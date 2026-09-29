@@ -80,3 +80,7 @@ See [MVP scope](docs/MVP.md), [architecture](docs/ARCHITECTURE.md), and [first i
 ## This workspace
 
 The first local preview inspects `/Users/tolu/projects/visalytics` on port 4317, using a ten-commit comparison. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
+
+## Original context
+
+The original specification and prototype archive are preserved in [docs/context](docs/context/README.md). They provide background; [the current MVP scope](docs/MVP.md) reflects the owner's subsequent clarification.
