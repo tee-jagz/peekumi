@@ -182,6 +182,14 @@ try {
         .first();
       await card.focus();
       await card.click();
+      if (process.env.STRATA_TEST_DIRECTORY_DOC)
+        assert.ok(
+          (
+            await page
+              .locator(".directory-details .code-description")
+              .textContent()
+          ).includes(process.env.STRATA_TEST_DIRECTORY_DOC),
+        );
       assert.equal(await page.locator(".sel-name").textContent(), folder);
       assert.equal(
         await page.locator(".crumbs [aria-current]").textContent(),
@@ -229,6 +237,10 @@ try {
     await symbol.focus();
     await symbol.click();
     await page.locator(".code-metadata .signature").waitFor();
+    assert.match(
+      await page.locator(".adapter-details summary").textContent(),
+      /adapter/,
+    );
     assert.ok(
       (await page.locator(".metadata-return").textContent()).includes(
         "Returns:",

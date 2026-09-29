@@ -4,6 +4,17 @@ Explore a repository and its changes from your phone, from the overall structure
 
 Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. It leaves the inspected repository's working tree, branches and hooks untouched.
 
+## Directory responsibilities
+
+- [frontend/](frontend/README.md): browser map, navigation and review panel.
+- [backend/](backend/README.md): API, Git analysis and persistent cache.
+- [backend/adapters/](backend/adapters/README.md): shared language contract and parser implementations.
+- [scripts/](scripts/README.md): build, launch and benchmarking tools.
+- [test/](test/README.md): regression and browser tests.
+- [docs/](docs/README.md): product, architecture and original design context.
+
+Strata displays each directory's committed README opening paragraph as its description. It prefers README.md, README.rst, README.txt, then README (case-insensitive), with a Python __init__.py module docstring as fallback. It uses only documentation in that directory, shows its source and revision, and provides a link to read the complete file. Descriptions are limited to 600 characters and rendered as plain text. Before/After selects documentation from the corresponding commit.
+
 ## Run
 
 Requirements to build: a current stable Rust toolchain (edition 2024), a C toolchain for bundled SQLite, Git, and Node.js 22.13+ for the npm commands and TypeScript parser. Python 3.9+ enables Python symbol extraction. Missing parsers produce labelled file-level inspection. Install Rust with [rustup](https://rust-lang.org/tools/install/).
@@ -13,7 +24,7 @@ npm ci
 npm start -- /path/to/repository
 ```
 
-`npm start` builds and launches the Rust executable. You can also use `cargo build --release --locked` and run `./target/release/strata /path/to/repository` directly. The web assets and Python helper are embedded in the binary. JavaScript/TypeScript/Svelte extraction uses the bundled `src/typescript_ast.mjs` helper and installed `typescript` package; when moving the binary, pass `--parser-root /path/to/repo-strata` (or `STRATA_PARSER_ROOT`) to locate them. `STRATA_NODE` selects its Node executable. No Node HTTP service runs.
+`npm start` builds and launches the Rust executable. You can also use `cargo build --release --locked` and run `./target/release/strata /path/to/repository` directly. The web assets and Python helper are embedded in the binary. JavaScript/TypeScript/Svelte extraction uses the bundled `backend/adapters/typescript_ast.mjs` helper and installed `typescript` package; when moving the binary, pass `--parser-root /path/to/repo-strata` (or `STRATA_PARSER_ROOT`) to locate them. `STRATA_NODE` selects its Node executable. No Node HTTP service runs.
 
 Open the access link printed in the terminal. The token in its URL fragment is exchanged for an HttpOnly session cookie and removed from browser history. The session lasts seven days or until the service restarts. Local access credentials live in `.strata/`, which is excluded from Git. `--state-dir /private/path` changes the credential and index location.
 

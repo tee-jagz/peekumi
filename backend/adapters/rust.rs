@@ -260,6 +260,33 @@ pub fn resolve(file: &str, spec: &str, paths: &std::collections::BTreeSet<String
     }
     vec![]
 }
+/// Native Rust implementation of the common language contract.
+pub struct Rust;
+impl super::LanguageAdapter for Rust {
+    fn id(&self) -> &'static str {
+        "rust"
+    }
+    fn extensions(&self) -> &'static [&'static str] {
+        &["rs"]
+    }
+    fn limitations(&self) -> &'static str {
+        "Macros and conditional compilation are not evaluated; conventional module paths only."
+    }
+    fn identity(&self, _: &super::Config) -> String {
+        "syn2".into()
+    }
+    fn analyze(&self, input: &[(String, String)], _: &super::Config) -> anyhow::Result<Vec<Value>> {
+        Ok(input.iter().map(|(_, source)| analyze(source)).collect())
+    }
+    fn resolve(&self, file: &str, item: &Value, context: &super::Resolution) -> Vec<String> {
+        resolve(
+            file,
+            item["specifier"].as_str().unwrap_or(""),
+            &context.paths,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

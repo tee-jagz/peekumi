@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const pythonScript = fileURLToPath(new URL("../../src/python_ast.py", import.meta.url));
+const pythonScript = fileURLToPath(new URL("../../backend/adapters/python_ast.py", import.meta.url));
 const MAX_SOURCE = 512 * 1024;
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 export function command(

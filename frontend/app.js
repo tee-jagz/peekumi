@@ -147,6 +147,10 @@ async function loadComparison() {
             view: "overview",
           }),
       );
+      data.directoryMetadata = await api(
+        "/api/directories?" +
+          new URLSearchParams({ base: data.base, head: data.head }),
+      );
       comparisons.set(key, data);
       if (comparisons.size > 6)
         comparisons.delete(comparisons.keys().next().value);
@@ -387,7 +391,7 @@ function renderGraph(body) {
   }
   if (root) {
     const w = 5.9 * k,
-      h = Math.max(66, Math.min(88, 1.12 * k)),
+      h = Math.max(100, Math.min(116, 1.5 * k)),
       gap = Math.max(16, 0.45 * k);
     current.forEach((node, index) =>
       positions.set(node.key, {
@@ -414,7 +418,7 @@ function renderGraph(body) {
       isFile && cols === 1
         ? graphWidth - 74
         : (graphWidth - 42 - (cols - 1) * 12) / cols;
-    const h = isFile ? 46 : 76,
+    const h = isFile ? 46 : 108,
       gap = isFile ? 10 : 28,
       left = isFile && cols === 1 ? 28 : 21;
     current.forEach((node, index) =>
@@ -541,6 +545,12 @@ function graphNode({ node, x, y, w, h }) {
     );
   card.append(top);
   if (node.files) {
+    const info = directoryInfo(node.path, node.status === "removed");
+    if (info) {
+      const description = element("p", "n-description", info.description);
+      description.title = info.description;
+      card.append(description);
+    }
     const kids = element("div", "n-kids");
     const paths = [
       ...new Set(
@@ -833,11 +843,83 @@ function renderCommits() {
         5;
   });
 }
+function directoryInfo(path, removed = false) {
+  return comparison?.directoryMetadata?.[
+    before || removed ? "before" : "after"
+  ]?.[path];
+}
+function directoryCard(path, removed = false) {
+  const info = directoryInfo(path, removed),
+    box = element("section", "directory-details");
+  box.append(element("h3", "details-heading", "Details"));
+  if (!info) {
+    box.append(
+      element(
+        "p",
+        "metadata-muted",
+        "No directory README or package docstring at this revision.",
+      ),
+    );
+    return box;
+  }
+  box.append(element("p", "code-description", info.description));
+  box.append(
+    element(
+      "small",
+      "metadata-muted",
+      `${info.provenance} · ${info.path} · ${info.revision.slice(0, 7)}`,
+    ),
+  );
+  box.append(
+    button("btn documentation-link", "Read documentation", async () => {
+      await navigate({ kind: "file", path: info.path });
+      tab = "source";
+      sourceView = before || removed ? "before" : "after";
+      renderPanel();
+    }),
+  );
+  return box;
+}
+function adapterCard() {
+  const adapter = comparison?.directoryMetadata?.adapters?.find((a) =>
+      a.extensions.includes(scope.path.split(".").at(-1)),
+    ),
+    box = element("details", "adapter-details");
+  box.append(
+    element(
+      "summary",
+      "",
+      adapter
+        ? "Analyzed by " + adapter.id + " adapter"
+        : "File-level inspection",
+    ),
+  );
+  box.append(
+    element("p", "metadata-muted", sourceData?.analysis || "Loading analysis…"),
+  );
+  if (adapter) {
+    box.append(
+      element("p", "", adapter.capabilities.join(" · ")),
+      element("p", "metadata-muted", adapter.limitations),
+    );
+  } else
+    box.append(
+      element(
+        "p",
+        "metadata-muted",
+        "Symbol extraction is not supported for this file type.",
+      ),
+    );
+  return box;
+}
 function renderSelection() {
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
-    if (scope.kind === "file" && sourceData) strip.append(metadataCard());
+    if (scope.kind === "file" && sourceData)
+      strip.append(metadataCard(), adapterCard());
+    if (["repo", "folder", "rootfiles"].includes(scope.kind))
+      strip.append(directoryCard(scope.path));
     strip.append(
       element(
         "div",
@@ -919,6 +1001,9 @@ function renderSelection() {
     ["symbol", "boundary"].includes(selected.kind)
   )
     box.append(metadataCard());
+  if (["folder", "rootfiles"].includes(selected.kind))
+    box.append(directoryCard(selected.path, selected.status === "removed"));
+  if (scope.kind === "file") box.append(adapterCard());
   strip.append(box);
 }
 function metadataCard() {
@@ -941,13 +1026,19 @@ function metadataCard() {
       info.fields?.length
     )
   )
-    return element("div", "metadata-empty");
+    return element(
+      "p",
+      "metadata-muted",
+      "Details · No declaration documentation available at this revision.",
+    );
   box.open = true;
   box.append(
     element(
       "summary",
       "",
-      (selected?.kind === "symbol" ? "Declaration" : "Module description") +
+      (selected?.kind === "symbol"
+        ? "Details · Declaration"
+        : "Details · Module description") +
         (useBefore ? " · Before" : " · After"),
     ),
   );

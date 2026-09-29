@@ -1,3 +1,4 @@
+//! Persistent, size-bounded syntax cache keyed by blob and parser identity.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;

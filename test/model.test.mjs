@@ -5,7 +5,7 @@ import {
   connections,
   rootScope,
   visibleOnSide,
-} from "../public/model.js";
+} from "../frontend/model.js";
 const file = (path, status = "unchanged", deps = [], beforeDeps = []) => ({
   path,
   status,
@@ -60,7 +60,7 @@ test("Before excludes additions, Structure excludes removals, Changes keeps remo
 });
 
 test("symbol patches exclude unrelated changed functions", async () => {
-  const { patchForSymbol } = await import("../public/model.js");
+  const { patchForSymbol } = await import("../frontend/model.js");
   const patch =
     "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,2 +1,2 @@\n-old_a\n+new_a\n@@ -30,2 +30,2 @@\n-old_b\n+new_b\n";
   const selected = {

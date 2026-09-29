@@ -15,7 +15,8 @@ The first implementation uses Changes, Source, and Dependencies review tabs. Com
 - Run a service beside a Git repository on macOS or Linux and access its web UI by URL.
 - Browse the real directory hierarchy, with static internal import relationships.
 - Compare two explicit commits. Roll added, changed, and removed files up into their directories.
-- Drill into Python and JavaScript/TypeScript symbols, then source and complete file diffs. Svelte script symbols are extracted; template changes remain visible at file level.
+- Drill into Rust, Python and JavaScript/TypeScript symbols, then source and complete file diffs. Svelte script symbols are extracted; template changes remain visible at file level.
+- Show directory README summaries (or Python package docstrings) with revision provenance and links to the complete documentation. Expose adapter capabilities and limitations.
 - Load code-authored module/class/function documentation and declaration metadata on file drill-down, without inferred types or generated descriptions.
 - Keep every tracked file accounted for (and visible with Changes only disabled), including tests, configuration, assets, and unsupported languages.
 - Support a phone viewport of 390 × 844, touch targets, breadcrumbs, search, and stable alphabetical positioning.

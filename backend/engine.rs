@@ -1,4 +1,9 @@
-use crate::{index::Index, process::run};
+//! Committed Git snapshots, comparisons, directory documentation and language-adapter coordination.
+use crate::{
+    adapters::{self, Config},
+    index::Index,
+    process::run,
+};
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -71,9 +76,7 @@ struct Snapshot {
 }
 pub struct Repository {
     pub directory: PathBuf,
-    python: String,
-    node: String,
-    parser_root: PathBuf,
+    parser_config: Config,
     index: Index,
     cache: VecDeque<Arc<Snapshot>>,
     comparisons: VecDeque<(String, bool, Value)>,
@@ -97,12 +100,16 @@ impl Repository {
         } else {
             std::env::current_dir()?.join(parser_root)
         };
-        let helper = std::fs::read(parser_root.join("src/typescript_ast.mjs")).unwrap_or_default();
+        let helper = std::fs::read(parser_root.join("backend/adapters/typescript_ast.mjs"))
+            .unwrap_or_default();
         let version = hash(
             [
                 include_bytes!("engine.rs").as_slice(),
-                include_bytes!("rust_ast.rs").as_slice(),
-                include_bytes!("../src/python_ast.py").as_slice(),
+                include_bytes!("adapters/rust.rs").as_slice(),
+                include_bytes!("adapters/python_ast.py").as_slice(),
+                include_bytes!("adapters/mod.rs").as_slice(),
+                include_bytes!("adapters/python.rs").as_slice(),
+                include_bytes!("adapters/typescript.rs").as_slice(),
                 helper.as_slice(),
             ]
             .concat(),
@@ -113,9 +120,11 @@ impl Repository {
         );
         Ok(Self {
             directory,
-            python,
-            node,
-            parser_root,
+            parser_config: Config {
+                python,
+                node,
+                root: parser_root,
+            },
             index,
             cache: VecDeque::new(),
             comparisons: VecDeque::new(),
@@ -177,38 +186,6 @@ impl Repository {
         Ok(
             json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"initialBase":base,"initialHead":self.resolve(head)?}),
         )
-    }
-    fn identity(&mut self, language: &str) -> String {
-        if let Some(v) = self.identities.get(language) {
-            return v.clone();
-        }
-        let result = if language == "py" {
-            run(&self.python, &["--version"], None, vec![])
-        } else {
-            run(
-                &self.node,
-                &[
-                    &self
-                        .parser_root
-                        .join("src/typescript_ast.mjs")
-                        .to_string_lossy(),
-                    "--version",
-                ],
-                None,
-                vec![],
-            )
-        };
-        let identity = format!(
-            "{}:{}",
-            if language == "py" {
-                &self.python
-            } else {
-                &self.node
-            },
-            result.map(string).unwrap_or("unavailable".into()).trim()
-        );
-        self.identities.insert(language.into(), identity.clone());
-        identity
     }
     fn snapshot(&mut self, reference: &str) -> Result<Arc<Snapshot>> {
         if let Some(snapshot) = self.cache.iter().find(|s| s.sha == reference) {
@@ -275,8 +252,7 @@ impl Repository {
                 input.into_bytes(),
             )?;
             let mut offset = 0;
-            let mut py = vec![];
-            let mut js = vec![];
+            let mut batches: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
             for path in candidates {
                 let newline = offset
                     + data
@@ -300,79 +276,46 @@ impl Repository {
                     continue;
                 }
                 file.source = Some(String::from_utf8_lossy(raw).into_owned());
-                let ext = path.rsplit('.').next().unwrap_or("");
-                if ![
-                    "py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx",
-                    "mtsx", "ctsx", "svelte", "rs",
-                ]
-                .contains(&ext)
-                {
+                let Some(adapter) = adapters::for_path(&path) else {
                     continue;
-                }
-                let identity = if ext == "rs" {
-                    "syn2".into()
-                } else {
-                    self.identity(if ext == "py" { "py" } else { "js" })
                 };
+                let identity = self
+                    .identities
+                    .entry(adapter.id().into())
+                    .or_insert_with(|| adapter.identity(&self.parser_config));
+                let ext = path.rsplit('.').next().unwrap_or("");
                 let key = format!("{}:{identity}:{ext}:{}", self.version, file.oid);
                 if let Some(value) = self.index.get(&key) {
                     file.apply(value);
                     self.reused += 1;
-                } else if ext == "rs" {
-                    let value = crate::rust_ast::analyze(file.source.as_deref().unwrap());
-                    self.index.set(key, value.clone());
-                    file.apply(value);
-                    self.parsed += 1;
-                } else if ext == "py" {
-                    py.push((path, key));
                 } else {
-                    js.push((path, key));
+                    batches
+                        .entry(adapter.id().into())
+                        .or_default()
+                        .push((path, key));
                 }
             }
             let mut jobs = vec![];
-            for (language, missing) in [("py", py), ("js", js)] {
-                if missing.is_empty() {
+            for adapter in adapters::all() {
+                let Some(missing) = batches.remove(adapter.id()) else {
                     continue;
-                }
-                let input = if language == "py" {
-                    json!(
-                        missing
-                            .iter()
-                            .map(|(p, _)| files[p].source.as_deref().unwrap())
-                            .collect::<Vec<_>>()
-                    )
-                } else {
-                    json!(
-                        missing
-                            .iter()
-                            .map(|(p, _)| json!({"path":p,"source":files[p].source}))
-                            .collect::<Vec<_>>()
-                    )
                 };
-                let python = self.python.clone();
-                let node = self.node.clone();
-                let parser = self.parser_root.join("src/typescript_ast.mjs");
-                let input = input.to_string().into_bytes();
-                let job = std::thread::spawn(move || {
-                    let output = if language == "py" {
-                        run(
-                            &python,
-                            &["-c", include_str!("../src/python_ast.py")],
-                            None,
-                            input,
-                        )
-                    } else {
-                        run(&node, &[&parser.to_string_lossy()], None, input)
-                    };
-                    output.and_then(|v| Ok(serde_json::from_slice::<Vec<Value>>(&v)?))
-                });
-                jobs.push((language, missing, job));
+                let input = missing
+                    .iter()
+                    .map(|(p, _)| (p.clone(), files[p].source.clone().unwrap()))
+                    .collect::<Vec<_>>();
+                let config = self.parser_config.clone();
+                jobs.push((
+                    adapter,
+                    missing,
+                    std::thread::spawn(move || adapter.analyze(&input, &config)),
+                ));
             }
-            for (language, missing, job) in jobs {
-                let result = job
+            for (adapter, missing, job) in jobs {
+                match job
                     .join()
-                    .unwrap_or_else(|_| Err(anyhow::anyhow!("Parser worker failed")));
-                match result {
+                    .unwrap_or_else(|_| Err(anyhow::anyhow!("Parser worker failed")))
+                {
                     Ok(values) if values.len() == missing.len() => {
                         for ((p, key), value) in missing.into_iter().zip(values) {
                             self.index.set(key, value.clone());
@@ -384,10 +327,10 @@ impl Repository {
                         for (p, _) in missing {
                             files.get_mut(&p).unwrap().analysis = format!(
                                 "{} unavailable · file-level analysis",
-                                if language == "py" {
-                                    "Python"
-                                } else {
-                                    "TypeScript"
+                                match adapter.id() {
+                                    "python" => "Python",
+                                    "typescript" => "TypeScript",
+                                    _ => "Rust",
                                 }
                             );
                         }
@@ -398,6 +341,13 @@ impl Repository {
         self.index.flush();
         resolve_imports(&mut files);
         Ok(Snapshot { sha, files })
+    }
+    pub fn directories(&mut self, base: &str, head: &str) -> Result<Value> {
+        let a = self.snapshot(base)?;
+        let b = self.snapshot(head)?;
+        Ok(
+            json!({"before":directory_descriptions(&a),"after":directory_descriptions(&b),"adapters":adapters::descriptors()}),
+        )
     }
     pub fn compare(&mut self, base: &str, head: &str, overview: bool) -> Result<Value> {
         let a = self.snapshot(base)?;
@@ -503,117 +453,89 @@ fn compare_file(path: &str, a: Option<&File>, b: Option<&File>, overview: bool) 
     }
     v
 }
-fn normalize(path: &str) -> String {
-    let mut out = vec![];
-    for part in path.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                if out.last().is_some_and(|v| *v != "..") {
-                    out.pop();
-                } else {
-                    out.push(part)
-                }
-            }
-            _ => out.push(part),
+// Descriptions come only from committed documentation in this exact directory.
+fn directory_descriptions(snapshot: &Snapshot) -> Value {
+    let mut descriptions = BTreeMap::new();
+    let mut candidates = snapshot
+        .files
+        .values()
+        .filter_map(|file| {
+            let name = file.path.rsplit('/').next()?.to_ascii_lowercase();
+            let priority = match name.as_str() {
+                "readme.md" => 0,
+                "readme.rst" => 1,
+                "readme.txt" => 2,
+                "readme" => 3,
+                "__init__.py" => 4,
+                _ => return None,
+            };
+            Some((priority, file))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|(priority, file)| (*priority, &file.path));
+    for (priority, file) in candidates {
+        let directory = file.path.rsplit_once('/').map(|v| v.0).unwrap_or("");
+        if descriptions.contains_key(directory) {
+            continue;
         }
+        let Some(source) = file.source.as_deref() else {
+            continue;
+        };
+        let description = if priority == 4 {
+            file.details
+                .as_ref()
+                .map(|v| text(&v["description"]))
+                .unwrap_or("")
+                .to_string()
+        } else {
+            document_summary(source)
+        };
+        let summary = description.chars().take(600).collect::<String>();
+        if summary.trim().is_empty() {
+            continue;
+        }
+        descriptions.insert(directory,json!({"description":summary,"path":file.path,"revision":snapshot.sha,"provenance":if priority==4 {"Python package docstring"} else {"Directory README"}}));
     }
-    if out.is_empty() {
-        ".".into()
-    } else {
-        out.join("/")
+    json!(descriptions)
+}
+fn document_summary(source: &str) -> String {
+    let mut lines = vec![];
+    let mut fence = false;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fence = !fence;
+            continue;
+        }
+        if fence {
+            continue;
+        }
+        if trimmed.is_empty() {
+            if !lines.is_empty() {
+                break;
+            }
+            continue;
+        }
+        if trimmed.starts_with('#')
+            || trimmed.starts_with("![")
+            || trimmed.starts_with("<!--")
+            || trimmed.chars().all(|c| c == '=' || c == '-')
+        {
+            continue;
+        }
+        lines.push(trimmed);
     }
+    lines.join(" ")
 }
 fn resolve_imports(files: &mut BTreeMap<String, File>) {
-    let paths: BTreeSet<_> = files.keys().cloned().collect();
-    let mut modules: HashMap<String, Vec<String>> = HashMap::new();
-    for p in paths.iter().filter(|p| p.ends_with(".py")) {
-        let stem = p.trim_end_matches(".py");
-        let stem = stem.strip_suffix("/__init__").unwrap_or(stem);
-        let parts: Vec<_> = stem.split('/').collect();
-        for i in 0..parts.len() {
-            modules
-                .entry(parts[i..].join("."))
-                .or_default()
-                .push(p.clone());
-        }
-    }
+    let context = adapters::Resolution::new(files.keys().cloned().collect());
     for file in files.values_mut() {
+        let Some(adapter) = adapters::for_path(&file.path) else {
+            continue;
+        };
         let mut deps = BTreeSet::new();
         for item in &mut file.imports {
-            let spec = text(&item["specifier"]);
-            let mut found = vec![];
-            if file.path.ends_with(".rs") {
-                found = crate::rust_ast::resolve(&file.path, spec, &paths);
-            } else if file.path.ends_with(".py") {
-                let level = item["level"].as_u64().unwrap_or(0) as usize;
-                let names = array(&item["names"]);
-                if level > 0 {
-                    let parts: Vec<_> = file.path.split('/').collect();
-                    let folder = parts[..parts.len().saturating_sub(level)].join("/");
-                    let stem = normalize(&format!("{folder}/{}", spec.replace('.', "/")));
-                    let mut stems = vec![stem.clone()];
-                    stems.extend(
-                        names
-                            .iter()
-                            .filter(|n| text(n) != "*")
-                            .map(|n| normalize(&format!("{stem}/{}", text(n)))),
-                    );
-                    for s in stems {
-                        for p in [format!("{s}.py"), format!("{s}/__init__.py")] {
-                            if paths.contains(&p) {
-                                found.push(p)
-                            }
-                        }
-                    }
-                } else {
-                    let mut specs = vec![spec.to_string()];
-                    specs.extend(names.iter().map(|n| format!("{spec}.{}", text(n))));
-                    for s in specs {
-                        if let Some(options) = modules.get(&s)
-                            && options.len() == 1
-                        {
-                            found.push(options[0].clone());
-                        }
-                    }
-                }
-            } else {
-                let stem = if spec.starts_with('.') {
-                    let folder = file.path.rsplit_once('/').map(|v| v.0).unwrap_or("");
-                    Some(normalize(&format!("{folder}/{spec}")))
-                } else if let Some(suffix) = spec.strip_prefix("$lib/") {
-                    file.path
-                        .find("/src/")
-                        .map(|i| format!("{}/src/lib/{suffix}", &file.path[..i]))
-                } else {
-                    None
-                };
-                if let Some(stem) = stem {
-                    let alternate = stem
-                        .strip_suffix(".js")
-                        .map(|p| format!("{p}.ts"))
-                        .unwrap_or(stem.clone());
-                    'outer: for s in [stem, alternate] {
-                        for ext in [
-                            "",
-                            ".ts",
-                            ".tsx",
-                            ".js",
-                            ".jsx",
-                            ".mjs",
-                            ".svelte",
-                            "/index.ts",
-                            "/index.js",
-                        ] {
-                            let p = format!("{s}{ext}");
-                            if paths.contains(&p) {
-                                found.push(p);
-                                break 'outer;
-                            }
-                        }
-                    }
-                }
-            }
+            let mut found = adapter.resolve(&file.path, item, &context);
             let mut seen = BTreeSet::new();
             found.retain(|p| seen.insert(p.clone()));
             for p in &found {

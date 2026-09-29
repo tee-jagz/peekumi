@@ -1,7 +1,8 @@
+//! Authenticated HTTP API, embedded frontend and repository worker.
+mod adapters;
 mod engine;
 mod index;
 mod process;
-mod rust_ast;
 use anyhow::{Context, Result};
 use axum::{
     Router,
@@ -106,6 +107,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[2]["view"] == "overview",
         ),
         "source" => repo.source(argument(args, 0), argument(args, 1), argument(args, 2)),
+        "directories" => repo.directories(argument(args, 0), argument(args, 1)),
         "metrics" => Ok(repo.metrics()),
         _ => anyhow::bail!("Unknown repository operation"),
     }
@@ -133,12 +135,12 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
 }
 fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
     match path {
-        "/" => Some(("text/html", include_bytes!("../public/index.html"))),
-        "/app.js" => Some(("text/javascript", include_bytes!("../public/app.js"))),
-        "/model.js" => Some(("text/javascript", include_bytes!("../public/model.js"))),
-        "/canvas.js" => Some(("text/javascript", include_bytes!("../public/canvas.js"))),
-        "/style.css" => Some(("text/css", include_bytes!("../public/style.css"))),
-        "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../public/favicon.svg"))),
+        "/" => Some(("text/html", include_bytes!("../frontend/index.html"))),
+        "/app.js" => Some(("text/javascript", include_bytes!("../frontend/app.js"))),
+        "/model.js" => Some(("text/javascript", include_bytes!("../frontend/model.js"))),
+        "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
+        "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
+        "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
         _ => None,
     }
 }
@@ -334,6 +336,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
                 .call("compare", json!([base,head,{"view":query.get("view")}]))
                 .await
         }
+        "/api/directories" => app.engine.call("directories", json!([base, head])).await,
         "/api/source" => {
             app.engine
                 .call("source", json!([base, head, query.get("path")]))

@@ -5,7 +5,7 @@ edition = "2024"
 
 [[bin]]
 name = "strata"
-path = "rust/main.rs"
+path = "backend/main.rs"
 
 [dependencies]
 anyhow = "1"

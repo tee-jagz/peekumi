@@ -1,3 +1,4 @@
+//! Bounded subprocess execution for Git and installed syntax helpers.
 use anyhow::{Context, Result, bail};
 use std::{
     io::{Read, Write},

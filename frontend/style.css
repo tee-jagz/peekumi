@@ -2118,3 +2118,38 @@ button {
     top: -4px;
   }
 }
+
+.directory-details {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.details-heading {
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+.documentation-link {
+  display: block;
+  margin-top: 8px;
+}
+.adapter-details {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+}
+.adapter-details summary {
+  cursor: pointer;
+}
+.adapter-details p {
+  line-height: 1.5;
+}
+.n-description {
+  font-size: 10px;
+  line-height: 1.4;
+  margin: 5px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

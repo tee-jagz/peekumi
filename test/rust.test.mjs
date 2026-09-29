@@ -330,3 +330,62 @@ test("Rust declarations are served from committed blobs and repo sessions coexis
   assert.equal(method.returns, "usize");
   assert.equal(method.parameters[0].name, "value");
 });
+
+test("directory descriptions use committed revision-specific docs and package fallback", async (t) => {
+  const f = await fixture(t);
+  await writeFile(
+    path.join(f.directory, "pkg/README.md"),
+    "# Package\n\nOriginal responsibility.\n\nMore detail.\n",
+  );
+  await mkdir(path.join(f.directory, "fallback"));
+  await writeFile(
+    path.join(f.directory, "fallback/__init__.py"),
+    '"""Package fallback description."""\n',
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Directory documentation");
+  const base = (await f.git("rev-parse", "HEAD")).toString().trim();
+  await writeFile(
+    path.join(f.directory, "pkg/README.md"),
+    "# Package\n\nUpdated responsibility.\n",
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Update description");
+  await writeFile(
+    path.join(f.directory, "pkg/README.md"),
+    "Working tree must not leak.",
+  );
+  const s = await startRust(f.directory, { base });
+  t.after(() => s.close());
+  const response = await fetch(s.url + "/api/directories", {
+    headers: { Authorization: "Bearer " + s.token },
+  });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.before.pkg.description, "Original responsibility.");
+  assert.equal(data.after.pkg.description, "Updated responsibility.");
+  assert.equal(data.before.pkg.revision, base);
+  assert.equal(data.after.pkg.path, "pkg/README.md");
+  assert.equal(
+    data.after.fallback.description,
+    "Package fallback description.",
+  );
+  assert.equal(data.after.fallback.provenance, "Python package docstring");
+  assert.equal(data.after["pkg/nested"], undefined);
+  assert.deepEqual(data.adapters.map((a) => a.id).sort(), [
+    "python",
+    "rust",
+    "typescript",
+  ]);
+  assert.ok(
+    data.adapters.every(
+      (a) => a.capabilities.includes("documentation") && a.limitations,
+    ),
+  );
+  const reversed = await (
+    await fetch(s.url + "/api/directories?base=HEAD&head=" + base, {
+      headers: { Authorization: "Bearer " + s.token },
+    })
+  ).json();
+  assert.equal(reversed.after.pkg.description, "Original responsibility.");
+});
