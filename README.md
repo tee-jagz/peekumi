@@ -58,6 +58,8 @@ The Rust service uses Git subprocesses and has been built and tested on this Int
 
 ## Analysis and limitations
 
+Rust uses the native `syn` parser for modules, structs, enums, traits, methods, functions, documentation comments and explicit types. Macros are never expanded; conditional compilation is not evaluated. Rust imports follow conventional `crate`, `self`, `super` and module paths; custom `#[path]` and Cargo workspace resolution are not supported.
+
 Python uses `ast`; JavaScript and TypeScript use the TypeScript compiler parser. Svelte script blocks use the same parser, with non-JavaScript data scripts excluded. Templates remain visible in file diffs. Files are considered changed using Git object identity and file mode, so constants, templates, comments, and changes outside extracted symbols remain visible.
 
 Declaration details are loaded only when opening a file, keeping the initial map compact. Python descriptions come from module/class/function docstrings; TypeScript and JavaScript use JSDoc plus explicit AST declarations, including Svelte scripts. Module JSDoc requires `@module`, `@file`, or `@fileoverview`. Types are not inferred, documentation is not generated, and directory descriptions are not synthesized. Python docstring prose is preserved rather than guessing parameter types from arbitrary documentation formats.
@@ -100,6 +102,8 @@ Build first with `npm run build:rust`. The benchmark starts both implementations
 ## This workspace
 
 The preview inspects `/Users/tolu/projects/visalytics` on localhost port 4317, using a ten-commit comparison. It is reachable privately at `http://tolu-mac-mini.tailb34901.ts.net:4317/` with Tailscale enabled on the client. The Tailscale daemon uses `/Users/tolu/.config/tailscale/tailscaled.sock`; Serve forwards port 4317 to `http://127.0.0.1:4317`. The previous LAN URL has been retired. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. The live executable and TypeScript helper are copied into `.strata/runtime/` for a stable deployment; parser resolution uses that directory. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
+
+The self-inspection viewer uses port 4318 and `.strata/self/` for its private state, token and logs. It compares commit `93aed95` with `HEAD`, showing the Rust migration and subsequent changes. Both viewers read committed code, so commit changes before refreshing the comparison. Repository-specific cookies allow both viewers to stay signed in on the same hostname.
 
 ## Original context
 

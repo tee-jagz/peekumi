@@ -101,6 +101,7 @@ impl Repository {
         let version = hash(
             [
                 include_bytes!("engine.rs").as_slice(),
+                include_bytes!("rust_ast.rs").as_slice(),
                 include_bytes!("../src/python_ast.py").as_slice(),
                 helper.as_slice(),
             ]
@@ -302,17 +303,26 @@ impl Repository {
                 let ext = path.rsplit('.').next().unwrap_or("");
                 if ![
                     "py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx",
-                    "mtsx", "ctsx", "svelte",
+                    "mtsx", "ctsx", "svelte", "rs",
                 ]
                 .contains(&ext)
                 {
                     continue;
                 }
-                let identity = self.identity(if ext == "py" { "py" } else { "js" });
+                let identity = if ext == "rs" {
+                    "syn2".into()
+                } else {
+                    self.identity(if ext == "py" { "py" } else { "js" })
+                };
                 let key = format!("{}:{identity}:{ext}:{}", self.version, file.oid);
                 if let Some(value) = self.index.get(&key) {
                     file.apply(value);
                     self.reused += 1;
+                } else if ext == "rs" {
+                    let value = crate::rust_ast::analyze(file.source.as_deref().unwrap());
+                    self.index.set(key, value.clone());
+                    file.apply(value);
+                    self.parsed += 1;
                 } else if ext == "py" {
                     py.push((path, key));
                 } else {
@@ -533,7 +543,9 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
         for item in &mut file.imports {
             let spec = text(&item["specifier"]);
             let mut found = vec![];
-            if file.path.ends_with(".py") {
+            if file.path.ends_with(".rs") {
+                found = crate::rust_ast::resolve(&file.path, spec, &paths);
+            } else if file.path.ends_with(".py") {
                 let level = item["level"].as_u64().unwrap_or(0) as usize;
                 let names = array(&item["names"]);
                 if level > 0 {

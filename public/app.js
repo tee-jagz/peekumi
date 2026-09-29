@@ -761,6 +761,7 @@ function goUp() {
   navigate(path ? { kind: "folder", path } : rootScope());
 }
 function renderPanel() {
+  $("#panel").dataset.selection = String(!!selected);
   renderCommits();
   renderSelection();
   document
@@ -820,6 +821,7 @@ function renderCommits() {
     `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short}`,
   );
   head.append(meta);
+  $("#revisionSummary").textContent = `${commit(baseRef).short} → ${c.short}`;
   requestAnimationFrame(() => {
     const active = strip.querySelector('[aria-selected="true"]');
     if (active)
@@ -840,7 +842,9 @@ function renderSelection() {
       element(
         "div",
         "hint-strip",
-        "Tap a card or a line to select it. Tap a selected card again to open it.",
+        scope.kind === "file"
+          ? "Select a symbol to inspect its declaration."
+          : "Select a card to review · tap again to open.",
       ),
     );
     return;
@@ -886,12 +890,6 @@ function renderSelection() {
   else if (selected.kind === "edge")
     stats.textContent = `${selected.before.size} imports before → ${selected.after.size} after`;
   box.append(stats);
-  if (
-    scope.kind === "file" &&
-    sourceData &&
-    ["symbol", "boundary"].includes(selected.kind)
-  )
-    box.append(metadataCard());
   const actions = element("div", "sel-acts");
   actions.append(
     button(
@@ -915,6 +913,12 @@ function renderSelection() {
       }),
     );
   box.append(actions);
+  if (
+    scope.kind === "file" &&
+    sourceData &&
+    ["symbol", "boundary"].includes(selected.kind)
+  )
+    box.append(metadataCard());
   strip.append(box);
 }
 function metadataCard() {
@@ -928,6 +932,16 @@ function metadataCard() {
     selected?.kind === "symbol"
       ? module?.symbols?.find((item) => item.name === selected.name)
       : module;
+  if (
+    !info ||
+    !(
+      info.signature ||
+      info.description ||
+      info.parameters?.length ||
+      info.fields?.length
+    )
+  )
+    return element("div", "metadata-empty");
   box.open = true;
   box.append(
     element(
@@ -937,14 +951,42 @@ function metadataCard() {
         (useBefore ? " · Before" : " · After"),
     ),
   );
-  if (!info) {
-    box.append(element("p", "", "No declaration metadata available."));
-    return box;
-  }
   if (info.signature) box.append(element("pre", "signature", info.signature));
-  if (info.description)
-    box.append(element("p", "code-description", info.description));
-  else box.append(element("p", "metadata-muted", "No description documented."));
+  if (info.description) {
+    const long = info.description.length > 260;
+    box.append(
+      element(
+        "p",
+        "code-description",
+        long
+          ? info.description.slice(0, 260).trimEnd() + "…"
+          : info.description,
+      ),
+    );
+    if (long) {
+      const full = element("details", "doc-expansion");
+      full.append(
+        element("summary", "", "Read full documentation"),
+        element("p", "full-description", info.description),
+      );
+      box.append(full);
+    }
+  }
+  const contract = element("details", "contract-details");
+  const count = info.parameters?.length || 0;
+  contract.append(
+    element(
+      "summary",
+      "",
+      [
+        info.parameters ? `${count} argument${count === 1 ? "" : "s"}` : "",
+        info.returns ? "returns " + info.returns : "",
+        info.fields?.length ? info.fields.length + " fields" : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ),
+  );
   if (info.parameters?.length) {
     const list = element("dl", "metadata-parameters");
     for (const param of info.parameters) {
@@ -954,7 +996,7 @@ function metadataCard() {
           "dd",
           "",
           [
-            param.type || "Type not annotated",
+            param.type || "Unannotated",
             param.default != null ? "default: " + param.default : "",
             param.kind,
             param.description,
@@ -964,10 +1006,10 @@ function metadataCard() {
         ),
       );
     }
-    box.append(list);
+    contract.append(list);
   }
   if (info.parameters)
-    box.append(
+    contract.append(
       element(
         "p",
         "metadata-return",
@@ -977,7 +1019,7 @@ function metadataCard() {
       ),
     );
   if (info.fields?.length) {
-    box.append(
+    contract.append(
       element(
         "p",
         "",
@@ -994,17 +1036,23 @@ function metadataCard() {
       ),
     );
   }
+  if (info.parameters || info.fields?.length) box.append(contract);
   if (info.provenance)
     box.append(element("small", "metadata-muted", info.provenance));
   return box;
 }
-function legend() {
+function legend(files) {
   const box = element("div", "legend-inline");
   for (const status of Object.keys(labels)) {
+    const count = files?.filter((file) => file.status === status).length;
+    if (files && !count) continue;
     const item = element("span");
     const dot = element("i");
     dot.style.setProperty("--tone", tones[status]);
-    item.append(dot, document.createTextNode(labels[status]));
+    item.append(
+      dot,
+      document.createTextNode((files ? count + " " : "") + labels[status]),
+    );
     box.append(item);
   }
   return box;
@@ -1041,7 +1089,7 @@ function renderTab() {
   );
   summary.id = "change-summary";
   summary.dataset.count = changed.length;
-  body.append(summary, legend());
+  body.append(summary, legend(files));
   const searchBox = element("label", "search-wrap");
   searchBox.append(element("span", "", "⌕"));
   const input = element("input");

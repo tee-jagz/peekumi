@@ -84,9 +84,13 @@
       </main>
       <section class="panel" id="panel" aria-label="Review">
         <div id="notice" class="notice" role="status" hidden></div>
-        <div id="commitBar"></div>
         <div id="commitHead"></div>
-        <div id="selStrip"></div>
+        <details id="revisionDetails" class="revision-details">
+          <summary>
+            History &amp; comparison <span id="revisionSummary"></span>
+          </summary>
+          <div id="commitBar"></div>
+        </details>
         <div class="tabs" role="tablist" id="tabs">
           <button
             type="button"
@@ -111,6 +115,7 @@
             Dependencies
           </button>
         </div>
+        <div id="selStrip"></div>
         <div id="tabBody" role="tabpanel"></div>
       </section>
     </div>

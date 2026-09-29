@@ -31,12 +31,19 @@ const browser = await chromium.launch({
 });
 await mkdir("test-results", { recursive: true });
 try {
-  const data = await repo.compare(base, head);
+  const data = await (
+    await fetch(url + `/api/compare?base=${base}&head=${head}`, {
+      headers: { Authorization: "Bearer " + token },
+    })
+  ).json();
   const target =
+    (process.env.STRATA_TEST_FILE &&
+      data.files.find((f) => f.path === process.env.STRATA_TEST_FILE)) ||
     data.files.find(
       (f) =>
         f.status === "changed" && f.symbols.length && f.path.endsWith(".py"),
-    ) || data.files.find((f) => f.symbols.length);
+    ) ||
+    data.files.find((f) => f.symbols.length);
   assert.ok(target, "An analysable file is required");
   for (const viewport of [
     { width: 390, height: 844 },
@@ -68,6 +75,10 @@ try {
           document.documentElement.scrollHeight <= innerHeight + 1,
       ),
       "App stays within viewport",
+    );
+    assert.equal(
+      await page.locator("#revisionDetails").evaluate((el) => el.open),
+      false,
     );
     const stage = await page.locator("#stage").boundingBox(),
       panel = await page.locator("#panel").boundingBox();
@@ -203,12 +214,18 @@ try {
       path: `test-results/${viewport.width}-module.png`,
       fullPage: true,
     });
-    const changedSymbol = front
-      .locator('.node[data-kind="symbol"][data-status="changed"]')
+    const selectedSymbol =
+      target.symbols.find(
+        (s) =>
+          s.status === "changed" && ["function", "method"].includes(s.kind),
+      ) || target.symbols.find((s) => ["function", "method"].includes(s.kind));
+    assert.ok(selectedSymbol);
+    const symbol = front
+      .locator('.node[data-kind="symbol"]')
+      .filter({
+        has: page.locator(".n-name", { hasText: selectedSymbol.name }),
+      })
       .first();
-    const symbol = (await changedSymbol.count())
-      ? changedSymbol
-      : front.locator('.node[data-kind="symbol"]').first();
     await symbol.focus();
     await symbol.click();
     await page.locator(".code-metadata .signature").waitFor();
@@ -222,7 +239,7 @@ try {
     await page.screenshot({
       path: "test-results/" + viewport.width + "-metadata.png",
     });
-    if (target.status === "changed")
+    if (selectedSymbol.status === "changed")
       assert.ok(
         (await page
           .locator(".code-line.addition,.code-line.deletion")
@@ -244,10 +261,11 @@ try {
         .getAttribute("aria-pressed"),
       "true",
     );
-    assert.match(
-      await page.locator(".code-metadata summary").textContent(),
-      /Before/,
-    );
+    if (target.status !== "added")
+      assert.match(
+        await page.locator(".code-metadata > summary").textContent(),
+        /Before/,
+      );
     await page.locator('[data-tab="dependencies"]').click();
     assert.ok(await page.locator("#tabBody .list").isVisible());
     const edge = front.locator("path.hit").first();
@@ -292,6 +310,9 @@ try {
     );
     await page.locator('[data-mode="diff"]').click();
     await page.locator("#notice").waitFor({ state: "hidden" });
+    await page.locator("#revisionDetails").evaluate((node) => {
+      node.open = true;
+    });
     await page.locator("#base").selectOption(peekSha);
     await page.locator("#notice").waitFor({ state: "hidden" });
     await page.waitForFunction(

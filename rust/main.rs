@@ -1,6 +1,7 @@
 mod engine;
 mod index;
 mod process;
+mod rust_ast;
 use anyhow::{Context, Result};
 use axum::{
     Router,
@@ -112,6 +113,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
 struct App {
     engine: Engine,
     token: String,
+    cookie_name: String,
     sessions: Mutex<HashMap<String, Instant>>,
     options: Options,
 }
@@ -274,7 +276,8 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         sessions.insert(session.clone(), now + Duration::from_secs(7 * 86400));
         drop(sessions);
         let cookie = format!(
-            "strata_session={session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800{}",
+            "{}={session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800{}",
+            app.cookie_name,
             if app.options.secure_cookie {
                 "; Secure"
             } else {
@@ -288,7 +291,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         .unwrap_or("");
     let session = header(request.headers(), "cookie")
         .split(';')
-        .find_map(|s| s.trim().strip_prefix("strata_session="))
+        .find_map(|s| s.trim().strip_prefix(&format!("{}=", app.cookie_name)))
         .unwrap_or("");
     let authenticated = equal(bearer, &app.token)
         || app
@@ -410,7 +413,12 @@ async fn main() -> Result<()> {
         "Repo Strata · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
         json!({"port":address.port()})
     );
+    let cookie_name = format!(
+        "strata_session_{}",
+        &engine::hash(repo.directory.to_string_lossy().as_bytes())[..12]
+    );
     let app = Arc::new(App {
+        cookie_name,
         engine: Engine::start(repo),
         token: access_token,
         sessions: Mutex::new(HashMap::new()),

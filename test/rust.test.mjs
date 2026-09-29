@@ -276,3 +276,57 @@ test("Rust keeps serving when its optional disk index is unavailable", async (t)
     await f.repo.compare(f.base, "HEAD", { view: "overview" }),
   );
 });
+
+test("Rust declarations are served from committed blobs and repo sessions coexist", async (t) => {
+  const a = await fixture(t),
+    b = await fixture(t);
+  await mkdir(path.join(a.directory, "rust"));
+  await writeFile(
+    path.join(a.directory, "rust/main.rs"),
+    "//! Service entry.\nmod model;\n",
+  );
+  await writeFile(
+    path.join(a.directory, "rust/model.rs"),
+    "/// Run input.\npub fn run(value: &str) -> usize { value.len() }\n",
+  );
+  await a.git("add", ".");
+  await a.git("commit", "-m", "Rust module");
+  await writeFile(
+    path.join(a.directory, "rust/model.rs"),
+    "uncommitted invalid Rust",
+  );
+  const servers = [
+    await startRust(a.directory, { base: a.base }),
+    await startRust(b.directory, { base: b.base }),
+  ];
+  t.after(() => Promise.all(servers.map((s) => s.close())));
+  const cookies = [];
+  for (const s of servers) {
+    const r = await fetch(s.url + "/api/session", {
+      method: "POST",
+      headers: { Origin: s.url },
+      body: JSON.stringify({ token: s.token }),
+    });
+    assert.equal(r.status, 200);
+    cookies.push(r.headers.get("set-cookie").split(";")[0]);
+  }
+  assert.notEqual(cookies[0].split("=")[0], cookies[1].split("=")[0]);
+  for (const s of servers)
+    assert.equal(
+      (
+        await fetch(s.url + "/api/repo", {
+          headers: { Cookie: cookies.join("; ") },
+        })
+      ).status,
+      200,
+    );
+  const r = await fetch(servers[0].url + "/api/source?path=rust/model.rs", {
+    headers: { Cookie: cookies.join("; ") },
+  });
+  assert.equal(r.status, 200);
+  const data = await r.json(),
+    method = data.details.after.symbols.find((s) => s.name === "run");
+  assert.equal(method.description, "Run input.");
+  assert.equal(method.returns, "usize");
+  assert.equal(method.parameters[0].name, "value");
+});
