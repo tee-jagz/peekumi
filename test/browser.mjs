@@ -85,12 +85,88 @@ try {
       path: `test-results/${viewport.width}-overview.png`,
       fullPage: true,
     });
+    const canvas = front.locator("svg.map-canvas");
+    assert.equal(await canvas.count(), 1);
+    const transform = () =>
+      canvas.locator(":scope > g").getAttribute("transform");
+    const initialTransform = await transform();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    assert.notEqual(await transform(), initialTransform);
+    await page
+      .getByRole("button", { name: "Reset map view", exact: true })
+      .click();
+    await canvas.hover({ position: { x: 10, y: 10 } });
+    await page.mouse.wheel(0, 160);
+    await page.waitForTimeout(50);
+    assert.notEqual(await transform(), initialTransform);
+    await page.getByRole("button", { name: "Fit map", exact: true }).click();
+    const fitted = await transform();
+    const rect = await canvas.boundingBox();
+    await page.mouse.move(rect.x + 10, rect.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(rect.x + 40, rect.y + 80, { steps: 5 });
+    await page.mouse.up();
+    assert.notEqual(await transform(), fitted);
+    assert.equal(
+      await page.locator(".sel-name").count(),
+      0,
+      "Dragging does not select cards",
+    );
+    const cdp = await page.context().newCDPSession(page);
+    const points = (distance) => [
+      { x: rect.x + 130 - distance / 2, y: rect.y + 90, id: 1 },
+      { x: rect.x + 130 + distance / 2, y: rect.y + 90, id: 2 },
+    ];
+    const beforePinch = await transform();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: points(60),
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: points(100),
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    assert.notEqual(await transform(), beforePinch, "Pinch changes map scale");
+    assert.equal(
+      await page.locator(".sel-name").count(),
+      0,
+      "Pinching does not select cards",
+    );
+    await cdp.detach();
+    await page
+      .getByRole("button", { name: "Changes only", exact: true })
+      .click();
+    assert.equal(
+      await front
+        .locator('.node:not(.stub):not(.boundary)[data-status="unchanged"]')
+        .count(),
+      0,
+    );
+    assert.ok(
+      await front
+        .locator('.node[data-status="changed"],.node[data-status="added"]')
+        .count(),
+    );
+    await page.screenshot({
+      path: "test-results/" + viewport.width + "-filtered.png",
+    });
+    await page
+      .getByRole("button", { name: "Changes only", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Reset map view", exact: true })
+      .click();
     const folder = target.path.split("/")[0];
     if (target.path.includes("/")) {
       const card = front
         .locator('.node[data-kind="folder"]')
         .filter({ has: page.locator(".n-name", { hasText: folder }) })
         .first();
+      await card.focus();
       await card.click();
       assert.equal(await page.locator(".sel-name").textContent(), folder);
       assert.equal(
@@ -130,8 +206,19 @@ try {
     const symbol = (await changedSymbol.count())
       ? changedSymbol
       : front.locator('.node[data-kind="symbol"]').first();
+    await symbol.focus();
     await symbol.click();
+    await page.locator(".code-metadata .signature").waitFor();
+    assert.ok(
+      (await page.locator(".metadata-return").textContent()).includes(
+        "Returns:",
+      ),
+    );
     await page.locator("#source-code").waitFor();
+    await page.locator("#selStrip").scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: "test-results/" + viewport.width + "-metadata.png",
+    });
     if (target.status === "changed")
       assert.ok(
         (await page
@@ -153,6 +240,10 @@ try {
         .locator('[data-source-view="before"]')
         .getAttribute("aria-pressed"),
       "true",
+    );
+    assert.match(
+      await page.locator(".code-metadata summary").textContent(),
+      /Before/,
     );
     await page.locator('[data-tab="dependencies"]').click();
     assert.ok(await page.locator("#tabBody .list").isVisible());

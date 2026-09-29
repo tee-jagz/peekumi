@@ -1,3 +1,4 @@
+import { mountCanvas } from "./canvas.js";
 import {
   rootScope,
   leaf,
@@ -34,6 +35,7 @@ const tones = {
   removed: "var(--del)",
   unchanged: "var(--faint)",
 };
+let changesOnly = false;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let metadata,
   comparison,
@@ -303,7 +305,7 @@ function visibleInSide(node) {
 }
 function renderGraph(body) {
   const width = Math.max(240, body.clientWidth),
-    available = Math.max(240, body.clientHeight),
+    available = Math.max(180, body.clientHeight - 38),
     root = scope.kind === "repo";
   const canvas = element("div", "graph-inner"),
     graph = element("div", "graph");
@@ -314,19 +316,24 @@ function renderGraph(body) {
     k = graphWidth / 7.2;
   const positions = new Map();
   let y = 24;
-  const current = nodes.filter(visibleInSide);
+  const current = nodes.filter(
+    (node) =>
+      visibleInSide(node) && (!changesOnly || node.status !== "unchanged"),
+  );
   if (root) {
     const hint = element(
       "div",
       "row-lbl",
-      `${current.length} components · scroll to explore`,
+      `${current.length} components · drag or scroll to explore`,
     );
     hint.style.left = "12px";
     hint.style.top = "3px";
     canvas.append(hint);
   }
   const stubs = new Map();
-  for (const edge of edges)
+  for (const edge of edges.filter(
+    (edge) => !changesOnly || edge.status !== "unchanged",
+  ))
     for (const endpoint of [edge.from, edge.to])
       if (endpoint.kind === "stub") stubs.set(endpoint.key, endpoint);
   const incoming = [...stubs.values()]
@@ -421,9 +428,11 @@ function renderGraph(body) {
     const message = element(
       "div",
       "map-empty",
-      scope.kind === "file"
-        ? "No extracted symbols. Open Source to inspect the complete file."
-        : "No items in this revision.",
+      changesOnly
+        ? "No changed symbols or items here. Open Source for file-level changes, or turn off Changes only."
+        : scope.kind === "file"
+          ? "No extracted symbols. Open Source to inspect the complete file."
+          : "No items in this revision.",
     );
     message.style.position = "absolute";
     message.style.top = y + "px";
@@ -451,6 +460,22 @@ function renderGraph(body) {
   for (const p of positions.values()) p.y += verticalOffset;
   drawEdges(canvas, positions, graphWidth, height, root);
   for (const p of positions.values()) canvas.append(graphNode(p));
+  const controls = element("div", "canvas-controls");
+  const filter = button("change-filter", "Changes only", () => {
+    changesOnly = !changesOnly;
+    if (changesOnly && selected?.status === "unchanged") selected = null;
+    render();
+  });
+  filter.setAttribute("aria-pressed", String(changesOnly));
+  controls.append(filter);
+  mountCanvas(
+    body,
+    canvas,
+    graphWidth,
+    height,
+    [baseRef, headRef, scope.kind, scope.path, changesOnly].join(":"),
+    controls,
+  );
 }
 function graphNode({ node, x, y, w, h }) {
   const cls = [
@@ -578,6 +603,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
   svg.append(defs);
   let drawable = edges.filter(
     (e) =>
+      (!changesOnly || e.status !== "unchanged") &&
       positions.has(e.from.key) &&
       positions.has(e.to.key) &&
       (before ? e.before.size : lens === "structure" ? e.after.size : true),
@@ -794,6 +820,7 @@ function renderSelection() {
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
+    if (scope.kind === "file" && sourceData) strip.append(metadataCard());
     strip.append(
       element(
         "div",
@@ -844,6 +871,12 @@ function renderSelection() {
   else if (selected.kind === "edge")
     stats.textContent = `${selected.before.size} imports before → ${selected.after.size} after`;
   box.append(stats);
+  if (
+    scope.kind === "file" &&
+    sourceData &&
+    ["symbol", "boundary"].includes(selected.kind)
+  )
+    box.append(metadataCard());
   const actions = element("div", "sel-acts");
   actions.append(
     button(
@@ -868,6 +901,87 @@ function renderSelection() {
     );
   box.append(actions);
   strip.append(box);
+}
+function metadataCard() {
+  const box = element("details", "code-metadata");
+  const useBefore =
+    tab === "source" && sourceView !== "diff"
+      ? sourceView === "before"
+      : before || selected?.status === "removed";
+  const module = sourceData?.details?.[useBefore ? "before" : "after"];
+  const info =
+    selected?.kind === "symbol"
+      ? module?.symbols?.find((item) => item.name === selected.name)
+      : module;
+  box.open = true;
+  box.append(
+    element(
+      "summary",
+      "",
+      (selected?.kind === "symbol" ? "Declaration" : "Module description") +
+        (useBefore ? " · Before" : " · After"),
+    ),
+  );
+  if (!info) {
+    box.append(element("p", "", "No declaration metadata available."));
+    return box;
+  }
+  if (info.signature) box.append(element("pre", "signature", info.signature));
+  if (info.description)
+    box.append(element("p", "code-description", info.description));
+  else box.append(element("p", "metadata-muted", "No description documented."));
+  if (info.parameters?.length) {
+    const list = element("dl", "metadata-parameters");
+    for (const param of info.parameters) {
+      list.append(element("dt", "", param.name + (param.optional ? "?" : "")));
+      list.append(
+        element(
+          "dd",
+          "",
+          [
+            param.type || "Type not annotated",
+            param.default != null ? "default: " + param.default : "",
+            param.kind,
+            param.description,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ),
+      );
+    }
+    box.append(list);
+  }
+  if (info.parameters)
+    box.append(
+      element(
+        "p",
+        "metadata-return",
+        "Returns: " +
+          (info.returns || "not annotated") +
+          (info.returnDescription ? " · " + info.returnDescription : ""),
+      ),
+    );
+  if (info.fields?.length) {
+    box.append(
+      element(
+        "p",
+        "",
+        "Fields: " +
+          info.fields
+            .map(
+              (field) =>
+                field.name +
+                (field.optional ? "?" : "") +
+                ": " +
+                (field.type || "not annotated"),
+            )
+            .join("; "),
+      ),
+    );
+  }
+  if (info.provenance)
+    box.append(element("small", "metadata-muted", info.provenance));
+  return box;
 }
 function legend() {
   const box = element("div", "legend-inline");
@@ -1078,6 +1192,7 @@ async function loadSource() {
     }
     if (id !== sourceId || scope.path !== path) return;
     sourceData = data;
+    renderSelection();
     if (tab === "source") renderTab();
   } catch (error) {
     if (id === sourceId) {
@@ -1111,6 +1226,7 @@ function renderSource(body) {
   for (const view of ["diff", "after", "before"]) {
     const b = button("", view[0].toUpperCase() + view.slice(1), () => {
       sourceView = view;
+      renderSelection();
       renderTab();
     });
     b.dataset.sourceView = view;

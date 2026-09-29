@@ -188,3 +188,88 @@ test("API requires auth, rejects cross-origin pairing, and serves source through
     405,
   );
 });
+
+test("declaration metadata is revision-specific, lazy, and never inferred", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  await f.put(
+    "documented.py",
+    `"""Repository services."""
+class Service(Base):
+    """Handles a request."""
+    count: int
+    async def run(self, value: str, /, limit: int = 3, *items: str, strict: bool = False, **options: str) -> list[str]:
+        """Run the service."""
+        return []
+`,
+  );
+  await f.put(
+    "documented.ts",
+    `/** @module Typed services. */
+/** A service. */
+export class Service extends Base {
+  count: number;
+  /** Runs a request.
+   * @param value Request input.
+   * @returns Returned results.
+   */
+  async run<T>(value: T, limit = 3): Promise<T[]> { return []; }
+}
+/** A JS-compatible function.
+ * @param {string} value Input text.
+ * @returns {number} Text length.
+ */
+export const length = (value) => value.length;
+/** A record. */
+export interface Result { name?: string; }
+`,
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Document declarations");
+  const documented = await f.repo.resolve("HEAD");
+  const py = (await f.repo.source(f.base, documented, "documented.py")).details;
+  assert.equal(py.before, null);
+  assert.equal(py.after.description, "Repository services.");
+  const method = py.after.symbols.find((s) => s.name === "Service.run");
+  assert.equal(method.description, "Run the service.");
+  assert.equal(method.returns, "list[str]");
+  assert.equal(method.async, true);
+  assert.equal(method.parameters[1].kind, "positional-only");
+  assert.equal(method.parameters[2].default, "3");
+  assert.equal(method.parameters[4].kind, "keyword-only");
+  assert.equal(method.parameters[0].type, null);
+  assert.deepEqual(py.after.symbols[0].fields, [
+    { name: "count", type: "int" },
+  ]);
+  assert.deepEqual(py.after.symbols[0].bases, ["Base"]);
+  const ts = (await f.repo.source(f.base, documented, "documented.ts")).details
+    .after;
+  assert.match(ts.description, /Typed services/);
+  const run = ts.symbols.find((s) => s.name === "Service.run");
+  assert.equal(run.description, "Runs a request.");
+  assert.equal(run.parameters[0].type, "T");
+  assert.equal(run.parameters[0].description, "Request input.");
+  assert.equal(run.parameters[1].type, null);
+  assert.equal(run.returns, "Promise<T[]>");
+  assert.match(run.signature, /run<T>/);
+  const length = ts.symbols.find((s) => s.name === "length");
+  assert.equal(length.parameters[0].type, "string");
+  assert.equal(length.returns, "number");
+  assert.deepEqual(ts.symbols.find((s) => s.name === "Result").fields, [
+    { name: "name", type: "string", optional: true },
+  ]);
+  const comparison = await f.repo.compare(f.base, documented);
+  assert.ok(!JSON.stringify(comparison).includes("Run the service."));
+  assert.ok(!JSON.stringify(comparison).includes("Request input."));
+  await f.put(
+    "documented.py",
+    '"""Updated services."""\ndef run():\n    return None\n',
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Update declarations");
+  const versions = (await f.repo.source(documented, "HEAD", "documented.py"))
+    .details;
+  assert.equal(versions.before.description, "Repository services.");
+  assert.equal(versions.after.description, "Updated services.");
+  assert.equal(versions.after.symbols[0].returns, null);
+});

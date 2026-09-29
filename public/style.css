@@ -1821,3 +1821,113 @@ button {
     padding: 12px 16px 20px;
   }
 }
+
+/* Pan and zoom the map as a single SVG viewport. */
+.sheet[data-front] .sheet-body {
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.map-canvas {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.map-canvas:active {
+  cursor: grabbing;
+}
+.map-canvas foreignObject {
+  overflow: visible;
+}
+.map-canvas .graph-inner {
+  margin: 0;
+  position: relative;
+}
+.canvas-controls {
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--glass);
+  border-top: 1px solid var(--glass-line);
+  z-index: 5;
+}
+.canvas-controls button {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.canvas-controls button:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+.canvas-controls .change-filter {
+  margin-right: auto;
+  margin-left: 5px;
+}
+.canvas-controls .change-filter[aria-pressed="true"] {
+  color: white;
+  background: var(--accent);
+}
+.canvas-controls output {
+  font:
+    10px ui-monospace,
+    monospace;
+  min-width: 34px;
+  text-align: center;
+}
+.code-metadata {
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.code-metadata summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+.code-metadata p {
+  margin: 7px 0;
+}
+.code-description {
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+.signature {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.09);
+  max-height: 150px;
+  overflow: auto;
+}
+.metadata-parameters {
+  display: grid;
+  grid-template-columns: minmax(100px, 1.2fr) minmax(0, 2fr);
+  gap: 5px 10px;
+}
+.metadata-parameters dt {
+  font-family: ui-monospace, monospace;
+}
+.metadata-parameters dd {
+  margin: 0;
+}
+.metadata-muted {
+  opacity: 0.65;
+}

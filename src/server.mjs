@@ -11,6 +11,7 @@ const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 const assets = {
   "/": ["index.html", "text/html"],
   "/app.js": ["app.js", "text/javascript"],
+  "/canvas.js": ["canvas.js", "text/javascript"],
   "/model.js": ["model.js", "text/javascript"],
   "/style.css": ["style.css", "text/css"],
   "/favicon.svg": ["favicon.svg", "image/svg+xml"],

@@ -96,13 +96,108 @@ function jsAnalyze(file, source) {
   const symbols = [],
     imports = [];
   const printer = ts.createPrinter({ removeComments: true });
+  const commentText = (comment) =>
+    typeof comment === "string"
+      ? comment
+      : comment?.map((part) => part.text || "").join("") || "";
+  function details(node, name, kind) {
+    const callable =
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      (ts.isArrowFunction(node.initializer) ||
+        ts.isFunctionExpression(node.initializer))
+        ? node.initializer
+        : node;
+    const docs =
+      node.jsDoc ||
+      (ts.isVariableDeclaration(node) ? node.parent?.parent?.jsDoc : null) ||
+      [];
+    const tags = docs.flatMap((doc) => [...(doc.tags || [])]);
+    const returns = tags.find((tag) =>
+      ["returns", "return"].includes(tag.tagName.text),
+    );
+    const result = {
+      description: docs
+        .map((doc) => commentText(doc.comment))
+        .filter(Boolean)
+        .join("\n\n"),
+      provenance: "TypeScript / JSDoc declarations",
+    };
+    const params = callable.parameters;
+    if (params) {
+      result.parameters = params.map((param) => {
+        const tag = tags.find(
+          (tag) =>
+            tag.tagName.text === "param" &&
+            tag.name?.getText(tree) === param.name.getText(tree),
+        );
+        return {
+          name: (param.dotDotDotToken ? "..." : "") + param.name.getText(tree),
+          type:
+            param.type?.getText(tree) ||
+            tag?.typeExpression?.type?.getText(tree) ||
+            null,
+          optional: !!param.questionToken || !!tag?.isBracketed,
+          default: param.initializer?.getText(tree) ?? null,
+          description: commentText(tag?.comment),
+        };
+      });
+      result.returns =
+        callable.type?.getText(tree) ||
+        returns?.typeExpression?.type?.getText(tree) ||
+        null;
+      result.returnDescription = commentText(returns?.comment);
+      result.async = !!callable.modifiers?.some(
+        (mod) => mod.kind === ts.SyntaxKind.AsyncKeyword,
+      );
+      result.signature =
+        (result.async ? "async " : "") +
+        name +
+        (callable.typeParameters?.length
+          ? "<" +
+            callable.typeParameters.map((p) => p.getText(tree)).join(", ") +
+            ">"
+          : "") +
+        "(" +
+        params.map((p) => p.getText(tree)).join(", ") +
+        ")" +
+        (result.returns ? ": " + result.returns : "");
+    } else {
+      result.type = node.type?.getText(tree) || null;
+      result.bases =
+        node.heritageClauses?.map((clause) => clause.getText(tree)) || [];
+      result.signature =
+        kind +
+        " " +
+        name +
+        (result.type ? ": " + result.type : "") +
+        (result.bases.length ? " " + result.bases.join(" ") : "");
+      result.fields =
+        node.members
+          ?.filter(
+            (member) =>
+              ts.isPropertyDeclaration(member) ||
+              ts.isPropertySignature(member),
+          )
+          .map((member) => ({
+            name: member.name.getText(tree),
+            type: member.type?.getText(tree) || null,
+            optional: !!member.questionToken,
+          })) || [];
+    }
+    return result;
+  }
   function add(node, name, kind) {
     symbols.push({
       name,
       kind,
       start: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
       end: tree.getLineAndCharacterOfPosition(node.end).line + 1,
-      hash: hash(printer.printNode(ts.EmitHint.Unspecified, node, tree)),
+      details: details(node, name, kind),
+      hash: hash(
+        printer.printNode(ts.EmitHint.Unspecified, node, tree) +
+          JSON.stringify(details(node, name, kind)),
+      ),
     });
   }
   for (const node of tree.statements) {
@@ -160,6 +255,20 @@ function jsAnalyze(file, source) {
   return {
     symbols,
     imports,
+    details: {
+      description: (ts.getLeadingCommentRanges(text, 0) || [])
+        .map((range) => text.slice(range.pos, range.end))
+        .filter((comment) => /@(?:module|fileoverview|file)\b/.test(comment))
+        .map((comment) =>
+          comment
+            .replace(/^\/\*\*?|\*\/$/g, "")
+            .replace(/^\s*\* ?/gm, "")
+            .replace(/@(?:module|fileoverview|file)\b/g, "")
+            .trim(),
+        )
+        .join("\n\n"),
+      provenance: "JSDoc module comment",
+    },
     analysis: svelte
       ? "Svelte script AST · template at file level"
       : "TypeScript AST",
@@ -482,6 +591,26 @@ export class Repository {
       after: after?.source ?? null,
       patch,
       analysis: (after || before).analysis,
+      details: {
+        before: before
+          ? {
+              ...before.details,
+              symbols: before.symbols.map((symbol) => ({
+                name: symbol.name,
+                ...symbol.details,
+              })),
+            }
+          : null,
+        after: after
+          ? {
+              ...after.details,
+              symbols: after.symbols.map((symbol) => ({
+                name: symbol.name,
+                ...symbol.details,
+              })),
+            }
+          : null,
+      },
     };
   }
 }
