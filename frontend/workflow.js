@@ -130,6 +130,9 @@ export function createWorkflow({
       draft = "";
     }
     showTab("comments");
+    document
+      .querySelector("#composerHost textarea")
+      ?.focus({ preventScroll: true });
   }
   function visible(c) {
     if (c.status === "deleted") return false;
@@ -150,7 +153,7 @@ export function createWorkflow({
     );
     await refresh();
   }
-  function comments(body) {
+  function comments(body, composerHost) {
     const tools = el("div", "sel-acts");
     tools.append(
       action("Comment on selection", compose, true),
@@ -172,15 +175,17 @@ export function createWorkflow({
       ),
     );
     if (composer) {
-      const box = el("section", "workflow-card composer");
+      const box = el("section", "composer");
       box.append(
-        el("h3", "", editing ? "Edit draft" : "New draft"),
         el(
           "p",
-          "rd",
-          label(composer.anchor) + " · " + composer.sha.slice(0, 8),
+          "composer-anchor",
+          (editing ? "Edit · " : "Comment · ") +
+            label(composer.anchor) +
+            " · " +
+            composer.sha.slice(0, 8),
         ),
-        field("What should change, and why", draft, (v) => (draft = v)),
+        field("What should change, and why", draft, (v) => (draft = v), 2),
       );
       const buttons = el("div", "sel-acts");
       buttons.append(
@@ -206,8 +211,13 @@ export function createWorkflow({
           redraw();
         }),
       );
+      const input = box.querySelector("textarea");
+      input.placeholder = "What should change, and why…";
+      input.setAttribute("aria-label", "What should change, and why");
+      input.parentElement.firstChild.textContent = "";
+      input.parentElement.classList.add("dock-input");
       box.append(buttons);
-      body.append(box);
+      composerHost.append(box);
     }
     const items = data.comments.filter(visible);
     if (!items.length)
@@ -530,9 +540,9 @@ export function createWorkflow({
   return {
     refresh,
     compose,
-    render(body, tab) {
+    render(body, tab, composerHost) {
       bar();
-      tab === "comments" ? comments(body) : runs(body);
+      tab === "comments" ? comments(body, composerHost) : runs(body);
     },
   };
 }

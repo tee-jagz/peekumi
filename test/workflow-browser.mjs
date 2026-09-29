@@ -134,7 +134,7 @@ try {
         .getByLabel("Your question")
         .fill("What would improve this function?");
       await page
-        .locator("#tabBody")
+        .locator("#composerHost")
         .getByRole("button", { name: "Ask", exact: true })
         .click();
       await page
@@ -171,6 +171,61 @@ try {
       await page.screenshot({
         path: `test-results/persistent-review-${viewport.width}.png`,
       });
+      // Inputs must remain reachable at the viewport edge, not merely inside a panel.
+      const assertDockVisible = async () => {
+        const dock = await page.locator("#conversationDock").boundingBox();
+        const size = page.viewportSize();
+        assert.ok(dock.y >= 0 && dock.y + dock.height <= size.height + 1);
+        assert.ok(
+          size.height - (dock.y + dock.height) < 24,
+          "Dock stays at the bottom edge",
+        );
+        const input = await page
+          .locator("#composerHost textarea")
+          .boundingBox();
+        assert.ok(input.y >= dock.y && input.y + input.height <= size.height);
+      };
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page
+        .locator("#reviewScroll")
+        .evaluate((el) => (el.scrollTop = el.scrollHeight));
+      await assertDockVisible();
+      await page.screenshot({
+        path: `test-results/bottom-ask-${viewport.width}.png`,
+      });
+      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page
+        .getByLabel("What should change, and why")
+        .fill("Keep this unfinished comment anchored.");
+      await assertDockVisible();
+      await page.screenshot({
+        path: `test-results/bottom-comment-${viewport.width}.png`,
+      });
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      assert.equal(
+        await page.getByLabel("What should change, and why").inputValue(),
+        "Keep this unfinished comment anchored.",
+      );
+      if (viewport.width < 900) {
+        await page.setViewportSize({ width: viewport.width, height: 460 });
+        await page.waitForFunction(
+          () =>
+            Math.abs(
+              parseFloat(
+                document.documentElement.style.getPropertyValue(
+                  "--viewer-height",
+                ),
+              ) - window.visualViewport.height,
+            ) < 1,
+        );
+        await page.screenshot({ path: "test-results/bottom-short-debug.png" });
+        await assertDockVisible();
+        await page.screenshot({
+          path: "test-results/bottom-short-viewport.png",
+        });
+        await page.setViewportSize(viewport);
+      }
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       );

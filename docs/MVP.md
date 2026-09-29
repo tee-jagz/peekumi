@@ -8,7 +8,7 @@ Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the vi
 
 Tap selects a card or dependency. A second tap or Open zooms into a card; breadcrumbs and the back chevron zoom out. Time stacks recent commit sheets and compares each commit with its first parent. Diff stacks base and head and supports Before/After. Use real packages and symbols; do not invent layers or health measurements. Large real-world maps use an SVG pan/zoom viewport, with readable labels at 1:1 and an optional Fit control. Changes only hides unchanged cards at each hierarchy level.
 
-The review panel centres on Ask and Comments, with persistent Ask and new-comment controls. Description and metadata are collapsible; Changes, Source and Dependencies sit under Explore code. Commit history lives on the map. Comments become frozen task previews, isolated agent runs, reports and owner verification; Run preparation and progress live inside Comments. Ask discusses committed context with tools disabled. Structure replaces the unmeasured Health lens.
+The review panel centres on Ask and Comments, with a bottom action bar and a separately docked question/comment composer. Description and metadata are collapsible; Changes, Source and Dependencies sit under Explore code. Commit history lives on the map. Comments become frozen task previews, isolated agent runs, reports and owner verification; Run preparation and progress live inside Comments. Ask discusses committed context with tools disabled. Structure replaces the unmeasured Health lens.
 
 ## First usable slice
 

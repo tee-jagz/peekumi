@@ -91,40 +91,6 @@
       </main>
       <section class="panel" id="panel" aria-label="Review">
         <div id="notice" class="notice" role="status" hidden></div>
-        <div id="reviewActions">
-          <div
-            class="tabs"
-            role="tablist"
-            id="tabs"
-            aria-label="Review conversation"
-          >
-            <button
-              type="button"
-              role="tab"
-              data-tab="ask"
-              aria-selected="true"
-            >
-              Ask
-            </button>
-            <button
-              type="button"
-              role="tab"
-              data-tab="comments"
-              aria-selected="false"
-            >
-              Comments
-            </button>
-          </div>
-          <button
-            type="button"
-            class="btn primary"
-            id="newComment"
-            aria-label="Comment"
-            title="Comment on the current selection"
-          >
-            + Comment
-          </button>
-        </div>
         <div id="reviewScope"></div>
         <div id="reviewScroll">
           <details id="selectionDetails">
@@ -147,6 +113,43 @@
           </details>
           <div id="runBar"></div>
           <div id="tabBody" role="tabpanel"></div>
+        </div>
+        <div id="conversationDock" aria-label="Ask or comment">
+          <div id="composerHost"></div>
+          <div id="reviewActions">
+            <div
+              class="tabs"
+              role="tablist"
+              id="tabs"
+              aria-label="Review conversation"
+            >
+              <button
+                type="button"
+                role="tab"
+                data-tab="ask"
+                aria-selected="true"
+              >
+                Ask
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-tab="comments"
+                aria-selected="false"
+              >
+                Comments
+              </button>
+            </div>
+            <button
+              type="button"
+              class="btn primary"
+              id="newComment"
+              aria-label="Comment"
+              title="Comment on the current selection"
+            >
+              + Comment
+            </button>
+          </div>
         </div>
       </section>
     </div>

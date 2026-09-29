@@ -1454,6 +1454,8 @@ function listRow(node, detail, action) {
 function renderTab() {
   const body = $("#tabBody");
   body.replaceChildren();
+  const composerHost = $("#composerHost");
+  composerHost.replaceChildren();
   if (["source", "changes", "dependencies"].includes(tab)) {
     body.append(
       button(
@@ -1467,11 +1469,11 @@ function renderTab() {
     );
   }
   if (tab === "ask") {
-    ask.render(body);
+    ask.render(body, composerHost);
     return;
   }
   if (["comments", "runs"].includes(tab)) {
-    workflow.render(body, tab);
+    workflow.render(body, tab, composerHost);
     return;
   }
   if (tab === "source") {
@@ -2003,6 +2005,8 @@ document.querySelectorAll("[data-tab]").forEach(
       if (b.dataset.tab === "ask" && tab !== "ask") ask.open();
       tab = b.dataset.tab;
       if (comparison) renderPanel();
+      if (tab === "ask")
+        $("#composerHost textarea")?.focus({ preventScroll: true });
       if (tab === "source" && scope.kind === "file" && !sourceData)
         loadSource();
     }),
@@ -2037,3 +2041,24 @@ if (token) {
     $("#login-error").textContent = error.message;
   });
 } else boot();
+
+/** Keeps the interaction dock above a phone keyboard and browser chrome. */
+function fitVisualViewport() {
+  const viewport = window.visualViewport;
+  if (!viewport || viewport.scale > 1.05) return;
+  document.documentElement.style.setProperty(
+    "--viewer-height",
+    `${viewport.height}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--viewer-top",
+    `${viewport.offsetTop}px`,
+  );
+  document.documentElement.classList.toggle(
+    "keyboard-open",
+    viewport.height < window.innerHeight * 0.8,
+  );
+}
+window.visualViewport?.addEventListener("resize", fitVisualViewport);
+window.visualViewport?.addEventListener("scroll", fitVisualViewport);
+fitVisualViewport();

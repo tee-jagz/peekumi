@@ -9,6 +9,6 @@ The browser interface lets you explore repository structure, compare commits, fo
 - `canvas.js`: SVG pan, pinch, zoom and card positioning.
 - `index.html` and `style.css`: page structure and responsive appearance.
 
-Ask and Comments are the primary review views. Their controls stay visible while the panel content scrolls. Description and metadata are collapsed by default, code inspection tools sit under Explore code, and history opens over the map.
+Ask and Comments are the primary review views. Their action bar sits at the bottom edge. Question and comment inputs render in a separate dock above it, so long conversations, source and run details never push the input below the scroll. The dock follows the visual viewport on phones as the keyboard opens. Description and metadata are collapsed by default, code inspection tools sit under Explore code, and history opens over the map.
 
 The frontend displays committed documentation as plain text. It does not execute code from inspected repositories. The backend embeds these assets when built.

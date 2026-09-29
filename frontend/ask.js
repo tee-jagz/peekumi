@@ -49,7 +49,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       if (!selectedContext || identity(live) !== identity(selectedContext))
         selectedContext = live;
     },
-    render(body) {
+    render(body, composerHost) {
       const chat = current(),
         c = chat.context;
       const title = el(
@@ -100,7 +100,12 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         label = el("label", "Your question"),
         input = el("textarea");
       label.className = "workflow-field";
-      input.rows = 3;
+      form.className = "dock-form";
+      input.rows = 2;
+      input.placeholder = "Ask about this code…";
+      input.setAttribute("aria-label", "Your question");
+      label.classList.add("dock-input");
+      label.firstChild.textContent = "";
       input.maxLength = 8000;
       input.value = chat.question;
       input.required = true;
@@ -148,7 +153,13 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
           redraw();
         }
       };
-      body.append(form);
+      const anchor = el(
+        "p",
+        `${c.anchor.symbol || c.anchor.path || "Repository"} · ${c.sha.slice(0, 8)}`,
+      );
+      anchor.className = "composer-anchor";
+      anchor.title = anchor.textContent;
+      composerHost.append(anchor, form);
       const clear = btn("New conversation", () => {
         chat.messages = [];
         chat.question = "";
