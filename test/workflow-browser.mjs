@@ -1,0 +1,135 @@
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { chromium } from "@playwright/test";
+import { fixture, waitFor } from "./workflow-support.mjs";
+let browser;
+try {
+  browser = await chromium.launch({ headless: true });
+  await mkdir("test-results", { recursive: true });
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1366, height: 768 },
+  ]) {
+    const f = await fixture();
+    const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    try {
+      await page.goto(f.server.url + "/#token=" + f.server.token);
+      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Comment on selection", exact: true })
+        .click();
+      await page
+        .getByLabel("What should change, and why")
+        .fill("Make the implementation easier to review.");
+      await page
+        .getByRole("button", { name: "Save draft", exact: true })
+        .click();
+      await page.locator(".workflow-card[data-comment-id]").waitFor();
+      assert.equal(
+        await page.locator(".workflow-card[data-comment-id]").count(),
+        1,
+      );
+      await page.screenshot({
+        path: `test-results/workflow-comments-${viewport.width}.png`,
+      });
+      await page.locator(".runbar").click();
+      await page
+        .getByLabel("Brief · decisions and constraints")
+        .fill("Keep the current behavior. Explain your checks.");
+      await page
+        .getByRole("button", { name: "Preview task", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Dispatch run", exact: true })
+        .waitFor();
+      assert.ok(
+        await page
+          .locator(".taskpre")
+          .innerText()
+          .then((s) => s.includes("Make the implementation easier to review.")),
+      );
+      await page.screenshot({
+        path: `test-results/workflow-preview-${viewport.width}.png`,
+      });
+      await page
+        .getByRole("button", { name: "Dispatch run", exact: true })
+        .click();
+      await waitFor(async () => {
+        const s = await f.req("/api/workflow");
+        return s.runs.some((r) => r.status === "completed");
+      });
+      await page
+        .getByRole("button", { name: "Refresh runs", exact: true })
+        .click();
+      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      await page.getByRole("button", { name: "Verify", exact: true }).waitFor();
+      await page
+        .getByRole("button", { name: "Review fix", exact: true })
+        .click();
+      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      await page.getByRole("button", { name: "Verify", exact: true }).click();
+      await page
+        .getByLabel("What did you check?")
+        .fill("Inspected the result commit and the agent's reported checks.");
+      await page
+        .getByRole("button", { name: "Confirm verification", exact: true })
+        .click();
+      try {
+        await page
+          .getByText("Verified by you:", { exact: false })
+          .waitFor({ timeout: 5000 });
+      } catch (e) {
+        console.log(
+          "Verification failure",
+          await page.locator("#notice").innerText(),
+          JSON.stringify(await f.req("/api/workflow")),
+        );
+        await page.screenshot({ path: "test-results/workflow-failure.png" });
+        throw e;
+      }
+      await page.screenshot({
+        path: `test-results/workflow-verified-${viewport.width}.png`,
+      });
+      const front = page.locator('.sheet[data-front="true"]');
+      await front.locator(".node").first().click();
+      await front.locator(".node").first().click();
+      await front.locator('.node[data-path="module.py"]').click();
+      await front.locator('.node[data-path="module.py"]').click();
+      await front.locator('.node[data-kind="symbol"]').first().click();
+      await page.locator('[data-source-view="before"]').click();
+      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page
+        .getByLabel("What should change, and why")
+        .fill("Check this earlier declaration");
+      await page
+        .getByRole("button", { name: "Save draft", exact: true })
+        .click();
+      const anchored = await waitFor(async () => {
+        const state = await f.req("/api/workflow");
+        return state.comments.find(
+          (c) => c.text === "Check this earlier declaration",
+        );
+      });
+      assert.equal(anchored.sha, f.sha);
+      assert.equal(anchored.anchor.kind, "symbol");
+      assert.equal(anchored.anchor.path, "module.py");
+      assert.equal(anchored.anchor.symbol, "run");
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      );
+      assert.equal(overflow, false);
+      assert.deepEqual(errors, []);
+      console.log(
+        `Workflow browser ${viewport.width}: draft → preview → dispatch → MCP report → inspect → verify passed`,
+      );
+    } finally {
+      await page.close();
+      await f.close();
+    }
+  }
+} finally {
+  await browser?.close();
+}

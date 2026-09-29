@@ -1,4 +1,5 @@
 /** @module Browser controller for repository navigation, committed comparisons and the review panel. */
+import { createWorkflow } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import {
   rootScope,
@@ -72,6 +73,79 @@ const commit = (sha) =>
     short: sha?.slice(0, 8),
     subject: "Selected revision",
   };
+/** Captures the selected declaration or dependency at its displayed immutable revision. */
+function reviewContext() {
+  const n = selected;
+  const useBefore =
+    (tab === "source" && sourceView !== "diff"
+      ? sourceView === "before"
+      : before) || n?.status === "removed";
+  let anchor = {
+    kind:
+      scope.kind === "repo" || scope.kind === "rootfiles" ? "repo" : scope.kind,
+    path: scope.path || "",
+  };
+  if (n?.kind === "symbol")
+    anchor = {
+      kind: "symbol",
+      path: scope.path,
+      symbol: n.name,
+      line: n.start,
+    };
+  else if (n?.kind === "edge") {
+    const pair =
+      n.pairs.get([...(useBefore ? n.before : n.after)][0]) ||
+      [...n.pairs.values()][0];
+    anchor = {
+      kind: "edge",
+      path: pair?.from || n.from.path,
+      target: pair?.to || n.to.path,
+      relationship: n.relationshipKind,
+      label: n.name,
+      sourceSymbol: pair?.fromSymbol || null,
+      targetSymbol: pair?.toSymbol || null,
+    };
+  } else if (n && ["folder", "file"].includes(n.kind))
+    anchor = { kind: n.kind, path: n.path };
+  return { anchor, sha: useBefore ? baseRef : headRef };
+}
+const workflow = createWorkflow({
+  api,
+  context: reviewContext,
+  notice: showNotice,
+  showTab(value) {
+    tab = value;
+    renderPanel();
+  },
+  redraw() {
+    if (comparison && ["comments", "runs"].includes(tab)) renderTab();
+  },
+  async inspect(base, head, anchor) {
+    document.querySelector("#tabs").inert = true;
+    try {
+      mode = "diff";
+      baseRef = base;
+      diffBase = base;
+      headRef = head;
+      before = false;
+      await loadComparison();
+      if (anchor.path) {
+        await navigate({
+          kind: anchor.kind === "folder" ? "folder" : "file",
+          path: anchor.path,
+        });
+        if (scope.kind === "file") await loadSource();
+      } else await navigate(rootScope());
+      if (anchor.symbol)
+        selected = nodes.find((n) => n.name === anchor.symbol) || null;
+      tab = anchor.path && anchor.kind !== "folder" ? "source" : "changes";
+      sourceView = base === head ? "after" : "diff";
+      render();
+    } finally {
+      document.querySelector("#tabs").inert = false;
+    }
+  },
+});
 /** Updates the status banner and distinguishes ordinary progress from errors. */
 function showNotice(message, error = false) {
   $("#notice").textContent = message;
@@ -118,6 +192,7 @@ async function boot(refresh = false) {
     diffBase = diffBase || metadata.initialBase;
     baseRef = mode === "time" ? parentRevision(headRef) : diffBase;
     await loadComparison();
+    workflow.refresh(false).catch((error) => showNotice(error.message, true));
   } catch (error) {
     showNotice(error.message, true);
   }
@@ -1128,6 +1203,7 @@ function renderSelection() {
         renderPanel();
       }),
     );
+  actions.append(button("btn", "Comment", () => workflow.compose()));
   box.append(actions);
   if (
     scope.kind === "file" &&
@@ -1301,6 +1377,10 @@ function listRow(node, detail, action) {
 function renderTab() {
   const body = $("#tabBody");
   body.replaceChildren();
+  if (["comments", "runs"].includes(tab)) {
+    workflow.render(body, tab);
+    return;
+  }
   if (tab === "source") {
     renderSource(body);
     return;

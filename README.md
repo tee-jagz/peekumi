@@ -2,7 +2,7 @@
 
 Explore a repository and its changes from your phone, from the overall structure down to the implementation.
 
-Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. It leaves the inspected repository's working tree, branches and hooks untouched.
+Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. Inspection leaves the working tree, branches and hooks untouched. Explicit agent dispatch creates a separate run branch and worktree.
 
 ## Directory responsibilities
 
@@ -79,7 +79,7 @@ Python imports resolve relative paths and unique dotted-module suffixes. JavaScr
 
 Every tracked file appears, including tests and unsupported languages. Binary files, symlinks, submodules, files above 512 KiB, and common secret filenames are labelled without source previews. This filename restriction is not a secret scanner; the viewer is private because other source files can contain sensitive code or data.
 
-Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. A private SQLite syntax index under `.strata/index-rust/` reuses unchanged Git blobs across commits and restarts. The key includes parser implementation, language, TypeScript/Node version and Python interpreter/version. Dependency resolution is rebuilt for each tree, so moves and changed import targets remain accurate. Retained index payload is capped at 128 MiB per repository; deleting this directory forces reindexing. If the disk index is unavailable, analysis falls back to memory. There is no history backfill or agent orchestration yet.
+Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. A private SQLite syntax index under `.strata/index-rust/` reuses unchanged Git blobs across commits and restarts. The key includes parser implementation, language, TypeScript/Node version and Python interpreter/version. Dependency resolution is rebuilt for each tree, so moves and changed import targets remain accurate. Retained index payload is capped at 128 MiB per repository; deleting this directory forces reindexing. If the disk index is unavailable, analysis falls back to memory. There is no history backfill. Explicit agent runs are described in the workflow guide below.
 
 A bounded work queue sends repository analysis and SQLite operations to a dedicated Rust thread. Axum/Tokio handles HTTP independently; gzip runs in the blocking-work pool. The phone initially receives file statuses, dependencies and compact symbol previews; opening a file fetches its full symbols, imports, documentation, source and diff. The previous Node backend is retained under `test/reference/` solely for compatibility tests and benchmarking.
 
@@ -123,3 +123,7 @@ The original specification and prototype archive are preserved in [docs/context]
 ## Relationships and dependency rules
 
 The Dependencies panel now distinguishes static imports, calls, implementations and inheritance, with source evidence and explicit unresolved/ambiguous targets. Commit `.strata.json` to define path groups and forbidden relationship kinds. Violations and configuration errors are revision-specific; no rules are inferred from directory descriptions. See [relationship support and configuration](docs/RELATIONSHIPS.md) for examples and language limitations.
+
+## Review and steer
+
+Use **Comment** on a selection, then **Prepare run** to choose drafts and preview the exact task. Dispatch starts Codex or Claude Code in a dedicated worktree. Agent reports link commits and check evidence back to comments; **Review fix**, **Verify**, or **Reopen** completes the loop. See [the workflow guide](docs/WORKFLOW.md) for setup, persistence and boundaries.

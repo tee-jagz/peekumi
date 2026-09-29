@@ -142,7 +142,7 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
   );
   assert.equal((await f.git("status", "--porcelain")).toString(), "");
 });
-test("Rust authentication, read-only routes, gzip negotiation and static asset boundaries", async (t) => {
+test("Rust authentication, write content-type boundary, gzip negotiation and static assets", async (t) => {
   const f = await fixture(t);
   const server = await startRust(f.directory, { base: f.base });
   t.after(() => server.close());
@@ -195,7 +195,7 @@ test("Rust authentication, read-only routes, gzip negotiation and static asset b
   );
   assert.equal(
     (await fetch(url + "/api/runs", { method: "POST", headers })).status,
-    405,
+    403,
   );
   assert.equal(
     (await fetch(url + "/api/compare?base=--help", { headers })).status,

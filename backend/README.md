@@ -6,6 +6,8 @@ The Rust backend serves the authenticated API, reads committed Git objects, comp
 - `engine.rs`: Git snapshots, comparisons, directory descriptions and adapter coordination.
 - `relationships.rs`: shared relationship evidence, resolution and revision comparisons.
 - `rules.rs`: committed dependency configuration validation and violation checks.
+- `workflow.rs`: durable draft comments, frozen task previews, agent reports and owner verification.
+- `runner.rs`: isolated agent worktrees, process supervision and scoped stdio MCP reporting.
 - `index.rs`: persistent SQLite syntax cache.
 - `process.rs`: bounded Git and parser subprocess execution.
 - `adapters/`: the common language interface and its implementations.

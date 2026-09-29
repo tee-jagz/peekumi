@@ -112,3 +112,15 @@ Twenty Node-driven regression/model/API tests and nine native Rust tests pass. A
 Browser checks at 390×844 and 1366×768 cover real Strata adapter files and Visalytics, plus a fixture that deliberately violates rules. The fixture verifies directory rollup badges, Before/After outcomes, retention under Changes only, typed call edges, unresolved evidence and navigation back to source. Mobile and desktop relationship screenshots were inspected.
 
 Visalytics produced no parser/availability gaps. Its committed tree has no `.strata.json`, so no policy compliance is claimed. The first relationship-enabled scan with an empty index took approximately 12–13 seconds on this host. The first implementation returned 6,030,292 bytes of repeated overview JSON. Compact file pairs reduced that to 128,865 JSON bytes / 13,496 gzip bytes for 1,173 pairs, with ordinary imports reused from the existing file overview and detailed symbol evidence loaded lazily. These sizes cover the relationship response only, not the complete initial page.
+
+## Review workflow (2026-09-29)
+
+The comments/run slice adds durable anchored drafts, immutable previews, isolated Codex/Claude launchers, run-scoped stdio MCP reports and owner verification. Automated validation uses a deterministic local agent, not a paid model session.
+
+- 24 Node-driven tests and 9 native Rust tests cover the existing engine and new workflow. Strict Clippy checks pass.
+- New integration cases cover draft/ref conflicts, duplicate dispatch, one active run, attribution checks, cross-run report rejection, flagging, unreported outcomes, verification notes, reopening, persistence, cancellation, missing executables and service interruption.
+- The browser workflow completes draft → preview → dispatch → commit/MCP report → inspect → verify at 390×844 and 1366×768. A source-Before regression checks the saved SHA and symbol anchor.
+- Existing map, source, dependency and relationship browser checks pass. Visalytics also passes the phone and desktop inspection suite without modifying its checkout. Workflow screenshots were visually inspected.
+- Installed Codex and Claude Code sign-in status commands succeed on this host. Their real paid execution, model behavior and test quality have not been exercised by this validation.
+
+See [WORKFLOW.md](WORKFLOW.md) for current-status history semantics, polling, process recovery, permissions and remaining specification items.

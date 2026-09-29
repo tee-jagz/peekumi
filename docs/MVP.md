@@ -8,7 +8,7 @@ Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the vi
 
 Tap selects a card or dependency. A second tap or Open zooms into a card; breadcrumbs and the back chevron zoom out. Time stacks recent commit sheets and compares each commit with its first parent. Diff stacks base and head and supports Before/After. Use real packages and symbols; do not invent layers or health measurements. Large real-world maps use an SVG pan/zoom viewport, with readable labels at 1:1 and an optional Fit control. Changes only hides unchanged cards at each hierarchy level.
 
-The first implementation uses Changes, Source, and Dependencies review tabs. Comments and Ask remain deferred. Structure replaces the unmeasured Health lens.
+The review panel uses Changes, Source, Dependencies, Comments and Runs tabs. Comments become frozen task previews, isolated agent runs, reports and owner verification; Ask remains deferred. Structure replaces the unmeasured Health lens.
 
 ## First usable slice
 
@@ -27,8 +27,12 @@ Visalytics is the first integration target: a mixed Python and Svelte/TypeScript
 
 ## Deferred
 
-Ask, agent dispatch, comments, health scores, coverage, mutation testing, inferred architecture, compiler-backed call resolution and runtime dispatch, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
+Ask, health scores, coverage, mutation testing, inferred architecture, compiler-backed call resolution and runtime dispatch, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
 
 ## Acceptance
 
 From a phone, identify changed areas in a real agent session, follow their dependencies, drill to exact source and diffs, and decide whether implementation needs steering. Test map accuracy against Git, not just rendered examples.
+
+## Review workflow
+
+The authorized next slice is implemented in [WORKFLOW.md](WORKFLOW.md): anchored drafts, exact task preview, Codex/Claude dispatch, scoped MCP reporting, and owner verification. Inspection stays read-only; dispatch creates a separate worktree.

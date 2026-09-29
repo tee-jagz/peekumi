@@ -14,6 +14,8 @@ export async function startRust(
     python = process.env.STRATA_PYTHON ||
       (process.platform === "darwin" ? "/usr/bin/python3" : "python3"),
     node = process.execPath,
+    codex,
+    claude,
   } = {},
 ) {
   const state =
@@ -39,6 +41,8 @@ export async function startRust(
         STRATA_TOKEN: token,
         STRATA_PYTHON: python,
         STRATA_NODE: node,
+        ...(codex ? { STRATA_CODEX: codex } : {}),
+        ...(claude ? { STRATA_CLAUDE: claude } : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

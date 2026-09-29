@@ -5,6 +5,8 @@ mod index;
 mod process;
 mod relationships;
 mod rules;
+mod runner;
+mod workflow;
 use anyhow::{Context, Result};
 use axum::{
     Router,
@@ -57,6 +59,13 @@ struct Options {
     token: Option<String>,
     #[arg(long, hide = true)]
     stdio: bool,
+    /// Installed agent executable; invoked only after an explicit run dispatch.
+    #[arg(long, env = "STRATA_CODEX", default_value = "codex")]
+    codex: String,
+    #[arg(long, env = "STRATA_CLAUDE", default_value = "claude")]
+    claude: String,
+    #[arg(long, hide = true)]
+    report_run: Option<String>,
 }
 /// One queued repository operation with JSON arguments and a channel for its result.
 struct Work {
@@ -133,6 +142,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
 /// Shared HTTP state: repository worker, access token, expiring sessions and launch options.
 struct App {
     engine: Engine,
+    workflow: workflow::Workflow,
     token: String,
     cookie_name: String,
     sessions: Mutex<HashMap<String, Instant>>,
@@ -162,6 +172,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/" => Some(("text/html", include_bytes!("../frontend/index.html"))),
         "/app.js" => Some(("text/javascript", include_bytes!("../frontend/app.js"))),
         "/model.js" => Some(("text/javascript", include_bytes!("../frontend/model.js"))),
+        "/workflow.js" => Some(("text/javascript", include_bytes!("../frontend/workflow.js"))),
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
@@ -258,13 +269,13 @@ async fn json_response(
 async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
     json_response(code, json!({"error":message}), gzip, None).await
 }
-/// Serves embedded assets, exchanges access tokens for sessions and authenticates read-only API requests.
-/// Rejects cross-origin pairing, unauthorized access and unsupported write methods before repository dispatch.
+/// Serves assets, pairs sessions, and authenticates inspection and owner workflow requests.
+/// Rejects cross-origin writes before dispatching blocking repository or workflow operations.
 async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
     let gzip = gzip_accepted(request.headers());
-    let path = request.uri().path();
+    let path = request.uri().path().to_string();
     if request.method() == Method::GET
-        && let Some((kind, bytes)) = asset(path)
+        && let Some((kind, bytes)) = asset(&path)
     {
         return respond(StatusCode::OK, kind, bytes.to_vec(), gzip, None).await;
     }
@@ -342,8 +353,54 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         )
         .await;
     }
+    if path == "/api/workflow" || path.starts_with("/api/comments") || path.starts_with("/api/runs")
+    {
+        let method = request.method().to_string();
+        if method != "GET" {
+            let origin = header(request.headers(), "origin");
+            let valid_origin = origin.is_empty()
+                || url::Url::parse(origin).ok().is_some_and(|url| {
+                    let authority = match url.port() {
+                        Some(p) => format!("{}:{p}", url.host_str().unwrap_or("")),
+                        None => url.host_str().unwrap_or("").into(),
+                    };
+                    authority == header(request.headers(), "host")
+                });
+            if !valid_origin
+                || header(request.headers(), "sec-fetch-site") == "cross-site"
+                || !header(request.headers(), "content-type").starts_with("application/json")
+            {
+                return error(StatusCode::FORBIDDEN, "Same-origin JSON required", gzip).await;
+            }
+        }
+        let bytes = match to_bytes(request.into_body(), 131072).await {
+            Ok(b) => b,
+            Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "Request too large", gzip).await,
+        };
+        let body = if bytes.is_empty() {
+            json!({})
+        } else {
+            match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await,
+            }
+        };
+        let store = app.workflow.clone();
+        return match tokio::task::spawn_blocking(move || store.route(&method, &path, body)).await {
+            Ok(Ok(v)) => json_response(StatusCode::OK, v, gzip, None).await,
+            Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            Err(_) => {
+                error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Workflow worker failed",
+                    gzip,
+                )
+                .await
+            }
+        };
+    }
     if request.method() != Method::GET {
-        return error(StatusCode::METHOD_NOT_ALLOWED, "Read-only API", gzip).await;
+        return error(StatusCode::METHOD_NOT_ALLOWED, "Unsupported method", gzip).await;
     }
     let query: HashMap<_, _> =
         url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
@@ -357,7 +414,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         .get("head")
         .filter(|v| !v.is_empty())
         .unwrap_or(&app.options.head);
-    let result = match path {
+    let result = match path.as_str() {
         "/api/repo" => {
             app.engine
                 .call("metadata", json!([app.options.base, app.options.head]))
@@ -424,6 +481,16 @@ fn token(options: &Options) -> Result<String> {
 /// Returns startup, configuration, repository or listener errors.
 async fn main() -> Result<()> {
     let options = Options::parse();
+    if let Some(id) = &options.report_run {
+        let store = workflow::Workflow::new(
+            &options.directory,
+            &options.state_dir,
+            &options.head,
+            &options.codex,
+            &options.claude,
+        )?;
+        return runner::mcp(store, id);
+    }
     let mut repo = Repository::new(
         options.directory.clone(),
         &options.state_dir,
@@ -455,6 +522,49 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     let access_token = token(&options)?;
+    // The API owns recovery; a second service must not mark a live run interrupted.
+    let service_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(options.state_dir.join("workflow-service.lock"))?;
+    service_lock
+        .try_lock()
+        .context("Another Strata service is using this state directory")?;
+    let watched = if options.head == "HEAD" {
+        String::from_utf8(
+            process::run(
+                "git",
+                &[
+                    "-C",
+                    repo.directory.to_str().context("Invalid directory")?,
+                    "symbolic-ref",
+                    "-q",
+                    "HEAD",
+                ],
+                None,
+                vec![],
+            )
+            .unwrap_or_default(),
+        )?
+        .trim()
+        .to_string()
+    } else {
+        options.head.clone()
+    };
+    let workflow = workflow::Workflow::new(
+        &repo.directory,
+        &options.state_dir,
+        if watched.is_empty() {
+            &options.head
+        } else {
+            &watched
+        },
+        &options.codex,
+        &options.claude,
+    )?;
+    runner::recover(workflow.clone())?;
     let listener = tokio::net::TcpListener::bind((options.host.as_str(), options.port)).await?;
     let address = listener.local_addr()?;
     println!(
@@ -467,6 +577,7 @@ async fn main() -> Result<()> {
     );
     let app = Arc::new(App {
         cookie_name,
+        workflow,
         engine: Engine::start(repo),
         token: access_token,
         sessions: Mutex::new(HashMap::new()),
