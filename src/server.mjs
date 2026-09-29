@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import http from "node:http";
-import { gzipSync } from "node:zlib";
+import { gzip } from "node:zlib";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Repository } from "./engine.mjs";
+import { RepositoryClient } from "./repository-client.mjs";
+import { promisify } from "node:util";
+const compress = promisify(gzip);
 
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 const assets = {
@@ -35,7 +37,7 @@ export function createServer(
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
-    const sendBody = (code, type, value) => {
+    const sendBody = async (code, type, value) => {
       let body = Buffer.isBuffer(value) ? value : Buffer.from(value);
       const acceptsGzip = (request.headers["accept-encoding"] || "")
         .split(",")
@@ -53,7 +55,7 @@ export function createServer(
         });
       response.setHeader("Vary", "Accept-Encoding");
       if (body.length >= 1024 && acceptsGzip) {
-        body = gzipSync(body);
+        body = await compress(body);
         response.setHeader("Content-Encoding", "gzip");
       }
       response.writeHead(code, {
@@ -68,7 +70,7 @@ export function createServer(
       const url = new URL(request.url, "http://localhost");
       if (request.method === "GET" && assets[url.pathname]) {
         const [file, type] = assets[url.pathname];
-        sendBody(200, type, await readFile(path.join(publicDir, file)));
+        await sendBody(200, type, await readFile(path.join(publicDir, file)));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/session") {
@@ -76,16 +78,16 @@ export function createServer(
           request.headers.origin &&
           new URL(request.headers.origin).host !== request.headers.host
         )
-          return send(403, { error: "Origin rejected" });
+          return await send(403, { error: "Origin rejected" });
         let body = "";
         for await (const chunk of request) {
           body += chunk;
           if (body.length > 2048)
-            return send(413, { error: "Request too large" });
+            return await send(413, { error: "Request too large" });
         }
         const provided = JSON.parse(body).token;
         if (!equal(provided, token))
-          return send(401, { error: "Access token not recognised" });
+          return await send(401, { error: "Access token not recognised" });
         for (const [key, expires] of sessions)
           if (expires < Date.now()) sessions.delete(key);
         const session = randomBytes(32).toString("hex");
@@ -94,7 +96,7 @@ export function createServer(
           "Set-Cookie",
           `strata_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${secureCookie ? "; Secure" : ""}`,
         );
-        return send(200, { ok: true });
+        return await send(200, { ok: true });
       }
       const session = request.headers.cookie
         ?.split(";")
@@ -103,11 +105,11 @@ export function createServer(
         ?.slice(15);
       const bearer = request.headers.authorization?.replace(/^Bearer /, "");
       if (!(sessions.get(session) > Date.now()) && !equal(bearer, token))
-        return send(401, {
+        return await send(401, {
           error: "Connect with the access link printed by Strata",
         });
       if (request.method !== "GET")
-        return send(405, { error: "Read-only API" });
+        return await send(405, { error: "Read-only API" });
       if (url.pathname === "/api/repo") {
         const metadata = await repo.metadata();
         let initialBase;
@@ -116,7 +118,7 @@ export function createServer(
         } catch {
           initialBase = metadata.commits.at(-1).sha;
         }
-        return send(200, {
+        return await send(200, {
           ...metadata,
           initialBase,
           initialHead: await repo.resolve(head),
@@ -125,13 +127,19 @@ export function createServer(
       const baseRef = url.searchParams.get("base") || base,
         headRef = url.searchParams.get("head") || head;
       if (url.pathname === "/api/compare")
-        return send(200, await repo.compare(baseRef, headRef));
+        return await send(
+          200,
+          await repo.compare(baseRef, headRef, {
+            view:
+              url.searchParams.get("view") === "overview" ? "overview" : "full",
+          }),
+        );
       if (url.pathname === "/api/source")
-        return send(
+        return await send(
           200,
           await repo.source(baseRef, headRef, url.searchParams.get("path")),
         );
-      return send(404, { error: "Not found" });
+      return await send(404, { error: "Not found" });
     } catch (error) {
       send(400, { error: error.message });
     }
@@ -158,8 +166,15 @@ async function main() {
       options[key.slice(2)] = args.shift();
     else throw new Error(`Unknown or missing argument: ${key}`);
   }
-  const repo = new Repository(directory);
-  await repo.resolve("HEAD");
+  const repo = new RepositoryClient(directory, {
+    cacheDirectory: path.join(process.cwd(), ".strata", "index"),
+  });
+  try {
+    await repo.resolve("HEAD");
+  } catch (error) {
+    await repo.close();
+    throw error;
+  }
   const state = path.join(process.cwd(), ".strata");
   await mkdir(state, { recursive: true, mode: 0o700 });
   const tokenFile = path.join(state, "access-token");
@@ -173,7 +188,9 @@ async function main() {
   const host = options.host || "127.0.0.1",
     port = Number(options.port || 4317);
   const server = createServer(repo, { ...options, token });
+  server.on("close", () => repo.close());
   server.on("error", (error) => {
+    repo.close();
     console.error(error.message);
     process.exitCode = 1;
   });

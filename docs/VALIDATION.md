@@ -59,3 +59,24 @@ Python module/class/function docstrings and annotations, plus TypeScript/JSDoc d
 Eight engine/model/API tests pass, including metadata provenance, Python positional/keyword/variadic arguments, async signatures, JSDoc argument and return tags, generics, class fields, revision switching, and exclusion of descriptions from initial comparisons. Browser integration against Visalytics passes at 390 × 844 and 1366 × 768, including the existing Time/Diff, source, dependency and authentication checks. Visually inspected phone and desktop metadata screens alongside the map overview; screenshots remain ignored. Physical-phone gesture testing remains with the owner.
 
 On the same simulated 1 Mbps / 100 ms mobile connection, the new warm map became usable in 3,944 ms. The compressed comparison is 356,831 bytes, versus 356,462 bytes before this change, with all 60 changed files preserved. Full declaration metadata does not inflate the initial repository map payload. Cold parsing remains separate from this warm measurement.
+
+## Incremental index and compact overview
+
+Implemented content-addressed syntax reuse, a private SQLite index, a worker-backed CLI, asynchronous gzip, and compact initial comparisons. Full symbol comparisons and unresolved imports now arrive with file details. The SVG map, file inventory, status rollups and dependency edges are preserved. Persistent data stays under ignored `.strata/index/`; inspected repository objects remain read-only.
+
+Measured against Visalytics with `STRATA_BASELINE_ENGINE=.strata/stable/src/engine.mjs STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /Users/tolu/projects/visalytics HEAD~10 HEAD`:
+
+| Measurement | Result |
+| --- | ---: |
+| Previous implementation, cold full comparison | 6,737 ms |
+| New implementation, empty index and overview | 6,965 ms |
+| New worker, existing disk index | 894 ms |
+| Warm overview, median of five samples | 34 ms |
+| Previous compressed comparison | 356,831 bytes |
+| New compressed overview | 47,929 bytes |
+
+First indexing parsed 1,243 files and reused 1,177 analyses across the two snapshots. Reopening the index parsed zero files and reused 2,420 analyses. File paths, statuses and before/after dependency edges matched the previous engine exactly. The initial scan is not faster in this measurement; the improvements are reuse, restart behaviour, HTTP responsiveness and transfer size. Worker timings include worker initialization but not process startup, and the operating system's filesystem cache was not cleared.
+
+A separate three-sample browser comparison warmed both backends and used fresh 390 × 844 browser pages with 1 Mbps download throughput and 100 ms latency. Previous map-ready times: 3,932 / 3,950 / 3,958 ms. New times: 1,421 / 1,421 / 1,410 ms. Median improved from 3,950 to 1,421 ms. This is simulated network performance, not a physical-phone measurement.
+
+Twelve automated tests pass, including persistent reuse across a fresh repository instance, changed-blob-only parsing, moved relative-import resolution without mutating old snapshots, overview/full-source equivalence, worker shutdown/error handling, and memory fallback when the disk index is unavailable. Mobile and desktop browser checks pass against Visalytics; screenshots of the mobile file drill-down and desktop overview were inspected. This is the optimized Node baseline. A Rust implementation and equivalent end-to-end benchmark have not been built or measured yet.

@@ -5,7 +5,7 @@
   "description": "A mobile repository map, from architecture to source.",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "bin": {
     "strata": "src/server.mjs"

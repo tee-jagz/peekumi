@@ -6,7 +6,7 @@ Strata reads committed Git objects and serves a mobile web interface. It leaves 
 
 ## Run
 
-Requirements: Node.js 22+, Git, and Python 3.9+ for Python symbol extraction. Python is not required for file-level inspection or JavaScript/TypeScript analysis.
+Requirements: Node.js 22.13+, Git, and Python 3.9+ for Python symbol extraction. Python is not required for file-level inspection or JavaScript/TypeScript analysis.
 
 ```sh
 npm ci
@@ -64,7 +64,9 @@ Python imports resolve relative paths and unique dotted-module suffixes. JavaScr
 
 Every tracked file appears, including tests and unsupported languages. Binary files, symlinks, submodules, files above 512 KiB, and common secret filenames are labelled without source previews. This filename restriction is not a secret scanner; the viewer is private because other source files can contain sensitive code or data.
 
-Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. There is no database, history backfill, or agent orchestration yet.
+Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. A private SQLite syntax index under `.strata/index/` reuses unchanged Git blobs across commits and restarts. The key includes parser implementation, language, TypeScript version and Python interpreter/version. Dependency resolution is rebuilt for each tree, so moves and changed import targets remain accurate. Retained index payload is capped at 128 MiB per repository; deleting this directory forces reindexing. If the disk index is unavailable, analysis falls back to memory. There is no history backfill or agent orchestration yet.
+
+The CLI runs analysis in a worker thread, keeping parsing and index operations away from the HTTP event loop. Compression uses the asynchronous Node API. The phone initially receives file statuses, dependencies and compact symbol previews; opening a file fetches its full symbols, imports, documentation, source and diff. The Node SQLite API can emit an experimental-feature warning on supported releases.
 
 ## Verify
 
@@ -83,6 +85,14 @@ STRATA_TEST_REPO=/path/to/visalytics STRATA_TEST_BASE=HEAD~10 npm run test:brows
 `STRATA_BROWSER_CHANNEL=chrome` uses an installed Chrome instead of Playwright's downloaded Chromium. Browser tests save local screenshots under `test-results/`; these can contain inspected code and are never committed.
 
 See [MVP scope](docs/MVP.md), [architecture](docs/ARCHITECTURE.md), and [first integration results](docs/VALIDATION.md).
+
+## Benchmark indexing
+
+```sh
+STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /path/to/repository HEAD~10 HEAD
+```
+
+This measures an empty index, a restarted analysis worker with a persisted index, five warm comparison samples, and compressed overview size. It uses a temporary private index and cleans it up. `STRATA_BASELINE_ENGINE=/path/to/previous/engine.mjs` optionally compares a previous implementation and verifies identical file statuses and dependency edges. Browser/network timings are separate.
 
 ## This workspace
 

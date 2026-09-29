@@ -140,7 +140,12 @@ async function loadComparison() {
     let data = comparisons.get(key);
     if (!data) {
       data = await api(
-        "/api/compare?" + new URLSearchParams({ base: baseRef, head: headRef }),
+        "/api/compare?" +
+          new URLSearchParams({
+            base: baseRef,
+            head: headRef,
+            view: "overview",
+          }),
       );
       comparisons.set(key, data);
       if (comparisons.size > 6)
@@ -428,11 +433,13 @@ function renderGraph(body) {
     const message = element(
       "div",
       "map-empty",
-      changesOnly
-        ? "No changed symbols or items here. Open Source for file-level changes, or turn off Changes only."
-        : scope.kind === "file"
-          ? "No extracted symbols. Open Source to inspect the complete file."
-          : "No items in this revision.",
+      scope.kind === "file" && !sourceData
+        ? "Loading symbols…"
+        : changesOnly
+          ? "No changed symbols or items here. Open Source for file-level changes, or turn off Changes only."
+          : scope.kind === "file"
+            ? "No extracted symbols. Open Source to inspect the complete file."
+            : "No items in this revision.",
     );
     message.style.position = "absolute";
     message.style.top = y + "px";
@@ -529,7 +536,9 @@ function graphNode({ node, x, y, w, h }) {
     ),
   );
   if (node.kind === "file")
-    top.append(element("span", "n-meta", node.symbols.length));
+    top.append(
+      element("span", "n-meta", node.symbolCount ?? node.symbols?.length ?? 0),
+    );
   card.append(top);
   if (node.files) {
     const kids = element("div", "n-kids");
@@ -550,9 +559,15 @@ function graphNode({ node, x, y, w, h }) {
     if (paths.length > 3)
       kids.append(element("span", "kid", `+${paths.length - 3}`));
     card.append(kids);
-  } else if (node.kind === "file" && node.symbols.length) {
+  } else if (
+    node.kind === "file" &&
+    (node.symbolCount ?? node.symbols?.length ?? 0)
+  ) {
     const kids = element("div", "n-kids");
-    for (const symbol of node.symbols.slice(0, 22)) {
+    for (const symbol of (node.symbols || node.symbolPreview || []).slice(
+      0,
+      22,
+    )) {
       const bar = element("span", "bar");
       bar.style.setProperty(
         "--c",
@@ -867,7 +882,7 @@ function renderSelection() {
   else if (selected.kind === "symbol")
     stats.textContent = `Lines ${selected.start}–${selected.end}`;
   else if (selected.kind === "file")
-    stats.textContent = `${selected.symbols.length} symbols · ${selected.analysis}`;
+    stats.textContent = `${selected.symbolCount ?? selected.symbols?.length ?? 0} symbols · ${selected.analysis}`;
   else if (selected.kind === "edge")
     stats.textContent = `${selected.before.size} imports before → ${selected.after.size} after`;
   box.append(stats);
@@ -1157,7 +1172,7 @@ function renderDependencies(body) {
     );
   if (scope.kind === "file") {
     const file = comparison.files.find((f) => f.path === scope.path);
-    const unresolved = file?.imports.filter((i) => !i.resolved?.length) || [];
+    const unresolved = file?.imports?.filter((i) => !i.resolved?.length) || [];
     if (unresolved.length)
       body.append(
         element(
@@ -1192,8 +1207,15 @@ async function loadSource() {
     }
     if (id !== sourceId || scope.path !== path) return;
     sourceData = data;
+    const file = comparison.files.find((file) => file.path === path);
+    if (file) {
+      file.symbols = data.symbols;
+      file.imports = data.imports;
+    }
+    refreshModel();
+    renderDeck();
     renderSelection();
-    if (tab === "source") renderTab();
+    renderTab();
   } catch (error) {
     if (id === sourceId) {
       showNotice(error.message, true);

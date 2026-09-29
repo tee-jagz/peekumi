@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { AnalysisIndex } from "./analysis-index.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -279,11 +281,20 @@ const statusOf = (a, b) =>
 export class Repository {
   constructor(
     directory,
-    { python = process.env.STRATA_PYTHON || "python3" } = {},
+    { python = process.env.STRATA_PYTHON || "python3", cacheDirectory } = {},
   ) {
     this.directory = path.resolve(directory);
     this.python = python;
     this.cache = new Map();
+    this.buildQueue = Promise.resolve();
+    this.stats = { parsed: 0, reused: 0, snapshots: 0 };
+    this.index = new AnalysisIndex(cacheDirectory, hash(this.directory));
+    this.parserVersion = hash(
+      readFileSync(fileURLToPath(import.meta.url)) +
+        readFileSync(pythonScript) +
+        ts.version,
+    );
+    this.pythonIdentity = null;
   }
   async git(...args) {
     return command("git", ["-C", this.directory, ...args]);
@@ -338,17 +349,40 @@ export class Repository {
   async snapshot(ref) {
     const sha = await this.resolve(ref);
     if (!this.cache.has(sha)) {
-      const pending = this.buildSnapshot(sha).catch((error) => {
-        this.cache.delete(sha);
-        throw error;
-      });
+      const pending = this.buildQueue
+        .then(() => this.buildSnapshot(sha))
+        .catch((error) => {
+          this.cache.delete(sha);
+          throw error;
+        });
+      this.buildQueue = pending.catch(() => {});
       this.cache.set(sha, pending);
       if (this.cache.size > 6)
         this.cache.delete(this.cache.keys().next().value);
     }
     return this.cache.get(sha);
   }
+  metrics() {
+    return { ...this.stats };
+  }
+  close() {
+    this.index.close();
+  }
   async buildSnapshot(sha) {
+    this.stats.snapshots++;
+    this.pythonIdentity ||= command(this.python, ["--version"]).then(
+      (output) => this.python + ":" + output.toString().trim(),
+      () => this.python + ":unavailable",
+    );
+    const pythonIdentity = await this.pythonIdentity;
+    const cacheKey = (entry) =>
+      this.parserVersion +
+      ":" +
+      (entry.path.endsWith(".py") ? pythonIdentity : "typescript") +
+      ":" +
+      path.extname(entry.path) +
+      ":" +
+      entry.oid;
     const entries = (await this.git("ls-tree", "-rlz", sha))
       .toString()
       .split("\0")
@@ -398,10 +432,19 @@ export class Repository {
           continue;
         }
         entry.source = raw.toString("utf8");
-        if (entry.path.endsWith(".py")) pythonFiles.push(entry);
-        else if (/\.(?:[cm]?[jt]sx?|svelte)$/.test(entry.path))
-          Object.assign(entry, jsAnalyze(entry.path, entry.source));
-        else entry.analysis = "file-level analysis";
+        if (/\.(?:py|[cm]?[jt]sx?|svelte)$/.test(entry.path)) {
+          const cached = this.index.get(cacheKey(entry));
+          if (cached) {
+            Object.assign(entry, cached);
+            this.stats.reused++;
+          } else if (entry.path.endsWith(".py")) pythonFiles.push(entry);
+          else {
+            const analysis = jsAnalyze(entry.path, entry.source);
+            this.index.set(cacheKey(entry), analysis);
+            Object.assign(entry, analysis);
+            this.stats.parsed++;
+          }
+        } else entry.analysis = "file-level analysis";
       }
       if (pythonFiles.length) {
         try {
@@ -413,9 +456,11 @@ export class Repository {
               })
             ).toString(),
           );
-          pythonFiles.forEach((entry, index) =>
-            Object.assign(entry, results[index]),
-          );
+          pythonFiles.forEach((entry, index) => {
+            this.index.set(cacheKey(entry), results[index]);
+            Object.assign(entry, results[index]);
+            this.stats.parsed++;
+          });
         } catch (error) {
           pythonFiles.forEach((entry) => {
             entry.analysis = "Python unavailable · file-level analysis";
@@ -423,6 +468,7 @@ export class Repository {
         }
       }
     }
+    this.index.flush();
     const files = Object.fromEntries(
       entries.map((entry) => [entry.path, entry]),
     );
@@ -511,7 +557,7 @@ export class Repository {
     }
     return { sha, files };
   }
-  async compare(baseRef, headRef) {
+  async compare(baseRef, headRef, { view = "full", path: selectedPath } = {}) {
     const [base, head] = await Promise.all([
       this.snapshot(baseRef),
       this.snapshot(headRef),
@@ -519,6 +565,7 @@ export class Repository {
     const files = [
       ...new Set([...Object.keys(base.files), ...Object.keys(head.files)]),
     ]
+      .filter((file) => selectedPath === undefined || file === selectedPath)
       .sort()
       .map((file) => {
         const before = base.files[file],
@@ -548,10 +595,17 @@ export class Repository {
           ),
           size: current.size,
           analysis: current.analysis,
-          symbols,
+          ...(view === "overview"
+            ? {
+                symbolCount: symbols.length,
+                symbolPreview: symbols
+                  .slice(0, 22)
+                  .map((s) => ({ status: s.status })),
+              }
+            : { symbols }),
           deps: after?.deps || [],
           beforeDeps: before?.deps || [],
-          imports: current.imports,
+          ...(view === "overview" ? {} : { imports: current.imports }),
           readable: typeof current.source === "string",
         };
       });
@@ -591,6 +645,9 @@ export class Repository {
       after: after?.source ?? null,
       patch,
       analysis: (after || before).analysis,
+      symbols: (await this.compare(base.sha, head.sha, { path: file })).files[0]
+        .symbols,
+      imports: (after || before).imports,
       details: {
         before: before
           ? {

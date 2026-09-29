@@ -273,3 +273,130 @@ export interface Result { name?: string; }
   assert.equal(versions.after.description, "Updated services.");
   assert.equal(versions.after.symbols[0].returns, null);
 });
+
+test("blob index persists across restarts, reuses unchanged syntax, and resolves moved imports per snapshot", async (t) => {
+  const f = await fixture();
+  const cacheDirectory = await mkdtemp(path.join(os.tmpdir(), "strata-index-"));
+  t.after(async () => {
+    await rm(f.directory, { recursive: true, force: true });
+    await rm(cacheDirectory, { recursive: true, force: true });
+  });
+  const options = { python: f.repo.python, cacheDirectory };
+  const indexed = new Repository(f.directory, options);
+  const expected = await f.repo.compare(f.base, "HEAD");
+  assert.deepEqual(await indexed.compare(f.base, "HEAD"), expected);
+  assert.ok(indexed.metrics().parsed > 0);
+  assert.ok(indexed.metrics().reused > 0);
+  indexed.close();
+  const restarted = new Repository(f.directory, options);
+  t.after(() => restarted.close());
+  assert.deepEqual(await restarted.compare(f.base, "HEAD"), expected);
+  assert.equal(
+    restarted.metrics().parsed,
+    0,
+    "A fresh repository instance uses persisted syntax",
+  );
+  const head = await restarted.resolve("HEAD");
+  await f.put(
+    "other/use.py",
+    "from .model import Model\ndef go():\n    return Model().run()\n",
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Reuse syntax at a different path");
+  const next = await restarted.compare(head, "HEAD");
+  assert.equal(
+    restarted.metrics().parsed,
+    0,
+    "Identical blob at new path is not reparsed",
+  );
+  assert.deepEqual(next.files.find((f) => f.path === "other/use.py").deps, []);
+  assert.deepEqual(next.files.find((f) => f.path === "pkg/use.py").deps, [
+    "pkg/model.py",
+  ]);
+  const old = await restarted.snapshot(head);
+  assert.deepEqual(
+    old.files["pkg/use.py"].imports[0].resolved,
+    ["pkg/model.py"],
+    "Resolving another path never mutates cached snapshots",
+  );
+  await f.put("other/model.py", "class Model:\n    pass\n");
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Add target");
+  const added = await restarted.compare(head, "HEAD");
+  assert.equal(restarted.metrics().parsed, 1, "Only new content is parsed");
+  assert.deepEqual(added.files.find((f) => f.path === "other/use.py").deps, [
+    "other/model.py",
+  ]);
+  assert.equal((await f.git("status", "--porcelain")).toString(), "");
+});
+
+test("overview preserves every file and edge while symbols and imports arrive with file details", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const full = await f.repo.compare(f.base, "HEAD");
+  const overview = await f.repo.compare(f.base, "HEAD", { view: "overview" });
+  assert.equal(overview.files.length, full.files.length);
+  for (let i = 0; i < full.files.length; i++) {
+    const a = full.files[i],
+      b = overview.files[i];
+    assert.equal(b.path, a.path);
+    assert.equal(b.status, a.status);
+    assert.deepEqual(b.deps, a.deps);
+    assert.deepEqual(b.beforeDeps, a.beforeDeps);
+    assert.equal(b.symbolCount, a.symbols.length);
+    assert.ok(!("symbols" in b));
+    assert.ok(!("imports" in b));
+    const source = await f.repo.source(f.base, "HEAD", a.path);
+    assert.deepEqual(source.symbols, a.symbols);
+    assert.deepEqual(source.imports, a.imports);
+  }
+  const server = createServer(f.repo, { token: "overview-test", base: f.base });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const response = await fetch(
+    "http://127.0.0.1:" + server.address().port + "/api/compare?view=overview",
+    { headers: { Authorization: "Bearer overview-test" } },
+  );
+  assert.deepEqual(await response.json(), overview);
+});
+
+test("worker-backed repository preserves API results and reports failures without hanging", async (t) => {
+  const { RepositoryClient } = await import("../src/repository-client.mjs");
+  const f = await fixture();
+  const worker = new RepositoryClient(f.directory, { python: f.repo.python });
+  t.after(async () => {
+    await worker.close();
+    await rm(f.directory, { recursive: true, force: true });
+  });
+  assert.deepEqual(
+    await worker.compare(f.base, "HEAD", { view: "overview" }),
+    await f.repo.compare(f.base, "HEAD", { view: "overview" }),
+  );
+  assert.deepEqual(
+    await worker.source(f.base, "HEAD", "pkg/model.py"),
+    await f.repo.source(f.base, "HEAD", "pkg/model.py"),
+  );
+  await assert.rejects(worker.resolve("--help"), /Invalid Git revision/);
+  const pending = worker.compare(f.base, "HEAD");
+  const rejected = assert.rejects(pending, /stopped/);
+  await worker.close();
+  await rejected;
+  await assert.rejects(worker.metadata(), /stopped/);
+});
+
+test("an unavailable persistent index falls back to memory without losing analysis", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const blocker = path.join(f.directory, "index-blocker");
+  await writeFile(blocker, "not a directory");
+  const repo = new Repository(f.directory, {
+    python: f.repo.python,
+    cacheDirectory: blocker,
+  });
+  t.after(() => repo.close());
+  assert.deepEqual(
+    await repo.compare(f.base, "HEAD"),
+    await f.repo.compare(f.base, "HEAD"),
+  );
+  assert.ok(repo.metrics().reused > 0);
+});
