@@ -1,55 +1,110 @@
 #!/usr/bin/env node
-import http from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Repository } from './engine.mjs';
+import http from "node:http";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Repository } from "./engine.mjs";
 
-const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
-const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'] };
-const equal = (a, b) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-export function createServer(repo, { token, base = 'HEAD~1', head = 'HEAD', secureCookie = false } = {}) {
-  if (!token) throw new Error('An access token is required');
+const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+const assets = {
+  "/": ["index.html", "text/html"],
+  "/app.js": ["app.js", "text/javascript"],
+  "/style.css": ["style.css", "text/css"],
+  "/favicon.svg": ["favicon.svg", "image/svg+xml"],
+};
+const equal = (a, b) =>
+  typeof a === "string" &&
+  a.length === b.length &&
+  timingSafeEqual(Buffer.from(a), Buffer.from(b));
+export function createServer(
+  repo,
+  { token, base = "HEAD~1", head = "HEAD", secureCookie = false } = {},
+) {
+  if (!token) throw new Error("An access token is required");
   const sessions = new Map();
   return http.createServer(async (request, response) => {
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('X-Frame-Options', 'DENY');
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
-    const send = (code, value) => { response.writeHead(code, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)); };
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Referrer-Policy", "no-referrer");
+    response.setHeader("X-Frame-Options", "DENY");
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    );
+    const send = (code, value) => {
+      response.writeHead(code, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(value));
+    };
     try {
-      const url = new URL(request.url, 'http://localhost');
-      if (request.method === 'GET' && assets[url.pathname]) {
+      const url = new URL(request.url, "http://localhost");
+      if (request.method === "GET" && assets[url.pathname]) {
         const [file, type] = assets[url.pathname];
-        response.writeHead(200, { 'Content-Type': type }); response.end(await readFile(path.join(publicDir, file))); return;
+        response.writeHead(200, { "Content-Type": type });
+        response.end(await readFile(path.join(publicDir, file)));
+        return;
       }
-      if (request.method === 'POST' && url.pathname === '/api/session') {
-        if (request.headers.origin && new URL(request.headers.origin).host !== request.headers.host) return send(403, { error: 'Origin rejected' });
-        let body = '';
-        for await (const chunk of request) { body += chunk; if (body.length > 2048) return send(413, { error: 'Request too large' }); }
+      if (request.method === "POST" && url.pathname === "/api/session") {
+        if (
+          request.headers.origin &&
+          new URL(request.headers.origin).host !== request.headers.host
+        )
+          return send(403, { error: "Origin rejected" });
+        let body = "";
+        for await (const chunk of request) {
+          body += chunk;
+          if (body.length > 2048)
+            return send(413, { error: "Request too large" });
+        }
         const provided = JSON.parse(body).token;
-        if (!equal(provided, token)) return send(401, { error: 'Access token not recognised' });
-        for (const [key, expires] of sessions) if (expires < Date.now()) sessions.delete(key);
-        const session = randomBytes(32).toString('hex'); sessions.set(session, Date.now() + 7 * 86400000);
-        response.setHeader('Set-Cookie', `strata_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${secureCookie ? '; Secure' : ''}`);
+        if (!equal(provided, token))
+          return send(401, { error: "Access token not recognised" });
+        for (const [key, expires] of sessions)
+          if (expires < Date.now()) sessions.delete(key);
+        const session = randomBytes(32).toString("hex");
+        sessions.set(session, Date.now() + 7 * 86400000);
+        response.setHeader(
+          "Set-Cookie",
+          `strata_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${secureCookie ? "; Secure" : ""}`,
+        );
         return send(200, { ok: true });
       }
-      const session = request.headers.cookie?.split(';').map(c => c.trim()).find(c => c.startsWith('strata_session='))?.slice(15);
-      const bearer = request.headers.authorization?.replace(/^Bearer /, '');
-      if (!(sessions.get(session) > Date.now()) && !equal(bearer, token)) return send(401, { error: 'Connect with the access link printed by Strata' });
-      if (request.method !== 'GET') return send(405, { error: 'Read-only API' });
-      if (url.pathname === '/api/repo') {
+      const session = request.headers.cookie
+        ?.split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith("strata_session="))
+        ?.slice(15);
+      const bearer = request.headers.authorization?.replace(/^Bearer /, "");
+      if (!(sessions.get(session) > Date.now()) && !equal(bearer, token))
+        return send(401, {
+          error: "Connect with the access link printed by Strata",
+        });
+      if (request.method !== "GET")
+        return send(405, { error: "Read-only API" });
+      if (url.pathname === "/api/repo") {
         const metadata = await repo.metadata();
         let initialBase;
-        try { initialBase = await repo.resolve(base); } catch { initialBase = metadata.commits.at(-1).sha; }
-        return send(200, { ...metadata, initialBase, initialHead: await repo.resolve(head) });
+        try {
+          initialBase = await repo.resolve(base);
+        } catch {
+          initialBase = metadata.commits.at(-1).sha;
+        }
+        return send(200, {
+          ...metadata,
+          initialBase,
+          initialHead: await repo.resolve(head),
+        });
       }
-      const baseRef = url.searchParams.get('base') || base, headRef = url.searchParams.get('head') || head;
-      if (url.pathname === '/api/compare') return send(200, await repo.compare(baseRef, headRef));
-      if (url.pathname === '/api/source') return send(200, await repo.source(baseRef, headRef, url.searchParams.get('path')));
-      return send(404, { error: 'Not found' });
+      const baseRef = url.searchParams.get("base") || base,
+        headRef = url.searchParams.get("head") || head;
+      if (url.pathname === "/api/compare")
+        return send(200, await repo.compare(baseRef, headRef));
+      if (url.pathname === "/api/source")
+        return send(
+          200,
+          await repo.source(baseRef, headRef, url.searchParams.get("path")),
+        );
+      return send(404, { error: "Not found" });
     } catch (error) {
       send(400, { error: error.message });
     }
@@ -58,26 +113,54 @@ export function createServer(repo, { token, base = 'HEAD~1', head = 'HEAD', secu
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.includes('--help') || !args.length) {
-    console.log('Usage: npm start -- /path/to/repo [--host 127.0.0.1] [--port 4317] [--base HEAD~1] [--head HEAD] [--secure-cookie]\nSTRATA_PYTHON selects the Python interpreter. Access is token protected. Bind a private interface for phone access.'); return;
+  if (args.includes("--help") || !args.length) {
+    console.log(
+      "Usage: npm start -- /path/to/repo [--host 127.0.0.1] [--port 4317] [--base HEAD~1] [--head HEAD] [--secure-cookie]\nSTRATA_PYTHON selects the Python interpreter. Access is token protected. Bind a private interface for phone access.",
+    );
+    return;
   }
-  const directory = args.shift(); const options = {};
+  const directory = args.shift();
+  const options = {};
   while (args.length) {
     const key = args.shift();
-    if (key === '--secure-cookie') options.secureCookie = true;
-    else if (['--host', '--port', '--base', '--head'].includes(key) && args.length) options[key.slice(2)] = args.shift();
+    if (key === "--secure-cookie") options.secureCookie = true;
+    else if (
+      ["--host", "--port", "--base", "--head"].includes(key) &&
+      args.length
+    )
+      options[key.slice(2)] = args.shift();
     else throw new Error(`Unknown or missing argument: ${key}`);
   }
   const repo = new Repository(directory);
-  await repo.resolve('HEAD');
-  const state = path.join(process.cwd(), '.strata'); await mkdir(state, { recursive: true, mode: 0o700 });
-  const tokenFile = path.join(state, 'access-token'); let token;
-  try { token = (await readFile(tokenFile, 'utf8')).trim(); } catch { token = randomBytes(32).toString('hex'); await writeFile(tokenFile, token, { mode: 0o600 }); }
-  const host = options.host || '127.0.0.1', port = Number(options.port || 4317);
+  await repo.resolve("HEAD");
+  const state = path.join(process.cwd(), ".strata");
+  await mkdir(state, { recursive: true, mode: 0o700 });
+  const tokenFile = path.join(state, "access-token");
+  let token;
+  try {
+    token = (await readFile(tokenFile, "utf8")).trim();
+  } catch {
+    token = randomBytes(32).toString("hex");
+    await writeFile(tokenFile, token, { mode: 0o600 });
+  }
+  const host = options.host || "127.0.0.1",
+    port = Number(options.port || 4317);
   const server = createServer(repo, { ...options, token });
-  server.on('error', error => { console.error(error.message); process.exitCode = 1; });
+  server.on("error", (error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
   server.listen(port, host, () => {
-    console.log(`Repo Strata · ${repo.directory}\nOpen: http://${host.includes(':') ? `[${host}]` : host}:${port}/#token=${token}\nRead-only Git inspection. Ctrl+C to stop.`);
+    console.log(
+      `Repo Strata · ${repo.directory}\nOpen: http://${host.includes(":") ? `[${host}]` : host}:${port}/#token=${token}\nRead-only Git inspection. Ctrl+C to stop.`,
+    );
   });
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 1; });
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });

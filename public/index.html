@@ -1,20 +1,160 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f6f2"><title>Repo Strata</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
-<body>
-<header class="topbar"><a class="brand" href="/" aria-label="Repo Strata home"><img src="/favicon.svg" alt="" width="32" height="32"><span>strata<span class="brand-dot">.</span></span></a><span class="header-caption">THE SHAPE OF YOUR CODE</span><span class="private"><i></i> Private workspace</span></header>
-<main>
-<section id="connect" class="connect" hidden><span class="eyebrow">YOUR REPOSITORY, IN PERSPECTIVE</span><h1>Connect to your workspace.</h1><p>Open the access link printed by Strata on your host, or enter its access token below.</p><form id="login"><label for="token">Access token</label><input id="token" type="password" required autocomplete="off"><button class="primary" type="submit">Connect workspace →</button></form><p id="login-error" role="alert"></p></section>
-<div id="workspace" hidden>
-<section class="heading"><div><span class="eyebrow">REPOSITORY EXPLORER</span><h1 id="repo-name">Your repository</h1><p class="subtitle"><span id="branch"></span><span class="separator">/</span>Architecture to implementation. One level at a time.</p></div><button id="refresh" class="outline">↻ Refresh</button></section>
-<section class="comparison" aria-label="Revision comparison"><div class="compare-label"><span class="small-icon">⑂</span><div><strong>Compare revisions</strong><span>Changes in the context of your whole repo</span></div></div><div class="revision-controls"><label>BASE<select id="base" aria-label="Base revision"></select></label><span class="compare-arrow">→</span><label>HEAD<select id="head" aria-label="Head revision"></select></label></div></section>
-<div id="notice" class="notice" role="status" hidden></div>
-<div class="toolbar"><nav id="breadcrumbs" aria-label="Repository path"></nav><label class="search"><span>⌕</span><input id="search" type="search" placeholder="Find a file…" aria-label="Find a file"></label></div>
-<div class="explorer"><section class="map-panel" aria-label="Repository map"><div class="panel-top"><div><span class="eyebrow" id="scope-kind">REPOSITORY MAP</span><h2 id="scope-title">Overview</h2></div><label class="toggle"><input id="changed-only" type="checkbox"> Changes only</label></div><div id="scope-description" class="scope-description"></div><div id="legend" class="legend"><span class="added">+ Added</span><span class="changed">~ Modified</span><span class="removed">− Removed</span><span class="unchanged">· Unchanged</span></div><div id="map" class="map"></div><section id="connections" class="connections" hidden><div class="section-label">DEPENDENCIES AT THIS LEVEL <span>Static imports</span></div><div id="connection-list"></div></section><div id="map-footer" class="map-footer"></div></section>
-<aside class="review-panel"><div class="panel-top"><div><span class="eyebrow">COMPARISON</span><h2>Change overview</h2></div><span id="change-total" class="count"></span></div><div id="stats" class="stats"></div><div class="review-copy">Follow a changed area to see the implementation and what it connects to.</div><div id="changes" class="change-list"></div><div class="aside-foot">COMMITTED CODE · READ-ONLY<br><span id="revision-caption"></span></div></aside></div>
-<section id="source-panel" class="source-panel" hidden><div class="source-top"><div><span class="eyebrow" id="source-label">IMPLEMENTATION</span><h2 id="source-title"></h2></div><div class="source-tabs" role="group" aria-label="Source view"><button data-view="diff" aria-pressed="true">Diff</button><button data-view="after" aria-pressed="false">After</button><button data-view="before" aria-pressed="false">Before</button></div></div><p id="source-meta" class="scope-description"></p><div id="source-code" class="source-code" tabindex="0" aria-label="Source code"></div></section>
-<footer><span>REPO STRATA <span class="version">/ EARLY PREVIEW</span></span><span>Keep the engineering in view.</span></footer>
-</div>
-<div id="loading" class="loading" role="status"><span class="loader"></span>Opening your workspace…</div>
-</main>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f5f6f2" />
+    <title>Repo Strata</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Repo Strata home"
+        ><img src="/favicon.svg" alt="" width="32" height="32" /><span
+          >strata<span class="brand-dot">.</span></span
+        ></a
+      ><span class="header-caption">THE SHAPE OF YOUR CODE</span
+      ><span class="private"><i></i> Private workspace</span>
+    </header>
+    <main>
+      <section id="connect" class="connect" hidden>
+        <span class="eyebrow">YOUR REPOSITORY, IN PERSPECTIVE</span>
+        <h1>Connect to your workspace.</h1>
+        <p>
+          Open the access link printed by Strata on your host, or enter its
+          access token below.
+        </p>
+        <form id="login">
+          <label for="token">Access token</label
+          ><input
+            id="token"
+            type="password"
+            required
+            autocomplete="off"
+          /><button class="primary" type="submit">Connect workspace →</button>
+        </form>
+        <p id="login-error" role="alert"></p>
+      </section>
+      <div id="workspace" hidden>
+        <section class="heading">
+          <div>
+            <span class="eyebrow">REPOSITORY EXPLORER</span>
+            <h1 id="repo-name">Your repository</h1>
+            <p class="subtitle">
+              <span id="branch"></span
+              ><span class="separator">/</span>Architecture to implementation.
+              One level at a time.
+            </p>
+          </div>
+          <button id="refresh" class="outline">↻ Refresh</button>
+        </section>
+        <section class="comparison" aria-label="Revision comparison">
+          <div class="compare-label">
+            <span class="small-icon">⑂</span>
+            <div>
+              <strong>Compare revisions</strong
+              ><span>Changes in the context of your whole repo</span>
+            </div>
+          </div>
+          <div class="revision-controls">
+            <label
+              >BASE<select id="base" aria-label="Base revision"></select></label
+            ><span class="compare-arrow">→</span
+            ><label
+              >HEAD<select id="head" aria-label="Head revision"></select
+            ></label>
+          </div>
+        </section>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <div class="toolbar">
+          <nav id="breadcrumbs" aria-label="Repository path"></nav>
+          <label class="search"
+            ><span>⌕</span
+            ><input
+              id="search"
+              type="search"
+              placeholder="Find a file…"
+              aria-label="Find a file"
+          /></label>
+        </div>
+        <div class="explorer">
+          <section class="map-panel" aria-label="Repository map">
+            <div class="panel-top">
+              <div>
+                <span class="eyebrow" id="scope-kind">REPOSITORY MAP</span>
+                <h2 id="scope-title">Overview</h2>
+              </div>
+              <label class="toggle"
+                ><input id="changed-only" type="checkbox" /> Changes only</label
+              >
+            </div>
+            <div id="scope-description" class="scope-description"></div>
+            <div id="legend" class="legend">
+              <span class="added">+ Added</span
+              ><span class="changed">~ Modified</span
+              ><span class="removed">− Removed</span
+              ><span class="unchanged">· Unchanged</span>
+            </div>
+            <div id="map" class="map"></div>
+            <section id="connections" class="connections" hidden>
+              <div class="section-label">
+                DEPENDENCIES AT THIS LEVEL <span>Static imports</span>
+              </div>
+              <div id="connection-list"></div>
+            </section>
+            <div id="map-footer" class="map-footer"></div>
+          </section>
+          <aside class="review-panel">
+            <div class="panel-top">
+              <div>
+                <span class="eyebrow">COMPARISON</span>
+                <h2>Change overview</h2>
+              </div>
+              <span id="change-total" class="count"></span>
+            </div>
+            <div id="stats" class="stats"></div>
+            <div class="review-copy">
+              Follow a changed area to see the implementation and what it
+              connects to.
+            </div>
+            <div id="changes" class="change-list"></div>
+            <div class="aside-foot">
+              COMMITTED CODE · READ-ONLY<br /><span
+                id="revision-caption"
+              ></span>
+            </div>
+          </aside>
+        </div>
+        <section id="source-panel" class="source-panel" hidden>
+          <div class="source-top">
+            <div>
+              <span class="eyebrow" id="source-label">IMPLEMENTATION</span>
+              <h2 id="source-title"></h2>
+            </div>
+            <div class="source-tabs" role="group" aria-label="Source view">
+              <button data-view="diff" aria-pressed="true">Diff</button
+              ><button data-view="after" aria-pressed="false">After</button
+              ><button data-view="before" aria-pressed="false">Before</button>
+            </div>
+          </div>
+          <p id="source-meta" class="scope-description"></p>
+          <div
+            id="source-code"
+            class="source-code"
+            tabindex="0"
+            aria-label="Source code"
+          ></div>
+        </section>
+        <footer>
+          <span>REPO STRATA <span class="version">/ EARLY PREVIEW</span></span
+          ><span>Keep the engineering in view.</span>
+        </footer>
+      </div>
+      <div id="loading" class="loading" role="status">
+        <span class="loader"></span>Opening your workspace…
+      </div>
+    </main>
+  </body>
+</html>
