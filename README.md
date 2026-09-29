@@ -41,11 +41,13 @@ The service is platform-independent Node code with Git subprocesses; this first 
 
 ## Explore
 
-- Select explicit base and head commits. The dropdown lists the latest 80 commits reachable from HEAD; startup flags can select other Git revisions.
-- Browse folders, files, classes and functions. Nested folders follow the repository's actual structure.
+- Select explicit base and head commits. The commit strip and comparison picker list the latest 80 first-parent commits from HEAD; startup flags can select other Git revisions.
+- Explore the glass card deck from the supplied mockup. Tap once to select, then tap the selected card or Open to zoom in. Nested packages follow the repository's actual structure.
 - Added is green, modified is purple, removed is red, unchanged is grey. Text labels accompany colour.
-- Use Changes only, file search, breadcrumbs, and the scoped change list to navigate.
-- Follow dependency buttons to related components or files. These are static import relationships, not a runtime call graph.
+- Use Time to review each commit against its first parent; tap a peeking sheet or commit chip to move through history. Use Diff to choose a base and switch the map between Before and After.
+- Use file search, breadcrumbs, and the scoped Changes list to navigate. Large maps scroll inside the stage; the review panel scrolls independently.
+- Select curved dependency lines in the map, then inspect their endpoints in Dependencies. Neighbours appear as dashed cards. These are static import relationships, not a runtime call graph.
+- Structure shows the current topology; Changes colours the comparison. Health scoring is not yet measured.
 - Open a symbol to highlight it in the full source. Switch between Before, After and a complete file diff.
 - Refresh to discover new commits. Uncommitted work is not included.
 
@@ -83,4 +85,4 @@ The preview inspects `/Users/tolu/projects/visalytics` on localhost port 4317, u
 
 ## Original context
 
-The original specification and prototype archive are preserved in [docs/context](docs/context/README.md). They provide background; [the current MVP scope](docs/MVP.md) reflects the owner's subsequent clarification.
+The original specification and prototype archive are preserved in [docs/context](docs/context/README.md). The archive's HTML mockup is the visual and interaction reference. [The current MVP scope](docs/MVP.md) defines which features are implemented.

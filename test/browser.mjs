@@ -16,8 +16,8 @@ try {
 } catch {
   base = head;
 }
-const token = "browser-test-token";
-const server = createServer(repo, { token, base });
+const token = "browser-test-token",
+  server = createServer(repo, { token, base });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const url = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({
@@ -31,38 +31,55 @@ try {
   const data = await repo.compare(base, head);
   const target =
     data.files.find(
-      (file) =>
-        file.status === "changed" &&
-        file.symbols.length > 0 &&
-        file.path.endsWith(".py"),
-    ) || data.files.find((file) => file.symbols.length > 0);
-  assert.ok(target, "Test repository needs an analysable source file");
+      (f) =>
+        f.status === "changed" && f.symbols.length && f.path.endsWith(".py"),
+    ) || data.files.find((f) => f.symbols.length);
+  assert.ok(target, "An analysable file is required");
   for (const viewport of [
     { width: 390, height: 844 },
     { width: 1366, height: 768 },
   ]) {
-    const page = await browser.newPage({ viewport });
+    const page = await browser.newPage({ viewport, colorScheme: "light" });
     const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
     await page.goto(url);
     await page.locator("#connect").waitFor({ state: "visible" });
+    errors.length = 0;
     await page.goto(url + "/#token=" + token);
     await page.reload();
-    await page
-      .locator(".node")
-      .first()
-      .waitFor({ state: "visible", timeout: 45000 });
+    const front = page.locator('.sheet[data-front="true"]');
+    await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
+    assert.equal(await page.evaluate(() => location.hash), "");
     assert.equal(
-      await page.locator("#change-total").textContent(),
+      await page.locator("#change-summary").getAttribute("data-count"),
       String(data.files.filter((f) => f.status !== "unchanged").length),
     );
-    assert.equal(await page.evaluate(() => location.hash), "");
     assert.ok(
       await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
+        () =>
+          document.documentElement.scrollWidth <= innerWidth &&
+          document.documentElement.scrollHeight <= innerHeight + 1,
       ),
-      "No horizontal page overflow",
+      "App stays within viewport",
+    );
+    const stage = await page.locator("#stage").boundingBox(),
+      panel = await page.locator("#panel").boundingBox();
+    if (viewport.width === 390) {
+      assert.ok(stage.height > viewport.height * 0.48);
+      assert.ok(panel.y >= stage.y + stage.height - 1);
+    } else assert.ok(panel.x > stage.x + stage.width - 1);
+    assert.equal(
+      await page.evaluate(() =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--accent")
+          .trim()
+          .toLowerCase(),
+      ),
+      "#007aff",
     );
     await page.screenshot({
       path: `test-results/${viewport.width}-overview.png`,
@@ -70,72 +87,141 @@ try {
     });
     const folder = target.path.split("/")[0];
     if (target.path.includes("/")) {
-      await page.locator(`.node[data-path="${folder}"]`).click();
-      assert.equal(await page.locator("#scope-title").textContent(), folder);
+      const card = front
+        .locator('.node[data-kind="folder"]')
+        .filter({ has: page.locator(".n-name", { hasText: folder }) })
+        .first();
+      await card.click();
+      assert.equal(await page.locator(".sel-name").textContent(), folder);
+      assert.equal(
+        await page.locator(".crumbs [aria-current]").textContent(),
+        (await repo.metadata()).name,
+      );
+      await card.click();
+      await page.waitForFunction(
+        (folder) =>
+          document.querySelector(".crumbs [aria-current]")?.textContent ===
+          folder,
+        folder,
+      );
+      await page.waitForTimeout(350);
       await page.screenshot({
         path: `test-results/${viewport.width}-component.png`,
         fullPage: true,
       });
     }
     await page.locator("#search").fill(target.path);
-    await page.locator(`.node[data-path="${target.path}"]`).click();
+    await page.locator("#changes .row").first().click();
     await page.waitForFunction(
-      () =>
-        document.querySelector("#source-code").textContent !==
-        "Loading source…",
+      (path) =>
+        document.querySelector(".crumbs [aria-current]")?.textContent ===
+        path.split("/").at(-1),
+      target.path,
     );
-    assert.ok(
-      (await page.locator("#source-title").textContent()).includes(target.path),
-    );
+    await front.locator('.node[data-kind="symbol"]').first().waitFor();
+    await page.waitForTimeout(350);
+    await page.screenshot({
+      path: `test-results/${viewport.width}-module.png`,
+      fullPage: true,
+    });
+    const changedSymbol = front
+      .locator('.node[data-kind="symbol"][data-status="changed"]')
+      .first();
+    const symbol = (await changedSymbol.count())
+      ? changedSymbol
+      : front.locator('.node[data-kind="symbol"]').first();
+    await symbol.click();
+    await page.locator("#source-code").waitFor();
     if (target.status === "changed")
       assert.ok(
         (await page
-          .locator(".code-line.addition, .code-line.deletion")
+          .locator(".code-line.addition,.code-line.deletion")
           .count()) > 0,
       );
-    await page.locator(".node").first().click();
-    assert.equal(
-      await page.locator('[data-view="after"]').getAttribute("aria-pressed"),
-      "true",
-    );
+    await page.locator('[data-source-view="after"]').click();
     assert.ok((await page.locator(".code-line.highlight").count()) > 0);
-    assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-      "No overflow in source view",
-    );
     await page.screenshot({
       path: `test-results/${viewport.width}-source.png`,
       fullPage: true,
     });
     await page
-      .locator("#source-panel")
+      .locator("#panel")
       .screenshot({ path: `test-results/${viewport.width}-source-detail.png` });
-    await page.locator('[data-view="before"]').click();
+    await page.locator('[data-source-view="before"]').click();
     assert.equal(
-      await page.locator('[data-view="before"]').getAttribute("aria-pressed"),
+      await page
+        .locator('[data-source-view="before"]')
+        .getAttribute("aria-pressed"),
       "true",
     );
-    await page.locator(".crumb").first().click();
-    await page.locator("#changed-only").check();
+    await page.locator('[data-tab="dependencies"]').click();
+    assert.ok(await page.locator("#tabBody .list").isVisible());
+    const edge = front.locator("path.hit").first();
+    if (await edge.count()) {
+      await edge.focus();
+      await page.keyboard.press("Enter");
+      assert.ok(
+        (await page.locator(".sel-kind").textContent()) ===
+          "Static import dependency",
+      );
+    }
+    await page.locator('[data-ba="before"]').click();
     assert.equal(
-      await page.locator('.node[data-status="unchanged"]').count(),
-      0,
+      await page.locator('[data-ba="before"]').getAttribute("aria-pressed"),
+      "true",
     );
-    await page.locator("#search").fill("no-such-file-strata-0000");
-    assert.ok(await page.locator("#map .empty").isVisible());
-    await page.locator("#search").fill("");
-    await page.locator("#changed-only").uncheck();
-    await page.locator("#base").selectOption(head);
+    await page.locator('[data-ba="after"]').click();
+    await page.locator('[data-mode="time"]').click();
+    await page.locator("#notice").waitFor({ state: "hidden" });
+    assert.ok(await page.locator("#baSeg").isHidden());
+    assert.ok((await page.locator(".sheet.peek").count()) > 0);
+    const peek = page.locator(".sheet.peek").first(),
+      peekSha = await peek.getAttribute("data-sha");
+    await peek.focus();
+    await page.keyboard.press("Enter");
     await page.locator("#notice").waitFor({ state: "hidden" });
     await page.waitForFunction(
-      () => document.querySelector("#change-total").textContent === "0",
+      (sha) =>
+        document.querySelector('.chip[aria-selected="true"]')?.dataset.sha ===
+        sha,
+      peekSha,
+    );
+    await page
+      .locator(".crumbs button")
+      .filter({ hasText: (await repo.metadata()).name })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(".crumbs [aria-current]").length === 1 &&
+        document.querySelector(".crumbs [aria-current]")?.textContent ===
+          document.querySelector("#repo-name").textContent,
+    );
+    await page.locator('[data-mode="diff"]').click();
+    await page.locator("#notice").waitFor({ state: "hidden" });
+    await page.locator("#base").selectOption(peekSha);
+    await page.locator("#notice").waitFor({ state: "hidden" });
+    await page.waitForFunction(
+      () => document.querySelector("#change-summary")?.dataset.count === "0",
+    );
+    await page.locator("#search").fill("strata-no-such-file-000");
+    assert.ok(await page.locator("#changes .empty").isVisible());
+    await page.locator("#search").fill("");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.waitForTimeout(100);
+    await page.screenshot({
+      path: `test-results/${viewport.width}-dark.png`,
+      fullPage: true,
+    });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      "No page overflow",
     );
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      `PASS ${viewport.width}×${viewport.height}: authentication, map, navigation, source, filters, comparison, overflow`,
+      `PASS ${viewport.width}×${viewport.height}: reference layout, select/open, zoom drill-down, source, dependency selection, Time/peeks, Diff, filters, dark theme, viewport`,
     );
   }
 } finally {

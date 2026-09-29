@@ -4,7 +4,7 @@ The first release has three parts:
 
 1. `src/engine.mjs` reads Git trees and blobs, extracts symbols, resolves static imports, and compares snapshots. It caches by immutable commit SHA. Git supplies file identity and complete file diffs; symbol hashes are supplemental information.
 2. `src/server.mjs` serves static assets and a token-protected, read-only API. It accepts a single configured repository path and starts no agents or repository code.
-3. `public/` is a dependency-free browser UI. It aggregates file changes into folder cards, groups import edges at the current depth, and fetches full source only when a file is opened.
+3. `public/` is a dependency-free browser UI. Its styling is derived directly from the supplied HTML mockup. `public/model.js` aggregates file changes into hierarchy cards and import edges into connections at the current depth. The renderer places them in stacked commit sheets, supports selection and zoom navigation, and fetches full source only when a file is opened. The frontend caches six comparisons and twelve opened source files to avoid repeated transfers.
 
 `src/python_ast.py` receives source strings through stdin. It parses them without importing or executing them. The TypeScript compiler runs inside the Node process. Failed parsers produce explicit file-level fallbacks.
 

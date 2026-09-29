@@ -2,6 +2,14 @@
 
 The owner wants to stay connected to the engineering behind agent implementations from a phone, moving between the whole repository and exact code details as needed.
 
+## Visual and interaction contract
+
+Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the visual reference. Preserve its pastel background, frosted commit sheets, rounded hierarchy cards, curved dependency arrows, selection strip, and compact review panel. On a phone the map occupies the upper portion of a fixed viewport and the review panel scrolls below; at desktop widths the panel sits to the right.
+
+Tap selects a card or dependency. A second tap or Open zooms into a card; breadcrumbs and the back chevron zoom out. Time stacks recent commit sheets and compares each commit with its first parent. Diff stacks base and head and supports Before/After. Use real packages and symbols; do not invent layers or health measurements. Large real-world maps scroll within the stage instead of shrinking every label.
+
+The first implementation uses Changes, Source, and Dependencies review tabs. Comments and Ask remain deferred. Structure replaces the unmeasured Health lens.
+
 ## First usable slice
 
 - Run a service beside a Git repository on macOS or Linux and access its web UI by URL.

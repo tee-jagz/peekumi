@@ -28,7 +28,7 @@ The LAN service returned HTTP 401 without authentication and served the expected
 ## Remaining product work
 
 - Review the experience with the owner on a real phone, especially map density and navigation depth.
-- Improve dependency visualisation beyond grouped, navigable relationship rows.
+- Improve dependency routing and filtering for dense graphs.
 - Add configurable import roots and aliases, and rename continuity.
 - Consider persisted snapshot caching after measuring real usage.
 
@@ -41,3 +41,11 @@ With the owner’s explicit approval, moved Strata to localhost and configured a
 The running server produced the warm comparison in about 70 ms, but transferred 4,046,626 bytes without compression. Removed symbol hashes from the viewer payload (hashes still determine symbol status on the server) and added negotiated gzip compression for JSON and static assets. Responses retain `no-store`, vary by `Accept-Encoding`, and honour `gzip;q=0`.
 
 A 390 × 844 Chromium test with 1 Mbps download throughput and 100 ms latency measured time to a usable map at 33,503 ms before and 3,660 ms after, with both snapshots already warm. Comparison transfer fell to 356,462 bytes, with all 60 changed files preserved. This measures a simulated connection, not the owner's physical phone or cold snapshot generation. Regression checks cover compressed/uncompressed response equivalence, gzip opt-out, static HTML decoding, payload reduction, and removal of internal hashes. All engine/API tests pass.
+
+## Mockup-based viewer correction
+
+Replaced the initial dashboard with the visual foundation from the owner's HTML mockup: original colour tokens, pastel backdrop, glass sheets, card styling, commit chips, selection strip, and responsive stage/panel layout. The live renderer adds nested package cards, curved selectable import edges, dashed external neighbours, module boundaries, and symbol cards. Time uses first-parent commit history and peeking sheets; Diff uses explicit base/head and Before/After. Tap selects and a second tap opens with zoom animation. Large maps scroll within the stage.
+
+Kept the existing real Git analysis, private authentication, gzip responses, source/diff endpoints, and all-file accounting. Scope adaptations are explicit: Structure instead of unmeasured Health, and Changes/Source/Dependencies tabs instead of unimplemented Comments/Ask. No sample metrics, rules, comments, or agent runs are presented as live data.
+
+Browser checks against Visalytics pass at 390 × 844 and 1366 × 768 for authentication, fixed-viewport layout, select-before-open behaviour, zoom navigation, symbol/source inspection, selectable dependency edges, Time peeks, Diff comparisons, Before/After, search, and dark mode. Captured and inspected the original mockup after animations settled, plus live overview, component, module, source-detail, and dark-theme screenshots. Model regression tests cover loose root files, nested rollups, replacement imports with unchanged counts, and correct visibility of additions/removals in each view.

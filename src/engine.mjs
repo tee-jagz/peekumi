@@ -202,16 +202,23 @@ export class Repository {
     const [root, branch, log] = await Promise.all([
       this.git("rev-parse", "--show-toplevel"),
       this.git("branch", "--show-current"),
-      this.git("log", "-80", "--format=%H%x00%h%x00%s%x00%aI%x00", "HEAD"),
+      this.git(
+        "log",
+        "--first-parent",
+        "-80",
+        "--format=%H%x00%h%x00%s%x00%aI%x00%P%x00",
+        "HEAD",
+      ),
     ]);
     const values = log.toString().trim().split("\0");
     const commits = [];
-    for (let i = 0; i + 3 < values.length; i += 4)
+    for (let i = 0; i + 4 < values.length; i += 5)
       commits.push({
         sha: values[i].trim(),
         short: values[i + 1],
         subject: values[i + 2],
         time: values[i + 3],
+        parent: values[i + 4].split(" ")[0] || null,
       });
     return {
       name: path.basename(root.toString().trim()),
