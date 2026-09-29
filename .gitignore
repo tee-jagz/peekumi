@@ -1,0 +1,6 @@
+node_modules/
+.strata/
+test-results/
+.DS_Store
+*.log
+.env
