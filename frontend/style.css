@@ -2153,3 +2153,15 @@ button {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.node:has(.n-description) .n-kids {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  max-height: 20px;
+}
+.node:has(.n-description) .n-top {
+  flex-shrink: 0;
+}
+.n-description {
+  flex-shrink: 0;
+  margin: 2px 0;
+}

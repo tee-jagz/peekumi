@@ -345,6 +345,22 @@ try {
       ),
       "No page overflow",
     );
+    if (process.env.STRATA_TEST_DIRECTORY_DOC) {
+      await page.reload();
+      await page.locator("#notice").waitFor({ state: "hidden" });
+      const card = page.locator(
+        '.sheet[data-front="true"] .node[data-path="backend"]',
+      );
+      await card.waitFor();
+      await card.click();
+      await page.locator(".documentation-link").click();
+      await page.locator("#source-code").waitFor();
+      assert.ok(
+        (await page.locator("#source-code").textContent()).includes(
+          process.env.STRATA_TEST_DIRECTORY_DOC,
+        ),
+      );
+    }
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
