@@ -17,7 +17,7 @@ impl LanguageAdapter for Python {
     }
     /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
-        "Explicit annotations only; ambiguous imports remain unresolved. Requires Python."
+        "Syntax-level named calls and inheritance only; dynamic receivers and nested function bodies are not resolved. Explicit annotations only. Requires Python."
     }
     /// Probes the installed helper runtime to identify compatible cached syntax.
     /// A failed probe is recorded as unavailable rather than hiding affected files.

@@ -75,3 +75,34 @@ test("symbol patches exclude unrelated changed functions", async () => {
   assert.equal(patchForSymbol(patch, { ...selected, status: "unchanged" }), "");
   assert.equal(patchForSymbol(patch, null), patch);
 });
+
+test("typed symbol edges preserve rule-only changes and never draw unresolved candidates", () => {
+  const files = [
+    { ...file("app.ts"), symbols: [{ name: "run" }, { name: "helper" }] },
+  ];
+  const fact = {
+    source: { path: "app.ts", symbol: "run" },
+    targets: [{ path: "app.ts", symbol: "helper" }],
+    kind: "calls",
+    resolution: "resolved",
+    violations: [],
+  };
+  const relations = [
+    {
+      status: "changed",
+      before: fact,
+      after: { ...fact, violations: [{ id: "boundary", message: "No calls" }] },
+    },
+    {
+      status: "added",
+      before: null,
+      after: { ...fact, resolution: "ambiguous" },
+    },
+  ];
+  const edges = connections(files, { kind: "file", path: "app.ts" }, relations);
+  assert.equal(edges.length, 1);
+  assert.equal(edges[0].from.key, "symbol:run");
+  assert.equal(edges[0].to.key, "symbol:helper");
+  assert.equal(edges[0].status, "changed");
+  assert.equal(edges[0].violationsAfter[0].id, "boundary");
+});

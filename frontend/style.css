@@ -2165,3 +2165,76 @@ button {
   flex-shrink: 0;
   margin: 2px 0;
 }
+
+.rule-summary {
+  margin: 8px 0 12px;
+  padding: 9px;
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 11px;
+}
+.rule-summary summary,
+.relationship-evidence summary,
+.unresolved-relations summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.rule-summary p {
+  line-height: 1.5;
+}
+.rule-error,
+.rule-summary[data-state="invalid"] {
+  color: var(--del);
+}
+.rule-badge {
+  color: white;
+  background: var(--del);
+  border-radius: 50%;
+  min-width: 16px;
+  height: 16px;
+  text-align: center;
+  font-weight: bold;
+}
+.e.violation {
+  stroke: var(--del) !important;
+}
+.e.implements:not(.removed) {
+  stroke-dasharray: 2 5;
+}
+.e.inherits:not(.removed) {
+  stroke-dasharray: 7 4;
+}
+.relationship-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.relationship-controls select {
+  min-height: 34px;
+  max-width: 100%;
+  border-radius: 8px;
+}
+.relationship-controls [aria-pressed="true"] {
+  background: var(--accent);
+  color: white;
+}
+.relationship-evidence,
+.unresolved-relations {
+  margin: 12px 0;
+  font-size: 11px;
+}
+.relation-evidence-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.relation-evidence-row .btn {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  margin-top: 7px;
+}
+.rule-summary.has-violations > summary {
+  color: var(--del);
+}

@@ -37,6 +37,8 @@ const tones = {
   unchanged: "var(--faint)",
 };
 let changesOnly = false;
+let relationshipKind = "all",
+  violationsOnly = false;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let metadata,
   comparison,
@@ -158,6 +160,14 @@ async function loadComparison() {
         "/api/directories?" +
           new URLSearchParams({ base: data.base, head: data.head }),
       );
+      data.relationshipData = await api(
+        "/api/relationships?" +
+          new URLSearchParams({
+            base: data.base,
+            head: data.head,
+            view: "overview",
+          }),
+      );
       comparisons.set(key, data);
       if (comparisons.size > 6)
         comparisons.delete(comparisons.keys().next().value);
@@ -182,7 +192,18 @@ async function loadComparison() {
 /** Rebuilds visible hierarchy nodes and import relationships from the current comparison and scope. */
 function refreshModel() {
   nodes = children(comparison.files, scope);
-  edges = connections(comparison.files, scope);
+  edges = connections(
+    comparison.files,
+    scope,
+    scope.kind === "file" && sourceData?.relationshipData
+      ? sourceData.relationshipData.relationships
+      : comparison.relationshipData?.relationships,
+  ).filter(
+    (e) =>
+      (relationshipKind === "all" || e.relationshipKind === relationshipKind) &&
+      (!violationsOnly ||
+        (before ? e.violationsBefore : e.violationsAfter).length),
+  );
 }
 /** Refreshes the hierarchy model, controls, commit deck and review panel from the current state. */
 function render() {
@@ -326,6 +347,41 @@ function tone(node) {
 function visibleInSide(node) {
   return visibleOnSide(node, before, lens);
 }
+/** Finds relationships inside a card, including edges hidden by directory aggregation. */
+function nodeRelations(node) {
+  const records =
+    (scope.kind === "file"
+      ? sourceData?.relationshipData
+      : comparison.relationshipData
+    )?.relationships || [];
+  const touches = (endpoint) =>
+    node.kind === "symbol"
+      ? endpoint.path === scope.path && endpoint.symbol === node.name
+      : node.kind === "rootfiles"
+        ? !endpoint.path.includes("/")
+        : endpoint.path === node.path ||
+          endpoint.path.startsWith(node.path + "/");
+  return records.filter((r) =>
+    [r.before, r.after]
+      .filter(Boolean)
+      .some((f) => touches(f.source) || f.targets.some(touches)),
+  );
+}
+function nodeViolations(node) {
+  return nodeRelations(node).flatMap((r) => {
+    const fact = r[before ? "before" : "after"];
+    if (!fact) return [];
+    const source = fact.source;
+    const owns =
+      node.kind === "symbol"
+        ? source.path === scope.path && source.symbol === node.name
+        : node.kind === "rootfiles"
+          ? !source.path.includes("/")
+          : source.path === node.path ||
+            source.path.startsWith(node.path + "/");
+    return owns ? fact.violations : [];
+  });
+}
 /** Lays out the current directory or symbol scope and its import neighbours inside the SVG viewport. */
 function renderGraph(body) {
   const width = Math.max(240, body.clientWidth),
@@ -340,9 +396,18 @@ function renderGraph(body) {
     k = graphWidth / 7.2;
   const positions = new Map();
   let y = 24;
+  const relationshipChanges = new Set(
+    edges
+      .filter((e) => e.status !== "unchanged")
+      .flatMap((e) => [e.from.key, e.to.key]),
+  );
   const current = nodes.filter(
     (node) =>
-      visibleInSide(node) && (!changesOnly || node.status !== "unchanged"),
+      visibleInSide(node) &&
+      (!changesOnly ||
+        node.status !== "unchanged" ||
+        relationshipChanges.has(node.key) ||
+        nodeRelations(node).some((r) => r.status !== "unchanged")),
   );
   if (root) {
     const hint = element(
@@ -528,6 +593,9 @@ function graphNode({ node, x, y, w, h }) {
   card.dataset.kind = node.kind;
   card.dataset.path = node.path || "";
   card.dataset.status = node.status || "unchanged";
+  card.dataset.relationshipChanged = String(
+    nodeRelations(node).some((r) => r.status !== "unchanged"),
+  );
   card.setAttribute(
     "aria-label",
     `${node.name}, ${node.kind}${node.status ? ", " + labels[node.status] : ""}`,
@@ -559,6 +627,13 @@ function graphNode({ node, x, y, w, h }) {
     top.append(
       element("span", "n-meta", node.symbolCount ?? node.symbols?.length ?? 0),
     );
+  const violations = nodeViolations(node);
+  if (violations.length) {
+    const badge = element("span", "rule-badge", "!");
+    badge.title = violations.map((v) => v.message).join("; ");
+    badge.setAttribute("aria-label", "Dependency rule violation");
+    top.append(badge);
+  }
   card.append(top);
   if (node.files) {
     const info = directoryInfo(node.path, node.status === "removed");
@@ -622,6 +697,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
   for (const [status, color] of Object.entries({
     ...tones,
     structure: "var(--edge)",
+    violation: "var(--del)",
   })) {
     const marker = document.createElementNS(NS, "marker");
     marker.id = "arrow-" + status;
@@ -657,6 +733,12 @@ function drawEdges(canvas, positions, width, height, arcs) {
         e.from.key === selected.key ||
         e.to.key === selected.key,
     );
+  if (scope.kind === "file" && nodes.length > 12)
+    drawable = drawable.filter(
+      (e) =>
+        e.relationshipKind !== "calls" ||
+        [e.from.key, e.to.key].includes(selected?.key),
+    );
   for (const [index, edge] of drawable.slice(0, 40).entries()) {
     const a = positions.get(edge.from.key),
       b = positions.get(edge.to.key);
@@ -686,12 +768,19 @@ function drawEdges(canvas, positions, width, height, arcs) {
         y2 = down ? b.y : b.y + b.h;
       d = `M${x},${y} C${x},${(y + y2) / 2} ${x2},${(y + y2) / 2} ${x2},${y2}`;
     }
-    const status = lens === "changes" ? edge.status : "structure";
+    const violations = before ? edge.violationsBefore : edge.violationsAfter;
+    const status = violations.length
+      ? "violation"
+      : lens === "changes"
+        ? edge.status
+        : "structure";
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", d);
     path.setAttribute(
       "class",
       "e " +
+        edge.relationshipKind +
+        " " +
         (status === "unchanged" ? "quiet" : status) +
         (selected?.key === edge.key ? " sel hl" : ""),
     );
@@ -702,7 +791,13 @@ function drawEdges(canvas, positions, width, height, arcs) {
     hit.setAttribute("class", "hit");
     hit.setAttribute("tabindex", "0");
     hit.setAttribute("role", "button");
-    hit.setAttribute("aria-label", edge.name + ", dependency");
+    hit.setAttribute(
+      "aria-label",
+      edge.name +
+        ", " +
+        edge.relationshipKind +
+        (violations.length ? ", rule violation" : ""),
+    );
     hit.dataset.edge = edge.key;
     hit.onclick = () => selectNode(edge);
     hit.onkeydown = (e) => {
@@ -783,7 +878,7 @@ async function navigate(next, originKey) {
       { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" },
     );
   $("#panel").scrollTop = 0;
-  if (scope.kind === "file") loadSource();
+  if (scope.kind === "file") await loadSource();
 }
 /** Navigates to the parent directory or repository root. */
 function goUp() {
@@ -983,7 +1078,9 @@ function renderSelection() {
       "div",
       "sel-kind",
       selected.kind === "edge"
-        ? "Static import dependency"
+        ? selected.relationshipKind === "imports"
+          ? "Static import dependency"
+          : "Static " + selected.relationshipKind + " relationship"
         : selected.kind === "symbol"
           ? `${selected.symbolKind} · ${scope.path}`
           : selected.path || "Repository files",
@@ -997,7 +1094,7 @@ function renderSelection() {
   else if (selected.kind === "file")
     stats.textContent = `${selected.symbolCount ?? selected.symbols?.length ?? 0} symbols · ${selected.analysis}`;
   else if (selected.kind === "edge")
-    stats.textContent = `${selected.before.size} imports before → ${selected.after.size} after`;
+    stats.textContent = `${selected.before.size} ${selected.relationshipKind} before → ${selected.after.size} after`;
   box.append(stats);
   const actions = element("div", "sel-acts");
   actions.append(
@@ -1019,6 +1116,13 @@ function renderSelection() {
         tab = "source";
         renderPanel();
         if (!sourceData) loadSource();
+      }),
+    );
+  if (selected.kind === "symbol")
+    actions.append(
+      button("btn", "Relationships", () => {
+        tab = "dependencies";
+        renderPanel();
       }),
     );
   box.append(actions);
@@ -1059,7 +1163,7 @@ function metadataCard() {
       "metadata-muted",
       "Details · No declaration documentation available at this revision.",
     );
-  box.open = true;
+  box.open = tab !== "dependencies";
   box.append(
     element(
       "summary",
@@ -1211,7 +1315,7 @@ function renderTab() {
   );
   summary.id = "change-summary";
   summary.dataset.count = changed.length;
-  body.append(summary, legend(files));
+  body.append(ruleSummary(), summary, legend(files));
   const searchBox = element("label", "search-wrap");
   searchBox.append(element("span", "", "⌕"));
   const input = element("input");
@@ -1289,34 +1393,135 @@ function renderTab() {
       }),
     );
 }
-/** Lists static import changes and unresolved or external imports within the current scope. */
+/** Shows configuration health without implying that unresolved code passed a rule check. */
+function ruleSummary() {
+  const phase = before ? "before" : "after",
+    checks = comparison.relationshipData?.checks?.[phase];
+  const box = element("details", "rule-summary");
+  if (!checks) return box;
+  box.append(
+    element(
+      "summary",
+      "",
+      checks.state === "invalid"
+        ? "Rule configuration error"
+        : checks.state === "not configured"
+          ? "Dependency rules · not configured"
+          : `${checks.violations} observed rule violations · ${checks.rules} rule${checks.rules === 1 ? "" : "s"}`,
+    ),
+  );
+  box.dataset.state = checks.state;
+  if (checks.violations) box.classList.add("has-violations");
+  if (tab !== "dependencies")
+    box.append(
+      button("btn sm", "Review relationships", () => {
+        tab = "dependencies";
+        renderPanel();
+      }),
+    );
+  box.append(
+    element(
+      "p",
+      "",
+      `Repository checks · ${checks.config} · ${phase} revision. ${checks.unresolved} external, unresolved or ambiguous relationships; ${checks.analysisGaps.length} files with analysis gaps.`,
+    ),
+  );
+  for (const error of checks.errors)
+    box.append(element("p", "rule-error", error));
+  if (checks.state === "not configured")
+    box.append(
+      element(
+        "p",
+        "",
+        "Commit a .strata.json file to define path groups and forbidden relationships. No rules have been assumed.",
+      ),
+    );
+  const other = comparison.relationshipData.checks[before ? "after" : "before"];
+  if (other?.violations !== checks.violations)
+    box.append(
+      element(
+        "p",
+        "",
+        `Other revision: ${other.violations} observed violations.`,
+      ),
+    );
+  return box;
+}
+/** Opens the revision and source declaration that provide relationship evidence. */
+async function openEvidence(relation) {
+  const fact = before ? relation.before : relation.after || relation.before;
+  if (!fact) return;
+  await navigate({ kind: "file", path: fact.source.path });
+  if (!sourceData) await loadSource();
+  selected = nodes.find((n) => n.name === fact.source.symbol) || null;
+  tab = "source";
+  sourceView = before || !relation.after ? "before" : "after";
+  renderDeck();
+  renderPanel();
+}
+/** Lists typed relationships, rule evidence and unresolved targets for the current scope. */
 function renderDependencies(body) {
-  const list = element("ul", "list");
+  body.append(ruleSummary());
+  const controls = element("div", "relationship-controls"),
+    filter = element("select");
+  filter.setAttribute("aria-label", "Relationship kind");
+  for (const kind of ["all", "imports", "calls", "implements", "inherits"]) {
+    const option = element(
+      "option",
+      "",
+      kind === "all" ? "All relationships" : kind,
+    );
+    option.value = kind;
+    filter.append(option);
+  }
+  filter.value = relationshipKind;
+  filter.onchange = () => {
+    relationshipKind = filter.value;
+    render();
+  };
+  const violations = button("btn", "Violations only", () => {
+    violationsOnly = !violationsOnly;
+    render();
+  });
+  violations.setAttribute("aria-pressed", String(violationsOnly));
+  controls.append(filter, violations);
+  body.append(controls);
   body.append(
     element(
       "p",
-      "sum",
-      "Static imports · select a connection to inspect its endpoints",
+      "read-note",
+      "Static declarations, not runtime execution. Solid: imports/calls · dotted: implements · dashed: inherits · red: rule violation. Select a symbol to focus its calls.",
     ),
-    list,
   );
-  const relevant = selected?.kind === "edge" ? [selected] : edges;
+  const list = element("ul", "list");
+  body.append(list);
+  let relevant = selected?.kind === "edge" ? [selected] : edges;
+  if (selected?.kind === "symbol")
+    relevant = relevant.filter((e) =>
+      [e.from.key, e.to.key].includes(selected.key),
+    );
   for (const edge of relevant) {
-    const li = element("li", "cm");
-    const b = button("anchor", edge.name, () => {
-      selected = edge;
-      renderDeck();
-      renderPanel();
-    });
+    const li = element("li", "cm"),
+      buttonNode = button(
+        "anchor",
+        `${edge.relationshipKind} · ${edge.name}`,
+        () => {
+          selected = edge;
+          renderDeck();
+          renderPanel();
+        },
+      );
     li.append(
-      b,
+      buttonNode,
       element(
         "p",
         "rd",
         `${labels[edge.status]} · ${edge.before.size} before → ${edge.after.size} after`,
       ),
     );
-    if (selected?.key === edge.key) {
+    for (const v of before ? edge.violationsBefore : edge.violationsAfter)
+      li.append(element("p", "rule-error", `! ${v.id}: ${v.message}`));
+    if (selected?.key === edge.key)
       for (const pair of edge.pairs.values()) {
         const row = element("div", "sel-acts");
         row.append(
@@ -1330,32 +1535,98 @@ function renderDependencies(body) {
         );
         li.append(row);
       }
-    }
     list.append(li);
   }
   if (!relevant.length)
     list.append(
+      element("li", "empty", "No resolved connections in this selection."),
+    );
+  if (scope.kind !== "file") {
+    body.append(
       element(
-        "li",
-        "empty",
-        "No internal dependencies resolved at this level.",
+        "p",
+        "read-note",
+        "Open a file for source locations and unresolved target details.",
       ),
     );
-  if (scope.kind === "file") {
-    const file = comparison.files.find((f) => f.path === scope.path);
-    const unresolved = file?.imports?.filter((i) => !i.resolved?.length) || [];
-    if (unresolved.length)
-      body.append(
+    return;
+  }
+  const records = sourceData?.relationshipData?.relationships || [];
+  const scoped = records.filter((r) => {
+    const fact = before ? r.before : r.after || r.before;
+    if (!fact) return false;
+    return (
+      (relationshipKind === "all" || fact.kind === relationshipKind) &&
+      (!violationsOnly || fact.violations.length) &&
+      (selected?.kind !== "symbol" ||
+        (fact.source.path === scope.path &&
+          fact.source.symbol === selected.name) ||
+        fact.targets.some(
+          (t) => t.path === scope.path && t.symbol === selected.name,
+        ))
+    );
+  });
+  const unresolved = element("details", "unresolved-relations"),
+    evidence = element("details", "relationship-evidence");
+  const unknown = scoped.filter(
+      (r) =>
+        (before ? r.before : r.after || r.before).resolution !== "resolved",
+    ),
+    known = scoped.filter(
+      (r) =>
+        (before ? r.before : r.after || r.before).resolution === "resolved",
+    );
+  unresolved.append(
+    element("summary", "", `${unknown.length} unresolved or ambiguous targets`),
+  );
+  evidence.append(
+    element(
+      "summary",
+      "",
+      `${known.length} resolved relationships · source evidence`,
+    ),
+  );
+  for (const [container, values] of [
+    [unresolved, unknown],
+    [evidence, known],
+  ]) {
+    for (const r of values.slice(0, 200)) {
+      const fact = before ? r.before : r.after || r.before;
+      const item = element("div", "relation-evidence-row");
+      item.dataset.resolution = fact.resolution;
+      item.append(
+        element(
+          "p",
+          "",
+          `${fact.source.symbol || fact.source.path} ${fact.kind} ${fact.target} · ${r.status}`,
+        ),
+        element(
+          "small",
+          "metadata-muted",
+          `${fact.resolution} · ${fact.reason}`,
+        ),
+      );
+      for (const v of fact.violations)
+        item.append(element("p", "rule-error", `! ${v.id}: ${v.message}`));
+      item.append(
+        button(
+          "btn sm",
+          `${fact.source.path}${fact.sites?.[0] ? ":" + fact.sites[0] : ""}`,
+          () => openEvidence(r),
+        ),
+      );
+      container.append(item);
+    }
+    if (values.length > 200)
+      container.append(
         element(
           "p",
           "read-note",
-          "External or unresolved: " +
-            [
-              ...new Set(unresolved.map((i) => i.specifier || "(relative)")),
-            ].join(", "),
+          `Showing the first 200 of ${values.length} relationships. Select a symbol to narrow the list.`,
         ),
       );
   }
+  body.append(evidence, unresolved);
 }
 /** Fetches before/after source and full declaration metadata for the current file. Reuses a twelve-file cache and ignores results from superseded navigation. */
 async function loadSource() {
@@ -1368,6 +1639,14 @@ async function loadSource() {
     if (!data) {
       data = await api(
         "/api/source?" +
+          new URLSearchParams({
+            base: comparison.base,
+            head: comparison.head,
+            path,
+          }),
+      );
+      data.relationshipData = await api(
+        "/api/relationships?" +
           new URLSearchParams({
             base: comparison.base,
             head: comparison.head,

@@ -13,7 +13,8 @@ The first implementation uses Changes, Source, and Dependencies review tabs. Com
 ## First usable slice
 
 - Run a service beside a Git repository on macOS or Linux and access its web UI by URL.
-- Browse the real directory hierarchy, with static internal import relationships.
+- Browse the real directory hierarchy, with static import, call, implementation and inheritance relationships. Show source evidence and unresolved targets.
+- Evaluate versioned .strata.json dependency rules against committed snapshots and show violations and configuration errors.
 - Compare two explicit commits. Roll added, changed, and removed files up into their directories.
 - Drill into Rust, Python and JavaScript/TypeScript symbols, then source and complete file diffs. Svelte script symbols are extracted; template changes remain visible at file level.
 - Show directory README summaries (or Python package docstrings) with revision provenance and links to the complete documentation. Expose adapter capabilities and limitations.
@@ -26,7 +27,7 @@ Visalytics is the first integration target: a mixed Python and Svelte/TypeScript
 
 ## Deferred
 
-Ask, agent dispatch, comments, rules, health scores, coverage, mutation testing, inferred architecture, cross-module call graphs, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
+Ask, agent dispatch, comments, health scores, coverage, mutation testing, inferred architecture, cross-module call graphs, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
 
 ## Acceptance
 

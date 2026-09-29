@@ -5,7 +5,7 @@ Build a mobile-first repository map with coloured Git comparisons and drill-down
 - Keep the inspected repository read-only. Read committed objects through Git; never checkout, execute its code, or alter its hooks.
 - Account for every tracked file. Unsupported, binary, oversized, and restricted files must remain visible and explicitly labelled.
 - Use the actual directory hierarchy. Do not invent architectural layers.
-- Import edges are static dependencies, not runtime call graphs.
+- Typed import, call, implementation and inheritance edges describe static declarations, not runtime execution. Unresolved or ambiguous targets must remain explicit.
 - Never commit inspected repository source, snapshots, credentials, or local access tokens.
 - Run npm test for engine/server changes and npm run test:browser for interface changes. Inspect mobile and desktop screenshots.
 - Keep the first release focused on map, compare, navigation, and source. Agent orchestration and health scoring are deferred.

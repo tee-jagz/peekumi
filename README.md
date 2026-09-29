@@ -119,3 +119,7 @@ The self-inspection viewer uses port 4318 and `.strata/self/` for its private st
 ## Original context
 
 The original specification and prototype archive are preserved in [docs/context](docs/context/README.md). The archive's HTML mockup is the visual and interaction reference. [The current MVP scope](docs/MVP.md) defines which features are implemented.
+
+## Relationships and dependency rules
+
+The Dependencies panel now distinguishes static imports, calls, implementations and inheritance, with source evidence and explicit unresolved/ambiguous targets. Commit `.strata.json` to define path groups and forbidden relationship kinds. Violations and configuration errors are revision-specific; no rules are inferred from directory descriptions. See [relationship support and configuration](docs/RELATIONSHIPS.md) for examples and language limitations.

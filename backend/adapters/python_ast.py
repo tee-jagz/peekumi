@@ -38,6 +38,72 @@ def details(node):
     return result
 
 
+def relationships(tree, symbols):
+    """Extract declaration-level relationships; dynamic receivers and shadowed names stay unresolved."""
+    result, bindings = [], {}
+    names = {s['name'] for s in symbols}
+    global_writes = set()
+    class Writes(ast.NodeVisitor):
+        def visit_Name(self,node):
+            if isinstance(node.ctx,(ast.Store,ast.Del)): global_writes.add(node.id)
+        def visit_FunctionDef(self,node): pass
+        visit_AsyncFunctionDef = visit_FunctionDef
+        def visit_ClassDef(self,node): pass
+    Writes().visit(tree)
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != '*':
+                    bindings[alias.asname or alias.name] = {'specifier': node.module or '', 'level': node.level, 'names': [alias.name], 'name': alias.name}
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = {'specifier': alias.name, 'level': 0, 'names': [], 'namespace': True}
+    def record(owner, target, kind, node, blocked=()):
+        entry = {'source': owner, 'target': target, 'kind': kind, 'line': node.lineno}
+        root = target.split('.')[0]
+        if root in blocked or root in global_writes:
+            entry['reason'] = 'Name is shadowed or assigned in this scope'
+        elif root in bindings and root in names:
+            entry['reason'] = 'Conflicting local and imported declarations'
+        elif target in bindings and not bindings[target].get('namespace'):
+            entry['lookup'] = {'import': bindings[target], 'name': bindings[target]['name']}
+        elif target in names and '.' not in target:
+            entry['lookup'] = {'local': target}
+        else:
+            match = next((alias for alias in bindings if bindings[alias].get('namespace') and target.startswith(alias + '.')), None)
+            if match:
+                entry['lookup'] = {'import': bindings[match], 'name': target[len(match)+1:]}
+            else:
+                entry['reason'] = 'Dynamic receiver, external name or unsupported lexical binding'
+        result.append(entry)
+    class Calls(ast.NodeVisitor):
+        def __init__(self, owner, blocked): self.owner, self.blocked = owner, blocked
+        def visit_Call(self, node):
+            record(self.owner, ast.unparse(node.func), 'calls', node, self.blocked)
+            self.generic_visit(node)
+        def visit_FunctionDef(self, node): pass
+        visit_AsyncFunctionDef = visit_FunctionDef
+        def visit_ClassDef(self, node): pass
+        def visit_Lambda(self, node): pass
+    def functions(body, prefix=''):
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                for base in node.bases: record(prefix+node.name, ast.unparse(base), 'inherits', base)
+                functions(node.body, prefix+node.name+'.')
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                blocked = {a.arg for a in node.args.posonlyargs+node.args.args+node.args.kwonlyargs}
+                blocked.update(a.arg for a in [node.args.vararg,node.args.kwarg] if a)
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store,ast.Del)): blocked.add(child.id)
+                    if isinstance(child, (ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and child is not node: blocked.add(child.name)
+                    if isinstance(child,(ast.Import,ast.ImportFrom)):
+                        blocked.update(a.asname or a.name.split('.')[0] for a in child.names)
+                visitor=Calls(prefix+node.name,blocked)
+                for statement in node.body: visitor.visit(statement)
+    functions(tree.body)
+    return result
+
+
 def analyze(source):
     """Parse one Python source string into symbols, imports and module metadata. Syntax failures return an explicit parse-error result; inspected code is never imported."""
     try:
@@ -63,7 +129,7 @@ def analyze(source):
             imports.extend({'specifier': item.name, 'level': 0, 'names': []} for item in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.append({'specifier': node.module or '', 'level': node.level, 'names': [item.name for item in node.names]})
-    return {'symbols': symbols, 'imports': imports, 'details': details(tree), 'analysis': 'Python AST'}
+    return {'symbols': symbols, 'imports': imports, 'details': details(tree), 'relationships': relationships(tree, symbols), 'analysis': 'Python AST'}
 
 
 json.dump([analyze(source) for source in json.load(sys.stdin)], sys.stdout)

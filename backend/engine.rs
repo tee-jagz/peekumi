@@ -53,6 +53,7 @@ struct File {
     source: Option<String>,
     symbols: Vec<Value>,
     imports: Vec<Value>,
+    relationships: Vec<Value>,
     details: Option<Value>,
     deps: Vec<String>,
 }
@@ -61,6 +62,7 @@ impl File {
     fn apply(&mut self, v: Value) {
         self.symbols = array(&v["symbols"]);
         self.imports = array(&v["imports"]);
+        self.relationships = array(&v["relationships"]);
         self.details = v.get("details").cloned();
         self.analysis = text(&v["analysis"]).into();
     }
@@ -85,6 +87,8 @@ impl File {
 struct Snapshot {
     sha: String,
     files: BTreeMap<String, File>,
+    relationships: Vec<Value>,
+    checks: Value,
 }
 /// Coordinates read-only Git inspection, language adapters and bounded analysis caches.
 /// Owns repository-specific state on the worker thread; inspected source is never executed.
@@ -126,6 +130,9 @@ impl Repository {
             [
                 include_bytes!("engine.rs").as_slice(),
                 include_bytes!("adapters/rust.rs").as_slice(),
+                include_bytes!("adapters/rust_relationships.rs").as_slice(),
+                include_bytes!("relationships.rs").as_slice(),
+                include_bytes!("rules.rs").as_slice(),
                 include_bytes!("adapters/python_ast.py").as_slice(),
                 include_bytes!("adapters/mod.rs").as_slice(),
                 include_bytes!("adapters/python.rs").as_slice(),
@@ -365,7 +372,13 @@ impl Repository {
         }
         self.index.flush();
         resolve_imports(&mut files);
-        Ok(Snapshot { sha, files })
+        let (relationships, checks) = analyze_relationships(&files);
+        Ok(Snapshot {
+            sha,
+            files,
+            relationships,
+            checks,
+        })
     }
     /// Returns directory descriptions at both revisions plus available adapter capabilities.
     /// Descriptions come from committed READMEs or Python package docstrings; snapshot failures are propagated.
@@ -374,6 +387,44 @@ impl Repository {
         let b = self.snapshot(head)?;
         Ok(
             json!({"before":directory_descriptions(&a),"after":directory_descriptions(&b),"adapters":adapters::descriptors()}),
+        )
+    }
+    /// Returns static relationships and rule outcomes for both committed revisions.
+    /// Overview aggregates file pairs; a file query includes incoming, outgoing and unresolved evidence.
+    pub fn relationships(
+        &mut self,
+        base: &str,
+        head: &str,
+        path: &str,
+        overview: bool,
+    ) -> Result<Value> {
+        let a = self.snapshot(base)?;
+        let b = self.snapshot(head)?;
+        let select = |snapshot: &Snapshot| -> Vec<Value> {
+            let values = snapshot
+                .relationships
+                .iter()
+                .filter(|r| {
+                    path.is_empty()
+                        || r["source"]["path"] == path
+                        || r["targets"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .any(|t| t["path"] == path)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if overview {
+                crate::relationships::overview(&values)
+            } else {
+                values
+            }
+        };
+        let left = select(&a);
+        let right = select(&b);
+        Ok(
+            json!({"base":a.sha,"head":b.sha,"relationships":crate::relationships::compare(&left,&right),"checks":{"before":a.checks,"after":b.checks}}),
         )
     }
     /// Compares two Git revisions and returns file statuses and dependency changes.
@@ -571,6 +622,100 @@ fn document_summary(source: &str) -> String {
         lines.push(trimmed);
     }
     lines.join(" ")
+}
+/// Builds resolved declaration evidence and checks only the committed root rule configuration.
+fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) {
+    let context = crate::relationships::Context {
+        paths: adapters::Resolution::new(files.keys().cloned().collect()),
+        symbols: files
+            .iter()
+            .map(|(p, f)| (p.clone(), f.symbols.clone()))
+            .collect(),
+    };
+    let mut merged: BTreeMap<String, Value> = BTreeMap::new();
+    for file in files.values() {
+        let Some(adapter) = adapters::for_path(&file.path) else {
+            continue;
+        };
+        let mut values = file
+            .relationships
+            .iter()
+            .map(|raw| {
+                crate::relationships::normalize(
+                    &file.path,
+                    raw,
+                    adapter.resolve_relationship(&file.path, raw, &context),
+                )
+            })
+            .collect::<Vec<_>>();
+        for import in &file.imports {
+            let spec = text(&import["specifier"]);
+            let paths = array(&import["resolved"]);
+            if paths.is_empty() {
+                values.push(crate::relationships::normalize(&file.path,&json!({"source":"","target":spec,"kind":"imports","reason":"External or unresolved import"}),vec![]));
+            }
+            for path in paths {
+                values.push(crate::relationships::normalize(&file.path,&json!({"source":"","target":format!("{spec} → {}",text(&path)),"kind":"imports"}),vec![json!({"path":path,"symbol":""})]));
+            }
+        }
+        for value in values {
+            let id = text(&value["id"]).to_string();
+            if let Some(previous) = merged.get_mut(&id) {
+                for site in array(&value["sites"]) {
+                    if !previous["sites"].as_array().unwrap().contains(&site) {
+                        previous["sites"].as_array_mut().unwrap().push(site);
+                    }
+                }
+            } else {
+                merged.insert(id, value);
+            }
+        }
+    }
+    let mut values = merged.into_values().collect::<Vec<_>>();
+    let config = files.get(".strata.json");
+    let mut checks =
+        json!({"config":".strata.json","state":"not configured","rules":0,"errors":[]});
+    if let Some(file) = config {
+        match file
+            .source
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("Rule configuration is unreadable"))
+            .and_then(crate::rules::parse)
+        {
+            Ok(rules) => {
+                rules.apply(&mut values);
+                checks["state"] = json!("evaluated");
+                checks["rules"] = json!(rules.count());
+            }
+            Err(error) => {
+                checks["state"] = json!("invalid");
+                checks["errors"] = json!([error.to_string()]);
+            }
+        }
+    }
+    checks["unresolved"] = json!(
+        values
+            .iter()
+            .filter(|r| r["resolution"] != "resolved")
+            .count()
+    );
+    checks["violations"] = json!(
+        values
+            .iter()
+            .map(|r| array(&r["violations"]).len())
+            .sum::<usize>()
+    );
+    checks["analysisGaps"] = json!(
+        files
+            .values()
+            .filter(|f| adapters::for_path(&f.path).is_some()
+                && (f.source.is_none()
+                    || f.analysis.contains("unavailable")
+                    || f.analysis.contains("parse error")))
+            .map(|f| json!({"path":f.path,"reason":f.analysis}))
+            .collect::<Vec<_>>()
+    );
+    (values, checks)
 }
 /// Delegates every file's imports to its registered language adapter.
 /// Updates resolved targets and unique non-self dependency edges using only the current snapshot.

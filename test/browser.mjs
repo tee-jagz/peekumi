@@ -156,7 +156,9 @@ try {
       .click();
     assert.equal(
       await front
-        .locator('.node:not(.stub):not(.boundary)[data-status="unchanged"]')
+        .locator(
+          '.node:not(.stub):not(.boundary)[data-status="unchanged"]:not([data-relationship-changed="true"])',
+        )
         .count(),
       0,
     );
@@ -285,8 +287,9 @@ try {
       await edge.focus();
       await page.keyboard.press("Enter");
       assert.ok(
-        (await page.locator(".sel-kind").textContent()) ===
-          "Static import dependency",
+        /Static (import dependency|(?:calls|implements|inherits) relationship)/.test(
+          await page.locator(".sel-kind").textContent(),
+        ),
       );
     }
     await page.locator('[data-ba="before"]').click();

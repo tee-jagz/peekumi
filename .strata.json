@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "groups": {
+    "frontend": ["frontend/**"],
+    "backend": ["backend/**"],
+    "engine": ["backend/engine.rs"],
+    "concrete-adapters": ["backend/adapters/python.rs", "backend/adapters/typescript.rs", "backend/adapters/rust.rs", "backend/adapters/rust_relationships.rs"]
+  },
+  "rules": [
+    {
+      "id": "frontend-no-backend-source",
+      "from": "frontend",
+      "to": ["backend"],
+      "kinds": ["imports", "calls", "inherits", "implements"],
+      "message": "The frontend communicates through the HTTP API, not backend source imports or calls."
+    },
+    {
+      "id": "engine-uses-adapter-contract",
+      "from": "engine",
+      "to": ["concrete-adapters"],
+      "kinds": ["imports", "calls"],
+      "message": "The repository engine must use the shared adapter registry and interface."
+    }
+  ]
+}

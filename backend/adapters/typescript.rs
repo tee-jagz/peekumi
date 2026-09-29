@@ -20,7 +20,7 @@ impl LanguageAdapter for TypeScript {
     }
     /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
-        "Explicit types and JSDoc only; Svelte script blocks only; relative and $lib imports. Requires Node and TypeScript."
+        "Syntax-level named calls and explicit heritage; dynamic receivers, nested functions and type-checker dispatch are not resolved. Svelte script blocks only; relative and $lib imports. Requires Node and TypeScript."
     }
     /// Probes the installed helper runtime to identify compatible cached syntax.
     /// A failed probe is recorded as unavailable rather than hiding affected files.

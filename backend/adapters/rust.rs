@@ -204,7 +204,7 @@ pub fn analyze(source: &str) -> Value {
             let mut symbols = vec![];
             let mut imports = vec![];
             walk(&file.items, "", &mut symbols, &mut imports);
-            json!({"symbols":symbols,"imports":imports,"analysis":"Rust AST · macros not expanded","details":{"description":docs(&file.attrs),"provenance":"Rust module documentation"}})
+            json!({"symbols":symbols,"imports":imports,"analysis":"Rust AST · macros not expanded","relationships":super::rust_relationships::extract(&file,&symbols),"details":{"description":docs(&file.attrs),"provenance":"Rust module documentation"}})
         }
         Err(e) => json!({"symbols":[],"imports":[],"analysis":format!("parse error: {e}")}),
     }
@@ -291,7 +291,7 @@ impl super::LanguageAdapter for Rust {
     }
     /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
-        "Macros and conditional compilation are not evaluated; conventional module paths only."
+        "Syntax-level calls, trait implementations and supertraits; receiver dispatch, closure bodies, macros and conditional compilation are not evaluated. Conventional module paths only."
     }
     /// Identifies the native syn parser generation for cache compatibility.
     fn identity(&self, _: &super::Config) -> String {

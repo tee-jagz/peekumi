@@ -16,6 +16,7 @@ The old Node backend is under `test/reference/`. It is an equivalence oracle and
 - `GET /api/repo`: name, branch, first-parent commit history and initial revisions.
 - `GET /api/compare?base=&head=`: complete comparison for compatibility; add `view=overview` for file statuses, dependency edges, counts and compact symbol colour previews.
 - `GET /api/directories?base=&head=`: revision-specific directory README summaries or Python package docstrings, with provenance and adapter capabilities.
+- `GET /api/relationships?base=&head=&path=`: typed relationships, source sites, resolution evidence and before/after rule outcomes. Optional `view=overview` aggregates resolved file pairs for the initial map; a path includes incoming and outgoing evidence.
 - `GET /api/source?base=&head=&path=`: before/after source, direct Git diff, symbol comparison, imports and revision-specific metadata.
 
 API requests require a session or bearer token except pairing. Repository strings are rendered using browser `textContent`. The internal `--stdio` protocol exists for local tests and benchmarks; it is not an HTTP endpoint.
@@ -23,3 +24,5 @@ API requests require a session or bearer token except pairing. Repository string
 ## Boundaries
 
 The inspected repository is read-only. Source comes from committed Git objects, not working-tree traversal. Symlinks are not followed; restricted filenames, binary content, large files and submodules remain labelled. Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. No architecture or health scores are invented.
+
+`backend/relationships.rs` normalizes adapter evidence, resolves candidate declarations through the shared index and compares relationship/rule outcomes. `backend/rules.rs` validates committed `.strata.json` files and checks directional constraints. Rule evaluation is separate from syntax caching, so configuration-only commits can change violations.

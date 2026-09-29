@@ -3,6 +3,8 @@ mod adapters;
 mod engine;
 mod index;
 mod process;
+mod relationships;
+mod rules;
 use anyhow::{Context, Result};
 use axum::{
     Router,
@@ -117,6 +119,12 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[2]["view"] == "overview",
         ),
         "source" => repo.source(argument(args, 0), argument(args, 1), argument(args, 2)),
+        "relationships" => repo.relationships(
+            argument(args, 0),
+            argument(args, 1),
+            argument(args, 2),
+            args[3] == "overview",
+        ),
         "directories" => repo.directories(argument(args, 0), argument(args, 1)),
         "metrics" => Ok(repo.metrics()),
         _ => anyhow::bail!("Unknown repository operation"),
@@ -358,6 +366,14 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         "/api/compare" => {
             app.engine
                 .call("compare", json!([base,head,{"view":query.get("view")}]))
+                .await
+        }
+        "/api/relationships" => {
+            app.engine
+                .call(
+                    "relationships",
+                    json!([base, head, query.get("path"), query.get("view")]),
+                )
                 .await
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,

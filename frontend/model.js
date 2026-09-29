@@ -70,9 +70,16 @@ export function children(files, scope) {
     );
 }
 /** Rolls before/after file imports into visible directory or file edges, retaining external-scope neighbours and underlying file pairs. */
-export function connections(files, scope) {
+export function connections(files, scope, relationships = []) {
   const fileMap = new Map(files.map((file) => [file.path, file]));
-  function represent(path) {
+  function represent(path, symbol = "") {
+    if (
+      scope.kind === "file" &&
+      path === scope.path &&
+      symbol &&
+      fileMap.get(path)?.symbols?.some((s) => s.name === symbol)
+    )
+      return { key: "symbol:" + symbol, kind: "symbol", name: symbol, path };
     if (scope.kind === "file" && path === scope.path)
       return { key: "boundary", kind: "boundary", path, name: leaf(path) };
     if (scope.kind === "file")
@@ -118,37 +125,104 @@ export function connections(files, scope) {
     };
   }
   const edges = new Map();
-  for (const file of files)
-    for (const phase of ["beforeDeps", "deps"])
-      for (const target of file[phase]) {
-        if (!inScope(file, scope) && !inScope({ path: target }, scope))
-          continue;
-        const from = represent(file.path),
-          to = represent(target);
-        if (from.key === to.key) continue;
-        const key = from.key + "→" + to.key;
-        if (!edges.has(key))
-          edges.set(key, {
-            key,
-            kind: "edge",
-            from,
-            to,
-            before: new Set(),
-            after: new Set(),
-            pairs: new Map(),
-          });
-        const edge = edges.get(key),
-          pairKey = file.path + "→" + target;
-        edge[phase === "deps" ? "after" : "before"].add(pairKey);
-        edge.pairs.set(pairKey, { from: file.path, to: target });
+  const facts = [],
+    importEvidence = new Map();
+  for (const r of relationships)
+    for (const phase of ["before", "after"]) {
+      const fact = r[phase];
+      if (fact?.kind !== "imports") continue;
+      for (const target of fact.targets || []) {
+        const key = JSON.stringify([phase, fact.source.path, target.path]);
+        importEvidence.set(key, [
+          ...(importEvidence.get(key) || []),
+          ...(fact.violations || []),
+        ]);
       }
+    }
+
+  for (const file of files)
+    for (const phase of ["before", "after"])
+      for (const target of file[phase === "before" ? "beforeDeps" : "deps"] ||
+        []) {
+        const evidence =
+          importEvidence.get(JSON.stringify([phase, file.path, target])) || [];
+        facts.push({
+          phase,
+          from: file.path,
+          to: target,
+          kind: "imports",
+          violations: evidence,
+        });
+      }
+  for (const relation of relationships)
+    for (const phase of ["before", "after"]) {
+      const r = relation[phase];
+      if (!r || r.kind === "imports" || r.resolution !== "resolved") continue;
+      facts.push({
+        phase,
+        from: r.source.path,
+        to: r.targets[0].path,
+        fromSymbol: r.source.symbol,
+        toSymbol: r.targets[0].symbol,
+        kind: r.kind,
+        changed: relation.status === "changed",
+        violations: r.violations || [],
+      });
+    }
+  for (const fact of facts) {
+    if (
+      !inScope({ path: fact.from }, scope) &&
+      !inScope({ path: fact.to }, scope)
+    )
+      continue;
+    const from = represent(fact.from, fact.fromSymbol),
+      to = represent(fact.to, fact.toSymbol);
+    if (from.key === to.key) continue;
+    const key = from.key + "→" + to.key + ":" + fact.kind;
+    if (!edges.has(key))
+      edges.set(key, {
+        key,
+        kind: "edge",
+        relationshipKind: fact.kind,
+        from,
+        to,
+        before: new Set(),
+        after: new Set(),
+        pairs: new Map(),
+        violationsBefore: [],
+        violationsAfter: [],
+      });
+    const edge = edges.get(key),
+      pairKey = JSON.stringify([
+        fact.from,
+        fact.fromSymbol,
+        fact.to,
+        fact.toSymbol,
+      ]);
+    edge.evidenceChanged ||= !!fact.changed;
+    edge[fact.phase].add(pairKey);
+    edge.pairs.set(pairKey, {
+      from: fact.from,
+      to: fact.to,
+      fromSymbol: fact.fromSymbol,
+      toSymbol: fact.toSymbol,
+    });
+    const violations =
+      edge[fact.phase === "before" ? "violationsBefore" : "violationsAfter"];
+    for (const v of fact.violations)
+      if (!violations.some((existing) => existing.id === v.id))
+        violations.push(v);
+  }
   return [...edges.values()].map((edge) => ({
     ...edge,
     status: !edge.before.size
       ? "added"
       : !edge.after.size
         ? "removed"
-        : edge.before.size !== edge.after.size ||
+        : edge.evidenceChanged ||
+            JSON.stringify(edge.violationsBefore) !==
+              JSON.stringify(edge.violationsAfter) ||
+            edge.before.size !== edge.after.size ||
             [...edge.before].some((key) => !edge.after.has(key))
           ? "changed"
           : "unchanged",

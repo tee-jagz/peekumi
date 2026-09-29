@@ -1,6 +1,7 @@
 //! Language-specific syntax analysis behind one shared contract.
 mod python;
 mod rust;
+mod rust_relationships;
 mod typescript;
 use crate::process::run;
 use anyhow::Result;
@@ -34,7 +35,14 @@ pub trait LanguageAdapter: Sync {
     fn extensions(&self) -> &'static [&'static str];
     /// Lists the analysis categories this adapter advertises to the inspector.
     fn capabilities(&self) -> &[&str] {
-        &["symbols", "documentation", "explicit types", "imports"]
+        &[
+            "symbols",
+            "documentation",
+            "explicit types",
+            "imports",
+            "static calls",
+            "explicit heritage",
+        ]
     }
     /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str;
@@ -46,6 +54,15 @@ pub trait LanguageAdapter: Sync {
     fn analyze(&self, input: &[(String, String)], config: &Config) -> Result<Vec<Value>>;
     /// Resolves one import against the committed tree and returns known repository-relative target paths.
     /// An empty result means unresolved or external; callers must not invent a target.
+    /// Resolves adapter-emitted lookup evidence against committed declarations.
+    fn resolve_relationship(
+        &self,
+        file: &str,
+        relation: &Value,
+        context: &crate::relationships::Context,
+    ) -> Vec<Value> {
+        crate::relationships::resolve(self, file, relation, context)
+    }
     fn resolve(&self, file: &str, import: &Value, context: &Resolution) -> Vec<String>;
 }
 static PYTHON: python::Python = python::Python;
