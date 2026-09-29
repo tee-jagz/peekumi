@@ -274,3 +274,38 @@ test("restart retains reports and blocks dispatch until the interrupted agent ex
   assert.equal(ended.results.length, 1);
   assert.equal((await f.req("/api/workflow")).comments[0].status, "addressed");
 });
+
+test("Ask receives committed context without tools and never automatically creates a draft or run", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const result = await f.req("/api/ask", {
+    base: f.sha,
+    head: f.sha,
+    sha: f.sha,
+    anchor: { kind: "symbol", path: "module.py", symbol: "run" },
+    question: "What does this do?",
+    history: [],
+  });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.match(result.answer.text, /not run tests/);
+  assert.equal(
+    result.answer.suggestion,
+    "Add a focused regression test for this behavior.",
+  );
+  assert.equal(result.context.head, f.sha);
+  const state = await f.req("/api/workflow");
+  assert.equal(state.comments.length, 0);
+  assert.equal(state.runs.length, 0);
+  assert.equal(
+    (
+      await f.req("/api/ask", {
+        base: f.sha,
+        head: f.sha,
+        sha: f.sha,
+        question: "test",
+        anchor: { kind: "file", path: "../escape" },
+      })
+    ).status,
+    400,
+  );
+});

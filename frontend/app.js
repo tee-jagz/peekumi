@@ -1,4 +1,5 @@
 /** @module Browser controller for repository navigation, committed comparisons and the review panel. */
+import { createAsk } from "./ask.js";
 import { createWorkflow } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import {
@@ -144,6 +145,26 @@ const workflow = createWorkflow({
     } finally {
       document.querySelector("#tabs").inert = false;
     }
+  },
+});
+const ask = createAsk({
+  api,
+  context() {
+    return { ...reviewContext(), base: baseRef, head: headRef };
+  },
+  notice: showNotice,
+  redraw() {
+    if (tab === "ask") renderTab();
+  },
+  async makeDraft(draft) {
+    await api("/api/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+    });
+    await workflow.refresh(false);
+    tab = "comments";
+    renderPanel();
   },
 });
 /** Updates the status banner and distinguishes ordinary progress from errors. */
@@ -972,7 +993,10 @@ function renderPanel() {
   document
     .querySelectorAll("[data-tab]")
     .forEach((b) =>
-      b.setAttribute("aria-selected", String(b.dataset.tab === tab)),
+      b.setAttribute(
+        "aria-selected",
+        String(b.dataset.tab === (tab === "runs" ? "comments" : tab)),
+      ),
     );
   renderTab();
 }
@@ -1203,7 +1227,14 @@ function renderSelection() {
         renderPanel();
       }),
     );
-  actions.append(button("btn", "Comment", () => workflow.compose()));
+  actions.append(
+    button("btn", "Comment", () => workflow.compose()),
+    button("btn", "Ask", () => {
+      ask.open();
+      tab = "ask";
+      renderPanel();
+    }),
+  );
   box.append(actions);
   if (
     scope.kind === "file" &&
@@ -1377,6 +1408,10 @@ function listRow(node, detail, action) {
 function renderTab() {
   const body = $("#tabBody");
   body.replaceChildren();
+  if (tab === "ask") {
+    ask.render(body);
+    return;
+  }
   if (["comments", "runs"].includes(tab)) {
     workflow.render(body, tab);
     return;
@@ -1907,6 +1942,7 @@ document.querySelectorAll("[data-ba]").forEach(
 document.querySelectorAll("[data-tab]").forEach(
   (b) =>
     (b.onclick = () => {
+      if (b.dataset.tab === "ask" && tab !== "ask") ask.open();
       tab = b.dataset.tab;
       if (comparison) renderPanel();
       if (tab === "source" && scope.kind === "file" && !sourceData)

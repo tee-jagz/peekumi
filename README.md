@@ -126,4 +126,4 @@ The Dependencies panel now distinguishes static imports, calls, implementations 
 
 ## Review and steer
 
-Use **Comment** on a selection, then **Prepare run** to choose drafts and preview the exact task. Dispatch starts Codex or Claude Code in a dedicated worktree. Agent reports link commits and check evidence back to comments; **Review fix**, **Verify**, or **Reopen** completes the loop. See [the workflow guide](docs/WORKFLOW.md) for setup, persistence and boundaries.
+Use **Ask** to discuss a selection or **Comment** to capture an instruction. Runs live inside Comments. Use **Prepare run** to choose drafts and preview the exact task. Dispatch starts Codex or Claude Code in a dedicated worktree. Agent reports link commits and check evidence back to comments; **Review fix**, **Verify**, or **Reopen** completes the loop. See [the workflow guide](docs/WORKFLOW.md) for setup, persistence and boundaries.

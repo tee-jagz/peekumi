@@ -1,5 +1,6 @@
 //! Authenticated HTTP API, embedded frontend and repository worker.
 mod adapters;
+mod ask;
 mod engine;
 mod index;
 mod process;
@@ -143,6 +144,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
 struct App {
     engine: Engine,
     workflow: workflow::Workflow,
+    ask_lock: Mutex<()>,
     token: String,
     cookie_name: String,
     sessions: Mutex<HashMap<String, Instant>>,
@@ -172,6 +174,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/" => Some(("text/html", include_bytes!("../frontend/index.html"))),
         "/app.js" => Some(("text/javascript", include_bytes!("../frontend/app.js"))),
         "/model.js" => Some(("text/javascript", include_bytes!("../frontend/model.js"))),
+        "/ask.js" => Some(("text/javascript", include_bytes!("../frontend/ask.js"))),
         "/workflow.js" => Some(("text/javascript", include_bytes!("../frontend/workflow.js"))),
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
@@ -353,7 +356,10 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         )
         .await;
     }
-    if path == "/api/workflow" || path.starts_with("/api/comments") || path.starts_with("/api/runs")
+    if path == "/api/ask"
+        || path == "/api/workflow"
+        || path.starts_with("/api/comments")
+        || path.starts_with("/api/runs")
     {
         let method = request.method().to_string();
         if method != "GET" {
@@ -385,6 +391,23 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
                 Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await,
             }
         };
+        if path == "/api/ask" {
+            if method != "POST" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST for Ask", gzip).await;
+            }
+            let Ok(_ask_guard) = app.ask_lock.try_lock() else {
+                return error(
+                    StatusCode::CONFLICT,
+                    "An Ask answer is already in progress",
+                    gzip,
+                )
+                .await;
+            };
+            return match ask::answer(&app, body).await {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            };
+        }
         let store = app.workflow.clone();
         return match tokio::task::spawn_blocking(move || store.route(&method, &path, body)).await {
             Ok(Ok(v)) => json_response(StatusCode::OK, v, gzip, None).await,
@@ -578,6 +601,7 @@ async fn main() -> Result<()> {
     let app = Arc::new(App {
         cookie_name,
         workflow,
+        ask_lock: Mutex::new(()),
         engine: Engine::start(repo),
         token: access_token,
         sessions: Mutex::new(HashMap::new()),

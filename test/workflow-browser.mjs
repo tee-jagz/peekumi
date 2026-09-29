@@ -18,6 +18,16 @@ try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
       await page.locator('.sheet[data-front="true"] .node').first().waitFor();
       await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      assert.equal(
+        await page.getByRole("tab", { name: "Runs", exact: true }).count(),
+        0,
+      );
+      await page
+        .getByRole("button", { name: "View runs", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Back to comments", exact: true })
+        .click();
       await page
         .getByRole("button", { name: "Comment on selection", exact: true })
         .click();
@@ -117,6 +127,32 @@ try {
       assert.equal(anchored.anchor.kind, "symbol");
       assert.equal(anchored.anchor.path, "module.py");
       assert.equal(anchored.anchor.symbol, "run");
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page
+        .getByLabel("Your question")
+        .fill("What would improve this function?");
+      await page
+        .locator("#tabBody")
+        .getByRole("button", { name: "Ask", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Make draft comment", exact: true })
+        .waitFor();
+      const countBefore = (await f.req("/api/workflow")).comments.length;
+      await page.screenshot({ path: `test-results/ask-${viewport.width}.png` });
+      await page
+        .getByRole("button", { name: "Make draft comment", exact: true })
+        .click();
+      await waitFor(
+        async () =>
+          (await f.req("/api/workflow")).comments.length === countBefore + 1,
+      );
+      assert.equal(
+        await page
+          .getByRole("tab", { name: "Comments", exact: true })
+          .getAttribute("aria-selected"),
+        "true",
+      );
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       );

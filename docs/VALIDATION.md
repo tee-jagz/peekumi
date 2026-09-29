@@ -124,3 +124,7 @@ The comments/run slice adds durable anchored drafts, immutable previews, isolate
 - Installed Codex and Claude Code sign-in status commands succeed on this host. Their real paid execution, model behavior and test quality have not been exercised by this validation.
 
 See [WORKFLOW.md](WORKFLOW.md) for current-status history semantics, polling, process recovery, permissions and remaining specification items.
+
+### Comment and Ask navigation
+
+The review panel now uses Comments and Ask; run preparation and progress are nested under Comments. The additional Ask integration test checks committed context, disabled execution tools, credential-free provider environment and no automatic draft/run creation. Browser checks exercise question → answer → explicitly saved draft at phone and desktop sizes; screenshots were inspected. Validation uses a deterministic local provider rather than a live model request. Current suite: 25 Node-driven tests plus 10 native Rust tests. A native regression verifies that Ask includes a selected declaration near the end of a large file.

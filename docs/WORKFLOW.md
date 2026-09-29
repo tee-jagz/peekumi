@@ -7,7 +7,7 @@ Collect feedback while inspecting a repository, preview it as one task, then sen
 1. Select a folder, file, declaration or dependency and choose **Comment**. The Comments tab also supports a comment on the current scope. A draft stores its immutable Git SHA and anchor; navigation does not move a draft to another selection.
 2. Edit or delete drafts freely. **Prepare run** selects the drafts, Codex or Claude Code, and an optional brief. **Preview task** shows the exact task, start SHA, new branch and committed dependency rules.
 3. **Dispatch run** consumes that saved preview. If the watched branch or any selected draft changed, make a new preview. Repeated dispatch of the same preview returns the original run. One active run is allowed per repository.
-4. Follow progress in **Runs**. Inspect the agent output, original task and result commits. **Stop run** terminates the agent process group. A run is limited to one hour; logs retain the first MiB while further output is drained.
+4. Follow progress through **Comments → View runs**. Inspect the agent output, original task and result commits. **Stop run** terminates the agent process group. A run is limited to one hour; logs retain the first MiB while further output is drained.
 5. **Review fix** opens the run's base-to-result comparison. Agent-reported check results are evidence supplied by the agent, not an independent test execution by Strata.
 6. **Verify** records your review note against that exact commit. **Reopen** returns addressed, flagged or unreported feedback to Draft with its earlier history preserved.
 
@@ -43,6 +43,7 @@ Authenticated owner writes require same-origin JSON. Untrusted repository text, 
 
 ## API
 
+- `POST /api/ask`: `{base, head, sha, anchor, question, history}`; returns an answer, optional suggested comment and context omissions.
 - `GET /api/workflow`: comments, history, run summaries and watched ref.
 - `POST /api/comments`: `{anchor, sha, text}`.
 - `PATCH /api/comments/<id>`: `{action, version, text? , note?}`; actions `edit`, `delete`, `reopen`, `verify`.
@@ -57,4 +58,10 @@ The viewer polls active runs every three seconds; SSE is not implemented. Comple
 
 The deterministic integration agent performs real Git commits and reports through the production MCP transport. Tests cover exact preview delivery, stale drafts and refs, duplicate dispatch, concurrency, invalid attribution, unrelated comments, flagging, unanswered comments, verification, reopening, persistence, cancellation and missing executables. Browser coverage completes the loop on phone and desktop. These tests do not demonstrate a paid Codex or Claude session; a first real run still depends on local agent authentication and permissions.
 
-Ask, automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE and automatic merges remain outside this slice. Dependency rules are included in every task; owners can explicitly ask the agent to propose changes to `.strata.json` through a draft.
+Automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE and automatic merges remain outside this slice. Dependency rules are included in every task; owners can explicitly ask the agent to propose changes to `.strata.json` through a draft.
+
+## Ask versus Comment
+
+Every selection offers **Comment** and **Ask**. Comments capture instructions; **Comments → View runs** holds preparation and progress. Ask is a contextual conversation using the installed, signed-in Claude Code client, with all tools, skills and extra MCP servers disabled. No provider call occurs until the owner submits a question. Source and comparison context, committed rules and scoped comments are bounded and any omissions are disclosed. Provider calls time out after 30 seconds.
+
+Ask history stays in the open browser page and is lost on reload; each selected revision/scope has a separate conversation. Responses arrive when complete, rather than token streaming. An answer can propose a comment, but only **Make draft comment** saves it, anchored to the original question's selection and viewed revision. Ask cannot verify comments or start runs. Pinned answers and automatic brief generation remain deferred.

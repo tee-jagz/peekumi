@@ -152,6 +152,10 @@ export function createWorkflow({
     const tools = el("div", "sel-acts");
     tools.append(
       action("Comment on selection", compose, true),
+      action("View runs", () => {
+        preparing = false;
+        showTab("runs");
+      }),
       action(filter === "all" ? "Show this scope" : "Show all comments", () => {
         filter = filter === "all" ? "scope" : "all";
         redraw();
@@ -433,6 +437,7 @@ export function createWorkflow({
     }
   }
   function runs(body) {
+    body.append(action("Back to comments", () => showTab("comments")));
     if (preparing) {
       prepare(body);
       return;

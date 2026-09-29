@@ -4,6 +4,27 @@ import { writeFileSync, existsSync } from "node:fs";
 let task = "";
 for await (const chunk of process.stdin) task += chunk;
 const values = process.argv.slice(2);
+if (values.includes("--tools")) {
+  if (
+    values[values.indexOf("--tools") + 1] !== "" ||
+    !values.includes("--strict-mcp-config") ||
+    !values.includes("--disable-slash-commands")
+  )
+    throw Error("Ask must have no tools");
+  if (process.env.STRATA_TOKEN || process.env.STRATA_REPORT_TOKEN)
+    throw Error("Ask inherited a Strata credential");
+  const input = JSON.parse(task);
+  if (!input.repositoryContext || !input.question)
+    throw Error("Missing grounded context");
+  console.log(
+    JSON.stringify({
+      is_error: false,
+      result:
+        "The supplied comparison shows the selected module. I have not run tests.\nSuggested comment: Add a focused regression test for this behavior.",
+    }),
+  );
+  process.exit(0);
+}
 let command, args;
 if (values.includes("--mcp-config")) {
   if (
@@ -114,6 +135,6 @@ if (run.comments[1]) {
 console.log("Fixture reporting checks passed");
 // Keep the run active long enough to test dispatch serialization and owner verification ordering.
 const state = args[args.indexOf("--state-dir") + 1];
-for (let i = 0; existsSync(state + "/hold") && i < 300; i++)
+for (let i = 0; existsSync(state + "/hold") && i < 1200; i++)
   await new Promise((r) => setTimeout(r, 100));
 await new Promise((r) => setTimeout(r, 300));

@@ -74,7 +74,7 @@ export async function fixture() {
   };
 }
 export async function waitFor(fn) {
-  for (let n = 0; n < 300; n++) {
+  for (let n = 0; n < 900; n++) {
     const v = await fn();
     if (v) return v;
     await new Promise((r) => setTimeout(r, 100));

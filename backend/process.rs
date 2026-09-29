@@ -1,4 +1,4 @@
-//! Bounded subprocess execution for Git and installed syntax helpers.
+//! Bounded subprocess execution for Git, syntax helpers and tool-free Ask.
 use anyhow::{Context, Result, bail};
 use std::{
     io::{Read, Write},
@@ -18,6 +18,8 @@ use wait_timeout::ChildExt;
 pub fn run(program: &str, args: &[&str], cwd: Option<&Path>, input: Vec<u8>) -> Result<Vec<u8>> {
     let mut command = Command::new(program);
     command
+        .env_remove("STRATA_TOKEN")
+        .env_remove("STRATA_REPORT_TOKEN")
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
