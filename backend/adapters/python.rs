@@ -1,18 +1,26 @@
+//! Bridges the shared adapter contract to Python AST extraction and package import resolution.
 use super::*;
+/// Syntax adapter for Python source; parsing runs in an installed helper process.
 pub struct Python;
 impl LanguageAdapter for Python {
+    /// Returns the stable registry key used to group analysis batches and cache identities.
     fn id(&self) -> &'static str {
         "python"
     }
+    /// Returns the human-readable language name used in capability and failure messages.
     fn name(&self) -> &'static str {
         "Python"
     }
+    /// Lists filename extensions this adapter can analyze; entries omit the leading dot.
     fn extensions(&self) -> &'static [&'static str] {
         &["py"]
     }
+    /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
         "Explicit annotations only; ambiguous imports remain unresolved. Requires Python."
     }
+    /// Probes the installed helper runtime to identify compatible cached syntax.
+    /// A failed probe is recorded as unavailable rather than hiding affected files.
     fn identity(&self, config: &Config) -> String {
         format!(
             "{}:{}",
@@ -20,6 +28,8 @@ impl LanguageAdapter for Python {
             version(run(&config.python, &["--version"], None, vec![]))
         )
     }
+    /// Sends committed source batches to the Python helper through JSON stdin.
+    /// Returns ordered syntax results; subprocess failures or invalid response JSON are errors.
     fn analyze(&self, input: &[(String, String)], config: &Config) -> Result<Vec<Value>> {
         let input = json!(input.iter().map(|(_, source)| source).collect::<Vec<_>>())
             .to_string()
@@ -31,6 +41,7 @@ impl LanguageAdapter for Python {
             input,
         )?)?)
     }
+    /// Resolves relative Python imports and unique dotted-module matches; ambiguous and external names stay unresolved.
     fn resolve(&self, file: &str, item: &Value, context: &Resolution) -> Vec<String> {
         let spec = text(&item["specifier"]);
         let paths = &context.paths;

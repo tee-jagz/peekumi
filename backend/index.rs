@@ -6,6 +6,7 @@ use std::{
     collections::{HashMap, VecDeque},
     path::Path,
 };
+/// A repository-scoped syntax cache with optional SQLite persistence and a bounded memory fallback.
 pub struct Index {
     db: Option<Connection>,
     memory: HashMap<String, Value>,
@@ -13,6 +14,8 @@ pub struct Index {
     pending: Vec<(String, String)>,
 }
 impl Index {
+    /// Opens a private SQLite database under `directory` using the repository `namespace`.
+    /// Creates the directory and schema; logs failures and continues with memory-only caching.
     pub fn new(directory: &Path, namespace: &str) -> Self {
         let result = (|| -> Result<Connection> {
             std::fs::create_dir_all(directory)?;
@@ -48,6 +51,8 @@ impl Index {
             pending: vec![],
         }
     }
+    /// Returns cached analysis by content/version key, checking memory before SQLite.
+    /// Missing keys, unreadable records and invalid JSON are treated as cache misses.
     pub fn get(&self, key: &str) -> Option<Value> {
         if let Some(value) = self.memory.get(key) {
             return Some(value.clone());
@@ -62,6 +67,8 @@ impl Index {
             .ok()?;
         serde_json::from_str(&data?).ok()
     }
+    /// Stores analysis in memory and queues a database write when persistence is available.
+    /// Evicts oldest memory entries beyond 4,000 keys; disk writes happen in `flush`.
     pub fn set(&mut self, key: String, value: Value) {
         if !self.memory.contains_key(&key) {
             self.order.push_back(key.clone());
@@ -76,6 +83,8 @@ impl Index {
             }
         }
     }
+    /// Commits pending analysis records and trims retained database payload to 128 MiB.
+    /// A write failure disables persistence for this instance while preserving the memory cache.
     pub fn flush(&mut self) {
         let result = (|| -> Result<()> {
             let Some(db) = self.db.as_mut() else {

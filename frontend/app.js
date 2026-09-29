@@ -1,3 +1,4 @@
+/** @module Browser controller for repository navigation, committed comparisons and the review panel. */
 import { mountCanvas } from "./canvas.js";
 import {
   rootScope,
@@ -68,11 +69,13 @@ const commit = (sha) =>
     short: sha?.slice(0, 8),
     subject: "Selected revision",
   };
+/** Updates the status banner and distinguishes ordinary progress from errors. */
 function showNotice(message, error = false) {
   $("#notice").textContent = message;
   $("#notice").classList.toggle("error", error);
   $("#notice").hidden = !message;
 }
+/** Fetches an authenticated same-origin JSON API response. Rejects failed HTTP responses with the server error message. */
 async function api(route, options = {}) {
   const response = await fetch(route, options),
     result = await response.json();
@@ -83,6 +86,7 @@ async function api(route, options = {}) {
   if (!response.ok) throw new Error(result.error || "Request failed");
   return result;
 }
+/** Exchanges a private access token for a session cookie and initializes the viewer on success. */
 async function pair(token) {
   await api("/api/session", {
     method: "POST",
@@ -97,6 +101,7 @@ $("#login").onsubmit = (event) => {
     (error) => ($("#login-error").textContent = error.message),
   );
 };
+/** Loads repository identity and initial revisions, then renders the comparison. A refresh follows the latest configured head. */
 async function boot(refresh = false) {
   try {
     metadata = await api("/api/repo");
@@ -114,6 +119,7 @@ async function boot(refresh = false) {
     showNotice(error.message, true);
   }
 }
+/** Finds a commit's first parent in the loaded history for the Time comparison. */
 function parentRevision(sha) {
   const c = commit(sha);
   return (
@@ -123,6 +129,7 @@ function parentRevision(sha) {
     sha
   );
 }
+/** Fetches a compact comparison and revision-specific directory descriptions, reusing the six-entry browser cache. Stale requests cannot replace the active view. */
 async function loadComparison() {
   const id = ++loadId;
   ++sourceId;
@@ -172,10 +179,12 @@ async function loadComparison() {
     if (id === loadId) $("#refresh").disabled = false;
   }
 }
+/** Rebuilds visible hierarchy nodes and import relationships from the current comparison and scope. */
 function refreshModel() {
   nodes = children(comparison.files, scope);
   edges = connections(comparison.files, scope);
 }
+/** Refreshes the hierarchy model, controls, commit deck and review panel from the current state. */
 function render() {
   if (!comparison) return;
   refreshModel();
@@ -183,6 +192,7 @@ function render() {
   renderDeck();
   renderPanel();
 }
+/** Synchronizes view, colour-lens and Before/After controls with the active state. */
 function renderControls() {
   document
     .querySelectorAll("[data-mode]")
@@ -204,6 +214,7 @@ function renderControls() {
     );
   $("#baSeg").hidden = mode !== "diff";
 }
+/** Builds clickable ancestors for the current repository, directory or file scope. */
 function breadcrumbs() {
   const nav = element("nav", "crumbs");
   nav.setAttribute("aria-label", "Level");
@@ -236,6 +247,7 @@ function breadcrumbs() {
   });
   return nav;
 }
+/** Recreates the Time or Diff commit sheets and renders the active map while preserving map-sheet scroll position. */
 function renderDeck() {
   const deck = $("#deck"),
     oldScroll =
@@ -304,14 +316,17 @@ function renderDeck() {
   renderGraph(body);
   body.scrollTop = oldScroll;
 }
+/** Chooses a node colour from its Git status, or the neutral Structure accent. */
 function tone(node) {
   return lens === "changes"
     ? tones[node.status] || "var(--faint)"
     : "var(--accent)";
 }
+/** Determines whether a node belongs on the selected revision side and colour lens. */
 function visibleInSide(node) {
   return visibleOnSide(node, before, lens);
 }
+/** Lays out the current directory or symbol scope and its import neighbours inside the SVG viewport. */
 function renderGraph(body) {
   const width = Math.max(240, body.clientWidth),
     available = Math.max(180, body.clientHeight - 38),
@@ -488,6 +503,7 @@ function renderGraph(body) {
     controls,
   );
 }
+/** Creates an accessible map card with status, preview metadata and select-then-open behavior. */
 function graphNode({ node, x, y, w, h }) {
   const cls = [
     "node",
@@ -594,6 +610,7 @@ function graphNode({ node, x, y, w, h }) {
   }
   return card;
 }
+/** Draws selectable static import connections between positioned cards; these are not runtime call edges. */
 function drawEdges(canvas, positions, width, height, arcs) {
   const NS = "http://www.w3.org/2000/svg",
     svg = document.createElementNS(NS, "svg");
@@ -698,6 +715,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
   }
   canvas.append(svg);
 }
+/** Selects a card or dependency for review and loads file details when needed. */
 function selectNode(node) {
   selected = node;
   if (node.kind === "symbol") {
@@ -708,6 +726,7 @@ function selectNode(node) {
   renderPanel();
   if (scope.kind === "file" && !sourceData) loadSource();
 }
+/** Drills into a selected directory or file, or opens source for a selected symbol. */
 function openNode(node) {
   if (node.kind === "symbol") {
     tab = "source";
@@ -724,6 +743,7 @@ function openNode(node) {
   if (node.kind === "boundary") return;
   navigate(nodeScope(node), node.key);
 }
+/** Animates a scope change, clears stale selection and source state, and loads file details after entering a file. */
 async function navigate(next, originKey) {
   if (busy) return;
   const graph = $(".sheet:not(.peek) .graph-inner");
@@ -765,11 +785,13 @@ async function navigate(next, originKey) {
   $("#panel").scrollTop = 0;
   if (scope.kind === "file") loadSource();
 }
+/** Navigates to the parent directory or repository root. */
 function goUp() {
   if (scope.kind === "repo") return;
   const path = parent(scope.path);
   navigate(path ? { kind: "folder", path } : rootScope());
 }
+/** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
   $("#panel").dataset.selection = String(!!selected);
   renderCommits();
@@ -781,6 +803,7 @@ function renderPanel() {
     );
   renderTab();
 }
+/** Builds commit history controls and the base-revision picker from the loaded repository history. */
 function renderCommits() {
   const bar = $("#commitBar");
   bar.replaceChildren();
@@ -843,11 +866,13 @@ function renderCommits() {
         5;
   });
 }
+/** Selects directory documentation from Before or After; removed directories use the base revision. */
 function directoryInfo(path, removed = false) {
   return comparison?.directoryMetadata?.[
     before || removed ? "before" : "after"
   ]?.[path];
 }
+/** Builds a directory Details section from committed documentation, with provenance and a link to the complete source file. */
 function directoryCard(path, removed = false) {
   const info = directoryInfo(path, removed),
     box = element("section", "directory-details");
@@ -880,6 +905,7 @@ function directoryCard(path, removed = false) {
   );
   return box;
 }
+/** Builds a disclosure identifying the selected file's language adapter, capabilities, analysis status and limitations. */
 function adapterCard() {
   const adapter = comparison?.directoryMetadata?.adapters?.find((a) =>
       a.extensions.includes(scope.path.split(".").at(-1)),
@@ -912,6 +938,7 @@ function adapterCard() {
     );
   return box;
 }
+/** Rebuilds selected-item actions and metadata, or directory context when nothing is selected. */
 function renderSelection() {
   const strip = $("#selStrip");
   strip.replaceChildren();
@@ -1006,6 +1033,7 @@ function renderSelection() {
   if (scope.kind === "file") box.append(adapterCard());
   strip.append(box);
 }
+/** Displays revision-specific module or symbol documentation and explicit declaration metadata. Long documentation and argument details remain expandable. */
 function metadataCard() {
   const box = element("details", "code-metadata");
   const useBefore =
@@ -1132,6 +1160,7 @@ function metadataCard() {
     box.append(element("small", "metadata-muted", info.provenance));
   return box;
 }
+/** Builds Git-status labels, omitting statuses absent from the supplied file set. */
 function legend(files) {
   const box = element("div", "legend-inline");
   for (const status of Object.keys(labels)) {
@@ -1148,6 +1177,7 @@ function legend(files) {
   }
   return box;
 }
+/** Creates a keyboard-accessible review-list entry that invokes its supplied navigation action. */
 function listRow(node, detail, action) {
   const li = element("li"),
     row = button("row", "", action);
@@ -1160,6 +1190,7 @@ function listRow(node, detail, action) {
   li.append(row);
   return li;
 }
+/** Renders the scoped change inventory, source view or dependency list for the active review tab. */
 function renderTab() {
   const body = $("#tabBody");
   body.replaceChildren();
@@ -1258,6 +1289,7 @@ function renderTab() {
       }),
     );
 }
+/** Lists static import changes and unresolved or external imports within the current scope. */
 function renderDependencies(body) {
   const list = element("ul", "list");
   body.append(
@@ -1325,6 +1357,7 @@ function renderDependencies(body) {
       );
   }
 }
+/** Fetches before/after source and full declaration metadata for the current file. Reuses a twelve-file cache and ignores results from superseded navigation. */
 async function loadSource() {
   const id = ++sourceId,
     path = scope.path;
@@ -1363,6 +1396,7 @@ async function loadSource() {
     }
   }
 }
+/** Shows a full-file or selected-symbol diff, or highlighted source from Before or After. Repository text is rendered as text rather than executable HTML. */
 function renderSource(body) {
   if (scope.kind !== "file") {
     body.append(
@@ -1474,6 +1508,7 @@ function renderSource(body) {
       code.scrollTop = highlighted.offsetTop - code.offsetTop - 28;
   });
 }
+/** Changes the commit under review and reloads the appropriate Time or Diff comparison. */
 function chooseHead(sha) {
   if (busy) return;
   headRef = sha;

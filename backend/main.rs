@@ -30,6 +30,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
     name = "strata",
     about = "Explore committed repository structure from your phone"
 )]
+/// Launch configuration for the repository, listener, private state and installed parser helpers.
 struct Options {
     directory: PathBuf,
     #[arg(long, default_value = "127.0.0.1")]
@@ -55,16 +56,20 @@ struct Options {
     #[arg(long, hide = true)]
     stdio: bool,
 }
+/// One queued repository operation with JSON arguments and a channel for its result.
 struct Work {
     method: String,
     args: Value,
     reply: oneshot::Sender<Result<Value, String>>,
 }
 #[derive(Clone)]
+/// An asynchronous handle to the dedicated repository worker.
+/// Keeps blocking Git, parser and SQLite work off the HTTP runtime threads.
 struct Engine {
     sender: mpsc::Sender<Work>,
 }
 impl Engine {
+    /// Moves the repository into a worker thread and creates a queue capped at 32 operations.
     fn start(mut repo: Repository) -> Self {
         let (sender, mut receiver) = mpsc::channel::<Work>(32);
         std::thread::spawn(move || {
@@ -76,6 +81,8 @@ impl Engine {
         });
         Self { sender }
     }
+    /// Queues a named repository operation and asynchronously waits for its JSON result.
+    /// Returns operation errors or a worker-stopped error if either channel closes.
     async fn call(&self, method: &str, args: Value) -> Result<Value, String> {
         let (reply, receive) = oneshot::channel();
         self.sender
@@ -91,9 +98,12 @@ impl Engine {
             .map_err(|_| "Repository worker stopped".to_string())?
     }
 }
+/// Reads a positional string argument from the internal JSON protocol, defaulting to empty.
 fn argument(args: &Value, index: usize) -> &str {
     args[index].as_str().unwrap_or("")
 }
+/// Routes an internal operation name to the repository API.
+/// Returns an error for unknown operations or failed repository work.
 fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> {
     match method {
         "resolve" => Ok(json!(repo.resolve(argument(args, 0))?)),
@@ -112,6 +122,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
         _ => anyhow::bail!("Unknown repository operation"),
     }
 }
+/// Shared HTTP state: repository worker, access token, expiring sessions and launch options.
 struct App {
     engine: Engine,
     token: String,
@@ -119,20 +130,25 @@ struct App {
     sessions: Mutex<HashMap<String, Instant>>,
     options: Options,
 }
+/// Generates 32 random bytes encoded as hexadecimal for access and session tokens.
 fn random_token() -> String {
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+/// Compares token bytes with the constant-time equality primitive; unequal lengths are rejected.
 fn equal(a: &str, b: &str) -> bool {
     bool::from(a.as_bytes().ct_eq(b.as_bytes()))
 }
+/// Reads a valid UTF-8 request header, returning an empty string when missing or invalid.
 fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
     headers
         .get(name)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
 }
+/// Returns an embedded frontend asset from the fixed public route allowlist.
+/// Unknown paths return None rather than reading arbitrary files from disk.
 fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
     match path {
         "/" => Some(("text/html", include_bytes!("../frontend/index.html"))),
@@ -144,6 +160,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         _ => None,
     }
 }
+/// Checks explicit gzip acceptance and honors a zero quality value as an opt-out.
 fn gzip_accepted(headers: &HeaderMap) -> bool {
     header(headers, "accept-encoding").split(',').any(|entry| {
         let entry = entry.to_lowercase();
@@ -155,6 +172,9 @@ fn gzip_accepted(headers: &HeaderMap) -> bool {
         quality.is_none_or(|q| q.parse::<f64>().is_ok_and(|v| v > 0.0))
     })
 }
+/// Constructs an HTTP response with private-cache and browser security headers.
+/// Compresses accepted bodies of at least 1 KiB on the blocking pool and optionally sets a session cookie.
+/// Encoding failures produce an internal-server-error response.
 async fn respond(
     status: StatusCode,
     kind: &str,
@@ -210,6 +230,7 @@ async fn respond(
     }
     response
 }
+/// Serializes a JSON API result and sends it through the common response/header policy.
 async fn json_response(
     status: StatusCode,
     value: Value,
@@ -225,9 +246,12 @@ async fn json_response(
     )
     .await
 }
+/// Formats an API failure as a JSON error using the supplied HTTP status.
 async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
     json_response(code, json!({"error":message}), gzip, None).await
 }
+/// Serves embedded assets, exchanges access tokens for sessions and authenticates read-only API requests.
+/// Rejects cross-origin pairing, unauthorized access and unsupported write methods before repository dispatch.
 async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
     let gzip = gzip_accepted(request.headers());
     let path = request.uri().path();
@@ -349,6 +373,8 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         Err(message) => error(StatusCode::BAD_REQUEST, &message, gzip).await,
     }
 }
+/// Loads an explicit token or reuses the token stored in the private state directory.
+/// Creates a new owner-readable token file when absent; empty tokens and filesystem failures are errors.
 fn token(options: &Options) -> Result<String> {
     if let Some(token) = &options.token {
         anyhow::ensure!(!token.is_empty(), "Empty token");
@@ -377,6 +403,9 @@ fn token(options: &Options) -> Result<String> {
     }
 }
 #[tokio::main]
+/// Starts the configured repository service or the internal line-oriented test protocol.
+/// Validates HEAD before serving, binds the listener and prints the local pairing link.
+/// Returns startup, configuration, repository or listener errors.
 async fn main() -> Result<()> {
     let options = Options::parse();
     let mut repo = Repository::new(

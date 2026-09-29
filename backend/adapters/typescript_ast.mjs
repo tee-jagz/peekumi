@@ -1,7 +1,9 @@
+/** @module Syntax-only JavaScript, TypeScript and Svelte helper using the TypeScript compiler parser. Reads JSON batches and never executes inspected code. */
 // Syntax parser only: never execute inspected code.
 import ts from "typescript";
 import { createHash } from "node:crypto";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
+/** Extracts symbols, documentation, explicit declarations and static import specifiers from one source file. Svelte parsing preserves original line positions while excluding markup and non-code script blocks. Returns explicit parse diagnostics when syntax is invalid. */
 function jsAnalyze(file, source) {
   const svelte = file.endsWith(".svelte");
   // Preserve line numbers while excluding markup from TypeScript parsing.

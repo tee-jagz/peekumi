@@ -12,18 +12,24 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+/// Computes a hexadecimal SHA-256 fingerprint for cache namespaces, parser versions and symbol identities.
 pub fn hash(data: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(data))
 }
+/// Decodes subprocess output as UTF-8, replacing invalid bytes rather than failing repository inspection.
 fn string(data: Vec<u8>) -> String {
     String::from_utf8_lossy(&data).into_owned()
 }
+/// Reads a JSON string, returning an empty string when the value is absent or has another type.
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
+/// Copies a JSON array, returning an empty list when the value is absent or has another type.
 fn array(v: &Value) -> Vec<Value> {
     v.as_array().cloned().unwrap_or_default()
 }
+/// Identifies common secret-bearing filenames whose source must be hidden.
+/// Example environment templates remain readable; this is a filename policy, not a content secret scanner.
 pub fn restricted(file: &str) -> bool {
     let name = file.rsplit('/').next().unwrap_or(file).to_lowercase();
     ((name == ".env" || name.starts_with(".env."))
@@ -36,6 +42,8 @@ pub fn restricted(file: &str) -> bool {
         || ["id_rsa", "id_ed25519", "credentials.json"].contains(&name.as_str())
 }
 #[derive(Clone, Default)]
+/// One tracked Git entry and its optional syntax analysis.
+/// Retains unsupported or unreadable entries so the map still accounts for every tracked file.
 struct File {
     path: String,
     mode: String,
@@ -49,12 +57,15 @@ struct File {
     deps: Vec<String>,
 }
 impl File {
+    /// Installs an adapter result on this file, replacing symbols, imports, declaration details and analysis status.
     fn apply(&mut self, v: Value) {
         self.symbols = array(&v["symbols"]);
         self.imports = array(&v["imports"]);
         self.details = v.get("details").cloned();
         self.analysis = text(&v["analysis"]).into();
     }
+    /// Builds the lazy declaration payload, including each symbol's name and documentation.
+    /// This richer metadata is returned when a file is opened rather than in the initial overview.
     fn details(&self) -> Value {
         let mut v = self.details.clone().unwrap_or(json!({}));
         v["symbols"] = json!(
@@ -70,10 +81,13 @@ impl File {
         v
     }
 }
+/// An immutable committed file tree with syntax analysis and imports resolved within that tree.
 struct Snapshot {
     sha: String,
     files: BTreeMap<String, File>,
 }
+/// Coordinates read-only Git inspection, language adapters and bounded analysis caches.
+/// Owns repository-specific state on the worker thread; inspected source is never executed.
 pub struct Repository {
     pub directory: PathBuf,
     parser_config: Config,
@@ -87,6 +101,12 @@ pub struct Repository {
     pub snapshots: u64,
 }
 impl Repository {
+    /// Creates repository analysis state and opens its private syntax index.
+    /// `directory` identifies the inspected repository; `state` stores the cache, while `parser_root`,
+    /// `python` and `node` locate installed helpers. No snapshot is parsed until requested.
+    ///
+    /// # Errors
+    /// Returns an error if repository or relative parser-root paths cannot be resolved.
     pub fn new(
         directory: PathBuf,
         state: &Path,
@@ -135,12 +155,16 @@ impl Repository {
             snapshots: 0,
         })
     }
+    /// Runs Git against this repository with explicit arguments and captures stdout.
+    /// Returns subprocess errors; callers choose the read-only Git operation.
     fn git(&self, args: &[&str]) -> Result<Vec<u8>> {
         let directory = self.directory.to_string_lossy();
         let mut command = vec!["-C", &directory];
         command.extend_from_slice(args);
         run("git", &command, None, vec![])
     }
+    /// Resolves a branch, tag or commit reference to a full commit SHA.
+    /// Rejects empty, option-like, oversized or NUL-containing references and returns Git resolution errors.
     pub fn resolve(&self, reference: &str) -> Result<String> {
         if reference.is_empty()
             || reference.starts_with('-')
@@ -158,6 +182,8 @@ impl Repository {
         .trim()
         .into())
     }
+    /// Returns repository identity, branch, recent first-parent history and initial comparison revisions.
+    /// An invalid base falls back to the oldest listed commit; an invalid head or unreadable history is an error.
     pub fn metadata(&self, base: &str, head: &str) -> Result<Value> {
         let branch = string(self.git(&["branch", "--show-current"])?);
         let log = string(self.git(&[
@@ -187,6 +213,8 @@ impl Repository {
             json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"initialBase":base,"initialHead":self.resolve(head)?}),
         )
     }
+    /// Loads an immutable snapshot, reusing up to six cached revisions.
+    /// Symbolic references are resolved again so advancing HEAD is visible; cache misses read committed Git objects.
     fn snapshot(&mut self, reference: &str) -> Result<Arc<Snapshot>> {
         if let Some(snapshot) = self.cache.iter().find(|s| s.sha == reference) {
             return Ok(snapshot.clone());
@@ -202,6 +230,9 @@ impl Repository {
         }
         Ok(snapshot)
     }
+    /// Reads a committed tree and batches uncached source through the language adapter registry.
+    /// Labels restricted, binary, oversized and unsupported entries without losing them from the map.
+    /// Updates the syntax index and resolves imports in this tree; Git read failures return an error.
     fn build(&mut self, sha: String) -> Result<Snapshot> {
         self.snapshots += 1;
         let tree = string(self.git(&["ls-tree", "-rlz", &sha])?);
@@ -336,6 +367,8 @@ impl Repository {
         resolve_imports(&mut files);
         Ok(Snapshot { sha, files })
     }
+    /// Returns directory descriptions at both revisions plus available adapter capabilities.
+    /// Descriptions come from committed READMEs or Python package docstrings; snapshot failures are propagated.
     pub fn directories(&mut self, base: &str, head: &str) -> Result<Value> {
         let a = self.snapshot(base)?;
         let b = self.snapshot(head)?;
@@ -343,6 +376,9 @@ impl Repository {
             json!({"before":directory_descriptions(&a),"after":directory_descriptions(&b),"adapters":adapters::descriptors()}),
         )
     }
+    /// Compares two Git revisions and returns file statuses and dependency changes.
+    /// `overview` replaces full symbol lists with counts and compact previews for the initial map.
+    /// Caches up to six comparison results; invalid revisions or snapshot failures return an error.
     pub fn compare(&mut self, base: &str, head: &str, overview: bool) -> Result<Value> {
         let a = self.snapshot(base)?;
         let b = self.snapshot(head)?;
@@ -368,6 +404,9 @@ impl Repository {
         }
         Ok(value)
     }
+    /// Returns before/after source, symbol metadata and a unified diff for one repository-relative path.
+    /// Disables external diff drivers and text conversion. Unreadable entries omit source;
+    /// a missing path, invalid revision or Git failure returns an error.
     pub fn source(&mut self, base: &str, head: &str, path: &str) -> Result<Value> {
         let a = self.snapshot(base)?;
         let b = self.snapshot(head)?;
@@ -395,10 +434,13 @@ impl Repository {
             json!({"path":path,"before":before.and_then(|f|f.source.as_ref()),"after":after.and_then(|f|f.source.as_ref()),"patch":patch,"analysis":current.analysis,"symbols":compare_symbols(before,after),"imports":current.imports,"details":{"before":before.map(File::details),"after":after.map(File::details)}}),
         )
     }
+    /// Returns analysis counters for parsed blobs, reused results and built snapshots.
+    /// These are operational counters, not code-quality or health measurements.
     pub fn metrics(&self) -> Value {
         json!({"parsed":self.parsed,"reused":self.reused,"snapshots":self.snapshots})
     }
 }
+/// Classifies optional before/after identities as added, removed, unchanged or changed.
 fn status<T: PartialEq>(a: Option<T>, b: Option<T>) -> &'static str {
     match (a, b) {
         (None, _) => "added",
@@ -407,6 +449,8 @@ fn status<T: PartialEq>(a: Option<T>, b: Option<T>) -> &'static str {
         _ => "changed",
     }
 }
+/// Matches symbols by qualified name within a file and compares their hashes.
+/// Preserves old line ranges for removed or changed symbols while keeping documentation out of this payload.
 fn compare_symbols(a: Option<&File>, b: Option<&File>) -> Vec<Value> {
     let mut names = vec![];
     let mut seen = BTreeSet::new();
@@ -428,6 +472,8 @@ fn compare_symbols(a: Option<&File>, b: Option<&File>) -> Vec<Value> {
     }
     names.into_iter().map(|name|{let a=before.get(name).copied();let b=after.get(name).copied();let cur=b.or(a).unwrap();json!({"name":name,"kind":cur["kind"],"start":cur["start"],"end":cur["end"],"status":status(a.map(|v|&v["hash"]),b.map(|v|&v["hash"])),"before":a.map(|v|json!({"start":v["start"],"end":v["end"]}))})}).collect()
 }
+/// Builds one comparison entry from optional before/after files.
+/// Includes both dependency sets and either full symbols or compact overview previews.
 fn compare_file(path: &str, a: Option<&File>, b: Option<&File>, overview: bool) -> Value {
     let cur = b.or(a).unwrap();
     let symbols = compare_symbols(a, b);
@@ -448,6 +494,9 @@ fn compare_file(path: &str, a: Option<&File>, b: Option<&File>, overview: bool) 
     v
 }
 // Descriptions come only from committed documentation in this exact directory.
+/// Selects documentation from each exact directory in one committed snapshot.
+/// Prefers README variants over Python package docstrings and limits descriptions to 600 characters.
+/// Each result names its source file and revision; child-directory documentation is never inherited.
 fn directory_descriptions(snapshot: &Snapshot) -> Value {
     let mut descriptions = BTreeMap::new();
     let mut candidates = snapshot
@@ -492,6 +541,8 @@ fn directory_descriptions(snapshot: &Snapshot) -> Value {
     }
     json!(descriptions)
 }
+/// Extracts the first prose block used as a directory description.
+/// Skips fenced code, headings and selected decorative lines; returns plain text, not rendered Markdown.
 fn document_summary(source: &str) -> String {
     let mut lines = vec![];
     let mut fence = false;
@@ -521,6 +572,8 @@ fn document_summary(source: &str) -> String {
     }
     lines.join(" ")
 }
+/// Delegates every file's imports to its registered language adapter.
+/// Updates resolved targets and unique non-self dependency edges using only the current snapshot.
 fn resolve_imports(files: &mut BTreeMap<String, File>) {
     let context = adapters::Resolution::new(files.keys().cloned().collect());
     for file in files.values_mut() {

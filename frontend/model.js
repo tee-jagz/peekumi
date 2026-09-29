@@ -1,16 +1,24 @@
+/** @module Pure hierarchy, dependency and diff transformations shared by the map and review panel. */
+/** Creates the repository-root navigation scope. */
 export const rootScope = () => ({ kind: "repo", path: "" });
+/** Returns the final segment of a repository-relative path. */
 export const leaf = (path) => path.split("/").at(-1);
+/** Returns the parent directory path, or an empty string for a root file. */
 export const parent = (path) => path.split("/").slice(0, -1).join("/");
+/** Creates a stable selection key from a node kind and its path or symbol name. */
 export const keyOf = (node) => `${node.kind}:${node.path || node.name || ""}`;
+/** Tests whether a repository-relative file belongs to the current repository, directory, root-file group or file scope. */
 export function inScope(file, scope) {
   if (scope.kind === "repo") return true;
   if (scope.kind === "rootfiles") return !file.path.includes("/");
   return file.path === scope.path || file.path.startsWith(scope.path + "/");
 }
+/** Aggregates file statuses for a directory; a mixture of statuses is reported as changed. */
 export function rollup(files) {
   const statuses = new Set(files.map((file) => file.status));
   return statuses.size === 1 ? [...statuses][0] : "changed";
 }
+/** Builds the actual next directory level, or symbols when inside a file. Loose repository files share one root-file card. */
 export function children(files, scope) {
   if (scope.kind === "file") {
     const file = files.find((file) => file.path === scope.path);
@@ -61,6 +69,7 @@ export function children(files, scope) {
         a.name.localeCompare(b.name),
     );
 }
+/** Rolls before/after file imports into visible directory or file edges, retaining external-scope neighbours and underlying file pairs. */
 export function connections(files, scope) {
   const fileMap = new Map(files.map((file) => [file.path, file]));
   function represent(path) {
@@ -146,12 +155,14 @@ export function connections(files, scope) {
     name: edge.from.name + " → " + edge.to.name,
   }));
 }
+/** Hides additions on Before and removals in the After Structure view; Changes can retain removed ghosts. */
 export function visibleOnSide(node, before, lens) {
   if (before) return node.status !== "added";
   return lens !== "structure" || node.status !== "removed";
 }
 
 // Keep unified-diff headers and only the hunks touching the selected symbol.
+/** Filters a unified diff to hunks overlapping the selected symbol's old or new line range. Returns the full patch when no symbol is selected; unchanged symbols return an empty patch. */
 export function patchForSymbol(patch, symbol) {
   if (!symbol || symbol.status === "unchanged") return symbol ? "" : patch;
   const header = [],

@@ -1,21 +1,29 @@
+//! Bridges the shared adapter contract to JavaScript, TypeScript and Svelte script extraction.
 use super::*;
+/// Syntax adapter for TypeScript source; parsing runs in an installed helper process.
 pub struct TypeScript;
 impl LanguageAdapter for TypeScript {
+    /// Returns the stable registry key used to group analysis batches and cache identities.
     fn id(&self) -> &'static str {
         "typescript"
     }
+    /// Returns the human-readable language name used in capability and failure messages.
     fn name(&self) -> &'static str {
         "TypeScript"
     }
+    /// Lists filename extensions this adapter can analyze; entries omit the leading dot.
     fn extensions(&self) -> &'static [&'static str] {
         &[
             "js", "jsx", "ts", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx", "mtsx", "ctsx",
             "svelte",
         ]
     }
+    /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
         "Explicit types and JSDoc only; Svelte script blocks only; relative and $lib imports. Requires Node and TypeScript."
     }
+    /// Probes the installed helper runtime to identify compatible cached syntax.
+    /// A failed probe is recorded as unavailable rather than hiding affected files.
     fn identity(&self, config: &Config) -> String {
         format!(
             "{}:{}",
@@ -28,6 +36,8 @@ impl LanguageAdapter for TypeScript {
             ))
         )
     }
+    /// Sends committed source batches to the TypeScript helper through JSON stdin.
+    /// Returns ordered syntax results; subprocess failures or invalid response JSON are errors.
     fn analyze(&self, input: &[(String, String)], config: &Config) -> Result<Vec<Value>> {
         let input = json!(
             input
@@ -44,6 +54,8 @@ impl LanguageAdapter for TypeScript {
             input,
         )?)?)
     }
+    /// Resolves relative imports and the conventional Svelte $lib alias against tracked files.
+    /// Custom aliases and external packages remain unresolved; no package code is loaded.
     fn resolve(&self, file: &str, item: &Value, context: &Resolution) -> Vec<String> {
         let spec = text(&item["specifier"]);
         let paths = &context.paths;

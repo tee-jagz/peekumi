@@ -6,10 +6,12 @@ import sys
 
 
 def annotation(node):
+    """Print an explicit annotation or default expression without evaluating it; return None when absent."""
     return ast.unparse(node) if node is not None else None
 
 
 def details(node):
+    """Extract authored docstrings, signatures, argument kinds, defaults and explicit types from an AST declaration."""
     result = {'description': ast.get_docstring(node) or '', 'provenance': 'Python docstring / annotations'}
     if isinstance(node, ast.ClassDef):
         result['bases'] = [annotation(base) for base in node.bases]
@@ -37,6 +39,7 @@ def details(node):
 
 
 def analyze(source):
+    """Parse one Python source string into symbols, imports and module metadata. Syntax failures return an explicit parse-error result; inspected code is never imported."""
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError) as error:

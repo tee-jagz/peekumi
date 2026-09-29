@@ -4,9 +4,11 @@ use serde_json::{Value, json};
 use syn::{
     Attribute, Expr, FnArg, Item, Lit, Meta, ReturnType, Signature, UseTree, spanned::Spanned,
 };
+/// Prints syntax tokens as a compact declaration string without type inference.
 fn code(node: &impl ToTokens) -> String {
     node.to_token_stream().to_string()
 }
+/// Collects Rust doc attributes produced by outer or inner documentation comments.
 fn docs(attrs: &[Attribute]) -> String {
     attrs
         .iter()
@@ -26,9 +28,12 @@ fn docs(attrs: &[Attribute]) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+/// Builds shared declaration metadata with documentation provenance and a printed signature.
 fn info(attrs: &[Attribute], signature: String) -> Value {
     json!({"description":docs(attrs),"signature":signature,"provenance":"Rust documentation / declarations"})
 }
+/// Extracts a function's explicit signature, async flag, arguments and return type.
+/// A missing return annotation is represented as Rust unit; receiver types are retained.
 fn function(sig: &Signature, attrs: &[Attribute]) -> Value {
     let mut value = info(attrs, code(sig));
     value["async"] = json!(sig.asyncness.is_some());
@@ -47,11 +52,13 @@ fn function(sig: &Signature, attrs: &[Attribute]) -> Value {
     });
     value
 }
+/// Records a symbol's qualified name, kind, source span, token hash and declaration metadata.
 fn add(symbols: &mut Vec<Value>, node: &impl ToTokens, name: String, kind: &str, details: Value) {
     let tokens = node.to_token_stream();
     let span = node.span();
     symbols.push(json!({"name":name,"kind":kind,"start":span.start().line,"end":span.end().line,"hash":crate::engine::hash(tokens.to_string()),"details":details}));
 }
+/// Flattens Rust use trees, including groups and aliases, into import specifiers.
 fn use_paths(tree: &UseTree, prefix: &str, imports: &mut Vec<Value>) {
     match tree {
         UseTree::Path(p) => use_paths(&p.tree, &format!("{prefix}{}::", p.ident), imports),
@@ -65,6 +72,8 @@ fn use_paths(tree: &UseTree, prefix: &str, imports: &mut Vec<Value>) {
         UseTree::Glob(_) => imports.push(json!({"specifier":format!("{prefix}*")})),
     }
 }
+/// Extracts supported items and methods, recursively visiting inline modules.
+/// Collects module declarations and imports without expanding macros or evaluating configuration.
 fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Vec<Value>) {
     for item in items {
         match item {
@@ -187,6 +196,8 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
         }
     }
 }
+/// Parses Rust source into symbols, imports and module documentation using syn.
+/// Invalid syntax produces an explicit parse-error result rather than executing or compiling the source.
 pub fn analyze(source: &str) -> Value {
     match syn::parse_file(source) {
         Ok(file) => {
@@ -198,6 +209,9 @@ pub fn analyze(source: &str) -> Value {
         Err(e) => json!({"symbols":[],"imports":[],"analysis":format!("parse error: {e}")}),
     }
 }
+/// Resolves a conventional Rust module path inside the supplied tracked-file set.
+/// Handles crate, self and super prefixes and removes trailing symbol names to find module files.
+/// Returns no target for external or unsupported paths; Cargo metadata and custom path attributes are not evaluated.
 pub fn resolve(file: &str, spec: &str, paths: &std::collections::BTreeSet<String>) -> Vec<String> {
     let directory = file.rsplit_once('/').map(|p| p.0).unwrap_or("");
     let filename = file.rsplit('/').next().unwrap_or(file);
@@ -263,24 +277,34 @@ pub fn resolve(file: &str, spec: &str, paths: &std::collections::BTreeSet<String
 /// Native Rust implementation of the common language contract.
 pub struct Rust;
 impl super::LanguageAdapter for Rust {
+    /// Returns the stable registry key used to group analysis batches and cache identities.
     fn id(&self) -> &'static str {
         "rust"
     }
+    /// Returns the human-readable language name used in capability and failure messages.
     fn name(&self) -> &'static str {
         "Rust"
     }
+    /// Lists filename extensions this adapter can analyze; entries omit the leading dot.
     fn extensions(&self) -> &'static [&'static str] {
         &["rs"]
     }
+    /// Describes unsupported language behavior so the inspector can explain analysis boundaries.
     fn limitations(&self) -> &'static str {
         "Macros and conditional compilation are not evaluated; conventional module paths only."
     }
+    /// Identifies the native syn parser generation for cache compatibility.
     fn identity(&self, _: &super::Config) -> String {
         "syn2".into()
     }
+    /// Parses an ordered source batch with the native Rust analyzer.
+    /// Syntax errors remain individual results, so one invalid file does not fail the batch.
     fn analyze(&self, input: &[(String, String)], _: &super::Config) -> anyhow::Result<Vec<Value>> {
         Ok(input.iter().map(|(_, source)| analyze(source)).collect())
     }
+    /// Resolves a conventional Rust module path inside the supplied tracked-file set.
+    /// Handles crate, self and super prefixes and removes trailing symbol names to find module files.
+    /// Returns no target for external or unsupported paths; Cargo metadata and custom path attributes are not evaluated.
     fn resolve(&self, file: &str, item: &Value, context: &super::Resolution) -> Vec<String> {
         resolve(
             file,

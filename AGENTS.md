@@ -9,3 +9,5 @@ Build a mobile-first repository map with coloured Git comparisons and drill-down
 - Never commit inspected repository source, snapshots, credentials, or local access tokens.
 - Run npm test for engine/server changes and npm run test:browser for interface changes. Inspect mobile and desktop screenshots.
 - Keep the first release focused on map, compare, navigation, and source. Agent orchestration and health scoring are deferred.
+
+- Keep production module and API documentation readable in Strata: Rust `//!` and `///`, JavaScript `@module` and JSDoc, and Python docstrings. Explain responsibility and meaningful inputs, outputs, errors and side effects; keep directory READMEs aligned with the implementation.

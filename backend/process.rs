@@ -8,6 +8,13 @@ use std::{
 };
 use wait_timeout::ChildExt;
 
+/// Runs an installed executable with explicit arguments and byte input, returning stdout.
+/// `cwd` optionally changes only the child's working directory. Input and output use separate threads
+/// to avoid pipe deadlocks. The direct child is killed if it exceeds the 30-second wait.
+///
+/// # Errors
+/// Reports startup, output-read, wait, timeout and nonzero-exit failures.
+/// Callers must select trusted tools; this helper is not a sandbox for arbitrary inspected code.
 pub fn run(program: &str, args: &[&str], cwd: Option<&Path>, input: Vec<u8>) -> Result<Vec<u8>> {
     let mut command = Command::new(program);
     command

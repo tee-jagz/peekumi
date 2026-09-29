@@ -1,6 +1,8 @@
+/** @module SVG viewport supporting touch, mouse and keyboard navigation around repository cards. */
 // SVG viewport with HTML card contents, preserving the reference's glass styling.
 const NS = "http://www.w3.org/2000/svg";
 const views = new Map();
+/** Mounts HTML card content inside an SVG viewport and binds pan, pinch and zoom controls. Remembers the transform by view key, suppresses gesture clicks and pans focused cards into view. Mutates the supplied container and controls. */
 export function mountCanvas(body, content, width, height, key, controls) {
   const svg = document.createElementNS(NS, "svg");
   svg.classList.add("map-canvas");
