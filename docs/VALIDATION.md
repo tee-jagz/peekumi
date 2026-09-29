@@ -23,7 +23,7 @@ The initial cold comparison took about 6.4 seconds on this host before the final
 
 Captured and visually inspected overview and component screens at both sizes, plus readable source detail captures at both sizes. Text labels wrap in cards, source scrolls horizontally within its pane, and the page itself does not overflow. Screenshots stay in ignored `test-results/` because they include private repository details. The installed Chrome initially produced repeated viewport tiles in a full-page screenshot; final captures used the matching Playwright Chromium build.
 
-The LAN service returned HTTP 401 without authentication and served the expected comparison with authentication. A physical phone and access from outside the LAN have not been tested. Tailscale is not connected on this host. Linux is not yet tested.
+The LAN service returned HTTP 401 without authentication and served the expected comparison with authentication. A physical phone and access from outside the LAN have not been tested. The initial Tailscale check used the default socket and missed the running userspace daemon. Linux is not yet tested.
 
 ## Remaining product work
 
@@ -31,3 +31,7 @@ The LAN service returned HTTP 401 without authentication and served the expected
 - Improve dependency visualisation beyond grouped, navigable relationship rows.
 - Add configurable import roots and aliases, and rename continuity.
 - Consider persisted snapshot caching after measuring real usage.
+
+## Remote access follow-up
+
+With the owner’s explicit approval, moved Strata to localhost and configured a private Tailscale Serve route on port 4317 through the existing userspace daemon. Tested requests through `tailscale nc` to the node’s Tailscale address: the repository API returned 401 without authentication, and token pairing returned 200 with the correct browser origin. The local authenticated repository API returned 200 for Visalytics. A physical phone check remains with the owner; the phone must have Tailscale connected. No public tunnel was created.

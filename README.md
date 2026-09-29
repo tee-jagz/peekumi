@@ -35,7 +35,7 @@ Bind to the host's private network address:
 npm start -- /path/to/repository --host 192.168.1.20 --port 4317
 ```
 
-Open the printed access link on a phone on the same trusted Wi-Fi network. For access away from home, use the host's Tailscale IP instead, or put the service behind an authenticated HTTPS reverse proxy. With HTTPS, add `--secure-cookie`. Plain HTTP does not encrypt source or session cookies: use it only on a trusted local network. Do not expose this port directly to the public internet.
+Open the printed access link on a phone on the same trusted Wi-Fi network. For access away from home, bind Strata to localhost and use Tailscale Serve, or put the service behind an authenticated HTTPS reverse proxy. For example: `tailscale serve --bg --http=4317 http://127.0.0.1:4317`. Your phone must be connected to the same Tailscale network. Userspace Tailscale installations may require `--socket=/path/to/tailscaled.sock` before `serve`. With HTTPS, add `--secure-cookie`. Plain HTTP does not encrypt source or session cookies: use it only on a trusted local network. Do not expose this port directly to the public internet.
 
 The service is platform-independent Node code with Git subprocesses; this first slice has been tested on macOS. Linux has not yet been exercised here.
 
@@ -79,7 +79,7 @@ See [MVP scope](docs/MVP.md), [architecture](docs/ARCHITECTURE.md), and [first i
 
 ## This workspace
 
-The first local preview inspects `/Users/tolu/projects/visalytics` on port 4317, using a ten-commit comparison. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
+The preview inspects `/Users/tolu/projects/visalytics` on localhost port 4317, using a ten-commit comparison. It is reachable privately at `http://tolu-mac-mini.tailb34901.ts.net:4317/` with Tailscale enabled on the client. The Tailscale daemon uses `/Users/tolu/.config/tailscale/tailscaled.sock`; Serve forwards port 4317 to `http://127.0.0.1:4317`. The previous LAN URL has been retired. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
 
 ## Original context
 
