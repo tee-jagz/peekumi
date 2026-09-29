@@ -26,7 +26,7 @@ npm start -- /path/to/repository
 
 `npm start` builds and launches the Rust executable. You can also use `cargo build --release --locked` and run `./target/release/strata /path/to/repository` directly. The web assets and Python helper are embedded in the binary. JavaScript/TypeScript/Svelte extraction uses the bundled `backend/adapters/typescript_ast.mjs` helper and installed `typescript` package; when moving the binary, pass `--parser-root /path/to/repo-strata` (or `STRATA_PARSER_ROOT`) to locate them. `STRATA_NODE` selects its Node executable. No Node HTTP service runs.
 
-Open the access link printed in the terminal. The token in its URL fragment is exchanged for an HttpOnly session cookie and removed from browser history. The session lasts seven days or until the service restarts. Local access credentials live in `.strata/`, which is excluded from Git. `--state-dir /private/path` changes the credential and index location.
+Open the access link printed in the terminal. The token in its URL fragment is exchanged for an HttpOnly session cookie and removed from browser history. The session lasts 30 days and survives service restarts. After opening the private link once, bookmark the plain viewer URL or add it to your phone’s home screen. The original private link remains reusable while the state directory and access token are retained; rotating the token invalidates remembered browsers. Local access credentials live in `.strata/`, which is excluded from Git. `--state-dir /private/path` changes the credential and index location.
 
 Choose an initial comparison:
 

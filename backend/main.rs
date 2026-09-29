@@ -7,6 +7,7 @@ mod process;
 mod relationships;
 mod rules;
 mod runner;
+mod sessions;
 mod workflow;
 use anyhow::{Context, Result};
 use axum::{
@@ -25,7 +26,6 @@ use std::{
     io::{BufRead, Write},
     path::PathBuf,
     sync::Arc,
-    time::{Duration, Instant},
 };
 use subtle::ConstantTimeEq;
 use tokio::sync::{Mutex, mpsc, oneshot};
@@ -147,7 +147,7 @@ struct App {
     ask_lock: Mutex<()>,
     token: String,
     cookie_name: String,
-    sessions: Mutex<HashMap<String, Instant>>,
+    sessions: Mutex<sessions::Sessions>,
     options: Options,
 }
 /// Generates 32 random bytes encoded as hexadecimal for access and session tokens.
@@ -318,14 +318,19 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
             .await;
         }
         let session = random_token();
-        let now = Instant::now();
-        let mut sessions = app.sessions.lock().await;
-        sessions.retain(|_, expires| *expires > now);
-        sessions.insert(session.clone(), now + Duration::from_secs(7 * 86400));
-        drop(sessions);
+        if let Err(e) = app.sessions.lock().await.insert(&session) {
+            eprintln!("Unable to save browser session: {e}");
+            return error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to save browser session",
+                gzip,
+            )
+            .await;
+        }
         let cookie = format!(
-            "{}={session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800{}",
+            "{}={session}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
             app.cookie_name,
+            sessions::MAX_AGE,
             if app.options.secure_cookie {
                 "; Secure"
             } else {
@@ -341,13 +346,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         .split(';')
         .find_map(|s| s.trim().strip_prefix(&format!("{}=", app.cookie_name)))
         .unwrap_or("");
-    let authenticated = equal(bearer, &app.token)
-        || app
-            .sessions
-            .lock()
-            .await
-            .get(session)
-            .is_some_and(|expires| *expires > Instant::now());
+    let authenticated = equal(bearer, &app.token) || app.sessions.lock().await.contains(session);
     if !authenticated {
         return error(
             StatusCode::UNAUTHORIZED,
@@ -598,13 +597,18 @@ async fn main() -> Result<()> {
         "strata_session_{}",
         &engine::hash(repo.directory.to_string_lossy().as_bytes())[..12]
     );
+    let sessions = sessions::Sessions::load(
+        options.state_dir.join("sessions.json"),
+        &access_token,
+        &cookie_name,
+    )?;
     let app = Arc::new(App {
         cookie_name,
         workflow,
         ask_lock: Mutex::new(()),
         engine: Engine::start(repo),
         token: access_token,
-        sessions: Mutex::new(HashMap::new()),
+        sessions: Mutex::new(sessions),
         options,
     });
     axum::serve(listener, Router::new().fallback(handle).with_state(app))

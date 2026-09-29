@@ -389,3 +389,47 @@ test("directory descriptions use committed revision-specific docs and package fa
   ).json();
   assert.equal(reversed.after.pkg.description, "Original responsibility.");
 });
+
+test("remembered browser survives service restart and token rotation revokes it", async (t) => {
+  const f = await fixture(t);
+  const stateDirectory = await mkdtemp(
+    path.join(os.tmpdir(), "strata-sessions-"),
+  );
+  t.after(() => rm(stateDirectory, { recursive: true, force: true }));
+  let server = await startRust(f.directory, { base: f.base, stateDirectory });
+  t.after(() => server.close());
+  const login = await fetch(server.url + "/api/session", {
+    method: "POST",
+    headers: { Origin: server.url },
+    body: JSON.stringify({ token: server.token }),
+  });
+  assert.equal(login.status, 200);
+  assert.match(login.headers.get("set-cookie"), /Max-Age=2592000/);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  await server.close();
+  server = await startRust(f.directory, { base: f.base, stateDirectory });
+  assert.equal(
+    (await fetch(server.url + "/api/repo", { headers: { Cookie: cookie } }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (
+      await fetch(server.url + "/api/repo", {
+        headers: { Cookie: cookie + "x" },
+      })
+    ).status,
+    401,
+  );
+  await server.close();
+  server = await startRust(f.directory, {
+    base: f.base,
+    stateDirectory,
+    token: "rotated-owner-token",
+  });
+  assert.equal(
+    (await fetch(server.url + "/api/repo", { headers: { Cookie: cookie } }))
+      .status,
+    401,
+  );
+});
