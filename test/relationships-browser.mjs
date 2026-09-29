@@ -79,9 +79,8 @@ try {
     await consumer.click();
     await front.locator('.node[data-key="symbol:run"]').waitFor();
     await front.locator('.node[data-key="symbol:run"]').click();
-    await page
-      .getByRole("button", { name: "Relationships", exact: true })
-      .click();
+    await page.locator("#helperTools > summary").click();
+    await page.locator('[data-tab="dependencies"]').click();
     await page.getByLabel("Relationship kind").selectOption("calls");
     assert.ok(await front.locator("path.e.calls.violation").count());
     await page.locator(".unresolved-relations summary").click();

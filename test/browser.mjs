@@ -64,6 +64,8 @@ try {
     await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
     assert.equal(await page.evaluate(() => location.hash), "");
+    await page.locator("#helperTools > summary").click();
+    await page.locator('[data-tab="changes"]').click();
     assert.equal(
       await page.locator("#change-summary").getAttribute("data-count"),
       String(data.files.filter((f) => f.status !== "unchanged").length),
@@ -210,6 +212,8 @@ try {
         fullPage: true,
       });
     }
+    await page.locator("#helperTools").evaluate((el) => (el.open = true));
+    await page.locator('[data-tab="changes"]').click();
     await page.locator("#search").fill(target.path);
     await page.locator("#changes .row").first().click();
     await page.waitForFunction(
@@ -238,6 +242,10 @@ try {
       .first();
     await symbol.focus();
     await symbol.click();
+    await page.locator("#helperTools").evaluate((el) => (el.open = true));
+    await page.locator('[data-tab="source"]').click();
+    await page.locator("#selectionDetails > summary").click();
+    await page.locator(".code-metadata > summary").click();
     await page.locator(".code-metadata .signature").waitFor();
     assert.match(
       await page.locator(".adapter-details summary").textContent(),
@@ -330,6 +338,10 @@ try {
     });
     await page.locator("#base").selectOption(peekSha);
     await page.locator("#notice").waitFor({ state: "hidden" });
+    await page.locator("#helperTools").evaluate((node) => {
+      node.open = true;
+    });
+    await page.locator('[data-tab="changes"]').click();
     await page.waitForFunction(
       () => document.querySelector("#change-summary")?.dataset.count === "0",
     );

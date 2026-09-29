@@ -109,6 +109,8 @@ try {
       await front.locator('.node[data-path="module.py"]').click();
       await front.locator('.node[data-path="module.py"]').click();
       await front.locator('.node[data-kind="symbol"]').first().click();
+      await page.locator("#helperTools").evaluate((el) => (el.open = true));
+      await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
       await page.getByRole("button", { name: "Comment", exact: true }).click();
       await page
@@ -153,6 +155,22 @@ try {
           .getAttribute("aria-selected"),
         "true",
       );
+      await page
+        .locator("#reviewScroll")
+        .evaluate((el) => (el.scrollTop = el.scrollHeight));
+      for (const selector of ["#newComment", '#tabs [data-tab="ask"]']) {
+        const bounds = await page.locator(selector).boundingBox();
+        const panel = await page.locator("#panel").boundingBox();
+        assert.ok(
+          bounds.y >= panel.y &&
+            bounds.y + bounds.height <= panel.y + panel.height,
+          "Primary action stays inside visible panel",
+        );
+      }
+      assert.equal(await page.locator('#tabs [role="tab"]').count(), 2);
+      await page.screenshot({
+        path: `test-results/persistent-review-${viewport.width}.png`,
+      });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       );

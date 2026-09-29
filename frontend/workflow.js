@@ -124,9 +124,11 @@ export function createWorkflow({
     host.append(b);
   }
   function compose() {
-    composer = context();
-    editing = null;
-    draft = "";
+    if (!composer) {
+      composer = context();
+      editing = null;
+      draft = "";
+    }
     showTab("comments");
   }
   function visible(c) {

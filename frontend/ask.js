@@ -42,6 +42,13 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
     open() {
       selectedContext = context();
     },
+    followSelection() {
+      const live = context();
+      const identity = (c) =>
+        JSON.stringify([c.anchor, c.base, c.head, c.side]);
+      if (!selectedContext || identity(live) !== identity(selectedContext))
+        selectedContext = live;
+    },
     render(body) {
       const chat = current(),
         c = chat.context;

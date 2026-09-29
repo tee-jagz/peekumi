@@ -39,6 +39,7 @@ const tones = {
   removed: "var(--del)",
   unchanged: "var(--faint)",
 };
+let primaryTab = "ask";
 let changesOnly = false;
 let relationshipKind = "all",
   violationsOnly = false;
@@ -50,7 +51,7 @@ let metadata,
   mode = "diff",
   lens = "changes",
   before = false,
-  tab = "changes";
+  tab = "ask";
 let baseRef,
   headRef,
   diffBase,
@@ -150,7 +151,12 @@ const workflow = createWorkflow({
 const ask = createAsk({
   api,
   context() {
-    return { ...reviewContext(), base: baseRef, head: headRef };
+    return {
+      ...reviewContext(),
+      base: baseRef,
+      head: headRef,
+      side: before ? "before" : "after",
+    };
   },
   notice: showNotice,
   redraw() {
@@ -913,9 +919,9 @@ function drawEdges(canvas, positions, width, height, arcs) {
 function selectNode(node) {
   selected = node;
   if (node.kind === "symbol") {
-    tab = "source";
     sourceView = node.status === "removed" ? "before" : "diff";
   }
+  if (tab === "ask") ask.open();
   renderDeck();
   renderPanel();
   if (scope.kind === "file" && !sourceData) loadSource();
@@ -963,7 +969,8 @@ async function navigate(next, originKey) {
   sourceData = null;
   ++sourceId;
   search = "";
-  tab = "changes";
+  tab = primaryTab;
+  if (tab === "ask") ask.open();
   render();
   const body = $(".sheet:not(.peek) .sheet-body");
   if (body) body.scrollTop = 0;
@@ -976,7 +983,7 @@ async function navigate(next, originKey) {
       ],
       { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" },
     );
-  $("#panel").scrollTop = 0;
+  $("#reviewScroll").scrollTop = 0;
   if (scope.kind === "file") await loadSource();
 }
 /** Navigates to the parent directory or repository root. */
@@ -987,6 +994,35 @@ function goUp() {
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
+  if (tab === "ask") ask.followSelection();
+  if (tab === "runs") primaryTab = "comments";
+  if (["ask", "comments"].includes(tab)) primaryTab = tab;
+  const scopeBar = $("#reviewScope");
+  scopeBar.replaceChildren(
+    element(
+      "strong",
+      "review-name",
+      selected?.name || scope.path || metadata?.name || "Repository",
+    ),
+  );
+  const caption =
+    selected?.kind === "symbol"
+      ? `${selected.symbolKind} · ${scope.path}`
+      : selected?.kind || scope.kind;
+  scopeBar.append(element("span", "review-kind", caption));
+  if (selected?.status)
+    scopeBar.append(element("span", "pill", labels[selected.status]));
+  if (selected) {
+    const clear = button("x", "×", () => {
+      selected = null;
+      if (tab === "ask") ask.open();
+      render();
+    });
+    clear.setAttribute("aria-label", "Clear selection");
+    scopeBar.append(clear);
+  }
+  const helper = ["source", "changes", "dependencies"].includes(tab);
+  $("#helperTools").open = helper;
   $("#panel").dataset.selection = String(!!selected);
   renderCommits();
   renderSelection();
@@ -995,7 +1031,14 @@ function renderPanel() {
     .forEach((b) =>
       b.setAttribute(
         "aria-selected",
-        String(b.dataset.tab === (tab === "runs" ? "comments" : tab)),
+        String(
+          b.dataset.tab ===
+            (tab === "runs"
+              ? "comments"
+              : ["ask", "comments"].includes(tab)
+                ? tab
+                : primaryTab),
+        ),
       ),
     );
   renderTab();
@@ -1137,6 +1180,17 @@ function adapterCard() {
 }
 /** Rebuilds selected-item actions and metadata, or directory context when nothing is selected. */
 function renderSelection() {
+  const side = before || selected?.status === "removed" ? "before" : "after";
+  const module = sourceData?.details?.[side];
+  const detail =
+    selected?.kind === "symbol"
+      ? module?.symbols?.find((item) => item.name === selected.name)
+      : scope.kind === "file"
+        ? module
+        : directoryInfo(selected?.path || scope.path);
+  $("#selectionDetails > summary").textContent = detail?.description
+    ? "Description · " + detail.description.slice(0, 130)
+    : "Description & metadata";
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
@@ -1227,14 +1281,6 @@ function renderSelection() {
         renderPanel();
       }),
     );
-  actions.append(
-    button("btn", "Comment", () => workflow.compose()),
-    button("btn", "Ask", () => {
-      ask.open();
-      tab = "ask";
-      renderPanel();
-    }),
-  );
   box.append(actions);
   if (
     scope.kind === "file" &&
@@ -1273,7 +1319,7 @@ function metadataCard() {
       "metadata-muted",
       "Details · No declaration documentation available at this revision.",
     );
-  box.open = tab !== "dependencies";
+  box.open = false;
   box.append(
     element(
       "summary",
@@ -1408,6 +1454,18 @@ function listRow(node, detail, action) {
 function renderTab() {
   const body = $("#tabBody");
   body.replaceChildren();
+  if (["source", "changes", "dependencies"].includes(tab)) {
+    body.append(
+      button(
+        "btn return-conversation",
+        `← Back to ${primaryTab === "ask" ? "Ask" : "Comments"}`,
+        () => {
+          tab = primaryTab;
+          renderPanel();
+        },
+      ),
+    );
+  }
   if (tab === "ask") {
     ask.render(body);
     return;
@@ -1949,6 +2007,10 @@ document.querySelectorAll("[data-tab]").forEach(
         loadSource();
     }),
 );
+$("#newComment").onclick = () => {
+  workflow.compose();
+  $("#reviewScroll").scrollTop = 0;
+};
 $("#refresh").onclick = () => boot(true);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.target.closest("input,select,textarea"))
