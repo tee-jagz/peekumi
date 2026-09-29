@@ -27,7 +27,7 @@ Visalytics is the first integration target: a mixed Python and Svelte/TypeScript
 
 ## Deferred
 
-Ask, agent dispatch, comments, health scores, coverage, mutation testing, inferred architecture, cross-module call graphs, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
+Ask, agent dispatch, comments, health scores, coverage, mutation testing, inferred architecture, compiler-backed call resolution and runtime dispatch, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
 
 ## Acceptance
 
