@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm, chmod } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Repository, command } from "../src/engine.mjs";
-import { createServer } from "../src/server.mjs";
+import { Repository, command } from "./reference/engine.mjs";
+import { createServer } from "./reference/server.mjs";
 
 async function fixture() {
   const directory = await mkdtemp(path.join(os.tmpdir(), "strata-test-"));
@@ -361,7 +361,7 @@ test("overview preserves every file and edge while symbols and imports arrive wi
 });
 
 test("worker-backed repository preserves API results and reports failures without hanging", async (t) => {
-  const { RepositoryClient } = await import("../src/repository-client.mjs");
+  const { RepositoryClient } = await import("./reference/repository-client.mjs");
   const f = await fixture();
   const worker = new RepositoryClient(f.directory, { python: f.repo.python });
   t.after(async () => {

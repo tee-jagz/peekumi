@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import assert from "node:assert/strict";
-import { RepositoryClient } from "../src/repository-client.mjs";
+import { RepositoryClient } from "../test/reference/repository-client.mjs";
 const [directory, base = "HEAD~10", head = "HEAD"] = process.argv.slice(2);
 if (!directory) throw Error("Provide a repository path");
 const cacheDirectory = await mkdtemp(

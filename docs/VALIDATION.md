@@ -80,3 +80,25 @@ First indexing parsed 1,243 files and reused 1,177 analyses across the two snaps
 A separate three-sample browser comparison warmed both backends and used fresh 390 × 844 browser pages with 1 Mbps download throughput and 100 ms latency. Previous map-ready times: 3,932 / 3,950 / 3,958 ms. New times: 1,421 / 1,421 / 1,410 ms. Median improved from 3,950 to 1,421 ms. This is simulated network performance, not a physical-phone measurement.
 
 Twelve automated tests pass, including persistent reuse across a fresh repository instance, changed-blob-only parsing, moved relative-import resolution without mutating old snapshots, overview/full-source equivalence, worker shutdown/error handling, and memory fallback when the disk index is unavailable. Mobile and desktop browser checks pass against Visalytics; screenshots of the mobile file drill-down and desktop overview were inspected. This is the optimized Node baseline. A Rust implementation and equivalent end-to-end benchmark have not been built or measured yet.
+
+## Rust backend migration
+
+The production service is now a Rust executable using Axum/Tokio, rusqlite with bundled SQLite, and a bounded repository-work queue. Rust owns HTTP, authentication, Git subprocesses, snapshots, comparison generation, dependency resolution and the persistent index. Python's AST and the TypeScript compiler remain isolated parser helpers; no Node HTTP backend runs. The former backend is under `test/reference/` for parity tests and benchmarking.
+
+Five native Rust tests and sixteen Node-driven integration/model/reference tests pass. Native parity checks cover every fixture's full and compact comparison, before/after source and metadata, reverse and identical comparisons, removed files, class/method signatures, Svelte, restricted/binary/large/symlink content, executable modes, malformed source, Unicode filenames and large UTF-8 documentation, moving HEAD references, missing parsers, restart reuse and unavailable disk indexes. HTTP checks cover pairing, cross-origin rejection, token/cookie auth, read-only methods, bad refs/paths, static allowlists, gzip opt-out and security headers. Clippy passes with warnings denied.
+
+`npm run test:browser` now launches Rust. It passes against Visalytics at 390 × 844 and 1366 × 768 for SVG pan/pinch/zoom, filtering, source and metadata, Time/Diff, dependency selection, dark mode and authentication. Mobile and desktop metadata screenshots were inspected. Full Visalytics comparisons match the Node reference exactly, including 1,706 files, 60 changed files, symbol status/ranges and all dependency edges. Selected Python and TypeScript source/metadata responses also match.
+
+The first direct port was slower than Node (97 ms versus 56 ms warm API median). Changed Git invocation to use `-C`, avoiding process-wide working-directory changes; reused immutable comparison results; skipped re-resolving already-cached commit SHAs; and ran the Python and TypeScript parsing batches concurrently. Repeated the same benchmark with the release executable:
+
+| Local API measurement | Optimized Node reference | Rust |
+| --- | ---: | ---: |
+| Empty-index comparison request (single run) | 7,176 ms | 7,187 ms |
+| Warm comparison request (median of five) | 53 ms | 44 ms |
+| Compressed overview | 47,929 bytes | 46,764 bytes |
+
+A restarted Rust process with the existing index handled its first comparison request in 1,233 ms. A separate restarted-process check reported zero parsed files and 2,420 reused analyses. These request measurements exclude service startup, include JSON transfer/decoding on loopback, use release builds and symbolic Git refs, and do not clear operating-system filesystem caches. They do not establish a general language-performance claim.
+
+On a fresh 390 × 844 browser page with simulated 1 Mbps download and 100 ms latency, warmed Node map-ready times were 1,871 / 1,452 / 1,410 ms; Rust times were 1,434 / 1,436 / 1,395 ms. Medians were 1,452 and 1,434 ms respectively: the phone experience is effectively maintained, not a dramatic speedup. The first-ever repository scan remains about seven seconds. Physical phone and Linux checks remain outstanding.
+
+Deployed a stable copy of the release executable and TypeScript helper under `.strata/runtime/`, reusing the existing access token and private Tailscale route. Verified the live PID is the Rust executable, all 12,428 symbols are present, both parsers are available, authenticated compact comparisons match over Tailscale, source metadata loads, and unauthenticated API requests return 401.

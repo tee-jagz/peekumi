@@ -1,0 +1,56 @@
+use anyhow::{Context, Result, bail};
+use std::{
+    io::{Read, Write},
+    path::Path,
+    process::{Command, Stdio},
+    time::Duration,
+};
+use wait_timeout::ChildExt;
+
+pub fn run(program: &str, args: &[&str], cwd: Option<&Path>, input: Vec<u8>) -> Result<Vec<u8>> {
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("Cannot start {program}"))?;
+    let mut stdin = child.stdin.take().context("Missing stdin")?;
+    let mut stdout = child.stdout.take().context("Missing stdout")?;
+    let mut stderr = child.stderr.take().context("Missing stderr")?;
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(&input);
+    });
+    let out = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let err = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let status = child.wait_timeout(Duration::from_secs(30))?;
+    if status.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let _ = writer.join();
+    let output = out
+        .join()
+        .map_err(|_| anyhow::anyhow!("Output reader failed"))??;
+    let errors = err
+        .join()
+        .map_err(|_| anyhow::anyhow!("Error reader failed"))??;
+    let Some(status) = status else {
+        bail!("{program} timed out")
+    };
+    if !status.success() {
+        bail!("{program}: {}", String::from_utf8_lossy(&errors).trim());
+    }
+    Ok(output)
+}

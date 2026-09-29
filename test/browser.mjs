@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { Repository } from "../src/engine.mjs";
-import { createServer } from "../src/server.mjs";
+import { Repository } from "./reference/engine.mjs";
+import { startRust } from "./rust-support.mjs";
 
 const repo = new Repository(process.env.STRATA_TEST_REPO || process.cwd(), {
   python:
@@ -16,10 +16,13 @@ try {
 } catch {
   base = head;
 }
-const token = "browser-test-token",
-  server = createServer(repo, { token, base });
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const url = `http://127.0.0.1:${server.address().port}`;
+const token = "browser-test-token";
+const server = await startRust(repo.directory, {
+  token,
+  base,
+  python: repo.python,
+});
+const url = server.url;
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.STRATA_BROWSER_CHANNEL
@@ -317,5 +320,5 @@ try {
   }
 } finally {
   await browser.close();
-  await new Promise((resolve) => server.close(resolve));
+  await server.close();
 }

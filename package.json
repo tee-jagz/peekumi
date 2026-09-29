@@ -1,6 +1,6 @@
 {
   "name": "repo-strata",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A mobile repository map, from architecture to source.",
   "type": "module",
@@ -8,12 +8,15 @@
     "node": ">=22.13"
   },
   "bin": {
-    "strata": "src/server.mjs"
+    "strata": "scripts/start.mjs"
   },
   "scripts": {
-    "start": "node src/server.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:browser": "node test/browser.mjs"
+    "start": "node scripts/start.mjs",
+    "test": "npm run build:rust && node --test test/*.test.mjs",
+    "test:browser": "npm run build:rust && node test/browser.mjs",
+    "build:rust": "node scripts/cargo.mjs build --release --locked",
+    "test:rust": "node scripts/cargo.mjs test --locked",
+    "benchmark:rust": "npm run build:rust && node scripts/benchmark-rust.mjs"
   },
   "dependencies": {
     "typescript": "^5.6.3"

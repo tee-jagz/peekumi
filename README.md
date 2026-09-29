@@ -2,18 +2,20 @@
 
 Explore a repository and its changes from your phone, from the overall structure down to the implementation.
 
-Strata reads committed Git objects and serves a mobile web interface. It leaves the inspected repository's working tree, branches and hooks untouched.
+Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. It leaves the inspected repository's working tree, branches and hooks untouched.
 
 ## Run
 
-Requirements: Node.js 22.13+, Git, and Python 3.9+ for Python symbol extraction. Python is not required for file-level inspection or JavaScript/TypeScript analysis.
+Requirements to build: a current stable Rust toolchain (edition 2024), a C toolchain for bundled SQLite, Git, and Node.js 22.13+ for the npm commands and TypeScript parser. Python 3.9+ enables Python symbol extraction. Missing parsers produce labelled file-level inspection. Install Rust with [rustup](https://rust-lang.org/tools/install/).
 
 ```sh
 npm ci
 npm start -- /path/to/repository
 ```
 
-Open the access link printed in the terminal. The token in its URL fragment is exchanged for an HttpOnly session cookie and removed from browser history. The session lasts seven days or until the service restarts. Local access credentials live in `.strata/`, which is excluded from Git.
+`npm start` builds and launches the Rust executable. You can also use `cargo build --release --locked` and run `./target/release/strata /path/to/repository` directly. The web assets and Python helper are embedded in the binary. JavaScript/TypeScript/Svelte extraction uses the bundled `src/typescript_ast.mjs` helper and installed `typescript` package; when moving the binary, pass `--parser-root /path/to/repo-strata` (or `STRATA_PARSER_ROOT`) to locate them. `STRATA_NODE` selects its Node executable. No Node HTTP service runs.
+
+Open the access link printed in the terminal. The token in its URL fragment is exchanged for an HttpOnly session cookie and removed from browser history. The session lasts seven days or until the service restarts. Local access credentials live in `.strata/`, which is excluded from Git. `--state-dir /private/path` changes the credential and index location.
 
 Choose an initial comparison:
 
@@ -37,7 +39,7 @@ npm start -- /path/to/repository --host 192.168.1.20 --port 4317
 
 Open the printed access link on a phone on the same trusted Wi-Fi network. For access away from home, bind Strata to localhost and use Tailscale Serve, or put the service behind an authenticated HTTPS reverse proxy. For example: `tailscale serve --bg --http=4317 http://127.0.0.1:4317`. Your phone must be connected to the same Tailscale network. Userspace Tailscale installations may require `--socket=/path/to/tailscaled.sock` before `serve`. With HTTPS, add `--secure-cookie`. Plain HTTP does not encrypt source or session cookies: use it only on a trusted local network. Do not expose this port directly to the public internet.
 
-The service is platform-independent Node code with Git subprocesses; this first slice has been tested on macOS. Linux has not yet been exercised here.
+The Rust service uses Git subprocesses and has been built and tested on this Intel Mac mini. Linux and other architectures have not yet been exercised here.
 
 ## Explore
 
@@ -64,13 +66,14 @@ Python imports resolve relative paths and unique dotted-module suffixes. JavaScr
 
 Every tracked file appears, including tests and unsupported languages. Binary files, symlinks, submodules, files above 512 KiB, and common secret filenames are labelled without source previews. This filename restriction is not a secret scanner; the viewer is private because other source files can contain sensitive code or data.
 
-Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. A private SQLite syntax index under `.strata/index/` reuses unchanged Git blobs across commits and restarts. The key includes parser implementation, language, TypeScript version and Python interpreter/version. Dependency resolution is rebuilt for each tree, so moves and changed import targets remain accurate. Retained index payload is capped at 128 MiB per repository; deleting this directory forces reindexing. If the disk index is unavailable, analysis falls back to memory. There is no history backfill or agent orchestration yet.
+Renames currently appear as removal plus addition. Symbol identity is qualified name within a file, and duplicate names are not independently tracked. Parse failures fall back to file-level inspection. Up to six snapshots are cached in memory. A private SQLite syntax index under `.strata/index-rust/` reuses unchanged Git blobs across commits and restarts. The key includes parser implementation, language, TypeScript/Node version and Python interpreter/version. Dependency resolution is rebuilt for each tree, so moves and changed import targets remain accurate. Retained index payload is capped at 128 MiB per repository; deleting this directory forces reindexing. If the disk index is unavailable, analysis falls back to memory. There is no history backfill or agent orchestration yet.
 
-The CLI runs analysis in a worker thread, keeping parsing and index operations away from the HTTP event loop. Compression uses the asynchronous Node API. The phone initially receives file statuses, dependencies and compact symbol previews; opening a file fetches its full symbols, imports, documentation, source and diff. The Node SQLite API can emit an experimental-feature warning on supported releases.
+A bounded work queue sends repository analysis and SQLite operations to a dedicated Rust thread. Axum/Tokio handles HTTP independently; gzip runs in the blocking-work pool. The phone initially receives file statuses, dependencies and compact symbol previews; opening a file fetches its full symbols, imports, documentation, source and diff. The previous Node backend is retained under `test/reference/` solely for compatibility tests and benchmarking.
 
 ## Verify
 
 ```sh
+npm run test:rust
 npm test
 npx playwright install chromium
 npm run test:browser
@@ -89,14 +92,14 @@ See [MVP scope](docs/MVP.md), [architecture](docs/ARCHITECTURE.md), and [first i
 ## Benchmark indexing
 
 ```sh
-STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /path/to/repository HEAD~10 HEAD
+STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark-rust.mjs /path/to/repository HEAD~10 HEAD
 ```
 
-This measures an empty index, a restarted analysis worker with a persisted index, five warm comparison samples, and compressed overview size. It uses a temporary private index and cleans it up. `STRATA_BASELINE_ENGINE=/path/to/previous/engine.mjs` optionally compares a previous implementation and verifies identical file statuses and dependency edges. Browser/network timings are separate.
+Build first with `npm run build:rust`. The benchmark starts both implementations on loopback with temporary private indexes. It compares cold and warm API responses, restarts Rust with the persisted index, checks complete comparison equivalence, and verifies selected source/metadata responses. It cleans up the temporary processes and indexes. Browser/network timings are separate.
 
 ## This workspace
 
-The preview inspects `/Users/tolu/projects/visalytics` on localhost port 4317, using a ten-commit comparison. It is reachable privately at `http://tolu-mac-mini.tailb34901.ts.net:4317/` with Tailscale enabled on the client. The Tailscale daemon uses `/Users/tolu/.config/tailscale/tailscaled.sock`; Serve forwards port 4317 to `http://127.0.0.1:4317`. The previous LAN URL has been retired. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
+The preview inspects `/Users/tolu/projects/visalytics` on localhost port 4317, using a ten-commit comparison. It is reachable privately at `http://tolu-mac-mini.tailb34901.ts.net:4317/` with Tailscale enabled on the client. The Tailscale daemon uses `/Users/tolu/.config/tailscale/tailscaled.sock`; Serve forwards port 4317 to `http://127.0.0.1:4317`. The previous LAN URL has been retired. Its access link is in `.strata/access-link.txt`; its process ID and logs are in `.strata/server.pid` and `.strata/server.log`. The live executable and TypeScript helper are copied into `.strata/runtime/` for a stable deployment; parser resolution uses that directory. This background preview does not start automatically after a reboot. To stop it, inspect the saved PID and stop that process. Use the commands above to restart it or run on another host.
 
 ## Original context
 

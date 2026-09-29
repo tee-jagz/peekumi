@@ -9,7 +9,7 @@ import { RepositoryClient } from "./repository-client.mjs";
 import { promisify } from "node:util";
 const compress = promisify(gzip);
 
-const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+const publicDir = fileURLToPath(new URL("../../public/", import.meta.url));
 const assets = {
   "/": ["index.html", "text/html"],
   "/app.js": ["app.js", "text/javascript"],

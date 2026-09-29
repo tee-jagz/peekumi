@@ -1,24 +1,24 @@
 # Architecture
 
-The first release has three parts:
+The production backend is Rust. The browser remains plain JavaScript, HTML/CSS and SVG.
 
-1. `src/engine.mjs` reads Git trees and blobs, extracts symbols, resolves static imports, and compares snapshots. It caches snapshots by immutable commit SHA and syntax analysis by Git blob, language and parser version. `src/analysis-index.mjs` provides a bounded private SQLite index, with memory fallback. Snapshot builds are queued to avoid duplicate parsing across simultaneous comparisons. Resolved imports are never reused from the syntax index; each tree resolves them afresh. Git supplies file identity and complete file diffs; symbol hashes are supplemental information.
-2. `src/server.mjs` serves static assets and a token-protected, read-only API. It accepts a single configured repository path and starts no agents or repository code. The CLI uses `src/repository-client.mjs` and `src/repository-worker.mjs` to keep analysis and SQLite operations off the HTTP thread. Gzip compression is asynchronous.
-3. `public/` is a dependency-free browser UI. Its styling is derived directly from the supplied HTML mockup. `public/model.js` aggregates file changes into hierarchy cards and import edges into connections at the current depth. `public/canvas.js` puts the card layout and vector dependency lines in an SVG viewport with HTML foreign-object card contents, preserving the glass styling. It handles pointer pan/pinch, wheel and keyboard movement, zoom controls, and bounded per-scope view persistence. The renderer places maps in stacked commit sheets, supports selection and zoom navigation, and fetches full symbols, unresolved imports, documentation and source only when a file is opened. The frontend caches six comparisons and twelve opened source files to avoid repeated transfers.
+1. `rust/main.rs` serves embedded assets and the token-protected API with Axum/Tokio. Constant-time token checking, same-origin pairing, expiring HttpOnly sessions, security headers, read-only routes and negotiated gzip preserve the existing contract. A bounded queue sends repository operations to a dedicated thread; compression uses Tokio's blocking-work pool.
+2. `rust/engine.rs` reads Git trees/blobs, resolves imports, compares file and symbol identities, and supplies source/diffs. It retains six immutable snapshots and six comparison results keyed by resolved commit pair and view. Symbolic references are resolved on each request; only already-cached commit SHAs skip repeat resolution. `rust/process.rs` runs fixed Git/parser subprocess commands with piped input, output draining, and a 30-second timeout. It never executes inspected code.
+3. `rust/index.rs` owns a per-repository SQLite syntax index under the private state directory. Its content keys include Git blob identity, language and parser version. It retains up to 128 MiB of analysis payload, falls back to memory if persistence fails, and resolves imports afresh for every tree. Rust uses `index-rust/` so the former Node index remains available for rollback.
+4. `src/python_ast.py` and `src/typescript_ast.mjs` are syntax helpers. Rust sends only cache misses through JSON stdin; Python and TypeScript batches run concurrently. Python uses the standard AST; the Node helper uses the TypeScript compiler to preserve JavaScript, TypeScript and Svelte metadata accuracy. They expose no HTTP service. Python is embedded; the TypeScript helper and its package are found through the configured parser root. Missing helpers produce explicit file-level fallbacks.
+5. `public/` retains the reference glass deck. `model.js` aggregates hierarchy and dependency edges; `canvas.js` provides SVG pan/pinch/zoom with HTML card contents. The frontend initially fetches a compact overview, then full symbols, imports, source and descriptions when opening a file. It caches six comparisons and twelve files.
 
-`src/python_ast.py` receives source strings through stdin. It parses them without importing or executing them. The TypeScript compiler runs inside the Node process. Failed parsers produce explicit file-level fallbacks.
+The old Node backend is under `test/reference/`. It is an equivalence oracle and benchmark baseline, not a production service. `npm start` builds and runs the Rust executable. `Cargo.lock` pins the Rust dependencies.
 
 ## API
 
-- `POST /api/session`: exchange an access token for a session cookie.
-- `GET /api/repo`: repository name, branch, recent commits, initial revisions.
-- `GET /api/compare?base=&head=`: full comparison for API compatibility. Add `view=overview` for the compact browser payload: all file statuses and dependency edges, symbol counts and up to 22 colour previews per file.
-- `GET /api/source?base=&head=&path=`: before and after source plus a direct file diff, full symbol comparison, imports and revision-specific declaration metadata. Descriptions and signatures are omitted from the initial comparison payload.
+- `POST /api/session`: exchange the access token for a session cookie.
+- `GET /api/repo`: name, branch, first-parent commit history and initial revisions.
+- `GET /api/compare?base=&head=`: complete comparison for compatibility; add `view=overview` for file statuses, dependency edges, counts and compact symbol colour previews.
+- `GET /api/source?base=&head=&path=`: before/after source, direct Git diff, symbol comparison, imports and revision-specific metadata.
 
-All API endpoints except session creation require a valid session or bearer token. No CORS access is granted. Cross-origin session creation is rejected. The browser renders repository text with `textContent`.
+API requests require a session or bearer token except pairing. Repository strings are rendered using browser `textContent`. The internal `--stdio` protocol exists for local tests and benchmarks; it is not an HTTP endpoint.
 
 ## Boundaries
 
-The inspected repository is read-only. No working-tree traversal is used for source extraction, so symlinks are not followed. Git diffs disable external diff drivers and text conversion. The host runtime and its Git installation are trusted.
-
-The hierarchy is physical structure. Static import dependencies do not prove runtime coupling or architectural quality. This release makes no health claims.
+The inspected repository is read-only. Source comes from committed Git objects, not working-tree traversal. Symlinks are not followed; restricted filenames, binary content, large files and submodules remain labelled. Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. No architecture or health scores are invented.
