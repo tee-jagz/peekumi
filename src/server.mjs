@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import http from "node:http";
+import { gzipSync } from "node:zlib";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -32,16 +33,40 @@ export function createServer(
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
-    const send = (code, value) => {
-      response.writeHead(code, { "Content-Type": "application/json" });
-      response.end(JSON.stringify(value));
+    const sendBody = (code, type, value) => {
+      let body = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      const acceptsGzip = (request.headers["accept-encoding"] || "")
+        .split(",")
+        .some((entry) => {
+          const [encoding, ...parameters] = entry
+            .trim()
+            .toLowerCase()
+            .split(";");
+          const quality = parameters
+            .map((p) => p.trim())
+            .find((p) => p.startsWith("q="));
+          return (
+            encoding === "gzip" && (!quality || Number(quality.slice(2)) > 0)
+          );
+        });
+      response.setHeader("Vary", "Accept-Encoding");
+      if (body.length >= 1024 && acceptsGzip) {
+        body = gzipSync(body);
+        response.setHeader("Content-Encoding", "gzip");
+      }
+      response.writeHead(code, {
+        "Content-Type": type,
+        "Content-Length": body.length,
+      });
+      response.end(body);
     };
+    const send = (code, value) =>
+      sendBody(code, "application/json", JSON.stringify(value));
     try {
       const url = new URL(request.url, "http://localhost");
       if (request.method === "GET" && assets[url.pathname]) {
         const [file, type] = assets[url.pathname];
-        response.writeHead(200, { "Content-Type": type });
-        response.end(await readFile(path.join(publicDir, file)));
+        sendBody(200, type, await readFile(path.join(publicDir, file)));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/session") {

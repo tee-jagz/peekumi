@@ -157,6 +157,27 @@ test("API requires auth, rejects cross-origin pairing, and serves source through
   const response = await fetch(url + "/api/compare", { headers: { cookie } });
   assert.equal(response.status, 200);
   const data = await response.json();
+  assert.equal(response.headers.get("content-encoding"), "gzip");
+  assert.equal(response.headers.get("vary"), "Accept-Encoding");
+  assert.ok(
+    data.files
+      .flatMap((file) => file.symbols)
+      .every((symbol) => !("hash" in symbol)),
+  );
+  const plain = await fetch(url + "/api/compare", {
+    headers: { cookie, "Accept-Encoding": "gzip;q=0, identity" },
+  });
+  assert.equal(plain.headers.get("content-encoding"), null);
+  assert.deepEqual(await plain.json(), data);
+  assert.ok(
+    Number(response.headers.get("content-length")) <
+      Number(plain.headers.get("content-length")) / 2,
+  );
+  const html = await fetch(url + "/", {
+    headers: { "Accept-Encoding": "gzip" },
+  });
+  assert.equal(html.headers.get("content-encoding"), "gzip");
+  assert.match(await html.text(), /Repo Strata/);
   assert.equal(
     data.files.find((f) => f.path === "docs/new.md").status,
     "added",

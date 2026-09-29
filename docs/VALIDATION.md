@@ -35,3 +35,9 @@ The LAN service returned HTTP 401 without authentication and served the expected
 ## Remote access follow-up
 
 With the owner’s explicit approval, moved Strata to localhost and configured a private Tailscale Serve route on port 4317 through the existing userspace daemon. Tested requests through `tailscale nc` to the node’s Tailscale address: the repository API returned 401 without authentication, and token pairing returned 200 with the correct browser origin. The local authenticated repository API returned 200 for Visalytics. A physical phone check remains with the owner; the phone must have Tailscale connected. No public tunnel was created.
+
+## Phone loading fix
+
+The running server produced the warm comparison in about 70 ms, but transferred 4,046,626 bytes without compression. Removed symbol hashes from the viewer payload (hashes still determine symbol status on the server) and added negotiated gzip compression for JSON and static assets. Responses retain `no-store`, vary by `Accept-Encoding`, and honour `gzip;q=0`.
+
+A 390 × 844 Chromium test with 1 Mbps download throughput and 100 ms latency measured time to a usable map at 33,503 ms before and 3,660 ms after, with both snapshots already warm. Comparison transfer fell to 356,462 bytes, with all 60 changed files preserved. This measures a simulated connection, not the owner's physical phone or cold snapshot generation. Regression checks cover compressed/uncompressed response equivalence, gzip opt-out, static HTML decoding, payload reduction, and removal of internal hashes. All engine/API tests pass.

@@ -417,7 +417,10 @@ export class Repository {
         const symbols = [
           ...new Set([...Object.keys(a), ...Object.keys(b)]),
         ].map((name) => ({
-          ...(b[name] || a[name]),
+          name,
+          kind: (b[name] || a[name]).kind,
+          start: (b[name] || a[name]).start,
+          end: (b[name] || a[name]).end,
           status: statusOf(a[name]?.hash, b[name]?.hash),
           before: a[name] ? { start: a[name].start, end: a[name].end } : null,
         }));
