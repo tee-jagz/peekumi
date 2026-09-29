@@ -325,14 +325,8 @@ impl Repository {
                     }
                     _ => {
                         for (p, _) in missing {
-                            files.get_mut(&p).unwrap().analysis = format!(
-                                "{} unavailable · file-level analysis",
-                                match adapter.id() {
-                                    "python" => "Python",
-                                    "typescript" => "TypeScript",
-                                    _ => "Rust",
-                                }
-                            );
+                            files.get_mut(&p).unwrap().analysis =
+                                format!("{} unavailable · file-level analysis", adapter.name());
                         }
                     }
                 }

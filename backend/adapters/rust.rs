@@ -266,6 +266,9 @@ impl super::LanguageAdapter for Rust {
     fn id(&self) -> &'static str {
         "rust"
     }
+    fn name(&self) -> &'static str {
+        "Rust"
+    }
     fn extensions(&self) -> &'static [&'static str] {
         &["rs"]
     }

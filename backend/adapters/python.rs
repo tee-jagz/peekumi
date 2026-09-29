@@ -4,6 +4,9 @@ impl LanguageAdapter for Python {
     fn id(&self) -> &'static str {
         "python"
     }
+    fn name(&self) -> &'static str {
+        "Python"
+    }
     fn extensions(&self) -> &'static [&'static str] {
         &["py"]
     }

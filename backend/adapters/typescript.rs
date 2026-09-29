@@ -4,6 +4,9 @@ impl LanguageAdapter for TypeScript {
     fn id(&self) -> &'static str {
         "typescript"
     }
+    fn name(&self) -> &'static str {
+        "TypeScript"
+    }
     fn extensions(&self) -> &'static [&'static str] {
         &[
             "js", "jsx", "ts", "tsx", "mjs", "cjs", "mts", "cts", "mjsx", "cjsx", "mtsx", "ctsx",

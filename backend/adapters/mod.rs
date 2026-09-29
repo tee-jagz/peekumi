@@ -23,6 +23,7 @@ impl Config {
 /// Adapters inspect syntax only and never execute inspected code.
 pub trait LanguageAdapter: Sync {
     fn id(&self) -> &'static str;
+    fn name(&self) -> &'static str;
     fn extensions(&self) -> &'static [&'static str];
     fn capabilities(&self) -> &[&str] {
         &["symbols", "documentation", "explicit types", "imports"]
@@ -45,7 +46,7 @@ pub fn for_path(path: &str) -> Option<&'static dyn LanguageAdapter> {
         .find(|adapter| adapter.extensions().contains(&ext))
 }
 pub fn descriptors() -> Value {
-    json!(all().iter().map(|a|json!({"id":a.id(),"extensions":a.extensions(),"capabilities":a.capabilities(),"limitations":a.limitations()})).collect::<Vec<_>>())
+    json!(all().iter().map(|a|json!({"id":a.id(),"name":a.name(),"extensions":a.extensions(),"capabilities":a.capabilities(),"limitations":a.limitations()})).collect::<Vec<_>>())
 }
 pub struct Resolution {
     paths: BTreeSet<String>,
