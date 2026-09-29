@@ -271,3 +271,45 @@ export function patchForSymbol(patch, symbol) {
     ? [...header, ...kept.flatMap((h) => h.lines)].join("\n")
     : "";
 }
+
+/** Expands compact file-pair transport into the same evidence shape used by file drill-down. */
+export function expandRelationships(data) {
+  if (!data.compact) return data;
+  return {
+    ...data,
+    relationships: data.pairs.map(
+      ([from, to, kind, left, right, beforeViolations, afterViolations]) => {
+        const fact = (count, violations) =>
+          count
+            ? {
+                source: { path: from, symbol: "" },
+                target: to,
+                targets: [{ path: to, symbol: "" }],
+                kind,
+                resolution: "resolved",
+                violations,
+                count,
+              }
+            : null;
+        const before = fact(left, beforeViolations),
+          after = fact(right, afterViolations),
+          current = after || before;
+        return {
+          ...current,
+          id: JSON.stringify([from, to, kind]),
+          before,
+          after,
+          status: !left
+            ? "added"
+            : !right
+              ? "removed"
+              : left !== right ||
+                  JSON.stringify(beforeViolations) !==
+                    JSON.stringify(afterViolations)
+                ? "changed"
+                : "unchanged",
+        };
+      },
+    ),
+  };
+}

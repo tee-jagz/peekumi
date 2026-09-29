@@ -2,6 +2,7 @@
 import { mountCanvas } from "./canvas.js";
 import {
   rootScope,
+  expandRelationships,
   leaf,
   parent,
   inScope,
@@ -160,13 +161,15 @@ async function loadComparison() {
         "/api/directories?" +
           new URLSearchParams({ base: data.base, head: data.head }),
       );
-      data.relationshipData = await api(
-        "/api/relationships?" +
-          new URLSearchParams({
-            base: data.base,
-            head: data.head,
-            view: "overview",
-          }),
+      data.relationshipData = expandRelationships(
+        await api(
+          "/api/relationships?" +
+            new URLSearchParams({
+              base: data.base,
+              head: data.head,
+              view: "overview",
+            }),
+        ),
       );
       comparisons.set(key, data);
       if (comparisons.size > 6)

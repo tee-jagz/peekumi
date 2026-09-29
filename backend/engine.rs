@@ -401,6 +401,9 @@ impl Repository {
         let a = self.snapshot(base)?;
         let b = self.snapshot(head)?;
         let select = |snapshot: &Snapshot| -> Vec<Value> {
+            if overview && path.is_empty() {
+                return crate::relationships::overview(&snapshot.relationships);
+            }
             let values = snapshot
                 .relationships
                 .iter()
@@ -423,6 +426,11 @@ impl Repository {
         };
         let left = select(&a);
         let right = select(&b);
+        if overview {
+            return Ok(
+                json!({"base":a.sha,"head":b.sha,"compact":true,"pairs":crate::relationships::compact(&left,&right),"checks":{"before":a.checks,"after":b.checks}}),
+            );
+        }
         Ok(
             json!({"base":a.sha,"head":b.sha,"relationships":crate::relationships::compare(&left,&right),"checks":{"before":a.checks,"after":b.checks}}),
         )

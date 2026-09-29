@@ -126,3 +126,35 @@ pub fn overview(relations: &[Value]) -> Vec<Value> {
         })
         .collect()
 }
+
+/// Encodes map-only file pairs without repeating source metadata on both revision sides.
+/// Ordinary imports already travel in the file overview; retain them here only for rule evidence.
+pub fn compact(before: &[Value], after: &[Value]) -> Vec<Value> {
+    compare(before, after)
+        .into_iter()
+        .filter_map(|r| {
+            let source = r["source"]["path"].as_str().unwrap_or("");
+            let target = r["targets"][0]["path"].as_str().unwrap_or("");
+            let violations = |phase: &str| {
+                r[phase]["violations"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            let left = violations("before");
+            let right = violations("after");
+            if (r["kind"] == "imports" || source == target) && left.is_empty() && right.is_empty() {
+                return None;
+            }
+            Some(json!([
+                source,
+                target,
+                r["kind"],
+                r["before"]["count"].as_u64().unwrap_or(0),
+                r["after"]["count"].as_u64().unwrap_or(0),
+                left,
+                right
+            ]))
+        })
+        .collect()
+}

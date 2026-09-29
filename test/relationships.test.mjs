@@ -1,4 +1,5 @@
 import test from "node:test";
+import { expandRelationships } from "../frontend/model.js";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -152,7 +153,7 @@ test("relationships retain language evidence, unresolved dispatch and versioned 
     !rows.some((r) => r.kind === "implements" && r.target === "Send"),
     "Negative impls do not become positive implementation edges",
   );
-  const overview = await get("view=overview");
+  const overview = expandRelationships(await get("view=overview"));
   assert.ok(overview.relationships.every((r) => r.resolution === "resolved"));
   assert.ok(
     overview.relationships.some(
