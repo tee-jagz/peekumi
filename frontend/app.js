@@ -28,7 +28,7 @@ const button = (className, text, action) => {
 };
 const labels = {
   added: "Added",
-  changed: "Changed",
+  changed: "Modified",
   removed: "Removed",
   unchanged: "Unchanged",
 };
@@ -970,7 +970,10 @@ function renderPanel() {
       : selected?.kind || scope.kind;
   scopeBar.append(element("span", "review-kind", caption));
   if (selected?.status)
-    scopeBar.append(element("span", "pill", labels[selected.status]));
+    scopeBar.insertBefore(
+      statusIcon(selected.status),
+      scopeBar.querySelector(".review-kind"),
+    );
   if (selected) {
     const clear = button("x", "×", () => {
       selected = null;
@@ -1188,7 +1191,11 @@ function renderSelection() {
   const contract = $("#selectionContract");
   contract.replaceChildren();
   const fact = (label, value) => {
-    contract.append(element("dt", "", label), element("dd", "", value));
+    const term = element("dt", "", label);
+    if (label === "In" || label === "Out") {
+      term.replaceChildren(interfaceIcon(label));
+    }
+    contract.append(term, element("dd", "", value));
   };
   if (detail?.parameters) {
     fact(
@@ -1407,6 +1414,40 @@ function metadataCard() {
     box.append(element("small", "metadata-muted", info.provenance));
   return box;
 }
+/** Compact, shape-distinct Git status badge with an accessible name and tooltip. */
+function statusIcon(status) {
+  const icon = element(
+    "span",
+    "status-icon",
+    status === "unchanged" ? "=" : symbols[status],
+  );
+  icon.style.setProperty("--status-tone", tones[status]);
+  icon.setAttribute("role", "img");
+  icon.setAttribute("aria-label", labels[status]);
+  icon.title = labels[status];
+  return icon;
+}
+/** Directional contract icon: arrow entering a boundary for inputs, leaving it for outputs. */
+function interfaceIcon(direction) {
+  const label = direction === "In" ? "Inputs" : "Outputs";
+  const icon = element("span", "interface-icon");
+  icon.setAttribute("role", "img");
+  icon.setAttribute("aria-label", label);
+  icon.title = label;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 20 20");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute(
+    "d",
+    direction === "In"
+      ? "M16 3v14M3 10h9M8 6l4 4-4 4"
+      : "M4 3v14M8 10h9M13 6l4 4-4 4",
+  );
+  svg.append(path);
+  icon.append(svg);
+  return icon;
+}
 /** Builds Git-status labels, omitting statuses absent from the supplied file set. */
 function legend(files) {
   const box = element("div", "legend-inline");
@@ -1414,8 +1455,7 @@ function legend(files) {
     const count = files?.filter((file) => file.status === status).length;
     if (files && !count) continue;
     const item = element("span");
-    const dot = element("i");
-    dot.style.setProperty("--tone", tones[status]);
+    const dot = statusIcon(status);
     item.append(
       dot,
       document.createTextNode((files ? count + " " : "") + labels[status]),
@@ -1462,6 +1502,14 @@ function renderMapLegend() {
       "Arrows point from the using/calling item to its dependency or target. Connections are static declarations, not runtime execution. Select a line for evidence.",
     ),
   );
+  const contractKey = element("div", "contract-key");
+  contractKey.append(
+    interfaceIcon("In"),
+    element("span", "", "Inputs"),
+    interfaceIcon("Out"),
+    element("span", "", "Outputs"),
+  );
+  host.append(contractKey);
   const close = button("btn", "Close legend", () => {
     $("#mapLegend").open = false;
   });

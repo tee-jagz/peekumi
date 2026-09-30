@@ -284,9 +284,24 @@ try {
       await page.locator("#sheetHandle").focus();
       await page.keyboard.press("Home");
       await page.locator("#selectionContract").waitFor({ state: "visible" });
-      assert.match(
-        await page.locator("#selectionContract").innerText(),
-        /In[\s\S]*Out/,
+      assert.equal(
+        await page.locator('#selectionContract [aria-label="Inputs"]').count(),
+        1,
+      );
+      assert.equal(
+        await page.locator('#selectionContract [aria-label="Outputs"]').count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .locator("#reviewScope .status-icon")
+          .getAttribute("aria-label"),
+        {
+          added: "Added",
+          changed: "Modified",
+          removed: "Removed",
+          unchanged: "Unchanged",
+        }[selectedSymbol.status],
       );
       assert.equal(await page.locator("#helperTools").isVisible(), false);
       assert.equal(await page.locator("#reviewScope .x").isVisible(), false);

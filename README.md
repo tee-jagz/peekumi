@@ -56,7 +56,7 @@ The Rust service uses Git subprocesses and has been built and tested on this Int
 
 - Select explicit base and head commits. The commit strip and comparison picker list the latest 80 first-parent commits from HEAD; startup flags can select other Git revisions.
 - Explore the glass card deck from the supplied mockup. Tap once to select, then tap the selected card or Open to zoom in. Nested packages follow the repository's actual structure.
-- Added is green, modified is purple, removed is red, unchanged is grey. Text labels accompany colour.
+- Added is green, modified is orange, removed is red, unchanged is grey. Compact status icons have distinct shapes, accessible names and a labelled legend.
 - Time and Diff compare the selected commit with its first parent by default. Tap a commit chip or select a head revision to move through history. A manually selected base stays pinned across navigation and refresh; choose Previous commit (automatic) to reset it. Diff also supports Before and After.
 - Pan the SVG map by dragging with a finger or mouse, or scrolling. Pinch or Control/Command-scroll to zoom; use +/−, Fit, or 1:1 for explicit controls. Keyboard users can focus the map and use arrows and +/−. The review panel scrolls independently.
 - Turn on Changes only to hide unchanged cards at every level, while keeping changed parent folders available for drill-down. Changed dependencies retain their external neighbours as context. File-level edits can have no changed symbols; the complete source diff remains available.

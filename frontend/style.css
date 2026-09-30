@@ -12,7 +12,7 @@
   --mid: #ff9f0a;
   --good: #34c759;
   --add: #28a745;
-  --mod: #5856d6;
+  --mod: #b85c00;
   --del: #ff3b30;
   --edge: #9a9aa0;
   --glass: rgba(255, 255, 255, 0.58);
@@ -48,7 +48,7 @@
     --mid: #ffb340;
     --good: #30d158;
     --add: #30d158;
-    --mod: #8e8bff;
+    --mod: #ffad42;
     --del: #ff453a;
     --edge: #7c7c82;
     --glass: rgba(40, 40, 44, 0.55);
@@ -77,7 +77,7 @@
   --mid: #ffb340;
   --good: #30d158;
   --add: #30d158;
-  --mod: #8e8bff;
+  --mod: #ffad42;
   --del: #ff453a;
   --edge: #7c7c82;
   --glass: rgba(40, 40, 44, 0.55);
@@ -3091,4 +3091,64 @@ select option {
   .panel[data-tab="details"]:not([data-height="peek"]) #selectionSummary {
     display: none;
   }
+}
+
+/* Compact labels retain shape and accessible text in addition to colour. */
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  color: var(--status-tone);
+  background: color-mix(in srgb, var(--status-tone) 10%, transparent);
+  font:
+    600 13px/1 ui-monospace,
+    monospace;
+  vertical-align: middle;
+}
+.legend-inline > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.interface-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  vertical-align: middle;
+}
+.interface-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.contract-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0;
+}
+.contract-key .interface-icon:nth-of-type(3) {
+  margin-left: 12px;
+}
+#selectionContract {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+#reviewScope .review-name {
+  max-width: calc(100% - 64px);
+}
+#reviewScope .review-kind {
+  order: 3;
+  flex-basis: 100%;
+  max-width: 100%;
+  font-size: 11px;
 }
