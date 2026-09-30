@@ -16,3 +16,5 @@ The Rust backend serves the authenticated API, reads committed Git objects, comp
 Build from the repository root with `cargo build --release --locked`. Browser assets and the Python helper are embedded; the TypeScript helper remains beside the deployed parser root.
 
 `sessions.rs` persists hashed browser sessions in private state so bookmarked viewer URLs remain signed in across restarts. Sessions expire after 30 days and are bound to the repository and current access token.
+
+Codex runs use `exec --approve-for-me`, which selects the workspace-write sandbox with automatic approval review. Do not combine that preset with `--sandbox`: the CLI rejects the combination before executing the task.

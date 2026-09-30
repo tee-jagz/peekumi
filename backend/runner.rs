@@ -84,10 +84,10 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
     ];
     let mut command = if run["agent"] == "codex" {
         let mut c = Command::new(&store.codex);
+        // This preset already selects workspace-write and automatic approval review.
+        // Codex rejects combining it with the separate --sandbox option.
         c.args([
             "exec",
-            "--sandbox",
-            "workspace-write",
             "--approve-for-me",
             "--json",
             "--color",

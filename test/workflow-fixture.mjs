@@ -39,9 +39,10 @@ if (values.includes("--mcp-config")) {
 } else {
   if (
     !values.includes("--approve-for-me") ||
-    !values.includes("workspace-write")
+    values.includes("--sandbox") ||
+    values.includes("--dangerously-bypass-approvals-and-sandbox")
   )
-    throw Error("Missing sandbox and approval review configuration");
+    throw Error("Use the approval-review preset without conflicting sandbox flags");
   command = JSON.parse(
     values
       .find((v) => v.startsWith("mcp_servers.strata.command="))
