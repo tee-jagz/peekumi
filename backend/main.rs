@@ -440,7 +440,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
     let result = match path.as_str() {
         "/api/repo" => {
             app.engine
-                .call("metadata", json!([app.options.base, app.options.head]))
+                .call("metadata", json!([base, head]))
                 .await
         }
         "/api/compare" => {

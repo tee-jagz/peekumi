@@ -3286,3 +3286,30 @@ select option {
     display: grid;
   }
 }
+
+/* The branch picker changes the viewed Git ref, never the working checkout. */
+.top > div:first-child {
+  min-width: 0;
+}
+#branchPicker {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  min-height: 28px;
+  padding: 3px 25px 3px 7px;
+  margin-top: 4px;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+#branchPicker[hidden] {
+  display: none;
+}
+#openTasks[data-ready="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (max-width: 899px) {
+  #branchPicker {
+    max-width: 180px;
+  }
+}

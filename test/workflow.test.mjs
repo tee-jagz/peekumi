@@ -318,3 +318,37 @@ test("Ask receives committed context without tools and never automatically creat
     400,
   );
 });
+
+test("branch inspection reads selected history without switching or changing the checkout", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  await f.git("checkout", "-b", "feature/inspect");
+  await writeFile(path.join(f.dir, "feature.txt"), "feature content");
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Feature implementation");
+  const tip = (await f.git("rev-parse", "HEAD")).toString().trim();
+  await f.git("update-ref", "refs/remotes/origin/feature", tip);
+  await f.git("checkout", "main");
+  await writeFile(path.join(f.dir, "local-draft.txt"), "keep this untouched");
+  const before = (await f.git("status", "--porcelain")).toString();
+  const meta = await f.req("/api/repo?head=refs%2Fheads%2Ffeature%2Finspect");
+  assert.equal(meta.status, 200);
+  assert.equal(meta.initialHead, tip);
+  assert.equal(meta.commits[0].sha, tip);
+  assert.equal(meta.commits[0].parent, f.sha);
+  assert.equal(meta.selectedBranch.name, "feature/inspect");
+  assert.equal(meta.branch, "main");
+  assert.ok(
+    meta.branches.some(
+      (b) => b.ref === "refs/remotes/origin/feature" && b.remote,
+    ),
+  );
+  assert.equal(
+    (await f.req("/api/repo?head=refs%2Fremotes%2Forigin%2Ffeature"))
+      .initialHead,
+    tip,
+  );
+  assert.equal((await f.req("/api/repo?head=--all")).status, 400);
+  assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
+  assert.equal((await f.git("status", "--porcelain")).toString(), before);
+});

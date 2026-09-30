@@ -52,6 +52,8 @@ let metadata,
   lens = "changes",
   before = false,
   tab = "details";
+let viewingBranch = new URL(location.href).searchParams.get("branch"),
+  bootId = 0;
 let baseRef,
   headRef,
   diffBase,
@@ -124,6 +126,7 @@ const workflow = createWorkflow({
   redraw() {
     if (comparison) renderTab();
   },
+  viewBranch: (branch) => switchBranch("refs/heads/" + branch),
   async inspect(base, head, anchor) {
     document.querySelector("#tabs").inert = true;
     try {
@@ -132,7 +135,10 @@ const workflow = createWorkflow({
       diffBase = base;
       headRef = head;
       before = false;
-      await loadComparison();
+      await boot(true, head);
+      const url = new URL(location.href);
+      url.searchParams.set("branch", head);
+      history.replaceState(null, "", url);
       if (anchor.path) {
         await navigate({
           kind: anchor.kind === "folder" ? "folder" : "file",
@@ -212,9 +218,44 @@ $("#login").onsubmit = (event) => {
   );
 };
 /** Loads repository identity and initial revisions, then renders the comparison. A refresh follows the latest configured head. */
-async function boot(refresh = false) {
+async function boot(refresh = false, branch = viewingBranch) {
+  const id = ++bootId;
+  ++loadId;
+  ++sourceId;
+  busy = true;
+  $("#branchPicker").disabled = true;
+  $("#refresh").disabled = true;
+  showNotice("Loading branch…");
   try {
-    metadata = await api("/api/repo");
+    const next = await api(
+      "/api/repo" + (branch ? "?" + new URLSearchParams({ head: branch }) : ""),
+    );
+    if (id !== bootId) return;
+    metadata = next;
+    viewingBranch = metadata.selectedBranch?.ref || branch;
+    const picker = $("#branchPicker");
+    picker.replaceChildren();
+    for (const b of metadata.branches) {
+      const option = element(
+        "option",
+        "",
+        b.name + (b.remote ? " · remote" : ""),
+      );
+      option.value = b.ref;
+      picker.append(option);
+    }
+    if (!metadata.selectedBranch) {
+      const option = element(
+        "option",
+        "",
+        "Detached · " + metadata.initialHead.slice(0, 7),
+      );
+      option.value = branch || "HEAD";
+      picker.append(option);
+    }
+    picker.value = viewingBranch || "HEAD";
+    picker.hidden = false;
+    $("#repo-sub").hidden = true;
     $("#connect").hidden = true;
     $("#workspace").inert = false;
     $("#repo-name").textContent = metadata.name;
@@ -226,9 +267,31 @@ async function boot(refresh = false) {
     await loadComparison();
     workflow.refresh(false).catch((error) => showNotice(error.message, true));
   } catch (error) {
-    showNotice(error.message, true);
+    if (id === bootId) {
+      $("#branchPicker").value = viewingBranch || "HEAD";
+      showNotice(error.message, true);
+    }
+  } finally {
+    if (id === bootId) {
+      busy = false;
+      $("#branchPicker").disabled = false;
+      $("#refresh").disabled = false;
+    }
   }
 }
+/** Switches only the inspected ref. Manual comparison bases and unsent messages survive. */
+async function switchBranch(branch) {
+  setSheetHeight("peek");
+  scope = rootScope();
+  selected = null;
+  before = false;
+  tab = "details";
+  await boot(true, branch);
+  const url = new URL(location.href);
+  if (viewingBranch) url.searchParams.set("branch", viewingBranch);
+  history.replaceState(null, "", url);
+}
+$("#branchPicker").onchange = (event) => switchBranch(event.target.value);
 /** Uses the selected commit's first parent, or itself when it has no parent. */
 function parentRevision(sha) {
   return commit(sha).parent || sha;

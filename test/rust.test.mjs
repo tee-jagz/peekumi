@@ -96,7 +96,10 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
     return r.json();
   };
   const metadata = await get("/api/repo");
-  assert.deepEqual(metadata, {
+  assert.ok(metadata.branches.some((b) => b.ref === "refs/heads/main"));
+  assert.equal(metadata.selectedBranch.ref, "refs/heads/main");
+  const { branches, selectedBranch, ...identity } = metadata;
+  assert.deepEqual(identity, {
     ...(await f.repo.metadata()),
     initialBase: f.base,
     initialHead: await f.repo.resolve("HEAD"),

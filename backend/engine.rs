@@ -189,16 +189,30 @@ impl Repository {
         .trim()
         .into())
     }
-    /// Returns repository identity, branch, recent first-parent history and initial comparison revisions.
+    /// Returns checkout identity, available local/remote-tracking branches and first-parent history for the selected head.
+    /// Reads refs and objects only; never checks out a branch or fetches remote refs.
     /// An invalid base falls back to the oldest listed commit; an invalid head or unreadable history is an error.
     pub fn metadata(&self, base: &str, head: &str) -> Result<Value> {
         let branch = string(self.git(&["branch", "--show-current"])?);
+        let initial_head = self.resolve(head)?;
+        let refs = string(self.git(&["for-each-ref", "--format=%(refname)%00%(objectname)%00%(symref)", "refs/heads", "refs/remotes"])?);
+        let branches: Vec<Value> = refs.lines().filter_map(|line| {
+            let fields: Vec<_> = line.split('\0').collect();
+            if fields.len() < 3 || !fields[2].is_empty() { return None; }
+            let remote = fields[0].starts_with("refs/remotes/");
+            let name = fields[0].trim_start_matches("refs/heads/").trim_start_matches("refs/remotes/");
+            Some(json!({"ref":fields[0], "name":name, "sha":fields[1], "remote":remote}))
+        }).collect();
+        let selected_branch = branches.iter().find(|b| {
+            text(&b["ref"]) == head || text(&b["name"]) == head ||
+            (head == "HEAD" && !b["remote"].as_bool().unwrap_or(false) && text(&b["name"]) == branch.trim())
+        }).cloned();
         let log = string(self.git(&[
             "log",
             "--first-parent",
             "-80",
             "--format=%H%x00%h%x00%s%x00%aI%x00%P%x00",
-            "HEAD",
+            &initial_head,
         ])?);
         let values: Vec<_> = log.trim().split('\0').collect();
         let mut commits = vec![];
@@ -217,7 +231,7 @@ impl Repository {
         })?;
         let root = string(self.git(&["rev-parse", "--show-toplevel"])?);
         Ok(
-            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"initialBase":base,"initialHead":self.resolve(head)?}),
+            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"initialBase":base,"initialHead":initial_head,"branches":branches,"selectedBranch":selected_branch}),
         )
     }
     /// Loads an immutable snapshot, reusing up to six cached revisions.

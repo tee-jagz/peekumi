@@ -145,6 +145,7 @@ export function createWorkflow({
   redraw,
   notice,
   inspect,
+  viewBranch,
 }) {
   let data = { comments: [], runs: [] },
     loaded = false,
@@ -241,6 +242,22 @@ export function createWorkflow({
   function bar() {
     const host = document.querySelector("#runBar");
     host.replaceChildren();
+    const ready = data.runs.filter(
+      (r) =>
+        r.status === "completed" &&
+        !r.applied &&
+        data.comments.some((c) => c.runId === r.id && c.status === "addressed"),
+    );
+    const tasksButton = document.querySelector("#openTasks");
+    if (tasksButton) {
+      tasksButton.textContent = ready.length
+        ? `Tasks · ${ready.length}`
+        : "Tasks";
+      tasksButton.dataset.ready = String(ready.length > 0);
+      tasksButton.title = ready.length
+        ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
+        : "Open tasks";
+    }
     if (
       ["comments", "runs"].includes(
         document.querySelector("#panel")?.dataset.tab,
@@ -492,7 +509,7 @@ export function createWorkflow({
       el(
         "p",
         "read-note",
-        "Choose the comments to send. The agent will make changes separately, then return here for your review.",
+        `The task starts from ${(data.watched || "main").replace("refs/heads/", "")}. Choose the comments to send; results return here for review.`,
       ),
     );
     const l = el("label", "workflow-field", "Agent"),
@@ -767,8 +784,13 @@ export function createWorkflow({
           await refresh();
         }),
       );
-    if (r.results?.length)
-      body.append(action("Review all changes", () => reviewTask(r), true));
+    if (r.results?.length) {
+      if (r.status === "completed")
+        body.append(
+          action("Review agent branch", () => viewBranch(r.branch), true),
+        );
+      body.append(action("Review all changes", () => reviewTask(r)));
+    }
     comments(body, r);
     const ready = data.comments.filter(
       (c) => c.runId === r.id && c.status === "addressed",

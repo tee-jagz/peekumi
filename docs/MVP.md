@@ -40,3 +40,5 @@ The authorized next slice is implemented in [WORKFLOW.md](WORKFLOW.md): anchored
 The map Legend belongs with the canvas zoom/fit controls, opening as an overlay without a permanent content row. Inspection navigation becomes available around half height during a drag.
 
 The task UI presents human-readable updates, reported checks and changed-file review together. Task review can verify all addressed comments with one review note; it does not merge or deploy the run branch. Agent JSON and generated prompts are optional diagnostics.
+
+Owners can switch the viewed branch in the header. This is read-only Git inspection: local edits and the checkout stay untouched. A completed task offers Review agent branch to inspect its implementation in the map, with a ready cue on Tasks. Comparison defaults remain the selected commit’s first parent unless a manual base is pinned.
