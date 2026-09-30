@@ -53,6 +53,11 @@ try {
           bounds.y + bounds.height / 2 - 30,
           { steps: 3 },
         );
+        assert.equal(
+          await page.locator("#helperTools").isVisible(),
+          false,
+          "Inspection controls remain hidden during a small drag out of peek",
+        );
         const midHeight = (await page.locator("#panel").boundingBox()).height;
         assert.ok(
           Math.abs(midHeight - startHeight - 30) < 3,

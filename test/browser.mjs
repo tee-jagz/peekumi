@@ -71,6 +71,7 @@ try {
     }
     assert.equal(await page.evaluate(() => location.hash), "");
     await page.locator("#mapLegend > summary").click();
+    assert.equal(await page.locator(".canvas-controls #mapLegend").count(), 1);
     assert.match(
       await page.locator("#legendContent").innerText(),
       /Change colours/,
@@ -279,6 +280,21 @@ try {
       .first();
     await symbol.focus();
     await symbol.click();
+    if (viewport.width === 390) {
+      await page.locator("#sheetHandle").focus();
+      await page.keyboard.press("Home");
+      await page.locator("#selectionContract").waitFor({ state: "visible" });
+      assert.match(
+        await page.locator("#selectionContract").innerText(),
+        /In[\s\S]*Out/,
+      );
+      assert.equal(await page.locator("#helperTools").isVisible(), false);
+      assert.equal(await page.locator("#reviewScope .x").isVisible(), false);
+      await page.waitForFunction(
+        () => !document.querySelector("#panel").dataset.settling,
+      );
+      await page.screenshot({ path: "test-results/390-peek-contract.png" });
+    }
     if (!(await page.locator("#helperTools").isVisible()))
       await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="source"]').click();

@@ -378,6 +378,7 @@ function renderDeck() {
   const deck = $("#deck"),
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
+  const mapLegend = $("#mapLegend");
   deck.replaceChildren();
   const sheet = element("div", "sheet");
   sheet.style.zIndex = "10";
@@ -395,6 +396,7 @@ function renderDeck() {
   sheet.append(header, body);
   deck.append(sheet);
   renderGraph(body);
+  body.querySelector(".canvas-controls")?.append(mapLegend);
   body.scrollTop = oldScroll;
 }
 /** Chooses a node colour from its Git status, or the neutral Structure accent. */
@@ -1183,6 +1185,38 @@ function renderSelection() {
       ? selected.signature ||
         "Select Details or Source to inspect this declaration."
       : "Explore the graph; select an item to inspect its implementation.");
+  const contract = $("#selectionContract");
+  contract.replaceChildren();
+  const fact = (label, value) => {
+    contract.append(element("dt", "", label), element("dd", "", value));
+  };
+  if (detail?.parameters) {
+    fact(
+      "In",
+      detail.parameters.length
+        ? detail.parameters
+            .map(
+              (p) =>
+                `${p.name}${p.optional ? "?" : ""} · ${p.type || "type unspecified"}`,
+            )
+            .join("; ")
+        : "No parameters",
+    );
+    fact(
+      "Out",
+      [detail.returns || "type unspecified", detail.returnDescription]
+        .filter(Boolean)
+        .join(" · "),
+    );
+  } else if (detail?.fields?.length) {
+    fact(
+      "Fields",
+      detail.fields
+        .map((f) => `${f.name} · ${f.type || "type unspecified"}`)
+        .join("; "),
+    );
+  }
+  contract.hidden = !contract.children.length;
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
@@ -1256,24 +1290,7 @@ function renderSelection() {
       () => openNode(selected),
     ),
   );
-  if (scope.kind === "file")
-    actions.append(
-      button("btn", "Full file diff", () => {
-        selected = null;
-        sourceView = "diff";
-        tab = "source";
-        renderPanel();
-        if (!sourceData) loadSource();
-      }),
-    );
-  if (selected.kind === "symbol")
-    actions.append(
-      button("btn", "Relationships", () => {
-        tab = "dependencies";
-        renderPanel();
-      }),
-    );
-  box.append(actions);
+  if (!["symbol", "edge"].includes(selected.kind)) box.append(actions);
   if (
     scope.kind === "file" &&
     sourceData &&
@@ -1465,6 +1482,7 @@ function listRow(node, detail, action) {
 }
 /** Renders the scoped change inventory, source view or dependency list for the active review tab. */
 function renderTab() {
+  $("#panel").dataset.tab = tab;
   const body = $("#tabBody");
   body.replaceChildren();
   const composerHost = $("#composerHost");
@@ -2060,6 +2078,7 @@ function setSheetHeight(height) {
   sheetMotion = null;
   delete panel.dataset.dragging;
   delete panel.dataset.settling;
+  delete panel.dataset.inspection;
   panel.style.removeProperty("height");
   panel.dataset.height = height;
   const end = panel.getBoundingClientRect().height;
@@ -2116,7 +2135,12 @@ sheetHandle.onpointermove = (e) => {
   sheetPointer.moved = true;
   const panel = $("#panel");
   panel.dataset.dragging = "true";
-  panel.style.height = `${Math.max(Math.min(...sheetPointer.stops), Math.min(Math.max(...sheetPointer.stops), sheetPointer.start + delta))}px`;
+  const height = Math.max(
+    Math.min(...sheetPointer.stops),
+    Math.min(Math.max(...sheetPointer.stops), sheetPointer.start + delta),
+  );
+  panel.style.height = `${height}px`;
+  panel.dataset.inspection = String(height >= sheetPointer.stops[1] - 24);
 };
 function finishSheetDrag(e, cancelled = false) {
   if (!sheetPointer || e.pointerId !== sheetPointer.id) return;

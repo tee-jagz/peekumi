@@ -84,9 +84,11 @@ try {
     [root, root],
     "Root commit has no parent and compares with itself",
   );
+  await page.locator("#revisionDetails > summary").click();
   await page.locator(`#timeRail .chip[data-sha="${head}"]`).click();
   await page.locator("#notice").waitFor({ state: "hidden" });
   await page.locator('[data-mode="diff"]').click();
+  await page.locator("#revisionDetails > summary").click();
   await page.locator("#notice").waitFor({ state: "hidden" });
   assert.equal(await page.locator("#base").inputValue(), "__previous__");
   assert.match(
