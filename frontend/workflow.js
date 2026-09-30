@@ -381,7 +381,13 @@ export function createWorkflow({
         .reverse()) {
         const card = action(taskTitle(r), () => openTask(r.id));
         card.classList.add("task-link");
-        card.append(el("span", "rd", runStatus(r)));
+        card.append(
+          el(
+            "span",
+            "rd",
+            `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`,
+          ),
+        );
         body.append(card);
       }
     }
@@ -423,7 +429,10 @@ export function createWorkflow({
         );
         const report = c.report;
         if (report) {
-          card.append(el("p", "workflow-text", report.note || report.reason));
+          card.append(
+            el("strong", "report-label", "Agent result"),
+            el("p", "workflow-text", report.note || report.reason),
+          );
           if (report.checks) {
             const d = el("details", "workflow-evidence");
             d.append(
@@ -583,11 +592,11 @@ export function createWorkflow({
     }
   }
   function taskTitle(r) {
-    return (
-      r.brief?.trim().split("\n")[0] ||
-      r.comments?.[0]?.text?.split("\n")[0] ||
-      "Repository task"
-    );
+    const paths = [
+      ...new Set((r.comments || []).map((c) => c.anchor.path || "Repository")),
+    ];
+    const scope = paths.length === 1 ? paths[0] : `${paths.length} locations`;
+    return `${r.comments?.length || 0} comment${r.comments?.length === 1 ? "" : "s"} · ${scope}`;
   }
   function runStatus(r) {
     if (r.status === "completed") {
