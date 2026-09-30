@@ -4,6 +4,16 @@ Explore a repository and its changes from your phone, from the overall structure
 
 Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. Inspection leaves the working tree, branches and hooks untouched. Explicit agent dispatch creates a separate run branch and worktree.
 
+## Screenshots
+
+Strata inspecting its own repository on a phone. Select a screenshot to view it at full size.
+
+| Repository map | Time travel | Task review |
+| --- | --- | --- |
+| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes and the Ask and Comment composer">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Selectable commit cards above the repository map">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-task-review.png" width="260" alt="Task review with actions to inspect the agent branch or diff">](docs/screenshots/mobile-task-review.png) |
+
+Explore the canvas, move through commits, and review agent changes while keeping Ask and Comment within reach.
+
 ## Directory responsibilities
 
 - [frontend/](frontend/README.md): browser map, navigation and review panel.
