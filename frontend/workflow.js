@@ -599,6 +599,7 @@ export function createWorkflow({
     return `${r.comments?.length || 0} comment${r.comments?.length === 1 ? "" : "s"} · ${scope}`;
   }
   function runStatus(r) {
+    if (r.applied) return `Applied to ${r.targetBranch || "main"}`;
     if (r.status === "completed") {
       const comments = data.comments.filter((c) =>
         r.comments.some((x) => x.id === c.id),
@@ -684,7 +685,9 @@ export function createWorkflow({
         el(
           "p",
           "read-note",
-          "Changes are committed on the task branch. Reviewing them does not apply or deploy them to main.",
+          r.applied
+            ? `Changes are committed on ${r.targetBranch || "main"}. Deployment is separate from applying changes.`
+            : "Changes are committed on the task branch. Reviewing them does not apply or deploy them to main.",
         ),
       );
     return live;

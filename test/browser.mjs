@@ -303,6 +303,16 @@ try {
           unchanged: "Unchanged",
         }[selectedSymbol.status],
       );
+      assert.equal(
+        await page.locator("#reviewScope .status-icon svg").count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .locator("#reviewScope .status-icon")
+          .evaluate((el) => getComputedStyle(el).borderTopWidth),
+        "0px",
+      );
       assert.equal(await page.locator("#helperTools").isVisible(), false);
       assert.equal(await page.locator("#reviewScope .x").isVisible(), false);
       await page.waitForFunction(

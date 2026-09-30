@@ -154,6 +154,15 @@ test("anchored drafts, immutable previews, scoped MCP reports, verification and 
   );
   assert.equal(verified.status, "verified");
   assert.equal(verified.verification.commit, addressed.report.commit);
+  assert.equal((await req("/api/runs/" + preview.id)).applied, false);
+  // Simulate the owner applying the reviewed branch outside Strata.
+  await f.git("merge", "--ff-only", finished.branch);
+  assert.equal((await req("/api/runs/" + preview.id)).applied, true);
+  assert.equal(
+    (await req("/api/workflow")).runs.find((r) => r.id === preview.id).applied,
+    true,
+  );
+
   const flagged = state.comments.find((x) => x.id === b.id);
   assert.equal(
     (

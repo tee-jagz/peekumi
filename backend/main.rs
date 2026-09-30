@@ -173,6 +173,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
     match path {
         "/" => Some(("text/html", include_bytes!("../frontend/index.html"))),
         "/app.js" => Some(("text/javascript", include_bytes!("../frontend/app.js"))),
+        "/icons.js" => Some(("text/javascript", include_bytes!("../frontend/icons.js"))),
         "/model.js" => Some(("text/javascript", include_bytes!("../frontend/model.js"))),
         "/ask.js" => Some(("text/javascript", include_bytes!("../frontend/ask.js"))),
         "/workflow.js" => Some(("text/javascript", include_bytes!("../frontend/workflow.js"))),

@@ -156,12 +156,26 @@ impl Workflow {
             &format!("{revision}^{{commit}}"),
         ])
     }
+    /// Checks whether all result commits are already on the watched branch.
+    /// This is read-only and does not imply that a deployment has occurred.
+    fn annotate_application(&self, run: &mut Value) {
+        let applied = run["results"].as_array().is_some_and(|commits| {
+            !commits.is_empty() && commits.iter().all(|commit| {
+                commit.as_str().is_some_and(|sha| {
+                    !sha.starts_with('-') && self.git(&["merge-base", "--is-ancestor", sha, &self.watched]).is_ok()
+                })
+            })
+        });
+        run["applied"] = json!(applied);
+        run["targetBranch"] = json!(self.watched.trim_start_matches("refs/heads/"));
+    }
     /// Serves the owner's workflow routes. Dispatch only accepts an unchanged persisted preview.
     pub fn route(&self, method: &str, path: &str, body: Value) -> Result<Value> {
         if method == "GET" && path == "/api/workflow" {
             let mut v = self.read()?;
             for r in list(&mut v, "runs") {
                 r.as_object_mut().unwrap().remove("reportHash");
+                self.annotate_application(r);
             }
             v["watched"] = json!(self.watched);
             return Ok(v);
@@ -303,6 +317,7 @@ impl Workflow {
             let id = path.trim_start_matches("/api/runs/");
             let mut r = find(&v, "runs", id)?.clone();
             r.as_object_mut().unwrap().remove("reportHash");
+            self.annotate_application(&mut r);
             let log = self.state.join("runs").join(id).join("output.log");
             r["output"] = json!(String::from_utf8_lossy(
                 &std::fs::read(log).unwrap_or_default()
