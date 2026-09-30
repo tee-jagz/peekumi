@@ -64,6 +64,7 @@
             <div id="commitBar"></div>
           </div>
         </details>
+        <div id="timeRail" aria-label="Commit mini cards" hidden></div>
         <div class="deck" id="deck">
           <div class="loading-message">Opening your workspace…</div>
         </div>
@@ -89,44 +90,50 @@
           </div>
         </div>
       </main>
-      <section class="panel" id="panel" aria-label="Review">
+      <section class="panel" id="panel" aria-label="Review" data-height="peek">
+        <button
+          id="sheetHandle"
+          type="button"
+          aria-label="Expand review sheet"
+          title="Drag up or down; click to change height"
+        >
+          <span></span>
+        </button>
         <div id="notice" class="notice" role="status" hidden></div>
         <div id="reviewScope"></div>
+        <p id="selectionSummary"></p>
         <div id="reviewScroll">
-          <details id="selectionDetails">
-            <summary>Description &amp; metadata</summary>
-            <div id="selStrip"></div>
-          </details>
-          <details id="helperTools">
-            <summary>Explore code</summary>
-            <div class="helper-actions" aria-label="Inspection helpers">
-              <button type="button" class="btn" data-tab="changes">
-                Changes
-              </button>
-              <button type="button" class="btn" data-tab="source">
-                Source
-              </button>
-              <button type="button" class="btn" data-tab="dependencies">
-                Dependencies
-              </button>
-            </div>
-          </details>
+          <nav id="helperTools" aria-label="Inspection views">
+            <button type="button" class="btn" data-tab="details">
+              Details
+            </button>
+            <button type="button" class="btn" data-tab="source">Source</button>
+            <button type="button" class="btn" data-tab="changes">
+              Changes
+            </button>
+            <button type="button" class="btn" data-tab="dependencies">
+              Relations
+            </button>
+            <button type="button" class="btn" id="showDiscussion">
+              Discussion
+            </button>
+          </nav>
+          <section id="selectionDetails"><div id="selStrip"></div></section>
           <div id="runBar"></div>
           <div id="tabBody" role="tabpanel"></div>
         </div>
         <div id="conversationDock" aria-label="Ask or comment">
-          <div id="composerHost"></div>
           <div id="reviewActions">
             <div
               class="tabs"
               role="tablist"
               id="tabs"
-              aria-label="Review conversation"
+              aria-label="Message action"
             >
               <button
                 type="button"
                 role="tab"
-                data-tab="ask"
+                data-compose="ask"
                 aria-selected="true"
               >
                 Ask
@@ -134,22 +141,16 @@
               <button
                 type="button"
                 role="tab"
-                data-tab="comments"
+                id="newComment"
+                data-compose="comments"
                 aria-selected="false"
               >
-                Comments
+                Comment
               </button>
             </div>
-            <button
-              type="button"
-              class="btn primary"
-              id="newComment"
-              aria-label="Comment"
-              title="Comment on the current selection"
-            >
-              + Comment
-            </button>
+            <span id="dockContext"></span>
           </div>
+          <div id="composerHost"></div>
         </div>
       </section>
     </div>

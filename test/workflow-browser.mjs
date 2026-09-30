@@ -17,7 +17,58 @@ try {
     try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
       await page.locator('.sheet[data-front="true"] .node').first().waitFor();
-      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      assert.ok(await page.locator("#timeRail").isHidden());
+      assert.equal(await page.locator(".sheet.peek").count(), 0);
+      if (viewport.width < 900) {
+        assert.equal(
+          await page.locator("#panel").getAttribute("data-height"),
+          "peek",
+        );
+        const map = await page.locator("#stage").boundingBox();
+        assert.ok(
+          map.height > viewport.height * 0.5,
+          "Peek leaves most of the phone for the map",
+        );
+        await page.screenshot({ path: "test-results/sheet-peek.png" });
+        await page
+          .getByLabel("Your question")
+          .fill("Keep my question while resizing");
+        const anchor = await page.locator("#dockContext").textContent();
+        const handle = page.locator("#sheetHandle");
+        const bounds = await handle.boundingBox();
+        await page.mouse.move(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        await page.mouse.down();
+        await page.mouse.move(bounds.x + bounds.width / 2, bounds.y - 70, {
+          steps: 6,
+        });
+        await page.mouse.up();
+        assert.equal(
+          await page.locator("#panel").getAttribute("data-height"),
+          "half",
+        );
+        await page.screenshot({ path: "test-results/sheet-half.png" });
+        await handle.focus();
+        await page.keyboard.press("End");
+        assert.equal(
+          await page.locator("#panel").getAttribute("data-height"),
+          "full",
+        );
+        await page.screenshot({ path: "test-results/sheet-full.png" });
+        assert.equal(
+          await page.getByLabel("Your question").inputValue(),
+          "Keep my question while resizing",
+        );
+        assert.equal(await page.locator("#dockContext").textContent(), anchor);
+        await page.keyboard.press("Home");
+        await page.getByLabel("Your question").fill("");
+      }
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       assert.equal(
         await page.getByRole("tab", { name: "Runs", exact: true }).count(),
         0,
@@ -74,12 +125,18 @@ try {
       await page
         .getByRole("button", { name: "Refresh runs", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       await page.getByRole("button", { name: "Verify", exact: true }).waitFor();
       await page
         .getByRole("button", { name: "Review fix", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Comments", exact: true }).click();
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       await page.getByRole("button", { name: "Verify", exact: true }).click();
       await page
         .getByLabel("What did you check?")
@@ -109,10 +166,14 @@ try {
       await front.locator('.node[data-path="module.py"]').click();
       await front.locator('.node[data-path="module.py"]').click();
       await front.locator('.node[data-kind="symbol"]').first().click();
-      await page.locator("#helperTools").evaluate((el) => (el.open = true));
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
       await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
-      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Check this earlier declaration");
@@ -151,14 +212,14 @@ try {
       );
       assert.equal(
         await page
-          .getByRole("tab", { name: "Comments", exact: true })
+          .getByRole("tab", { name: "Comment", exact: true })
           .getAttribute("aria-selected"),
         "true",
       );
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));
-      for (const selector of ["#newComment", '#tabs [data-tab="ask"]']) {
+      for (const selector of ["#newComment", '#tabs [data-compose="ask"]']) {
         const bounds = await page.locator(selector).boundingBox();
         const panel = await page.locator("#panel").boundingBox();
         assert.ok(
@@ -193,7 +254,10 @@ try {
       await page.screenshot({
         path: `test-results/bottom-ask-${viewport.width}.png`,
       });
-      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Keep this unfinished comment anchored.");
@@ -202,7 +266,10 @@ try {
         path: `test-results/bottom-comment-${viewport.width}.png`,
       });
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
       assert.equal(
         await page.getByLabel("What should change, and why").inputValue(),
         "Keep this unfinished comment anchored.",

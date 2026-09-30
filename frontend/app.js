@@ -51,7 +51,7 @@ let metadata,
   mode = "diff",
   lens = "changes",
   before = false,
-  tab = "ask";
+  tab = "details";
 let baseRef,
   headRef,
   diffBase,
@@ -79,7 +79,7 @@ const commit = (sha) =>
 function reviewContext() {
   const n = selected;
   const useBefore =
-    (tab === "source" && sourceView !== "diff"
+    (scope.kind === "file" && sourceView !== "diff"
       ? sourceView === "before"
       : before) || n?.status === "removed";
   let anchor = {
@@ -117,10 +117,12 @@ const workflow = createWorkflow({
   notice: showNotice,
   showTab(value) {
     tab = value;
+    if (["comments", "runs"].includes(value)) primaryTab = "comments";
+    setSheetHeight("half");
     renderPanel();
   },
   redraw() {
-    if (comparison && ["comments", "runs"].includes(tab)) renderTab();
+    if (comparison) renderTab();
   },
   async inspect(base, head, anchor) {
     document.querySelector("#tabs").inert = true;
@@ -155,12 +157,14 @@ const ask = createAsk({
       ...reviewContext(),
       base: baseRef,
       head: headRef,
-      side: before ? "before" : "after",
+      side: `${before ? "before" : "after"}:${scope.kind === "file" ? sourceView : "map"}`,
     };
   },
   notice: showNotice,
   redraw() {
-    if (tab === "ask") renderTab();
+    tab = "ask";
+    setSheetHeight("half");
+    renderTab();
   },
   async makeDraft(draft) {
     await api("/api/comments", {
@@ -170,6 +174,8 @@ const ask = createAsk({
     });
     await workflow.refresh(false);
     tab = "comments";
+    primaryTab = "comments";
+    setSheetHeight("half");
     renderPanel();
   },
 });
@@ -379,51 +385,6 @@ function renderDeck() {
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
   deck.replaceChildren();
-  const focus = metadata.commits.findIndex((c) => c.sha === headRef);
-  const peeks =
-    mode === "time"
-      ? metadata.commits
-          .slice(focus + 1, focus + 4)
-          .map((c) => ({ ...c, side: "history" }))
-      : [
-          {
-            ...commit(before ? headRef : baseRef),
-            side: before ? "after" : "before",
-          },
-        ];
-  peeks
-    .slice()
-    .reverse()
-    .forEach((c, index) => {
-      const depth = peeks.length - index;
-      const sheet = element("div", "sheet peek");
-      sheet.dataset.sha = c.sha;
-      sheet.style.transform = `translateY(${-12 * depth}px) scale(${1 - depth * 0.045})`;
-      sheet.style.opacity = String(1 - depth * 0.18);
-      sheet.style.zIndex = String(10 - depth);
-      sheet.tabIndex = 0;
-      sheet.setAttribute("role", "button");
-      sheet.setAttribute("aria-label", "Show " + c.short);
-      const h = element("div", "sheet-head");
-      h.append(element("b", "", c.short), element("span", "", c.subject));
-      sheet.append(h);
-      sheet.onclick = () => {
-        if (busy) return;
-        if (mode === "time") chooseHead(c.sha);
-        else {
-          before = !before;
-          selected = null;
-          render();
-        }
-      };
-      sheet.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          sheet.click();
-        }
-      };
-      deck.append(sheet);
-    });
   const sheet = element("div", "sheet");
   sheet.style.zIndex = "10";
   sheet.dataset.front = "true";
@@ -930,6 +891,7 @@ function selectNode(node) {
 function openNode(node) {
   if (node.kind === "symbol") {
     tab = "source";
+    setSheetHeight("half");
     sourceView = node.status === "removed" ? "before" : "after";
     renderPanel();
     if (!sourceData) loadSource();
@@ -937,6 +899,7 @@ function openNode(node) {
   }
   if (node.kind === "edge") {
     tab = "dependencies";
+    setSheetHeight("half");
     renderPanel();
     return;
   }
@@ -965,12 +928,13 @@ async function navigate(next, originKey) {
     ).finished;
   }
   scope = next;
+  sourceView = "diff";
   selected = null;
   sourceData = null;
   ++sourceId;
   search = "";
-  tab = primaryTab;
-  if (tab === "ask") ask.open();
+  tab = "details";
+  ask.followSelection();
   render();
   const body = $(".sheet:not(.peek) .sheet-body");
   if (body) body.scrollTop = 0;
@@ -994,9 +958,9 @@ function goUp() {
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
-  if (tab === "ask") ask.followSelection();
+  ask.followSelection();
   if (tab === "runs") primaryTab = "comments";
-  if (["ask", "comments"].includes(tab)) primaryTab = tab;
+
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(
     element(
@@ -1021,25 +985,19 @@ function renderPanel() {
     clear.setAttribute("aria-label", "Clear selection");
     scopeBar.append(clear);
   }
-  const helper = ["source", "changes", "dependencies"].includes(tab);
-  $("#helperTools").open = helper;
+
   $("#panel").dataset.selection = String(!!selected);
   renderCommits();
   renderSelection();
   document
     .querySelectorAll("[data-tab]")
     .forEach((b) =>
-      b.setAttribute(
-        "aria-selected",
-        String(
-          b.dataset.tab ===
-            (tab === "runs"
-              ? "comments"
-              : ["ask", "comments"].includes(tab)
-                ? tab
-                : primaryTab),
-        ),
-      ),
+      b.setAttribute("aria-pressed", String(b.dataset.tab === tab)),
+    );
+  document
+    .querySelectorAll("[data-compose]")
+    .forEach((b) =>
+      b.setAttribute("aria-selected", String(b.dataset.compose === primaryTab)),
     );
   renderTab();
 }
@@ -1061,8 +1019,28 @@ function renderCommits() {
     b.append(element("b", "", c.short), element("span", "subject", c.subject));
     strip.append(b);
   }
-  bar.append(strip);
+  const rail = $("#timeRail");
+  rail.replaceChildren();
+  rail.hidden = mode !== "time";
+  $("#stage").dataset.mode = mode;
+  if (mode === "time") rail.append(strip);
   if (mode === "diff") {
+    const headRow = element("label", "cmp", "Head revision");
+    const headPicker = element("select");
+    headPicker.id = "headRevision";
+    headPicker.setAttribute("aria-label", "Head revision");
+    const candidates = metadata.commits.some((c) => c.sha === headRef)
+      ? metadata.commits
+      : [commit(headRef), ...metadata.commits];
+    for (const c of candidates) {
+      const option = element("option", "", `${c.short} ${c.subject}`);
+      option.value = c.sha;
+      headPicker.append(option);
+    }
+    headPicker.value = headRef;
+    headPicker.onchange = () => chooseHead(headPicker.value);
+    headRow.append(headPicker);
+    bar.append(headRow);
     const row = element("label", "cmp", "Compare with");
     const picker = element("select");
     picker.id = "base";
@@ -1180,7 +1158,8 @@ function adapterCard() {
 }
 /** Rebuilds selected-item actions and metadata, or directory context when nothing is selected. */
 function renderSelection() {
-  const side = before || selected?.status === "removed" ? "before" : "after";
+  const side =
+    reviewContext().sha === baseRef && baseRef !== headRef ? "before" : "after";
   const module = sourceData?.details?.[side];
   const detail =
     selected?.kind === "symbol"
@@ -1188,9 +1167,12 @@ function renderSelection() {
       : scope.kind === "file"
         ? module
         : directoryInfo(selected?.path || scope.path);
-  $("#selectionDetails > summary").textContent = detail?.description
-    ? "Description · " + detail.description.slice(0, 130)
-    : "Description & metadata";
+  $("#selectionSummary").textContent =
+    detail?.description?.split("\n")[0] ||
+    (selected?.kind === "symbol"
+      ? selected.signature ||
+        "Select Details or Source to inspect this declaration."
+      : "Explore the graph; select an item to inspect its implementation.");
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
@@ -1293,13 +1275,10 @@ function renderSelection() {
   if (scope.kind === "file") box.append(adapterCard());
   strip.append(box);
 }
-/** Displays revision-specific module or symbol documentation and explicit declaration metadata. Long documentation and argument details remain expandable. */
+/** Displays revision-specific module or symbol documentation and explicit declaration metadata. Description, signature and arguments are readable directly in the expanded sheet. */
 function metadataCard() {
-  const box = element("details", "code-metadata");
-  const useBefore =
-    tab === "source" && sourceView !== "diff"
-      ? sourceView === "before"
-      : before || selected?.status === "removed";
+  const box = element("section", "code-metadata");
+  const useBefore = reviewContext().sha === baseRef && baseRef !== headRef;
   const module = sourceData?.details?.[useBefore ? "before" : "after"];
   const info =
     selected?.kind === "symbol"
@@ -1319,10 +1298,9 @@ function metadataCard() {
       "metadata-muted",
       "Details · No declaration documentation available at this revision.",
     );
-  box.open = false;
   box.append(
     element(
-      "summary",
+      "h3",
       "",
       (selected?.kind === "symbol"
         ? "Details · Declaration"
@@ -1331,31 +1309,13 @@ function metadataCard() {
     ),
   );
   if (info.signature) box.append(element("pre", "signature", info.signature));
-  if (info.description) {
-    const long = info.description.length > 260;
-    box.append(
-      element(
-        "p",
-        "code-description",
-        long
-          ? info.description.slice(0, 260).trimEnd() + "…"
-          : info.description,
-      ),
-    );
-    if (long) {
-      const full = element("details", "doc-expansion");
-      full.append(
-        element("summary", "", "Read full documentation"),
-        element("p", "full-description", info.description),
-      );
-      box.append(full);
-    }
-  }
-  const contract = element("details", "contract-details");
+  if (info.description)
+    box.append(element("p", "code-description", info.description));
+  const contract = element("section", "contract-details");
   const count = info.parameters?.length || 0;
   contract.append(
     element(
-      "summary",
+      "h4",
       "",
       [
         info.parameters ? `${count} argument${count === 1 ? "" : "s"}` : "",
@@ -1456,24 +1416,22 @@ function renderTab() {
   body.replaceChildren();
   const composerHost = $("#composerHost");
   composerHost.replaceChildren();
-  if (["source", "changes", "dependencies"].includes(tab)) {
-    body.append(
-      button(
-        "btn return-conversation",
-        `← Back to ${primaryTab === "ask" ? "Ask" : "Comments"}`,
-        () => {
-          tab = primaryTab;
-          renderPanel();
-        },
-      ),
-    );
-  }
+  const conversation = element("div", "conversation");
+  if (primaryTab === "ask") ask.render(conversation, composerHost);
+  else workflow.renderComposer(composerHost);
+  const anchor = composerHost.querySelector(".composer-anchor");
+  $("#dockContext").textContent = anchor?.textContent || "";
+  $("#dockContext").title = anchor?.textContent || "";
+  $("#selectionDetails").hidden = tab !== "details";
+  if (tab === "details") return;
   if (tab === "ask") {
-    ask.render(body, composerHost);
+    if (primaryTab !== "ask")
+      ask.render(conversation, document.createElement("div"));
+    body.append(conversation);
     return;
   }
   if (["comments", "runs"].includes(tab)) {
-    workflow.render(body, tab, composerHost);
+    workflow.render(body, tab);
     return;
   }
   if (tab === "source") {
@@ -1878,8 +1836,7 @@ function renderSource(body) {
   for (const view of ["diff", "after", "before"]) {
     const b = button("", view[0].toUpperCase() + view.slice(1), () => {
       sourceView = view;
-      renderSelection();
-      renderTab();
+      renderPanel();
     });
     b.dataset.sourceView = view;
     b.setAttribute("aria-pressed", String(sourceView === view));
@@ -1995,6 +1952,7 @@ document.querySelectorAll("[data-ba]").forEach(
   (b) =>
     (b.onclick = () => {
       before = b.dataset.ba === "before";
+      sourceView = "diff";
       selected = null;
       render();
     }),
@@ -2002,18 +1960,80 @@ document.querySelectorAll("[data-ba]").forEach(
 document.querySelectorAll("[data-tab]").forEach(
   (b) =>
     (b.onclick = () => {
-      if (b.dataset.tab === "ask" && tab !== "ask") ask.open();
       tab = b.dataset.tab;
+      setSheetHeight("half");
       if (comparison) renderPanel();
-      if (tab === "ask")
-        $("#composerHost textarea")?.focus({ preventScroll: true });
       if (tab === "source" && scope.kind === "file" && !sourceData)
         loadSource();
     }),
 );
-$("#newComment").onclick = () => {
-  workflow.compose();
-  $("#reviewScroll").scrollTop = 0;
+document.querySelectorAll("[data-compose]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      primaryTab = b.dataset.compose;
+      if (primaryTab === "ask") ask.open();
+      if (comparison) renderPanel();
+      $("#composerHost textarea")?.focus({ preventScroll: true });
+    }),
+);
+$("#showDiscussion").onclick = () => {
+  tab = primaryTab;
+  setSheetHeight("half");
+  renderPanel();
+};
+/** Changes review height without discarding selection, canvas transform, or message drafts. */
+function setSheetHeight(height) {
+  $("#panel").dataset.height = height;
+  $("#sheetHandle").setAttribute(
+    "aria-label",
+    height === "full" ? "Collapse review sheet" : "Expand review sheet",
+  );
+}
+let sheetPointer;
+const sheetHandle = $("#sheetHandle");
+sheetHandle.onpointerdown = (e) => {
+  sheetPointer = { y: e.clientY, height: $("#panel").dataset.height };
+  sheetHandle.setPointerCapture(e.pointerId);
+};
+sheetHandle.onpointerup = (e) => {
+  if (!sheetPointer) return;
+  const delta = e.clientY - sheetPointer.y;
+  const levels = ["peek", "half", "full"],
+    index = levels.indexOf(sheetPointer.height);
+  if (Math.abs(delta) > 25) {
+    setSheetHeight(
+      levels[Math.max(0, Math.min(2, index + (delta < 0 ? 1 : -1)))],
+    );
+    sheetHandle.dataset.dragged = "true";
+  }
+  sheetPointer = null;
+};
+sheetHandle.onpointercancel = () => {
+  sheetPointer = null;
+};
+sheetHandle.onclick = () => {
+  if (sheetHandle.dataset.dragged) {
+    delete sheetHandle.dataset.dragged;
+    return;
+  }
+  const levels = ["peek", "half", "full"];
+  setSheetHeight(levels[(levels.indexOf($("#panel").dataset.height) + 1) % 3]);
+};
+sheetHandle.onkeydown = (e) => {
+  if (["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) {
+    e.preventDefault();
+    const levels = ["peek", "half", "full"],
+      i = levels.indexOf($("#panel").dataset.height);
+    setSheetHeight(
+      e.key === "Home"
+        ? "peek"
+        : e.key === "End"
+          ? "full"
+          : levels[
+              Math.max(0, Math.min(2, i + (e.key === "ArrowUp" ? 1 : -1)))
+            ],
+    );
+  }
 };
 $("#refresh").onclick = () => boot(true);
 document.addEventListener("keydown", (event) => {

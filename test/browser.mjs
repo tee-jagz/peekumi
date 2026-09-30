@@ -64,7 +64,8 @@ try {
     await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
     assert.equal(await page.evaluate(() => location.hash), "");
-    await page.locator("#helperTools > summary").click();
+    if (!(await page.locator("#helperTools").isVisible()))
+      await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="changes"]').click();
     assert.equal(
       await page.locator("#change-summary").getAttribute("data-count"),
@@ -85,7 +86,7 @@ try {
     const stage = await page.locator("#stage").boundingBox(),
       panel = await page.locator("#panel").boundingBox();
     if (viewport.width === 390) {
-      assert.ok(stage.height > viewport.height * 0.48);
+      assert.ok(stage.height > viewport.height * 0.25);
       assert.ok(panel.y >= stage.y + stage.height - 1);
     } else assert.ok(panel.x > stage.x + stage.width - 1);
     assert.equal(
@@ -212,7 +213,8 @@ try {
         fullPage: true,
       });
     }
-    await page.locator("#helperTools").evaluate((el) => (el.open = true));
+    if (!(await page.locator("#helperTools").isVisible()))
+      await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="changes"]').click();
     await page.locator("#search").fill(target.path);
     await page.locator("#changes .row").first().click();
@@ -242,10 +244,10 @@ try {
       .first();
     await symbol.focus();
     await symbol.click();
-    await page.locator("#helperTools").evaluate((el) => (el.open = true));
+    if (!(await page.locator("#helperTools").isVisible()))
+      await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="source"]').click();
-    await page.locator("#selectionDetails > summary").click();
-    await page.locator(".code-metadata > summary").click();
+    await page.locator('[data-tab="details"]').click();
     await page.locator(".code-metadata .signature").waitFor();
     assert.match(
       await page.locator(".adapter-details summary").textContent(),
@@ -256,11 +258,12 @@ try {
         "Returns:",
       ),
     );
-    await page.locator("#source-code").waitFor();
     await page.locator("#selStrip").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: "test-results/" + viewport.width + "-metadata.png",
     });
+    await page.locator('[data-tab="source"]').click();
+    await page.locator("#source-code").waitFor();
     if (selectedSymbol.status === "changed")
       assert.ok(
         (await page
@@ -285,7 +288,7 @@ try {
     );
     if (target.status !== "added")
       assert.match(
-        await page.locator(".code-metadata > summary").textContent(),
+        await page.locator(".code-metadata > h3").textContent(),
         /Before/,
       );
     await page.locator('[data-tab="dependencies"]').click();
@@ -309,8 +312,9 @@ try {
     await page.locator('[data-mode="time"]').click();
     await page.locator("#notice").waitFor({ state: "hidden" });
     assert.ok(await page.locator("#baSeg").isHidden());
-    assert.ok((await page.locator(".sheet.peek").count()) > 0);
-    const peek = page.locator(".sheet.peek").first(),
+    assert.equal(await page.locator(".sheet.peek").count(), 0);
+    assert.ok(await page.locator("#timeRail").isVisible());
+    const peek = page.locator('#timeRail .chip[aria-selected="false"]').first(),
       peekSha = await peek.getAttribute("data-sha");
     await peek.focus();
     await page.keyboard.press("Enter");
@@ -379,7 +383,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      `PASS ${viewport.width}×${viewport.height}: reference layout, select/open, zoom drill-down, source, dependency selection, Time/peeks, Diff, filters, dark theme, viewport`,
+      `PASS ${viewport.width}×${viewport.height}: reference layout, select/open, zoom drill-down, source, dependency selection, Time/mini cards, Diff, filters, dark theme, viewport`,
     );
   }
 } finally {

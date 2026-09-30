@@ -79,7 +79,8 @@ try {
     await consumer.click();
     await front.locator('.node[data-key="symbol:run"]').waitFor();
     await front.locator('.node[data-key="symbol:run"]').click();
-    await page.locator("#helperTools > summary").click();
+    if (!(await page.locator("#helperTools").isVisible()))
+      await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="dependencies"]').click();
     await page.getByLabel("Relationship kind").selectOption("calls");
     assert.ok(await front.locator("path.e.calls.violation").count());

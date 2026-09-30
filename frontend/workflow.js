@@ -153,7 +153,60 @@ export function createWorkflow({
     );
     await refresh();
   }
-  function comments(body, composerHost) {
+  /** Renders the persistent draft input independently of the current inspection view. */
+  function renderComposer(composerHost) {
+    if (!composer || (!draft && !editing)) composer = context();
+    if (composer) {
+      const box = el("section", "composer");
+      box.append(
+        el(
+          "p",
+          "composer-anchor",
+          (editing ? "Edit · " : "Comment · ") +
+            label(composer.anchor) +
+            " · " +
+            composer.sha.slice(0, 8),
+        ),
+        field("What should change, and why", draft, (v) => (draft = v), 1),
+      );
+      const buttons = el("div", "sel-acts");
+      buttons.append(
+        action(
+          "Save draft",
+          async () => {
+            if (editing)
+              await write(
+                "/api/comments/" + editing.id,
+                { action: "edit", version: editing.version, text: draft },
+                "PATCH",
+              );
+            else await write("/api/comments", { ...composer, text: draft });
+            composer = null;
+            draft = "";
+            editing = null;
+            showTab("comments");
+            await refresh();
+          },
+          true,
+        ),
+        action("Cancel", () => {
+          composer = null;
+          draft = "";
+          editing = null;
+          redraw();
+        }),
+      );
+      const input = box.querySelector("textarea");
+      input.placeholder = "What should change, and why…";
+      input.setAttribute("aria-label", "What should change, and why");
+      input.parentElement.firstChild.textContent = "";
+      input.parentElement.classList.add("dock-input");
+      box.append(buttons);
+      buttons.classList.add("draft-buttons");
+      composerHost.append(box);
+    }
+  }
+  function comments(body) {
     const tools = el("div", "sel-acts");
     tools.append(
       action("Comment on selection", compose, true),
@@ -174,51 +227,6 @@ export function createWorkflow({
         "Current review status · anchors retain the revision where you left them. Drafts stay private until you dispatch a run.",
       ),
     );
-    if (composer) {
-      const box = el("section", "composer");
-      box.append(
-        el(
-          "p",
-          "composer-anchor",
-          (editing ? "Edit · " : "Comment · ") +
-            label(composer.anchor) +
-            " · " +
-            composer.sha.slice(0, 8),
-        ),
-        field("What should change, and why", draft, (v) => (draft = v), 2),
-      );
-      const buttons = el("div", "sel-acts");
-      buttons.append(
-        action(
-          "Save draft",
-          async () => {
-            if (editing)
-              await write(
-                "/api/comments/" + editing.id,
-                { action: "edit", version: editing.version, text: draft },
-                "PATCH",
-              );
-            else await write("/api/comments", { ...composer, text: draft });
-            composer = null;
-            draft = "";
-            editing = null;
-            await refresh();
-          },
-          true,
-        ),
-        action("Cancel", () => {
-          composer = null;
-          redraw();
-        }),
-      );
-      const input = box.querySelector("textarea");
-      input.placeholder = "What should change, and why…";
-      input.setAttribute("aria-label", "What should change, and why");
-      input.parentElement.firstChild.textContent = "";
-      input.parentElement.classList.add("dock-input");
-      box.append(buttons);
-      composerHost.append(box);
-    }
     const items = data.comments.filter(visible);
     if (!items.length)
       body.append(
@@ -540,9 +548,10 @@ export function createWorkflow({
   return {
     refresh,
     compose,
-    render(body, tab, composerHost) {
+    renderComposer,
+    render(body, tab) {
       bar();
-      tab === "comments" ? comments(body, composerHost) : runs(body);
+      tab === "comments" ? comments(body) : runs(body);
     },
   };
 }

@@ -40,9 +40,11 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
   }
   return {
     open() {
+      if (selectedContext && (current().question || current().pending)) return;
       selectedContext = context();
     },
     followSelection() {
+      if (selectedContext && (current().question || current().pending)) return;
       const live = context();
       const identity = (c) =>
         JSON.stringify([c.anchor, c.base, c.head, c.side]);
@@ -63,12 +65,6 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       );
       note.className = "read-note";
       body.append(title, note);
-      const help = el(
-        "p",
-        "Ask uses committed code, the comparison, rules and review comments. It cannot edit code or start a run. This conversation stays in this page until you reload.",
-      );
-      help.className = "read-note";
-      body.append(help);
       for (const message of chat.messages) {
         const card = el("article");
         card.className = "workflow-card";
@@ -101,7 +97,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         input = el("textarea");
       label.className = "workflow-field";
       form.className = "dock-form";
-      input.rows = 2;
+      input.rows = 1;
       input.placeholder = "Ask about this code…";
       input.setAttribute("aria-label", "Your question");
       label.classList.add("dock-input");

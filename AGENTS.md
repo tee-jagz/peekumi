@@ -1,6 +1,6 @@
 # Repo Strata
 
-Build a mobile-first repository map with coloured Git comparisons and drill-down to source. The product intent in docs/MVP.md defines scope. The HTML mockup in docs/context/repo-strata-context.zip is the authoritative visual and interaction reference: preserve its glass commit deck, curved dependency lines, zoom drill-down, and stage/review-panel layout. Do not substitute a dashboard or file-card explorer.
+Build a mobile-first repository map with coloured Git comparisons and drill-down to source. The product intent in docs/MVP.md defines scope. The HTML mockup in docs/context/repo-strata-context.zip is the authoritative visual and interaction reference: preserve its glass surfaces, curved dependency lines and zoom drill-down. The approved mobile update uses a single SVG graph canvas, a peek/half/full review sheet, and an independent Ask/Comment composer. Commit mini cards appear only in Time mode; do not add a folder strip or stacked canvases. Do not substitute a dashboard or file-card explorer.
 
 - Keep repository inspection read-only. Explicit owner dispatch may create a dedicated agent worktree and run the selected agent there; never switch or edit the inspected checkout, push, merge, or alter hooks.
 - Account for every tracked file. Unsupported, binary, oversized, and restricted files must remain visible and explicitly labelled.
