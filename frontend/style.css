@@ -2894,3 +2894,12 @@ select option {
     height: calc(var(--viewer-height, 100dvh) - 68px);
   }
 }
+#timeRail .chip[aria-selected="true"] {
+  color: var(--ink);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 25%, var(--surface)),
+    color-mix(in srgb, var(--accent) 12%, var(--surface))
+  );
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+}
