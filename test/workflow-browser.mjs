@@ -143,34 +143,6 @@ try {
         await page.getByLabel("Your question").fill("");
       }
       await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
-      assert.equal(
-        await page.getByRole("tab", { name: "Runs", exact: true }).count(),
-        0,
-      );
-      await page
-        .getByRole("button", { name: "View runs", exact: true })
-        .click();
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      assert.ok(
-        await page.getByLabel("Your question").isVisible(),
-        "Ask stays available while viewing runs",
-      );
-      assert.ok(
-        await page
-          .getByRole("button", { name: "Back to comments", exact: true })
-          .isVisible(),
-        "Changing composer does not replace run results",
-      );
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      await page
-        .getByRole("button", { name: "Back to comments", exact: true })
-        .click();
-      await page
-        .getByRole("button", { name: "Comment on selection", exact: true })
-        .click();
       await page
         .getByLabel("What should change, and why")
         .fill("Make the implementation easier to review.");
@@ -182,74 +154,100 @@ try {
         await page.locator(".workflow-card[data-comment-id]").count(),
         1,
       );
+      assert.equal(await page.locator("#helperTools").isVisible(), false);
       await page.screenshot({
         path: `test-results/workflow-comments-${viewport.width}.png`,
       });
-      await page.locator(".runbar").click();
       await page
-        .getByLabel("Brief · decisions and constraints")
+        .getByRole("button", { name: "Review task · 1 draft", exact: true })
+        .click();
+      await page
+        .getByLabel("Extra instructions (optional)")
         .fill("Keep the current behavior. Explain your checks.");
       await page
         .getByRole("button", { name: "Preview task", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "Dispatch run", exact: true })
+        .getByRole("button", { name: "Start task", exact: true })
         .waitFor();
-      assert.ok(
-        await page
-          .locator(".taskpre")
-          .innerText()
-          .then((s) => s.includes("Make the implementation easier to review.")),
+      assert.match(
+        await page.locator(".task-preview").innerText(),
+        /Make the implementation easier to review/,
+      );
+      assert.equal(
+        await page.locator(".taskpre").isVisible(),
+        false,
+        "Generated prompt is hidden by default",
       );
       await page.screenshot({
         path: `test-results/workflow-preview-${viewport.width}.png`,
       });
       await page
-        .getByRole("button", { name: "Dispatch run", exact: true })
+        .getByRole("button", { name: "Start task", exact: true })
         .click();
-      await waitFor(async () => {
-        const s = await f.req("/api/workflow");
-        return s.runs.some((r) => r.status === "completed");
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      assert.ok(await page.getByLabel("Your question").isVisible());
+      assert.ok(
+        await page
+          .getByRole("button", { name: "Back to tasks", exact: true })
+          .isVisible(),
+      );
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      // Keeping diagnostics open must not freeze the terminal state or review actions.
+      await page.locator(".diagnostics > summary").click();
+      await page
+        .getByRole("button", { name: "Mark task reviewed", exact: true })
+        .waitFor({ timeout: 20000 });
+      assert.equal(
+        await page.locator(".diagnostics").evaluate((d) => d.open),
+        true,
+      );
+      assert.equal(
+        await page.locator(".diagnostics .taskpre").first().isVisible(),
+        false,
+      );
+      await page.locator(".diagnostics > summary").click();
+      await page
+        .getByRole("button", { name: "Review all changes", exact: true })
+        .click();
+      await page.getByLabel("Changed file").waitFor();
+      await page.locator(".readable-diff .addition").first().waitFor();
+      assert.ok(
+        (await page.locator(".readable-diff .line-number").count()) > 0,
+      );
+      assert.ok(
+        !(await page.locator(".readable-diff").innerText()).includes(
+          "diff --git",
+        ),
+      );
+      await page.screenshot({
+        path: `test-results/workflow-diff-${viewport.width}.png`,
       });
       await page
-        .getByRole("button", { name: "Refresh runs", exact: true })
+        .getByRole("button", { name: "Back to result", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
-      await page.getByRole("button", { name: "Verify", exact: true }).waitFor();
       await page
-        .getByRole("button", { name: "Review fix", exact: true })
+        .getByRole("button", { name: "Mark task reviewed", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
-      await page.getByRole("button", { name: "Verify", exact: true }).click();
       await page
-        .getByLabel("What did you check?")
+        .getByLabel("Review note")
         .fill("Inspected the result commit and the agent's reported checks.");
       await page
-        .getByRole("button", { name: "Confirm verification", exact: true })
+        .getByRole("button", { name: "Confirm review", exact: true })
         .click();
-      try {
-        await page
-          .getByText("Verified by you:", { exact: false })
-          .waitFor({ timeout: 5000 });
-      } catch (e) {
-        console.log(
-          "Verification failure",
-          await page.locator("#notice").innerText(),
-          JSON.stringify(await f.req("/api/workflow")),
-        );
-        await page.screenshot({ path: "test-results/workflow-failure.png" });
-        throw e;
-      }
+      await page.getByText("Reviewed by you:", { exact: false }).waitFor();
+      await page
+        .getByText("Reviewed · not applied to main", { exact: true })
+        .waitFor();
       await page.screenshot({
         path: `test-results/workflow-verified-${viewport.width}.png`,
       });
+      if (viewport.width < 900) {
+        await page.locator("#sheetHandle").focus();
+        await page.keyboard.press("Home");
+      }
       const front = page.locator('.sheet[data-front="true"]');
+      await front.locator(".node").first().focus();
       await front.locator(".node").first().click();
       await front.locator(".node").first().click();
       await front.locator('.node[data-path="module.py"]').click();
@@ -260,9 +258,7 @@ try {
       await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
       await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
+      await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Check this earlier declaration");
@@ -344,9 +340,7 @@ try {
         path: `test-results/bottom-ask-${viewport.width}.png`,
       });
       await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
+      await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Keep this unfinished comment anchored.");
@@ -356,9 +350,7 @@ try {
       });
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
       await page.getByRole("tab", { name: "Comment", exact: true }).click();
-      if (!(await page.locator("#helperTools").isVisible()))
-        await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
+      await page.locator("#openTasks").click();
       assert.equal(
         await page.getByLabel("What should change, and why").inputValue(),
         "Keep this unfinished comment anchored.",

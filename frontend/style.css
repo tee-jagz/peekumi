@@ -3152,3 +3152,138 @@ select option {
   max-width: 100%;
   font-size: 11px;
 }
+
+/* One task surface: request, updates, result and review stay together. */
+.panel[data-tab="comments"] #helperTools,
+.panel[data-tab="runs"] #helperTools,
+.panel[data-tab="comments"] #reviewScope,
+.panel[data-tab="runs"] #reviewScope,
+.panel[data-tab="comments"] #selectionSummary,
+.panel[data-tab="runs"] #selectionSummary,
+.panel[data-tab="comments"] #selectionContract,
+.panel[data-tab="runs"] #selectionContract {
+  display: none;
+}
+#openTasks {
+  padding: 6px 9px;
+  min-height: 30px;
+  font-size: 11px;
+  flex: none;
+}
+.task-heading {
+  font-size: 17px;
+  line-height: 1.4;
+  margin: 10px 0 14px;
+  overflow-wrap: anywhere;
+}
+.task-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 10px 0;
+  padding: 14px;
+  line-height: 1.5;
+  white-space: normal;
+}
+.task-link .rd {
+  display: block;
+  margin-top: 7px;
+}
+.task-state {
+  font-weight: 600;
+  color: var(--accent);
+  margin: 8px 0;
+}
+.task-live,
+.task-preview {
+  margin: 12px 0;
+}
+.agent-message {
+  border-left: 2px solid var(--accent);
+  padding-left: 12px;
+}
+.workflow-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.workflow-card .cm-top {
+  flex-wrap: wrap;
+}
+.workflow-card .cm-top button {
+  white-space: normal;
+  text-align: left;
+}
+.diagnostics {
+  margin-top: 22px;
+  color: var(--muted);
+}
+.taskpre {
+  font-size: 11px;
+  max-height: 260px;
+  overflow: auto;
+}
+.diff-key {
+  font: 11px/1.5 var(--sans, sans-serif);
+  color: var(--muted);
+  margin: 10px 0;
+  white-space: normal;
+}
+.readable-diff {
+  font: 12px/1.65 var(--mono);
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 8px 0 16px;
+  tab-size: 2;
+}
+.readable-diff .code-line {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 29px 29px 14px minmax(0, 1fr);
+  padding-right: 6px;
+}
+.readable-diff .line-number {
+  min-width: 0;
+  padding-right: 5px;
+  font-size: 10px;
+}
+.diff-sign {
+  color: var(--muted);
+}
+.diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.readable-diff .hunk {
+  display: block;
+  padding: 8px;
+  white-space: normal;
+  font: 11px/1.5 var(--sans, sans-serif);
+}
+.readable-diff .addition .diff-sign {
+  color: var(--add);
+}
+.readable-diff .deletion .diff-sign {
+  color: var(--del);
+}
+.workflow-field select {
+  max-width: 100%;
+}
+
+@media (max-width: 899px) {
+  .panel[data-height="peek"][data-tab="comments"] #reviewScope,
+  .panel[data-height="peek"][data-tab="runs"] #reviewScope {
+    display: flex;
+  }
+  .panel[data-height="peek"][data-tab="comments"] #selectionSummary,
+  .panel[data-height="peek"][data-tab="runs"] #selectionSummary {
+    display: -webkit-box;
+  }
+  .panel[data-height="peek"][data-tab="comments"]
+    #selectionContract:not([hidden]),
+  .panel[data-height="peek"][data-tab="runs"] #selectionContract:not([hidden]) {
+    display: grid;
+  }
+}

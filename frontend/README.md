@@ -20,3 +20,5 @@ Both Time and Diff follow the selected commit’s first parent by default, indep
 The compact phone sheet shows the selection description and available input/output types, without inspection controls. Half and full heights reveal navigation and complete declaration details; missing types remain explicitly unspecified. Legend lives beside the canvas zoom controls and opens upward over the graph.
 
 Compact selection status uses shape-distinct coloured icons, and the contract uses entering/leaving arrows for inputs/outputs. Icons have accessible names and tooltips; the canvas legend explains them. Modified items use orange in both themes.
+
+Tasks are reachable directly from the persistent composer. Draft selection, a readable task preview, agent updates, results and review share one task view. Raw event streams and generated prompts are diagnostics. Unified diffs show before/after line numbers and hide Git transport headers. Reviewing records owner verification only; the interface explicitly distinguishes this from applying or deploying changes.

@@ -8,10 +8,10 @@ const el = (tag, cls, text) => {
 const states = {
   draft: "Draft",
   with_agent: "With agent",
-  addressed: "To verify",
+  addressed: "Ready for review",
   flagged: "Flagged",
-  verified: "Verified",
-  unreported: "Unreported",
+  verified: "Reviewed",
+  unreported: "Needs retry",
 };
 const active = (r) => ["starting", "running", "interrupted"].includes(r.status);
 const label = (a) =>
@@ -21,6 +21,122 @@ const label = (a) =>
       ? `${a.path} → ${a.target} · ${a.relationship}`
       : a.path || "Repository";
 
+/** Extracts only user-facing agent messages and activity labels from JSONL.
+ * Partial lines and tool payloads stay in diagnostics, never in the conversation. */
+export function agentActivity(output = "") {
+  const messages = [],
+    errors = [];
+  let activity = "Preparing the task…";
+  for (const line of output.split("\n")) {
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      if (/^(error:|Error:)/.test(line)) errors.push(line.slice(0, 500));
+      continue;
+    }
+    if (!event || typeof event !== "object") continue;
+    const item = event.item;
+    if (item?.type === "agent_message" && item.text) messages.push(item.text);
+    if (event.type === "assistant") {
+      for (const part of event.message?.content || []) {
+        if (part.type === "text" && part.text) messages.push(part.text);
+        if (part.type === "tool_use")
+          activity = "Working on the requested changes…";
+      }
+    }
+    if (event.type === "result" && event.result && !event.is_error)
+      messages.push(event.result);
+    if (
+      event.type === "error" ||
+      event.type === "turn.failed" ||
+      event.is_error
+    ) {
+      const reason = event.error?.message || event.message || event.result;
+      if (typeof reason === "string") errors.push(reason);
+    }
+    if (item?.type === "command_execution") {
+      activity = /\b(test|pytest|cargo test|playwright)\b/.test(
+        item.command || "",
+      )
+        ? "Checking the changes…"
+        : "Inspecting the repository…";
+      if (item.status === "failed") activity = "Investigating a failed check…";
+    }
+    if (item?.type === "file_change") activity = "Editing files…";
+  }
+  return {
+    messages: [...new Set(messages)].slice(-5),
+    errors: errors.slice(-2),
+    activity,
+  };
+}
+/** Converts a unified patch into readable rows with old/new line numbers. */
+export function diffRows(patch = "") {
+  const rows = [];
+  let oldLine = 0,
+    newLine = 0,
+    inHunk = false;
+  for (const line of (patch || "").split("\n")) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(line);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      inHunk = true;
+      rows.push({
+        kind: "hunk",
+        text: `Around line ${newLine || oldLine}${hunk[3] ? " · " + hunk[3].trim() : ""}`,
+      });
+    } else if (inHunk && /^[ +\-]/.test(line)) {
+      const kind =
+        line[0] === "+" ? "addition" : line[0] === "-" ? "deletion" : "context";
+      rows.push({
+        kind,
+        text: line.slice(1),
+        old: kind === "addition" ? "" : oldLine++,
+        new: kind === "deletion" ? "" : newLine++,
+      });
+    } else if (line.startsWith("diff --git")) inHunk = false;
+  }
+  return rows;
+}
+/** Appends a mobile unified diff without Git transport headers; source remains plain text. */
+export function renderDiff(host, patch) {
+  const rows = diffRows(patch);
+  if (!rows.length) {
+    host.append(
+      el("p", "read-note", "No readable text changes in this selection."),
+    );
+    return;
+  }
+  const key = el(
+    "p",
+    "diff-key",
+    "+ Added · − Removed · left line: before / right line: after",
+  );
+  host.append(key);
+  const code = el("div", "readable-diff");
+  code.tabIndex = 0;
+  code.setAttribute("aria-label", "Code changes");
+  for (const row of rows) {
+    const line = el("div", "code-line " + row.kind);
+    if (row.kind === "hunk")
+      line.append(el("span", "diff-hunk-label", row.text));
+    else
+      line.append(
+        el("span", "line-number", row.old),
+        el("span", "line-number", row.new),
+        el(
+          "span",
+          "diff-sign",
+          row.kind === "addition" ? "+" : row.kind === "deletion" ? "−" : "",
+        ),
+        el("code", "diff-text", row.text || " "),
+      );
+    code.append(line);
+  }
+  host.append(code);
+}
 /** Creates a panel controller; writes are explicit owner actions and poll updates preserve input. */
 export function createWorkflow({
   api,
@@ -42,7 +158,11 @@ export function createWorkflow({
     brief = "",
     picks = new Set(),
     runId = null,
-    runDetail = null;
+    runDetail = null,
+    taskComparison = null,
+    taskSource = null,
+    taskPath = "",
+    reviewing = false;
   let filter = "scope",
     verification = null,
     verificationNote = "";
@@ -71,6 +191,7 @@ export function createWorkflow({
     const l = el("label", "workflow-field", title),
       t = el("textarea");
     t.rows = rows;
+    t.setAttribute("aria-label", title);
     t.value = value;
     t.maxLength = 20000;
     t.oninput = () => changed(t.value);
@@ -85,7 +206,34 @@ export function createWorkflow({
         loaded = true;
         if (runId) runDetail = await api("/api/runs/" + runId);
         bar();
-        if (render) redraw();
+        if (render) {
+          const focused = document.activeElement;
+          const focusLabel = focused?.matches("textarea,input,select")
+            ? focused.getAttribute("aria-label")
+            : null;
+          const selection =
+            focused?.tagName === "TEXTAREA"
+              ? [focused.selectionStart, focused.selectionEnd]
+              : null;
+          const scroll = document.querySelector("#reviewScroll");
+          const top = scroll?.scrollTop || 0;
+          const opened = [
+            ...document.querySelectorAll("#tabBody details[open]"),
+          ]
+            .map((d) => d.dataset.key)
+            .filter(Boolean);
+          redraw();
+          for (const d of document.querySelectorAll("#tabBody details"))
+            if (opened.includes(d.dataset.key)) d.open = true;
+          if (focusLabel) {
+            const field = [
+              ...document.querySelectorAll("textarea,input,select"),
+            ].find((n) => n.getAttribute("aria-label") === focusLabel);
+            field?.focus({ preventScroll: true });
+            if (field && selection) field.setSelectionRange(...selection);
+          }
+          if (scroll) scroll.scrollTop = top;
+        } else updateLive();
       });
     refreshQueue = pending;
     return pending;
@@ -93,6 +241,12 @@ export function createWorkflow({
   function bar() {
     const host = document.querySelector("#runBar");
     host.replaceChildren();
+    if (
+      ["comments", "runs"].includes(
+        document.querySelector("#panel")?.dataset.tab,
+      )
+    )
+      return;
     const drafts = data.comments.filter((c) => c.status === "draft"),
       running = data.runs.find(active);
     const waiting = data.comments.filter((c) => c.status === "addressed");
@@ -102,12 +256,10 @@ export function createWorkflow({
         ? `${running.agent} running · View progress ›`
         : drafts.length
           ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Prepare run ›`
-          : `${waiting.length} ready to verify ›`,
+          : `${waiting.length} ready for review ›`,
       () => {
         if (running) {
-          runId = running.id;
-          showTab("runs");
-          return refresh();
+          return openTask(running.id);
         }
         if (drafts.length) {
           preparing = true;
@@ -206,42 +358,52 @@ export function createWorkflow({
       composerHost.append(box);
     }
   }
-  function comments(body) {
-    const tools = el("div", "sel-acts");
-    tools.append(
-      action("Comment on selection", compose, true),
-      action("View runs", () => {
-        preparing = false;
-        showTab("runs");
-      }),
-      action(filter === "all" ? "Show this scope" : "Show all comments", () => {
-        filter = filter === "all" ? "scope" : "all";
-        redraw();
-      }),
-    );
-    body.append(tools);
-    body.append(
-      el(
-        "p",
-        "read-note",
-        "Current review status · anchors retain the revision where you left them. Drafts stay private until you dispatch a run.",
-      ),
-    );
-    const items = data.comments.filter(visible);
-    if (!items.length)
+  function comments(body, task = null) {
+    if (!task) {
+      body.append(el("h2", "task-heading", "Tasks"));
+      const drafts = data.comments.filter((c) => c.status === "draft");
+      if (drafts.length)
+        body.append(
+          action(
+            `Review task · ${drafts.length} draft${drafts.length === 1 ? "" : "s"}`,
+            () => {
+              preparing = true;
+              preview = null;
+              picks = new Set(drafts.map((c) => c.id));
+              showTab("runs");
+            },
+            true,
+          ),
+        );
+      for (const r of data.runs
+        .filter((r) => r.status !== "preview")
+        .slice()
+        .reverse()) {
+        const card = action(taskTitle(r), () => openTask(r.id));
+        card.classList.add("task-link");
+        card.append(el("span", "rd", runStatus(r)));
+        body.append(card);
+      }
+    }
+    const items = task
+      ? data.comments.filter(
+          (c) =>
+            task.comments.some((snapshot) => snapshot.id === c.id) &&
+            c.status !== "deleted",
+        )
+      : data.comments.filter((c) => c.status === "draft");
+    if (!items.length && !data.runs.some((r) => r.status !== "preview"))
       body.append(
         el(
           "p",
           "empty",
-          loaded ? "No comments in this scope yet." : "Loading comments…",
+          loaded ? "Add a comment below to start a task." : "Loading tasks…",
         ),
       );
     for (const state of Object.keys(states)) {
       const group = items.filter((c) => c.status === state);
       if (!group.length) continue;
-      body.append(
-        el("h3", "workflow-group", `${states[state]} · ${group.length}`),
-      );
+      if (!task) body.append(el("h3", "workflow-group", "Your draft comments"));
       for (const c of group) {
         const card = el("article", "workflow-card");
         card.dataset.commentId = c.id;
@@ -266,7 +428,7 @@ export function createWorkflow({
             const d = el("details", "workflow-evidence");
             d.append(
               el("summary", "", "Agent-reported checks"),
-              el("pre", "taskpre", report.checks),
+              el("p", "workflow-text", report.checks),
             );
             card.append(d);
           }
@@ -276,7 +438,7 @@ export function createWorkflow({
             el(
               "p",
               "verification-note",
-              "Verified by you: " + c.verification.note,
+              "Reviewed by you: " + c.verification.note,
             ),
           );
         const controls = el("div", "sel-acts"),
@@ -292,7 +454,7 @@ export function createWorkflow({
             }),
             action("Delete draft", () => transition(c, "delete")),
           );
-        if (c.runId)
+        if (c.runId && !task)
           controls.append(
             action("View run", async () => {
               runId = c.runId;
@@ -301,75 +463,27 @@ export function createWorkflow({
               await refresh();
             }),
           );
-        if (report?.commit)
+        if (["addressed", "flagged", "unreported"].includes(c.status) && !busy)
           controls.append(
             action(
-              "Review fix",
-              () => inspect(run.base, report.commit, c.anchor),
-              true,
+              c.status === "unreported" ? "Retry comment" : "Request changes",
+              () => transition(c, "reopen"),
             ),
           );
-        if (c.status === "addressed" && !busy)
-          controls.append(
-            action("Verify", () => {
-              verification = c.id;
-              verificationNote = "";
-              redraw();
-            }),
-          );
-        if (["addressed", "flagged", "unreported"].includes(c.status) && !busy)
-          controls.append(action("Reopen", () => transition(c, "reopen")));
         if (c.status === "flagged" && !busy)
           controls.append(action("Delete", () => transition(c, "delete")));
         card.append(controls);
-        if (verification === c.id) {
-          card.append(
-            field(
-              "What did you check?",
-              verificationNote,
-              (v) => (verificationNote = v),
-            ),
-            action(
-              "Confirm verification",
-              async () => {
-                await transition(c, "verify", { note: verificationNote });
-                verification = null;
-                redraw();
-              },
-              true,
-            ),
-            action("Cancel verification", () => {
-              verification = null;
-              redraw();
-            }),
-          );
-        }
-        const history = el("details", "workflow-evidence");
-        history.append(el("summary", "", "Review history"));
-        for (const h of c.history)
-          history.append(
-            el(
-              "p",
-              "rd",
-              `${new Date(h.updatedAt).toLocaleString()} · ${h.actor} · ${states[h.status] || h.status}${h.report?.commit ? " · " + h.report.commit.slice(0, 8) : ""}`,
-            ),
-            el("p", "workflow-text", h.text),
-            ...(h.report
-              ? [el("p", "workflow-text", h.report.note || h.report.reason)]
-              : []),
-          );
-        card.append(history);
         body.append(card);
       }
     }
   }
   function prepare(body) {
     body.append(
-      el("h3", "workflow-group", "Prepare run"),
+      el("h3", "workflow-group", "Review task"),
       el(
         "p",
         "read-note",
-        `Starts from the latest commit on ${data.watched || "the watched branch"}, in a separate worktree. Changes stay on the run branch for your review.`,
+        "Choose the comments to send. The agent will make changes separately, then return here for your review.",
       ),
     );
     const l = el("label", "workflow-field", "Agent"),
@@ -407,7 +521,7 @@ export function createWorkflow({
       body.append(l);
     }
     body.append(
-      field("Brief · decisions and constraints", brief, (v) => {
+      field("Extra instructions (optional)", brief, (v) => {
         brief = v;
         preview = null;
         const dispatch = document.querySelector("#dispatchRun");
@@ -427,28 +541,40 @@ export function createWorkflow({
         },
         true,
       ),
-      action("Back to runs", () => {
+      action("Back to tasks", () => {
         preparing = false;
-        redraw();
+        showTab("comments");
       }),
     );
     if (preview) {
-      body.append(
+      const summary = el("section", "task-preview");
+      summary.append(
+        el("h3", "", "Ready to start"),
         el(
           "p",
-          "read-note",
-          `Exact task · ${preview.base.slice(0, 8)} → ${preview.branch}`,
+          "workflow-text",
+          `${preview.agent === "codex" ? "Codex" : "Claude Code"} will work on ${preview.comments.length} comment${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
         ),
+      );
+      for (const c of preview.comments)
+        summary.append(el("p", "workflow-text", c.text));
+      if (preview.brief)
+        summary.append(el("p", "workflow-text", preview.brief));
+      const exact = el("details", "workflow-evidence");
+      exact.dataset.key = "preview-diagnostics";
+      exact.append(
+        el("summary", "", "Technical task details"),
         el("pre", "taskpre", preview.task),
       );
+      summary.append(exact);
+      body.append(summary);
       const b = action(
-        "Dispatch run",
+        "Start task",
         async () => {
           const result = await write("/api/runs", { previewId: preview.id });
-          runId = result.id;
           preparing = false;
           preview = null;
-          await refresh();
+          await openTask(result.id);
         },
         true,
       );
@@ -456,94 +582,269 @@ export function createWorkflow({
       body.append(b);
     }
   }
+  function taskTitle(r) {
+    return (
+      r.brief?.trim().split("\n")[0] ||
+      r.comments?.[0]?.text?.split("\n")[0] ||
+      "Repository task"
+    );
+  }
+  function runStatus(r) {
+    if (r.status === "completed") {
+      const comments = data.comments.filter((c) =>
+        r.comments.some((x) => x.id === c.id),
+      );
+      return comments.length && comments.every((c) => c.status === "verified")
+        ? "Reviewed · not applied to main"
+        : "Ready for review";
+    }
+    return (
+      {
+        running: "Working",
+        starting: "Starting",
+        failed: "Needs attention",
+        cancelled: "Stopped",
+        interrupted: "Interrupted",
+      }[r.status] || r.status
+    );
+  }
+  async function openTask(id) {
+    runId = id;
+    preparing = false;
+    reviewing = false;
+    taskSource = taskComparison = null;
+    taskPath = "";
+    showTab("runs");
+    await refresh();
+  }
+  async function reviewTask(r, path = "") {
+    runId = r.id;
+    preparing = false;
+    reviewing = true;
+    const sha =
+      r.results?.at(-1) ||
+      data.comments.find((c) => c.runId === r.id && c.report?.commit)?.report
+        .commit;
+    if (!sha) throw Error("No committed changes were reported for this task.");
+    taskComparison = await api(
+      "/api/compare?" +
+        new URLSearchParams({ base: r.base, head: sha, view: "overview" }),
+    );
+    const files = taskComparison.files.filter((f) => f.status !== "unchanged");
+    taskPath = files.find((f) => f.path === path)?.path || files[0]?.path || "";
+    taskSource = null;
+    if (taskPath) await loadTaskFile(taskPath);
+    showTab("runs");
+    await refresh();
+    document.querySelector("#reviewScroll").scrollTop = 0;
+  }
+  async function loadTaskFile(path) {
+    const comparison = taskComparison;
+    taskPath = path;
+    taskSource = null;
+    const source = await api(
+      "/api/source?" +
+        new URLSearchParams({
+          base: comparison.base,
+          head: comparison.head,
+          path,
+        }),
+    );
+    if (taskComparison === comparison && taskPath === path) taskSource = source;
+  }
+  function activityView(r) {
+    const live = el("section", "task-live");
+    live.append(el("p", "task-state", runStatus(r)));
+    const progress = agentActivity(r.output);
+    if (active(r)) live.append(el("p", "workflow-text", progress.activity));
+    if (["failed", "interrupted", "cancelled"].includes(r.status)) {
+      live.append(
+        el(
+          "p",
+          "workflow-text",
+          progress.errors.join("\n") ||
+            "This task stopped before finishing. Review the updates, then retry any unanswered comments.",
+        ),
+      );
+    }
+    const latest = progress.messages.at(-1);
+    if (latest && active(r))
+      live.append(el("p", "workflow-text agent-message", latest));
+    if (r.status === "completed")
+      live.append(
+        el(
+          "p",
+          "read-note",
+          "Changes are committed on the task branch. Reviewing them does not apply or deploy them to main.",
+        ),
+      );
+    return live;
+  }
+  function updateLive() {
+    const live = document.querySelector(".task-live");
+    if (live && runDetail) live.replaceWith(activityView(runDetail));
+  }
   function runs(body) {
-    body.append(action("Back to comments", () => showTab("comments")));
+    if (!reviewing)
+      body.append(
+        action("Back to tasks", () => {
+          preparing = false;
+          showTab("comments");
+        }),
+      );
     if (preparing) {
       prepare(body);
       return;
     }
-    body.append(
-      action(
-        "Prepare run",
-        () => {
-          preparing = true;
-          preview = null;
-          picks = new Set(
-            data.comments.filter((c) => c.status === "draft").map((c) => c.id),
-          );
+    if (!runDetail || runDetail.id !== runId) {
+      body.append(el("p", "read-note", "Loading task…"));
+      return;
+    }
+    const r = runDetail;
+    if (reviewing && taskComparison) {
+      body.append(
+        action("Back to result", () => {
+          reviewing = false;
           redraw();
-        },
-        true,
-      ),
-      action("Refresh runs", () => refresh()),
-    );
-    if (runId && runDetail) {
-      const r = runDetail,
-        box = el("section", "workflow-card");
-      box.append(
-        el("h3", "", `${r.agent} · ${r.status}`),
-        el("p", "rd", r.branch),
-        el(
-          "p",
-          "workflow-text",
-          r.message || "Agent is working. Progress refreshes automatically.",
+          document.querySelector("#reviewScroll").scrollTop = 0;
+        }),
+      );
+      const files = taskComparison.files.filter(
+        (f) => f.status !== "unchanged",
+      );
+      const label = el(
+        "label",
+        "workflow-field",
+        `${files.length} changed file${files.length === 1 ? "" : "s"}`,
+      );
+      const select = el("select");
+      select.setAttribute("aria-label", "Changed file");
+      for (const file of files) {
+        const option = el("option", "", file.path);
+        option.value = file.path;
+        select.append(option);
+      }
+      select.value = taskPath;
+      select.onchange = async () => {
+        try {
+          await loadTaskFile(select.value);
+          redraw();
+        } catch (e) {
+          notice(e.message, true);
+        }
+      };
+      label.append(select);
+      body.append(label);
+      if (taskSource) renderDiff(body, taskSource.patch);
+      else body.append(el("p", "read-note", "No readable file changes."));
+      body.append(
+        action("Show on map", () =>
+          inspect(taskComparison.base, taskComparison.head, {
+            kind: "file",
+            path: taskPath,
+          }),
         ),
       );
-      if (active(r) && r.status !== "interrupted")
-        box.append(
-          action("Stop run", async () => {
-            await write(`/api/runs/${r.id}/cancel`, {});
-            await refresh();
+      return;
+    }
+    body.append(el("h2", "task-heading", taskTitle(r)), activityView(r));
+    if (active(r) && r.status !== "interrupted")
+      body.append(
+        action("Stop task", async () => {
+          await write(`/api/runs/${r.id}/cancel`, {});
+          await refresh();
+        }),
+      );
+    if (r.results?.length)
+      body.append(action("Review all changes", () => reviewTask(r), true));
+    comments(body, r);
+    const ready = data.comments.filter(
+      (c) => c.runId === r.id && c.status === "addressed",
+    );
+    if (ready.length && !active(r)) {
+      body.append(
+        action("Mark task reviewed", () => {
+          verification = "task";
+          redraw();
+        }),
+      );
+      if (verification === "task") {
+        body.append(
+          el(
+            "p",
+            "read-note",
+            "Records your review of all ready comments. This does not apply or deploy changes to main.",
+          ),
+          field(
+            "Review note",
+            verificationNote,
+            (value) => (verificationNote = value),
+          ),
+          action(
+            "Confirm review",
+            async () => {
+              try {
+                for (const c of ready)
+                  await write(
+                    "/api/comments/" + c.id,
+                    {
+                      action: "verify",
+                      version: c.version,
+                      note: verificationNote,
+                    },
+                    "PATCH",
+                  );
+                verification = null;
+                verificationNote = "";
+              } finally {
+                await refresh();
+              }
+            },
+            true,
+          ),
+          action("Cancel review", () => {
+            verification = null;
+            redraw();
           }),
         );
-      for (const sha of r.results || [])
-        box.append(
-          action("Inspect " + sha.slice(0, 8), () =>
-            inspect(r.base, sha, { kind: "repo", path: "" }),
-          ),
-        );
-      const progress = el("details", "workflow-evidence");
-      progress.append(
-        el("summary", "", "Agent output"),
-        el("pre", "taskpre", r.output || "No output yet."),
-      );
-      const task = el("details", "workflow-evidence");
-      task.append(
-        el("summary", "", "Dispatched task"),
-        el("pre", "taskpre", r.task),
-      );
-      box.append(progress, task);
-      body.append(box);
+      }
     }
-    const saved = data.runs.filter((r) => r.status !== "preview").reverse();
-    if (!saved.length)
-      body.append(
-        el(
-          "p",
-          "empty",
-          "No runs yet. Collect draft comments, preview the task, then dispatch when ready.",
-        ),
-      );
-    for (const r of saved) {
-      const b = action(
-        `${r.agent} · ${r.status} · ${r.comments.length} comments · ${r.id.slice(0, 8)}`,
-        async () => {
-          runId = r.id;
-          await refresh();
-        },
-      );
-      b.classList.add("workflow-run");
-      body.append(b);
+
+    const progress = agentActivity(r.output);
+    if (progress.messages.length) {
+      const updates = el("details", "workflow-evidence");
+      updates.dataset.key = "updates";
+      updates.append(el("summary", "", "Earlier agent updates"));
+      for (const message of progress.messages)
+        updates.append(el("p", "workflow-text", message));
+      body.append(updates);
     }
+    const diagnostics = el("details", "workflow-evidence diagnostics");
+    diagnostics.dataset.key = "diagnostics";
+    diagnostics.append(
+      el("summary", "", "Diagnostics"),
+      el("p", "rd", r.branch),
+    );
+    const output = el("details", "workflow-evidence");
+    output.dataset.key = "raw-output";
+    output.append(
+      el("summary", "", "Raw agent events"),
+      el("pre", "taskpre", r.output || "No output yet."),
+    );
+    const prompt = el("details", "workflow-evidence");
+    prompt.dataset.key = "raw-task";
+    prompt.append(
+      el("summary", "", "Generated task"),
+      el("pre", "taskpre", r.task),
+    );
+    diagnostics.append(output, prompt);
+    body.append(diagnostics);
   }
-  // Avoid replacing fields/details while the owner is reading or typing. The bar remains current.
+  // Poll results even while diagnostics or the composer are open. Refresh restores
+  // disclosure state, draft text, focus, cursor position and the reading position.
   setInterval(() => {
     if (document.hidden || !loaded || !data.runs.some(active)) return;
-    const focus = document.activeElement;
-    const editing =
-      focus?.matches("textarea,input,select") ||
-      document.querySelector("#tabBody details[open]");
-    refresh(!editing).catch((e) => notice(e.message, true));
+    refresh().catch((e) => notice(e.message, true));
   }, 3000);
   return {
     refresh,

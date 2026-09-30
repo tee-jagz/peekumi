@@ -1,6 +1,6 @@
 /** @module Browser controller for repository navigation, committed comparisons and the review panel. */
 import { createAsk } from "./ask.js";
-import { createWorkflow } from "./workflow.js";
+import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import {
   rootScope,
@@ -875,6 +875,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
 /** Selects a card or dependency for review and loads file details when needed. */
 function selectNode(node) {
   selected = node;
+  if (["comments", "runs"].includes(tab)) tab = "details";
   if (node.kind === "symbol") {
     sourceView = node.status === "removed" ? "before" : "diff";
   }
@@ -2007,6 +2008,10 @@ function renderSource(body) {
     );
     return;
   }
+  if (sourceView === "diff") {
+    renderDiff(code, value);
+    return;
+  }
   const range =
     selected?.kind === "symbol"
       ? sourceView === "before"
@@ -2095,6 +2100,13 @@ document.querySelectorAll("[data-compose]").forEach(
       $("#composerHost textarea")?.focus({ preventScroll: true });
     }),
 );
+$("#openTasks").onclick = () => {
+  tab = "comments";
+  primaryTab = "comments";
+  setSheetHeight("half");
+  renderPanel();
+  workflow.refresh();
+};
 $("#showDiscussion").onclick = () => {
   tab = primaryTab;
   setSheetHeight("half");
