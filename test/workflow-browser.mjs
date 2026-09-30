@@ -40,7 +40,35 @@ try {
           bounds.x + bounds.width / 2,
           bounds.y + bounds.height / 2,
         );
+        const startHeight = (await page.locator("#panel").boundingBox()).height;
+        await page
+          .locator("svg.map-canvas")
+          .evaluate((el) => (el.dataset.dragIdentity = "preserved"));
+        const originalTransform = await page
+          .locator("svg.map-canvas > g")
+          .getAttribute("transform");
         await page.mouse.down();
+        await page.mouse.move(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2 - 30,
+          { steps: 3 },
+        );
+        const midHeight = (await page.locator("#panel").boundingBox()).height;
+        assert.ok(
+          Math.abs(midHeight - startHeight - 30) < 3,
+          "Sheet follows the pointer before release",
+        );
+        assert.equal(
+          await page
+            .locator("svg.map-canvas")
+            .getAttribute("data-drag-identity"),
+          "preserved",
+        );
+        assert.equal(
+          await page.locator("svg.map-canvas > g").getAttribute("transform"),
+          originalTransform,
+        );
+
         await page.mouse.move(bounds.x + bounds.width / 2, bounds.y - 70, {
           steps: 6,
         });
@@ -63,6 +91,50 @@ try {
         );
         assert.equal(await page.locator("#dockContext").textContent(), anchor);
         await page.keyboard.press("Home");
+        // Losing pointer capture restores the original snap point without a stuck drag.
+        const cancelBounds = await handle.boundingBox();
+        await page.mouse.move(
+          cancelBounds.x + cancelBounds.width / 2,
+          cancelBounds.y + cancelBounds.height / 2,
+        );
+        await page.mouse.down();
+        await page.mouse.move(
+          cancelBounds.x + cancelBounds.width / 2,
+          cancelBounds.y - 60,
+          { steps: 3 },
+        );
+        await handle.evaluate((el) => el.releasePointerCapture(1));
+        await page.mouse.up();
+        await page.waitForFunction(
+          () => !document.querySelector("#panel").dataset.dragging,
+        );
+        assert.equal(
+          await page.locator("#panel").getAttribute("data-height"),
+          "peek",
+        );
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await handle.focus();
+        await page.keyboard.press("End");
+        assert.ok(
+          await page
+            .locator("#panel")
+            .evaluate((el) =>
+              el.getAnimations().some((a) => a.playState === "running"),
+            ),
+          "Release and keyboard transitions animate",
+        );
+        await page.waitForFunction(
+          () => !document.querySelector("#panel").dataset.settling,
+        );
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.keyboard.press("Home");
+        assert.equal(
+          await page
+            .locator("#panel")
+            .evaluate((el) => el.getAnimations().length),
+          0,
+          "Reduced motion skips settling animation",
+        );
         await page.getByLabel("Your question").fill("");
       }
       await page.getByRole("tab", { name: "Comment", exact: true }).click();

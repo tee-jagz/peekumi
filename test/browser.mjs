@@ -64,6 +64,28 @@ try {
     await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
     assert.equal(await page.evaluate(() => location.hash), "");
+    await page.locator("#mapLegend > summary").click();
+    assert.match(
+      await page.locator("#legendContent").innerText(),
+      /Change colours/,
+    );
+    assert.match(
+      await page.locator("#legendContent").innerText(),
+      /Dependency rule violation/,
+    );
+    await page.screenshot({
+      path: `test-results/${viewport.width}-legend.png`,
+    });
+    await page.locator('[data-lens="structure"]').click();
+    assert.match(
+      await page.locator("#legendContent").innerText(),
+      /Git change colours are hidden/,
+    );
+    await page.locator('[data-lens="changes"]').click();
+    await page
+      .getByRole("button", { name: "Close legend", exact: true })
+      .click();
+
     if (!(await page.locator("#helperTools").isVisible()))
       await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="changes"]').click();

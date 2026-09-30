@@ -326,6 +326,7 @@ function render() {
 }
 /** Synchronizes view, colour-lens and Before/After controls with the active state. */
 function renderControls() {
+  renderMapLegend();
   document
     .querySelectorAll("[data-mode]")
     .forEach((b) =>
@@ -1396,6 +1397,49 @@ function legend(files) {
   }
   return box;
 }
+/** Explains the active colour lens and static edge notation without occupying canvas space. */
+function renderMapLegend() {
+  const host = $("#legendContent");
+  host.replaceChildren(
+    element(
+      "strong",
+      "",
+      lens === "changes" ? "Change colours" : "Structure colours",
+    ),
+  );
+  if (lens === "changes") host.append(legend());
+  else
+    host.append(
+      element("p", "", "Blue marks structure; Git change colours are hidden."),
+    );
+  const lines = element("div", "legend-lines");
+  for (const [kind, label] of [
+    ["solid", "Import or call"],
+    ["implements", "Implementation"],
+    ["inherits", "Inheritance"],
+    ["removed", "Removed relationship"],
+    ["violation", "Dependency rule violation"],
+  ]) {
+    const row = element("div", "legend-row");
+    row.append(
+      element("span", "legend-line " + kind),
+      element("span", "", label),
+    );
+    lines.append(row);
+  }
+  host.append(
+    lines,
+    element(
+      "p",
+      "",
+      "Arrows point from the using/calling item to its dependency or target. Connections are static declarations, not runtime execution. Select a line for evidence.",
+    ),
+  );
+  const close = button("btn", "Close legend", () => {
+    $("#mapLegend").open = false;
+  });
+  host.append(close);
+}
 /** Creates a keyboard-accessible review-list entry that invokes its supplied navigation action. */
 function listRow(node, detail, action) {
   const li = element("li"),
@@ -1980,41 +2024,125 @@ $("#showDiscussion").onclick = () => {
   setSheetHeight("half");
   renderPanel();
 };
-/** Changes review height without discarding selection, canvas transform, or message drafts. */
+let sheetPointer = null,
+  sheetMotion = null;
+const sheetLevels = ["peek", "half", "full"];
+/** Measures the existing responsive snap heights, including the current draft and keyboard. */
+function sheetStops() {
+  const panel = $("#panel"),
+    previous = panel.dataset.height,
+    inline = panel.style.height;
+  panel.style.removeProperty("height");
+  delete panel.dataset.dragging;
+  const stops = sheetLevels.map((level) => {
+    panel.dataset.height = level;
+    return panel.getBoundingClientRect().height;
+  });
+  panel.dataset.height = previous;
+  panel.style.height = inline;
+  return stops;
+}
+/** Settles from the current pixel height; reduced motion still follows direct finger movement. */
 function setSheetHeight(height) {
-  $("#panel").dataset.height = height;
+  const panel = $("#panel"),
+    start = panel.getBoundingClientRect().height;
+  sheetMotion?.cancel();
+  sheetMotion = null;
+  delete panel.dataset.dragging;
+  delete panel.dataset.settling;
+  panel.style.removeProperty("height");
+  panel.dataset.height = height;
+  const end = panel.getBoundingClientRect().height;
   $("#sheetHandle").setAttribute(
     "aria-label",
     height === "full" ? "Collapse review sheet" : "Expand review sheet",
   );
+  if (
+    !matchMedia("(max-width: 899px)").matches ||
+    matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    Math.abs(start - end) < 1
+  )
+    return;
+  panel.dataset.settling = "true";
+  const motion = panel.animate(
+    [{ height: `${start}px` }, { height: `${end}px` }],
+    { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" },
+  );
+  sheetMotion = motion;
+  motion.finished
+    .then(() => {
+      if (sheetMotion === motion) {
+        sheetMotion = null;
+        delete panel.dataset.settling;
+      }
+    })
+    .catch(() => {});
 }
-let sheetPointer;
 const sheetHandle = $("#sheetHandle");
 sheetHandle.onpointerdown = (e) => {
-  sheetPointer = { y: e.clientY, height: $("#panel").dataset.height };
+  if (!e.isPrimary || e.button !== 0 || sheetPointer) return;
+  const panel = $("#panel"),
+    start = panel.getBoundingClientRect().height;
+  sheetMotion?.cancel();
+  sheetMotion = null;
+  delete panel.dataset.settling;
+  const stops = sheetStops();
+  sheetPointer = {
+    id: e.pointerId,
+    y: e.clientY,
+    start,
+    level: panel.dataset.height,
+    stops,
+    moved: false,
+  };
+  panel.style.height = `${start}px`;
+  delete sheetHandle.dataset.dragged;
   sheetHandle.setPointerCapture(e.pointerId);
 };
-sheetHandle.onpointerup = (e) => {
-  if (!sheetPointer) return;
-  const delta = e.clientY - sheetPointer.y;
-  const levels = ["peek", "half", "full"],
-    index = levels.indexOf(sheetPointer.height);
-  if (Math.abs(delta) > 25) {
-    setSheetHeight(
-      levels[Math.max(0, Math.min(2, index + (delta < 0 ? 1 : -1)))],
+sheetHandle.onpointermove = (e) => {
+  if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
+  const delta = sheetPointer.y - e.clientY;
+  if (Math.abs(delta) < 3 && !sheetPointer.moved) return;
+  sheetPointer.moved = true;
+  const panel = $("#panel");
+  panel.dataset.dragging = "true";
+  panel.style.height = `${Math.max(Math.min(...sheetPointer.stops), Math.min(Math.max(...sheetPointer.stops), sheetPointer.start + delta))}px`;
+};
+function finishSheetDrag(e, cancelled = false) {
+  if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
+  const drag = sheetPointer;
+  sheetPointer = null;
+  if (drag.moved) sheetHandle.dataset.dragged = "true";
+  else delete sheetHandle.dataset.dragged;
+  let target = drag.level;
+  if (!cancelled && drag.moved) {
+    const current = $("#panel").getBoundingClientRect().height;
+    let index = drag.stops.reduce(
+      (best, value, i) =>
+        Math.abs(value - current) < Math.abs(drag.stops[best] - current)
+          ? i
+          : best,
+      0,
     );
-    sheetHandle.dataset.dragged = "true";
+    const delta = drag.y - e.clientY,
+      previous = sheetLevels.indexOf(drag.level);
+    if (index === previous && Math.abs(delta) > 48)
+      index = Math.max(0, Math.min(2, index + (delta > 0 ? 1 : -1)));
+    target = sheetLevels[index];
   }
-  sheetPointer = null;
-};
-sheetHandle.onpointercancel = () => {
-  sheetPointer = null;
-};
-sheetHandle.onclick = () => {
-  if (sheetHandle.dataset.dragged) {
+  setSheetHeight(target);
+  if (sheetHandle.hasPointerCapture(e.pointerId))
+    sheetHandle.releasePointerCapture(e.pointerId);
+}
+sheetHandle.onpointerup = (e) => finishSheetDrag(e);
+sheetHandle.onpointercancel = (e) => finishSheetDrag(e, true);
+sheetHandle.onlostpointercapture = (e) => finishSheetDrag(e, true);
+sheetHandle.onclick = (event) => {
+  if (sheetHandle.dataset.dragged && event.detail !== 0) {
     delete sheetHandle.dataset.dragged;
     return;
   }
+  delete sheetHandle.dataset.dragged;
   const levels = ["peek", "half", "full"];
   setSheetHeight(levels[(levels.indexOf($("#panel").dataset.height) + 1) % 3]);
 };
@@ -2038,19 +2166,36 @@ $("#refresh").onclick = () => boot(true);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.target.closest("input,select,textarea"))
     return;
+  if ($("#mapLegend").open) {
+    $("#mapLegend").open = false;
+    $("#mapLegend summary").focus();
+    return;
+  }
   if (selected) {
     selected = null;
     renderDeck();
     renderPanel();
   } else goUp();
 });
-let resizeFrame;
-new ResizeObserver(() => {
+// Height changes resize the SVG viewport naturally. Rebuild only for width changes,
+// so dragging the sheet preserves the graph DOM, selection and pan/zoom transform.
+let resizeFrame,
+  deckWidth = 0;
+new ResizeObserver((entries) => {
+  const width = entries[0].contentRect.width;
+  if (Math.abs(width - deckWidth) < 1) return;
+  deckWidth = width;
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
     if (comparison) renderDeck();
   });
 }).observe($("#deck"));
+$("#mapLegend").addEventListener("toggle", () => {
+  if ($("#mapLegend").open) $("#revisionDetails").open = false;
+});
+$("#revisionDetails").addEventListener("toggle", () => {
+  if ($("#revisionDetails").open) $("#mapLegend").open = false;
+});
 const token = new URLSearchParams(location.hash.slice(1)).get("token");
 if (token) {
   history.replaceState(null, "", location.pathname);
@@ -2065,6 +2210,7 @@ if (token) {
 function fitVisualViewport() {
   const viewport = window.visualViewport;
   if (!viewport || viewport.scale > 1.05) return;
+  if (sheetPointer) finishSheetDrag({ pointerId: sheetPointer.id }, true);
   document.documentElement.style.setProperty(
     "--viewer-height",
     `${viewport.height}px`,

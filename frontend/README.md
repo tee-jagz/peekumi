@@ -12,3 +12,5 @@ The browser interface lets you explore repository structure, compare commits, fo
 The phone sheet expands from a compact selection summary to half or full height using pointer or keyboard controls. Details, Source, Changes, Relations and Discussion are direct views, while the Ask/Comment composer remains independent at the bottom. The dock follows the visual viewport when a phone keyboard opens. A single SVG graph remains the navigation surface; commit mini cards appear only in Time mode. Glass styling is shared by the sheet, buttons, tabs, inputs and revision selects (native select popups follow the browser).
 
 The frontend displays committed documentation as plain text. It does not execute code from inspected repositories. The backend embeds these assets when built.
+
+The sheet follows pointer movement continuously and animates to a snap height on release; reduced-motion settings disable settling animation. Height changes preserve the graph DOM and transform. The canvas Legend explains Git colours and static relationship line styles, with text appropriate to the active colour lens.

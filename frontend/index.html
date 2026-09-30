@@ -57,13 +57,19 @@
         </div>
       </header>
       <main class="stage" id="stage" aria-label="Repository map">
-        <details id="revisionDetails" class="revision-details map-history">
-          <summary>History <span id="revisionSummary"></span></summary>
-          <div class="history-content">
-            <div id="commitHead"></div>
-            <div id="commitBar"></div>
-          </div>
-        </details>
+        <div class="map-toolbar">
+          <details id="revisionDetails" class="revision-details map-history">
+            <summary>History <span id="revisionSummary"></span></summary>
+            <div class="history-content">
+              <div id="commitHead"></div>
+              <div id="commitBar"></div>
+            </div>
+          </details>
+          <details id="mapLegend">
+            <summary>Legend</summary>
+            <div id="legendContent" class="legend-popover"></div>
+          </details>
+        </div>
         <div id="timeRail" aria-label="Commit mini cards" hidden></div>
         <div class="deck" id="deck">
           <div class="loading-message">Opening your workspace…</div>
