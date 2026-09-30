@@ -222,23 +222,16 @@ async function boot(refresh = false) {
     $("#repo-sub").textContent =
       `${metadata.branch} · ${metadata.commits.length} recent commits`;
     headRef = refresh ? metadata.initialHead : headRef || metadata.initialHead;
-    diffBase = diffBase || metadata.initialBase;
-    baseRef = mode === "time" ? parentRevision(headRef) : diffBase;
+    baseRef = diffBase || parentRevision(headRef);
     await loadComparison();
     workflow.refresh(false).catch((error) => showNotice(error.message, true));
   } catch (error) {
     showNotice(error.message, true);
   }
 }
-/** Finds a commit's first parent in the loaded history for the Time comparison. */
+/** Uses the selected commit's first parent, or itself when it has no parent. */
 function parentRevision(sha) {
-  const c = commit(sha);
-  return (
-    c.parent ||
-    metadata.commits[metadata.commits.findIndex((c) => c.sha === sha) + 1]
-      ?.sha ||
-    sha
-  );
+  return commit(sha).parent || sha;
 }
 /** Fetches a compact comparison and revision-specific directory descriptions, reusing the six-entry browser cache. Stale requests cannot replace the active view. */
 async function loadComparison() {
@@ -1045,6 +1038,13 @@ function renderCommits() {
     const picker = element("select");
     picker.id = "base";
     picker.setAttribute("aria-label", "Compare with revision");
+    const automatic = element(
+      "option",
+      "",
+      `Previous commit (automatic) · ${commit(parentRevision(headRef)).short}`,
+    );
+    automatic.value = "__previous__";
+    picker.append(automatic);
     for (const c of metadata.commits) {
       const opt = element("option", "", `${c.short} ${c.subject}`);
       opt.value = c.sha;
@@ -1055,13 +1055,23 @@ function renderCommits() {
       opt.value = baseRef;
       picker.append(opt);
     }
-    picker.value = baseRef;
+    picker.value = diffBase || "__previous__";
     picker.onchange = () => {
-      diffBase = baseRef = picker.value;
+      diffBase = picker.value === "__previous__" ? null : picker.value;
+      baseRef = diffBase || parentRevision(headRef);
       loadComparison();
     };
     row.append(picker);
     bar.append(row);
+  }
+  if (diffBase) {
+    bar.append(
+      button("btn", "Use previous commit", () => {
+        diffBase = null;
+        baseRef = parentRevision(headRef);
+        loadComparison();
+      }),
+    );
   }
   const head = $("#commitHead"),
     c = commit(headRef);
@@ -1069,7 +1079,7 @@ function renderCommits() {
   const meta = element(
     "p",
     "c-meta",
-    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short}`,
+    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
   );
   head.append(meta);
   $("#revisionSummary").textContent = `${commit(baseRef).short} → ${c.short}`;
@@ -1970,7 +1980,7 @@ function chooseHead(sha) {
   if (busy) return;
   headRef = sha;
   before = false;
-  if (mode === "time") baseRef = parentRevision(sha);
+  baseRef = diffBase || parentRevision(sha);
   loadComparison();
 }
 document.querySelectorAll("[data-mode]").forEach(
@@ -1979,7 +1989,7 @@ document.querySelectorAll("[data-mode]").forEach(
       if (busy || mode === b.dataset.mode) return;
       mode = b.dataset.mode;
       before = false;
-      baseRef = mode === "time" ? parentRevision(headRef) : diffBase;
+      baseRef = diffBase || parentRevision(headRef);
       loadComparison();
     }),
 );

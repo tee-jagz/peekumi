@@ -63,6 +63,12 @@ try {
     const front = page.locator('.sheet[data-front="true"]');
     await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
+    if (process.env.STRATA_TEST_BASE) {
+      await page.locator("#revisionDetails > summary").click();
+      await page.locator("#base").selectOption(base);
+      await page.locator("#notice").waitFor({ state: "hidden" });
+      await page.locator("#revisionDetails > summary").click();
+    }
     assert.equal(await page.evaluate(() => location.hash), "");
     await page.locator("#mapLegend > summary").click();
     assert.match(

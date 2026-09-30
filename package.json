@@ -13,7 +13,7 @@
   "scripts": {
     "start": "node scripts/start.mjs",
     "test": "npm run build:rust && node --test test/*.test.mjs",
-    "test:browser": "npm run build:rust && node test/browser.mjs && node test/relationships-browser.mjs && node test/workflow-browser.mjs",
+    "test:browser": "npm run build:rust && node test/browser.mjs && node test/relationships-browser.mjs && node test/workflow-browser.mjs && node test/revisions-browser.mjs",
     "build:rust": "node scripts/cargo.mjs build --release --locked",
     "test:rust": "node scripts/cargo.mjs test --locked",
     "benchmark:rust": "npm run build:rust && node scripts/benchmark-rust.mjs"
