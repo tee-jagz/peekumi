@@ -102,6 +102,13 @@ try {
       path: `test-results/${viewport.width}-overview.png`,
       fullPage: true,
     });
+    const rootColumns = await front
+      .locator(".node")
+      .evaluateAll((nodes) => new Set(nodes.map((n) => n.style.left)).size);
+    assert.ok(
+      rootColumns > 1,
+      "Repository graph uses multiple node columns, not a vertical stack",
+    );
     const canvas = front.locator("svg.map-canvas");
     assert.equal(await canvas.count(), 1);
     const transform = () =>

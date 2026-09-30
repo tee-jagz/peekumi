@@ -457,9 +457,8 @@ function renderGraph(body) {
     graph = element("div", "graph");
   body.replaceChildren(graph);
   graph.append(canvas);
-  // Same 7.2-unit card geometry as the supplied mockup, capped for readable desktop cards.
-  const graphWidth = Math.min(width, 760),
-    k = graphWidth / 7.2;
+  // Keep graph nodes readable while using the canvas in both dimensions.
+  const graphWidth = Math.min(width, 760);
   const positions = new Map();
   let y = 24;
   const relationshipChanges = new Set(
@@ -536,19 +535,20 @@ function renderGraph(body) {
     y += 38;
   }
   if (root) {
-    const w = 5.9 * k,
-      h = Math.max(100, Math.min(116, 1.5 * k)),
-      gap = Math.max(16, 0.45 * k);
+    const cols = Math.min(current.length || 1, graphWidth < 540 ? 2 : 3),
+      gap = 24,
+      w = (graphWidth - 32 - (cols - 1) * gap) / cols,
+      h = 108;
     current.forEach((node, index) =>
       positions.set(node.key, {
         node,
-        x: (graphWidth - w) / 2 - 0.5 * k,
-        y: y + index * (h + gap),
+        x: 16 + (index % cols) * (w + gap),
+        y: y + Math.floor(index / cols) * (h + 32),
         w,
         h,
       }),
     );
-    y += current.length * (h + gap);
+    y += Math.ceil(current.length / cols) * (h + 32);
   } else {
     const isFile = scope.kind === "file",
       cols = isFile
@@ -615,7 +615,7 @@ function renderGraph(body) {
   canvas.style.height = height + "px";
   const verticalOffset = root && y < available ? (available - y) / 2 : 0;
   for (const p of positions.values()) p.y += verticalOffset;
-  drawEdges(canvas, positions, graphWidth, height, root);
+  drawEdges(canvas, positions, graphWidth, height, false);
   for (const p of positions.values()) canvas.append(graphNode(p));
   const controls = element("div", "canvas-controls");
   const filter = button("change-filter", "Changes only", () => {
@@ -959,7 +959,6 @@ function goUp() {
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
   ask.followSelection();
-  if (tab === "runs") primaryTab = "comments";
 
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(

@@ -76,6 +76,18 @@ try {
       await page
         .getByRole("button", { name: "View runs", exact: true })
         .click();
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      assert.ok(
+        await page.getByLabel("Your question").isVisible(),
+        "Ask stays available while viewing runs",
+      );
+      assert.ok(
+        await page
+          .getByRole("button", { name: "Back to comments", exact: true })
+          .isVisible(),
+        "Changing composer does not replace run results",
+      );
+      await page.getByRole("tab", { name: "Comment", exact: true }).click();
       await page
         .getByRole("button", { name: "Back to comments", exact: true })
         .click();
