@@ -3096,19 +3096,16 @@ select option {
 /* Compact labels retain shape and accessible text in addition to colour. */
 .status-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 18px;
   height: 18px;
   flex: none;
-  border: 1px solid currentColor;
-  border-radius: 5px;
   color: var(--status-tone);
-  background: color-mix(in srgb, var(--status-tone) 10%, transparent);
-  font:
-    600 13px/1 ui-monospace,
-    monospace;
   vertical-align: middle;
+}
+.row > .status-icon {
+  grid-row: 1 / span 3;
+  justify-self: center;
+  margin-top: 1px;
 }
 .legend-inline > span {
   display: inline-flex;
@@ -3117,11 +3114,13 @@ select option {
 }
 .interface-icon {
   display: inline-flex;
+  flex: none;
   width: 18px;
   height: 18px;
   color: var(--muted);
   vertical-align: middle;
 }
+.status-icon svg,
 .interface-icon svg {
   width: 100%;
   height: 100%;

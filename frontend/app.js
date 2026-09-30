@@ -2,6 +2,7 @@
 import { createAsk } from "./ask.js";
 import { createWorkflow } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
+import { statusIcon, interfaceIcon } from "./icons.js";
 import {
   rootScope,
   expandRelationships,
@@ -32,7 +33,6 @@ const labels = {
   removed: "Removed",
   unchanged: "Unchanged",
 };
-const symbols = { added: "+", changed: "Δ", removed: "−", unchanged: "·" };
 const tones = {
   added: "var(--add)",
   changed: "var(--mod)",
@@ -1245,15 +1245,7 @@ function renderSelection() {
   const box = element("div", "selstrip"),
     top = element("div", "sel-top");
   top.append(element("span", "sel-name", selected.name));
-  if (selected.status)
-    top.append(
-      element(
-        "span",
-        "pill p-" +
-          (selected.status === "unchanged" ? "same" : selected.status),
-        labels[selected.status],
-      ),
-    );
+  if (selected.status) top.append(statusIcon(selected.status));
   const close = button("x", "×", () => {
     selected = null;
     renderDeck();
@@ -1414,40 +1406,6 @@ function metadataCard() {
     box.append(element("small", "metadata-muted", info.provenance));
   return box;
 }
-/** Compact, shape-distinct Git status badge with an accessible name and tooltip. */
-function statusIcon(status) {
-  const icon = element(
-    "span",
-    "status-icon",
-    status === "unchanged" ? "=" : symbols[status],
-  );
-  icon.style.setProperty("--status-tone", tones[status]);
-  icon.setAttribute("role", "img");
-  icon.setAttribute("aria-label", labels[status]);
-  icon.title = labels[status];
-  return icon;
-}
-/** Directional contract icon: arrow entering a boundary for inputs, leaving it for outputs. */
-function interfaceIcon(direction) {
-  const label = direction === "In" ? "Inputs" : "Outputs";
-  const icon = element("span", "interface-icon");
-  icon.setAttribute("role", "img");
-  icon.setAttribute("aria-label", label);
-  icon.title = label;
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 20 20");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(svg.namespaceURI, "path");
-  path.setAttribute(
-    "d",
-    direction === "In"
-      ? "M16 3v14M3 10h9M8 6l4 4-4 4"
-      : "M4 3v14M8 10h9M13 6l4 4-4 4",
-  );
-  svg.append(path);
-  icon.append(svg);
-  return icon;
-}
 /** Builds Git-status labels, omitting statuses absent from the supplied file set. */
 function legend(files) {
   const box = element("div", "legend-inline");
@@ -1521,7 +1479,7 @@ function listRow(node, detail, action) {
     row = button("row", "", action);
   row.dataset.status = node.status || "unchanged";
   row.append(
-    element("span", "ic", symbols[node.status] || "→"),
+    statusIcon(node.status || "unchanged"),
     element("span", "rt", node.name),
     element("span", "rd", detail),
   );

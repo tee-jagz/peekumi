@@ -6,6 +6,7 @@ The browser interface lets you explore repository structure, compare commits, fo
 - `ask.js`: scope-specific conversations and explicit suggestion-to-draft actions.
 - `workflow.js`: comments, task preparation, run progress, agent evidence and verification.
 - `model.js`: directory hierarchy, dependency aggregation and symbol diff filtering.
+- `icons.js`: original rounded-stroke SVGs shared by Git status and input/output indicators, with accessible names and tooltips.
 - `canvas.js`: SVG pan, pinch, zoom and card positioning.
 - `index.html` and `style.css`: page structure and responsive appearance.
 
@@ -19,4 +20,4 @@ Both Time and Diff follow the selected commit’s first parent by default, indep
 
 The compact phone sheet shows the selection description and available input/output types, without inspection controls. Half and full heights reveal navigation and complete declaration details; missing types remain explicitly unspecified. Legend lives beside the canvas zoom controls and opens upward over the graph.
 
-Compact selection status uses shape-distinct coloured icons, and the contract uses entering/leaving arrows for inputs/outputs. Icons have accessible names and tooltips; the canvas legend explains them. Modified items use orange in both themes.
+Selection status, review lists and the legend use shape-distinct coloured SVG icons without badge borders or backgrounds, and the contract uses entering/leaving arrows for inputs/outputs. Icons have accessible names and tooltips; the canvas legend explains them. Modified items use orange in both themes.
