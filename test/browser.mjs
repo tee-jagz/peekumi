@@ -70,6 +70,15 @@ try {
       await page.locator("#revisionDetails > summary").click();
     }
     assert.equal(await page.evaluate(() => location.hash), "");
+    assert.equal(await front.locator(".node .dot, .node .kid i").count(), 0);
+    assert.equal(
+      await front.locator(".node .object-type-icon").count(),
+      await front.locator(".node").count(),
+    );
+    assert.ok(
+      await front.locator('.object-type-icon[aria-label="Directory"]').count(),
+    );
+
     await page.locator("#mapLegend > summary").click();
     assert.equal(await page.locator(".canvas-controls #mapLegend").count(), 1);
     assert.match(

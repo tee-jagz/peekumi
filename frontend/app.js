@@ -2,7 +2,7 @@
 import { createAsk } from "./ask.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
-import { statusIcon, interfaceIcon } from "./icons.js";
+import { statusIcon, interfaceIcon, objectTypeIcon } from "./icons.js";
 import {
   rootScope,
   expandRelationships,
@@ -723,7 +723,7 @@ function graphNode({ node, x, y, w, h }) {
   );
   card.setAttribute(
     "aria-label",
-    `${node.name}, ${node.kind}${node.status ? ", " + labels[node.status] : ""}`,
+    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}`,
   );
   card.title = node.name;
   Object.assign(card.style, {
@@ -734,7 +734,7 @@ function graphNode({ node, x, y, w, h }) {
   });
   card.style.setProperty("--tone", tone(node));
   const top = element("div", "n-top");
-  if (node.kind !== "stub") top.append(element("span", "dot"));
+  top.append(objectTypeIcon(node));
   top.append(
     element(
       "span",
@@ -777,9 +777,7 @@ function graphNode({ node, x, y, w, h }) {
     ];
     for (const name of paths.slice(0, 3)) {
       const kid = element("span", "kid");
-      const dot = element("i");
-      dot.style.setProperty("--c", tone(node));
-      kid.append(dot, document.createTextNode(name));
+      kid.append(document.createTextNode(name));
       kids.append(kid);
     }
     if (paths.length > 3)
@@ -1501,6 +1499,20 @@ function renderMapLegend() {
     host.append(
       element("p", "", "Blue marks structure; Git change colours are hidden."),
     );
+  const types = element("div", "legend-inline");
+  for (const [kind, label] of [
+    ["folder", "Directory"],
+    ["file", "File / module"],
+    ["class", "Class / struct"],
+    ["function", "Function / method"],
+    ["interface", "Interface / trait"],
+    ["enum", "Enum"],
+  ]) {
+    const item = element("span");
+    item.append(objectTypeIcon({ kind }), document.createTextNode(label));
+    types.append(item);
+  }
+  host.append(element("strong", "", "Object types"), types);
   const lines = element("div", "legend-lines");
   for (const [kind, label] of [
     ["solid", "Import or call"],
