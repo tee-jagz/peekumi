@@ -300,9 +300,15 @@ try {
         await page.locator('#selectionContract [aria-label="Inputs"]').count(),
         1,
       );
-      assert.equal(
-        await page.locator('#selectionContract [aria-label="Outputs"]').count(),
-        1,
+      assert.ok(
+        (await page
+          .locator('#selectionContract [aria-label="Outputs"]')
+          .count()) <= 1,
+      );
+      assert.doesNotMatch(
+        await page.locator("#selectionContract").innerText(),
+        /unspecified/,
+        "Peek omits missing annotations; Details labels them",
       );
       assert.equal(
         await page
