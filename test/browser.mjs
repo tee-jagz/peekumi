@@ -164,9 +164,12 @@ try {
     await page.getByRole("button", { name: "Fit map", exact: true }).click();
     const fitted = await transform();
     const rect = await canvas.boundingBox();
-    await page.mouse.move(rect.x + 10, rect.y + 30);
+    // Start in the empty right margin; the top-left corner holds Before/After.
+    await page.mouse.move(rect.x + rect.width - 6, rect.y + 70);
     await page.mouse.down();
-    await page.mouse.move(rect.x + 40, rect.y + 80, { steps: 5 });
+    await page.mouse.move(rect.x + rect.width - 40, rect.y + 120, {
+      steps: 5,
+    });
     await page.mouse.up();
     assert.notEqual(await transform(), fitted);
     assert.equal(
@@ -422,10 +425,11 @@ try {
         sha,
       peekSha,
     );
-    await page
+    // Home is disabled when the map is already at the repository root.
+    const home = page
       .locator(".crumbs button")
-      .filter({ hasText: (await repo.metadata()).name })
-      .click();
+      .filter({ hasText: (await repo.metadata()).name });
+    if (await home.isEnabled()) await home.click();
     await page.waitForFunction(
       () =>
         document.querySelectorAll(".crumbs [aria-current]").length === 1 &&
@@ -468,6 +472,33 @@ try {
     await page.locator("#search").fill("strata-no-such-file-000");
     await page.locator("#changes .empty").waitFor({ state: "visible" });
     await page.locator("#search").fill("");
+    if (viewport.width === 390) {
+      // Simulate a phone keyboard: resizes-content shrinks the window while a field has focus.
+      await page.locator("#sheetHandle").focus();
+      await page.keyboard.press("Home");
+      await page.waitForFunction(
+        () => !document.querySelector("#panel").dataset.settling,
+      );
+      await page.locator("#composerHost textarea").focus();
+      await page.setViewportSize({ width: 390, height: 470 });
+      await page.waitForFunction(() =>
+        document.documentElement.classList.contains("keyboard-open"),
+      );
+      const field = await page.locator("#composerHost textarea").boundingBox(),
+        sheet = await page.locator("#panel").boundingBox();
+      assert.ok(
+        field.y + field.height <= 470,
+        "The question field stays above the keyboard",
+      );
+      assert.ok(sheet.height < 470 * 0.7, "Peek keeps its own size while typing");
+      assert.equal(await page.locator(".canvas-controls").isVisible(), false);
+      await page.screenshot({ path: "test-results/390-keyboard.png" });
+      await page.locator("#composerHost textarea").blur();
+      await page.setViewportSize(viewport);
+      await page.waitForFunction(
+        () => !document.documentElement.classList.contains("keyboard-open"),
+      );
+    }
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForTimeout(100);
     await page.screenshot({

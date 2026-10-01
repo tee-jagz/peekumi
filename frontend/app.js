@@ -548,52 +548,39 @@ function renderControls() {
     );
   $("#baSeg").hidden = mode !== "diff";
 }
-/** Builds clickable ancestors for the current repository, directory or file scope. */
+/** Builds the map's level controls: Home and Up as icon buttons, plus the current level
+ * announced to assistive technology. The sheet names the scope visibly. */
 function breadcrumbs() {
-  const nav = element("nav", "crumbs");
+  const nav = element("nav", "crumbs map-group");
   nav.setAttribute("aria-label", "Level");
-  if (scope.kind !== "repo")
-    nav.append(iconButton(button("back", "", goUp), "back", "Up one level"));
-  const parts = [{ label: metadata.name, scope: rootScope() }];
-  if (scope.kind === "rootfiles")
-    parts.push({ label: "Repository files", scope });
-  else {
-    let path = "";
-    for (const part of scope.path.split("/").filter(Boolean)) {
-      path = path ? path + "/" + part : part;
-      parts.push({
-        label: part,
-        scope: { kind: path === scope.path ? scope.kind : "folder", path },
-      });
-    }
-  }
-  // The header keeps the root and current level; Up and the collapsed step reach the rest.
-  const visible = parts.length > 2 ? [parts[0], parts.at(-1)] : parts;
-  visible.forEach((part, index) => {
-    if (index) nav.append(element("span", "chev", "›"));
-    if (index && parts.length > 2) {
-      const between = parts.at(-2);
-      const skip = button("skip", "…", () => navigate(between.scope));
-      skip.title = between.scope.path;
-      skip.setAttribute("aria-label", "Up to " + between.label);
-      nav.append(skip, element("span", "chev", "›"));
-    }
-    const b = button("", part.label, () => navigate(part.scope));
-    b.title = part.scope.path || metadata.name;
-    if (index === visible.length - 1) b.setAttribute("aria-current", "page");
-    else if (index === 0) {
-      // When space runs out the root collapses to an icon, keeping its name for assistive tech.
-      b.classList.add("crumb-root");
-      b.replaceChildren(
-        glyph("home"),
-        element("span", "crumb-label", part.label),
-      );
-    }
-    nav.append(b);
-  });
+  const atRoot = scope.kind === "repo",
+    upTo = atRoot ? null : parent(scope.path) || metadata.name;
+  const home = iconButton(
+    button("crumb-home", "", () => navigate(rootScope())),
+    "home",
+    "Repository root · " + metadata.name,
+  );
+  home.append(element("span", "visually-hidden", metadata.name));
+  const up = iconButton(
+    button("back", "", goUp),
+    "up",
+    atRoot ? "Already at the repository root" : "Up to " + upTo,
+  );
+  home.disabled = up.disabled = atRoot;
+  const current = element(
+    "span",
+    "visually-hidden",
+    atRoot
+      ? metadata.name
+      : scope.kind === "rootfiles"
+        ? "Repository files"
+        : leaf(scope.path),
+  );
+  current.setAttribute("aria-current", "page");
+  nav.append(home, up, current);
   return nav;
 }
-/** Renders the header breadcrumbs and the active map, moving the persistent Before/After and key controls into the floating canvas controls. */
+/** Renders the active map with its floating controls: level navigation and tools along the bottom, Before/After in the top-left corner. */
 function renderDeck() {
   const deck = $("#deck"),
     oldScroll =
@@ -601,14 +588,7 @@ function renderDeck() {
   const mapLegend = $("#mapLegend"),
     sides = $("#baSeg"),
     crumbHost = $("#crumbHost");
-  const crumbs = breadcrumbs();
-  crumbHost.replaceChildren(crumbs);
-  requestAnimationFrame(() => {
-    crumbs.classList.remove("tight");
-    const root = crumbs.querySelector(".crumb-root");
-    if (root && root.scrollWidth > root.clientWidth + 1)
-      crumbs.classList.add("tight");
-  });
+  crumbHost.replaceChildren(breadcrumbs());
   deck.replaceChildren();
   const sheet = element("div", "sheet");
   sheet.style.zIndex = "10";
@@ -618,7 +598,9 @@ function renderDeck() {
   deck.append(sheet);
   renderGraph(body);
   body.querySelector(".map-tools")?.append(mapLegend);
-  body.querySelector(".canvas-controls")?.prepend(crumbHost, sides);
+  body.querySelector(".canvas-controls")?.prepend(crumbHost);
+  // Before/After belongs to the comparison, not navigation: it sits in the top-left corner.
+  body.append(sides);
   body.scrollTop = oldScroll;
 }
 /** Chooses a node colour from its Git status, or the neutral Structure accent. */
@@ -678,7 +660,8 @@ function renderGraph(body) {
   // Keep graph nodes readable while using the canvas in both dimensions.
   const graphWidth = Math.min(width, 760);
   const positions = new Map();
-  let y = 24;
+  // Start below the top-left Before/After control.
+  let y = 56;
   const relationshipChanges = new Set(
     edges
       .filter((e) => e.status !== "unchanged")
@@ -818,8 +801,8 @@ function renderGraph(body) {
     canvas.append(more);
     y += 25;
   }
-  // Leave room to scroll the last row clear of the floating navigation and controls.
-  const height = Math.max(available, y + 112);
+  // Leave room to scroll the last row clear of the floating map controls.
+  const height = Math.max(available, y + 64);
   canvas.style.width = graphWidth + "px";
   canvas.style.height = height + "px";
   const verticalOffset = root && y < available ? (available - y) / 2 : 0;
@@ -2628,24 +2611,37 @@ if (token) {
   });
 } else boot();
 
-/** Keeps the interaction dock above a phone keyboard and browser chrome. */
+/** Fits the app to the area above a phone keyboard. With Chrome's resizes-content keyboard
+ * mode the layout itself shrinks; elsewhere the app follows the visual viewport. Because the
+ * window shrinks too, the keyboard is detected from a focused text field plus a large drop
+ * from the tallest height seen at this width, not from innerHeight. */
+const tallestHeight = new Map();
+let fittedHeight = 0;
 function fitVisualViewport() {
   const viewport = window.visualViewport;
   if (!viewport || viewport.scale > 1.05) return;
-  if (sheetPointer) finishSheetDrag({ pointerId: sheetPointer.id }, true);
-  document.documentElement.style.setProperty(
-    "--viewer-height",
-    `${viewport.height}px`,
-  );
-  document.documentElement.style.setProperty(
-    "--viewer-top",
-    `${viewport.offsetTop}px`,
-  );
-  document.documentElement.classList.toggle(
-    "keyboard-open",
-    viewport.height < window.innerHeight * 0.8,
-  );
+  // A real resize invalidates a sheet drag; focus changes alone (pressing the handle) do not.
+  if (sheetPointer && Math.abs(viewport.height - fittedHeight) > 1)
+    finishSheetDrag({ pointerId: sheetPointer.id }, true);
+  fittedHeight = viewport.height;
+  const width = Math.round(viewport.width),
+    tallest = Math.max(tallestHeight.get(width) || 0, viewport.height);
+  tallestHeight.set(width, tallest);
+  const typing = !!document.activeElement?.matches?.(
+      "input, textarea, [contenteditable]",
+    ),
+    keyboard = typing && viewport.height < tallest * 0.8;
+  // A focused field can scroll the page; undo it so the offset below is not applied twice.
+  if (keyboard && window.scrollY) window.scrollTo(0, 0);
+  const root = document.documentElement;
+  root.style.setProperty("--viewer-height", `${viewport.height}px`);
+  root.style.setProperty("--viewer-top", `${viewport.offsetTop}px`);
+  root.classList.toggle("keyboard-open", keyboard);
 }
 window.visualViewport?.addEventListener("resize", fitVisualViewport);
 window.visualViewport?.addEventListener("scroll", fitVisualViewport);
+for (const type of ["focusin", "focusout"])
+  document.addEventListener(type, () =>
+    requestAnimationFrame(fitVisualViewport),
+  );
 fitVisualViewport();
