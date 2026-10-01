@@ -2198,10 +2198,22 @@ function sheetStops() {
   panel.style.height = inline;
   return stops;
 }
+/** Holds the phone map at a fixed height while the sheet moves over it, so the SVG
+ * viewport and its HTML cards are not re-laid-out and repainted on every frame. */
+function freezeStage(height) {
+  const stage = $("#stage");
+  if (!matchMedia("(max-width: 899px)").matches || stage.style.height) return;
+  stage.style.height = `${height}px`;
+}
+/** Returns the map to its grid row once the sheet has settled; it resizes once. */
+function releaseStage() {
+  $("#stage").style.removeProperty("height");
+}
 /** Settles from the current pixel height; reduced motion still follows direct finger movement. */
 function setSheetHeight(height) {
   const panel = $("#panel"),
-    start = panel.getBoundingClientRect().height;
+    start = panel.getBoundingClientRect().height,
+    stageStart = $("#stage").getBoundingClientRect().height;
   sheetMotion?.cancel();
   sheetMotion = null;
   delete panel.dataset.dragging;
@@ -2218,8 +2230,12 @@ function setSheetHeight(height) {
     !matchMedia("(max-width: 899px)").matches ||
     matchMedia("(prefers-reduced-motion: reduce)").matches ||
     Math.abs(start - end) < 1
-  )
+  ) {
+    releaseStage();
     return;
+  }
+  // Collapsing reveals map that the sheet covered, so pre-extend it under the sheet.
+  freezeStage(stageStart + Math.max(0, start - end));
   panel.dataset.settling = "true";
   const motion = panel.animate(
     [{ height: `${start}px` }, { height: `${end}px` }],
@@ -2231,6 +2247,7 @@ function setSheetHeight(height) {
       if (sheetMotion === motion) {
         sheetMotion = null;
         delete panel.dataset.settling;
+        releaseStage();
       }
     })
     .catch(() => {});
@@ -2244,6 +2261,10 @@ sheetHandle.onpointerdown = (e) => {
   sheetMotion = null;
   delete panel.dataset.settling;
   const stops = sheetStops();
+  // Extend the map to its peek-height size; the sheet then slides over it.
+  freezeStage(
+    $("#stage").getBoundingClientRect().height + start - Math.min(...stops),
+  );
   sheetPointer = {
     id: e.pointerId,
     y: e.clientY,

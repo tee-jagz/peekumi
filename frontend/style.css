@@ -3246,7 +3246,6 @@ select option {
 }
 body {
   background: var(--wall);
-  background-attachment: fixed;
 }
 .top {
   position: relative;
@@ -3886,4 +3885,21 @@ select.visually-hidden {
 #selectionContract[data-more="true"] {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+}
+
+/* Smooth sheet motion: the sheet slides over a map that keeps its size (see
+   freezeStage), and only top-level glass surfaces blur. A blur nested inside
+   another frosted surface only re-blurs that surface and costs a pass per frame. */
+@media (max-width: 899px) {
+  .panel {
+    position: relative;
+    z-index: 20;
+  }
+}
+.panel *,
+.history-content *,
+.legend-popover *,
+.frost-menu * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
