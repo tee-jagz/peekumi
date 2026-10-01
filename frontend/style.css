@@ -22,11 +22,18 @@
   --card-shadow:
     0 1px 1px rgba(0, 0, 0, 0.04), 0 6px 16px -10px rgba(24, 32, 64, 0.35);
   --wall:
-    radial-gradient(55% 45% at 12% 18%, #dce5ff 0%, rgba(220, 229, 255, 0) 70%),
-    radial-gradient(50% 45% at 90% 22%, #ffe2d4 0%, rgba(255, 226, 212, 0) 70%),
-    radial-gradient(60% 50% at 75% 95%, #d6f2e8 0%, rgba(214, 242, 232, 0) 70%),
-    radial-gradient(50% 50% at 15% 90%, #ece0ff 0%, rgba(236, 224, 255, 0) 70%),
-    #eef0f5;
+    radial-gradient(55% 45% at 12% 18%, #d3e8f6 0%, rgba(211, 232, 246, 0) 70%),
+    radial-gradient(50% 45% at 90% 22%, #ffe3d1 0%, rgba(255, 227, 209, 0) 70%),
+    radial-gradient(60% 50% at 75% 95%, #d2efe2 0%, rgba(210, 239, 226, 0) 70%),
+    radial-gradient(50% 50% at 15% 90%, #f6ead0 0%, rgba(246, 234, 208, 0) 70%),
+    #edf1f3;
+  --panel-glass: rgba(255, 255, 255, 0.5);
+  --panel-line: rgba(255, 255, 255, 0.92);
+  --panel-glow: rgba(255, 255, 255, 0.6);
+  --el-glass: rgba(255, 255, 255, 0.46);
+  --el-line: rgba(255, 255, 255, 0.85);
+  --el-shadow: 0 1px 2px rgba(24, 32, 64, 0.08);
+  --field-glass: rgba(255, 255, 255, 0.78);
   --font:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui,
     "Segoe UI", Roboto, sans-serif;
@@ -57,11 +64,18 @@
     --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.8);
     --card-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.7);
     --wall:
-      radial-gradient(55% 45% at 12% 18%, #1b2547 0%, rgba(27, 37, 71, 0) 70%),
-      radial-gradient(50% 45% at 90% 22%, #3a2330 0%, rgba(58, 35, 48, 0) 70%),
-      radial-gradient(60% 50% at 75% 95%, #12342e 0%, rgba(18, 52, 46, 0) 70%),
-      radial-gradient(50% 50% at 15% 90%, #2a2146 0%, rgba(42, 33, 70, 0) 70%),
-      #0b0c10;
+      radial-gradient(55% 45% at 12% 18%, #123049 0%, rgba(18, 48, 73, 0) 70%),
+      radial-gradient(50% 45% at 90% 22%, #3b2a1d 0%, rgba(59, 42, 29, 0) 70%),
+      radial-gradient(60% 50% at 75% 95%, #0f352c 0%, rgba(15, 53, 44, 0) 70%),
+      radial-gradient(50% 50% at 15% 90%, #182b34 0%, rgba(24, 43, 52, 0) 70%),
+      #0a0c0e;
+    --panel-glass: rgba(30, 30, 34, 0.5);
+    --panel-line: rgba(255, 255, 255, 0.16);
+    --panel-glow: rgba(255, 255, 255, 0.06);
+    --el-glass: rgba(255, 255, 255, 0.07);
+    --el-line: rgba(255, 255, 255, 0.13);
+    --el-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --field-glass: rgba(44, 44, 48, 0.72);
     color-scheme: dark;
   }
 }
@@ -86,11 +100,18 @@
   --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.8);
   --card-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.7);
   --wall:
-    radial-gradient(55% 45% at 12% 18%, #1b2547 0%, rgba(27, 37, 71, 0) 70%),
-    radial-gradient(50% 45% at 90% 22%, #3a2330 0%, rgba(58, 35, 48, 0) 70%),
-    radial-gradient(60% 50% at 75% 95%, #12342e 0%, rgba(18, 52, 46, 0) 70%),
-    radial-gradient(50% 50% at 15% 90%, #2a2146 0%, rgba(42, 33, 70, 0) 70%),
-    #0b0c10;
+    radial-gradient(55% 45% at 12% 18%, #123049 0%, rgba(18, 48, 73, 0) 70%),
+    radial-gradient(50% 45% at 90% 22%, #3b2a1d 0%, rgba(59, 42, 29, 0) 70%),
+    radial-gradient(60% 50% at 75% 95%, #0f352c 0%, rgba(15, 53, 44, 0) 70%),
+    radial-gradient(50% 50% at 15% 90%, #182b34 0%, rgba(24, 43, 52, 0) 70%),
+    #0a0c0e;
+  --panel-glass: rgba(30, 30, 34, 0.5);
+  --panel-line: rgba(255, 255, 255, 0.16);
+  --panel-glow: rgba(255, 255, 255, 0.06);
+  --el-glass: rgba(255, 255, 255, 0.07);
+  --el-line: rgba(255, 255, 255, 0.13);
+  --el-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --field-glass: rgba(44, 44, 48, 0.72);
   color-scheme: dark;
 }
 html {
@@ -228,26 +249,6 @@ button {
 .sheet.peek {
   cursor: pointer;
 }
-.sheet-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 6px 10px 4px 12px;
-}
-.peek .sheet-head {
-  min-height: 16px;
-  padding: 2px 14px;
-  font-size: 11px;
-  color: var(--muted);
-  gap: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.peek .sheet-head b {
-  color: var(--ink);
-  font-weight: 600;
-}
 .crumbs {
   display: flex;
   align-items: center;
@@ -281,19 +282,6 @@ button {
   font-size: 17px;
   padding: 2px 8px 2px 2px;
   line-height: 1;
-}
-.tag {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  background: rgba(118, 118, 128, 0.12);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-.tag.base {
-  color: var(--mod);
-  background: color-mix(in srgb, var(--mod) 14%, transparent);
 }
 .sheet-body {
   position: relative;
@@ -595,16 +583,6 @@ button {
   border-width: 2px;
 }
 
-.stage-foot {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
 
 .panel {
   background: var(--bg);
@@ -1524,11 +1502,6 @@ button {
   font-size: 10px;
   font-weight: 400;
 }
-.sheet-head .tag {
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .sel-name {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -1809,13 +1782,6 @@ button {
   .refresh {
     width: 28px;
   }
-  .stage-foot {
-    left: 12px;
-    right: 12px;
-  }
-  .stage-foot .seg button {
-    padding: 6px 11px;
-  }
   .panel {
     padding: 12px 16px 20px;
   }
@@ -1880,13 +1846,6 @@ button {
 .canvas-controls .change-filter[aria-pressed="true"] {
   color: white;
   background: var(--accent);
-}
-.canvas-controls output {
-  font:
-    10px ui-monospace,
-    monospace;
-  min-width: 34px;
-  text-align: center;
 }
 .code-metadata {
   margin: 10px 0;
@@ -2451,25 +2410,6 @@ button {
 .return-conversation {
   margin: 6px 0 12px;
 }
-.map-history {
-  position: absolute;
-  top: 3px;
-  right: 14px;
-  z-index: 12;
-  max-width: calc(100% - 28px);
-  margin: 0;
-}
-.map-history > summary {
-  background: var(--glass);
-  border: 1px solid var(--glass-line);
-  border-radius: 12px;
-  padding: 7px 10px;
-  font-size: 11px;
-  backdrop-filter: blur(20px);
-}
-.map-history[open] {
-  width: min(420px, calc(100% - 28px));
-}
 .history-content {
   max-height: 45vh;
   overflow: auto;
@@ -2478,9 +2418,6 @@ button {
   border-radius: 12px;
   padding: 12px;
   box-shadow: var(--shadow);
-}
-.map-history #commitHead {
-  display: block;
 }
 .panel .notice {
   margin: 6px 12px;
@@ -2606,8 +2543,7 @@ button,
 select,
 input,
 textarea,
-.cmp select,
-.map-history > summary {
+.cmp select {
   border: 1px solid var(--control-border);
   border-radius: 10px;
   background: var(--control-glass);
@@ -2649,27 +2585,6 @@ select option {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.map-history {
-  position: relative;
-  top: auto;
-  right: auto;
-  margin: 5px 12px 6px;
-  max-width: none;
-  flex: none;
-  z-index: 15;
-}
-.map-history[open] {
-  width: auto;
-}
-.map-history .history-content {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  background: color-mix(in srgb, var(--surface) 95%, transparent);
-  backdrop-filter: blur(24px);
 }
 .deck {
   flex: 1;
@@ -2841,11 +2756,6 @@ select option {
   font-size: 11px;
   padding: 6px 9px;
 }
-#composerHost .draft-buttons button:last-child {
-  max-width: 42px;
-  font-size: 10px;
-  padding: 4px;
-}
 @media (max-width: 899px) {
   .panel {
     height: 232px;
@@ -2904,20 +2814,6 @@ select option {
   border-color: color-mix(in srgb, var(--accent) 65%, transparent);
 }
 /* Map key is available without adding a permanent row to the canvas. */
-.map-toolbar {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  margin: 5px 12px 6px;
-  flex: none;
-  position: relative;
-  z-index: 20;
-}
-.map-toolbar .map-history {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-}
 #mapLegend {
   flex: none;
 }
@@ -3029,14 +2925,6 @@ select option {
 }
 .canvas-controls {
   position: relative;
-}
-.canvas-controls #mapLegend {
-  order: 1;
-}
-.canvas-controls #mapLegend > summary {
-  padding: 6px 7px;
-  border-radius: 8px;
-  font-size: 10px;
 }
 .canvas-controls .legend-popover {
   top: auto;
@@ -3331,4 +3219,507 @@ select option {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Minimal chrome: the header carries scope and comparison, the map carries its
+   own floating controls, and the review sheet is one frosted surface. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.glyph {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+body {
+  background: var(--wall);
+  background-attachment: fixed;
+}
+.top {
+  position: relative;
+  z-index: 30;
+  background: transparent;
+  padding: 8px 10px 6px 12px;
+  gap: 8px;
+}
+.title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.top .crumbs {
+  flex: none;
+  width: 100%;
+  gap: 0;
+  overflow: hidden;
+}
+.top .crumbs button {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 2px 4px;
+  min-height: 30px;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 0 1 auto;
+  min-width: 2.2em;
+  max-width: 34vw;
+}
+/* Ancestors shrink first; the current level keeps its full name when it fits. */
+.top .crumbs button[aria-current="page"] {
+  flex: 0 0 auto;
+  font-size: 17px;
+  font-weight: 700;
+  max-width: 100%;
+}
+.top .crumbs .back,
+.top .crumbs .skip,
+.top .crumbs .chev {
+  flex: none;
+  min-width: 0;
+}
+.top .crumbs .back {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  padding: 0;
+  color: var(--accent);
+}
+.top .crumbs .back .glyph {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+.top .crumbs .skip {
+  color: var(--muted);
+}
+.top-actions {
+  gap: 6px;
+}
+.icon-seg button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 34px;
+  padding: 0;
+  color: var(--muted);
+}
+.icon-seg button[aria-pressed="true"] {
+  color: var(--ink);
+}
+#openTasks {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 13px;
+}
+#openTasks[data-ready="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Branch and comparison open from the header line instead of a History row. */
+.revision-details {
+  position: relative;
+  margin: 0 0 0 4px;
+  border: 0;
+}
+.revision-details > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0;
+  cursor: pointer;
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+.revision-details > summary::-webkit-details-marker {
+  display: none;
+}
+.revision-details > summary::before {
+  content: none;
+}
+.revision-details > summary .glyph {
+  width: 14px;
+  height: 14px;
+}
+.revision-details[open] > summary {
+  color: var(--accent);
+}
+#revisionSummary {
+  margin: 0;
+  font: inherit;
+}
+.revision-details .history-content {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -4px;
+  z-index: 40;
+  width: min(420px, calc(100vw - 16px));
+  max-height: min(72dvh, 560px);
+  overflow: auto;
+  padding: 12px 14px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  backdrop-filter: blur(30px) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 var(--panel-glow),
+    var(--shadow);
+}
+.comparison-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.comparison-head strong {
+  flex: 1;
+  font-size: 16px;
+}
+.comparison-head button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 19px;
+  color: var(--ink);
+}
+.history-content .cmp {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.history-content .cmp select,
+#branchPicker {
+  display: block;
+  width: 100%;
+  max-width: none;
+  min-height: 40px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--field-glass);
+}
+.history-content #commitHead {
+  margin: 0 0 10px;
+}
+.history-content .c-title {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0 0 3px;
+}
+.history-content .c-meta {
+  font-size: 11px;
+  margin: 0;
+  color: var(--muted);
+}
+.history-content #commitBar {
+  padding: 0;
+}
+.history-content .read-note {
+  margin: 4px 0 0;
+}
+
+/* The map fills its stage; controls float over it. */
+.stage {
+  background: transparent;
+}
+.deck {
+  margin-bottom: 8px;
+}
+.canvas-controls {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  background: none;
+  border: 0;
+  pointer-events: none;
+}
+.canvas-controls > * {
+  pointer-events: auto;
+}
+.map-tools {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: 14px;
+  /* No backdrop filter here: it would stop the key popover inside from frosting. */
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--card-shadow);
+}
+.map-tools button,
+.map-tools #mapLegend > summary {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.map-tools #mapLegend > summary::-webkit-details-marker {
+  display: none;
+}
+.map-tools button[aria-pressed="true"],
+.map-tools #mapLegend[open] > summary {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  border: 0;
+}
+.map-tools #mapLegend {
+  position: static;
+}
+.map-tools .legend-popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: min(300px, calc(100vw - 40px));
+  max-height: min(380px, 48dvh);
+  border-radius: 16px;
+  border: 1px solid var(--panel-line);
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  backdrop-filter: blur(30px) saturate(1.6);
+}
+.legend-lens {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+.legend-lens .seg button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.legend-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0;
+  border-radius: 18px;
+}
+.canvas-controls #baSeg {
+  padding: 3px;
+  gap: 2px;
+  border-radius: 14px;
+}
+.canvas-controls #baSeg button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  color: var(--muted);
+}
+.canvas-controls #baSeg button[aria-pressed="true"] {
+  color: var(--ink);
+}
+
+/* Directory cards summarize changes as counts instead of truncated name chips. */
+.node .n-counts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  pointer-events: none;
+}
+.n-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.n-count .status-icon,
+.n-count .glyph {
+  width: 13px;
+  height: 13px;
+}
+.n-count[data-status="added"] {
+  color: var(--add);
+}
+.n-count[data-status="changed"] {
+  color: var(--mod);
+}
+.n-count[data-status="removed"] {
+  color: var(--del);
+}
+
+/* The review sheet and every control inside it share frosted glass. */
+.panel {
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  backdrop-filter: blur(30px) saturate(1.6);
+  border-top: 1px solid var(--panel-line);
+  box-shadow:
+    inset 0 1px 0 var(--panel-glow),
+    0 -14px 36px -22px rgba(24, 32, 64, 0.45);
+}
+#conversationDock {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  border-top: 1px solid var(--line);
+}
+.panel
+  button:not([aria-pressed="true"]):not([aria-selected="true"]):not(
+    .primary
+  ):not(#sheetHandle),
+.panel select,
+.panel .seg,
+.panel .tabs,
+.panel details,
+.panel .workflow-card {
+  background: var(--el-glass);
+  border-color: var(--el-line);
+  box-shadow: var(--el-shadow);
+}
+.panel textarea,
+.panel input {
+  background: var(--field-glass);
+  border-color: var(--el-line);
+}
+#helperTools {
+  gap: 6px;
+  border-bottom: 0;
+}
+#helperTools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 38px;
+  padding: 0 11px;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 12px;
+  color: var(--muted);
+}
+#helperTools button[aria-pressed="true"] {
+  color: var(--ink);
+}
+#helperTools .tab-label {
+  display: none;
+}
+#helperTools button[aria-pressed="true"] .tab-label {
+  display: inline;
+}
+#reviewActions {
+  gap: 10px;
+}
+#reviewActions .tabs button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-height: 34px;
+  padding: 0;
+  color: var(--muted);
+}
+#reviewActions .tabs button[aria-selected="true"] {
+  color: var(--ink);
+}
+#dockContext {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--ink);
+}
+#dockContext .glyph {
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+.dock-form {
+  align-items: center;
+}
+#composerHost .composer {
+  grid-template-columns: minmax(0, 1fr);
+  box-shadow: none;
+}
+#composerHost .draft-buttons {
+  justify-content: flex-end;
+  gap: 8px;
+}
+#composerHost .icon-action {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 22px;
+}
+#composerHost .icon-action.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+#composerHost .icon-action .glyph {
+  stroke-width: 2.1;
+}
+/* Chromium's <details> content slot breaks box-sizing inheritance for popovers. */
+.history-content,
+.history-content *,
+.legend-popover,
+.legend-popover * {
+  box-sizing: border-box;
+}
+.history-content .cmp {
+  grid-template-columns: minmax(0, 1fr);
+}
+.history-content .cmp select {
+  min-width: 0;
 }

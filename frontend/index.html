@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#F2F2F7" />
+    <meta name="theme-color" content="#EDF1F3" />
     <title>Repo Strata</title>
     <link rel="icon" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
@@ -34,72 +34,145 @@
     </div>
     <div class="app" id="workspace">
       <header class="top">
-        <div>
-          <span class="repo" id="repo-name">Repo strata</span
-          ><span class="sub" id="repo-sub">Connecting to your repository…</span>
-          <select
-            id="branchPicker"
-            aria-label="Viewing branch"
-            title="View a branch without changing the working checkout"
-            hidden
-          ></select>
+        <div class="title-block">
+          <h1 class="visually-hidden" id="repo-name">Repo strata</h1>
+          <div id="crumbHost"></div>
+          <span class="sub" id="repo-sub">Connecting to your repository…</span>
+          <details id="revisionDetails" class="revision-details">
+            <summary
+              aria-label="Branch and comparison"
+              title="Change branch or comparison"
+            >
+              <span data-glyph="branch"></span
+              ><span id="revisionSummary"></span>
+            </summary>
+            <div
+              class="history-content"
+              role="group"
+              aria-label="Branch and comparison"
+            >
+              <div class="comparison-head">
+                <strong>Comparison</strong>
+                <button
+                  class="refresh"
+                  id="refresh"
+                  type="button"
+                  data-glyph="refresh"
+                  aria-label="Refresh repository"
+                  title="Check for new commits"
+                ></button>
+                <button
+                  id="closeRevision"
+                  type="button"
+                  data-glyph="close"
+                  aria-label="Close comparison"
+                  title="Close"
+                ></button>
+              </div>
+              <label class="cmp"
+                >Branch
+                <select
+                  id="branchPicker"
+                  aria-label="Viewing branch"
+                  title="View a branch without changing the working checkout"
+                  hidden
+                ></select>
+              </label>
+              <div id="commitHead"></div>
+              <div id="commitBar"></div>
+              <p class="read-note">
+                Strata compares committed Git objects. Uncommitted work is not
+                included, and the checkout is never switched.
+              </p>
+            </div>
+          </details>
         </div>
         <div class="top-actions">
-          <button
-            class="refresh"
-            id="refresh"
-            aria-label="Refresh repository"
-            title="Refresh repository"
-          >
-            ↻
-          </button>
-          <div class="seg" role="group" aria-label="View">
-            <button type="button" data-mode="time" aria-pressed="false">
-              Time</button
-            ><button type="button" data-mode="diff" aria-pressed="true">
-              Diff
-            </button>
+          <div class="seg icon-seg" role="group" aria-label="View">
+            <button
+              type="button"
+              data-mode="time"
+              data-glyph="time"
+              aria-label="Time"
+              title="Time"
+              aria-pressed="false"
+            ></button
+            ><button
+              type="button"
+              data-mode="diff"
+              data-glyph="diff"
+              aria-label="Diff"
+              title="Diff"
+              aria-pressed="true"
+            ></button>
           </div>
+          <button
+            id="openTasks"
+            type="button"
+            class="btn"
+            data-glyph="tasks"
+            aria-label="Tasks"
+            title="Open tasks"
+          ></button>
         </div>
       </header>
       <main class="stage" id="stage" aria-label="Repository map">
-        <div class="map-toolbar">
-          <details id="revisionDetails" class="revision-details map-history">
-            <summary>History <span id="revisionSummary"></span></summary>
-            <div class="history-content">
-              <div id="commitHead"></div>
-              <div id="commitBar"></div>
-            </div>
-          </details>
-          <details id="mapLegend">
-            <summary>Legend</summary>
-            <div id="legendContent" class="legend-popover"></div>
-          </details>
-        </div>
         <div id="timeRail" aria-label="Commit mini cards" hidden></div>
         <div class="deck" id="deck">
           <div class="loading-message">Opening your workspace…</div>
         </div>
-        <div class="stage-foot">
-          <div class="seg glass" role="group" aria-label="Colour shows">
-            <button type="button" data-lens="structure" aria-pressed="false">
-              Structure</button
-            ><button type="button" data-lens="changes" aria-pressed="true">
-              Changes
-            </button>
-          </div>
+        <div id="mapParts" hidden>
           <div
             class="seg glass"
             id="baSeg"
             role="group"
             aria-label="Before or after"
           >
-            <button type="button" data-ba="before" aria-pressed="false">
-              Before</button
-            ><button type="button" data-ba="after" aria-pressed="true">
-              After
-            </button>
+            <button
+              type="button"
+              data-ba="before"
+              data-glyph="before"
+              aria-label="Before"
+              title="Before"
+              aria-pressed="false"
+            ></button
+            ><button
+              type="button"
+              data-ba="after"
+              data-glyph="after"
+              aria-label="After"
+              title="After"
+              aria-pressed="true"
+            ></button>
           </div>
+          <details id="mapLegend">
+            <summary
+              data-glyph="key"
+              aria-label="Map key"
+              title="Map key and colour lens"
+            ></summary>
+            <div class="legend-popover">
+              <div class="legend-lens">
+                <span>Colour shows</span>
+                <div class="seg" role="group" aria-label="Colour shows">
+                  <button
+                    type="button"
+                    data-lens="structure"
+                    aria-pressed="false"
+                  >
+                    Structure</button
+                  ><button
+                    type="button"
+                    data-lens="changes"
+                    aria-pressed="true"
+                  >
+                    Changes
+                  </button>
+                </div>
+              </div>
+              <div id="legendContent"></div>
+            </div>
+          </details>
         </div>
       </main>
       <section class="panel" id="panel" aria-label="Review" data-height="peek">
@@ -120,23 +193,60 @@
         ></dl>
         <div id="reviewScroll">
           <nav id="helperTools" aria-label="Inspection views">
-            <button type="button" class="btn" data-tab="details">
-              Details
+            <button
+              type="button"
+              class="btn"
+              data-tab="details"
+              data-glyph="details"
+              aria-label="Details"
+              title="Details"
+            >
+              <span class="tab-label">Details</span>
             </button>
-            <button type="button" class="btn" data-tab="source">Source</button>
-            <button type="button" class="btn" data-tab="changes">
-              Changes
+            <button
+              type="button"
+              class="btn"
+              data-tab="source"
+              data-glyph="source"
+              aria-label="Source"
+              title="Source"
+            >
+              <span class="tab-label">Source</span>
             </button>
-            <button type="button" class="btn" data-tab="dependencies">
-              Relations
+            <button
+              type="button"
+              class="btn"
+              data-tab="changes"
+              data-glyph="changes"
+              aria-label="Changes"
+              title="Changes"
+            >
+              <span class="tab-label">Changes</span>
             </button>
-            <button type="button" class="btn" id="showDiscussion">
-              Discussion
+            <button
+              type="button"
+              class="btn"
+              data-tab="dependencies"
+              data-glyph="relations"
+              aria-label="Relations"
+              title="Relations"
+            >
+              <span class="tab-label">Relations</span>
+            </button>
+            <button
+              type="button"
+              class="btn"
+              id="showDiscussion"
+              data-glyph="discussion"
+              aria-label="Discussion"
+              title="Discussion"
+            >
+              <span class="tab-label">Discussion</span>
             </button>
           </nav>
           <section id="selectionDetails"><div id="selStrip"></div></section>
           <div id="runBar"></div>
-          <div id="tabBody" role="tabpanel"></div>
+          <div id="tabBody"></div>
         </div>
         <div id="conversationDock" aria-label="Ask or comment">
           <div id="reviewActions">
@@ -150,22 +260,23 @@
                 type="button"
                 role="tab"
                 data-compose="ask"
+                data-glyph="ask"
+                aria-label="Ask"
+                title="Ask"
                 aria-selected="true"
-              >
-                Ask
-              </button>
+              ></button>
               <button
                 type="button"
                 role="tab"
                 id="newComment"
                 data-compose="comments"
+                data-glyph="comment"
+                aria-label="Comment"
+                title="Comment"
                 aria-selected="false"
-              >
-                Comment
-              </button>
+              ></button>
             </div>
             <span id="dockContext"></span>
-            <button id="openTasks" type="button" class="btn">Tasks</button>
           </div>
           <div id="composerHost"></div>
         </div>

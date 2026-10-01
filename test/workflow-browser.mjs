@@ -238,6 +238,7 @@ try {
       await page.screenshot({
         path: `test-results/agent-branch-${viewport.width}.png`,
       });
+      await page.locator("#revisionDetails > summary").click();
       await page.getByLabel("Viewing branch").selectOption("refs/heads/main");
       await page.locator("#notice").waitFor({ state: "hidden" });
       await page.locator("#openTasks").click();
@@ -316,7 +317,7 @@ try {
         .fill("What would improve this function?");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Ask", exact: true })
+        .getByRole("button", { name: "Send question", exact: true })
         .click();
       await page
         .getByRole("button", { name: "Make draft comment", exact: true })

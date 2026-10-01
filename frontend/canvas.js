@@ -1,9 +1,18 @@
 /** @module SVG viewport supporting touch, mouse and keyboard navigation around repository cards. */
 // SVG viewport with HTML card contents, preserving the reference's glass styling.
+import { iconButton } from "./icons.js";
 const NS = "http://www.w3.org/2000/svg";
 const views = new Map();
-/** Mounts HTML card content inside an SVG viewport and binds pan, pinch and zoom controls. Remembers the transform by view key, suppresses gesture clicks and pans focused cards into view. Mutates the supplied container and controls. */
-export function mountCanvas(body, content, width, height, key, controls) {
+/** Mounts HTML card content inside an SVG viewport and binds pan, pinch and zoom controls. Remembers the transform by view key, suppresses gesture clicks and pans focused cards into view. Mutates the supplied container and controls; icon buttons are appended to `toolbar`, which defaults to `controls`. */
+export function mountCanvas(
+  body,
+  content,
+  width,
+  height,
+  key,
+  controls,
+  toolbar = controls,
+) {
   const svg = document.createElementNS(NS, "svg");
   svg.classList.add("map-canvas");
   svg.setAttribute(
@@ -27,14 +36,11 @@ export function mountCanvas(body, content, width, height, key, controls) {
       scale: 1,
     }),
   };
-  const label = document.createElement("output");
-  label.setAttribute("aria-label", "Map zoom");
   const remember = () => {
     layer.setAttribute(
       "transform",
       `translate(${view.x} ${view.y}) scale(${view.scale})`,
     );
-    label.textContent = Math.round(view.scale * 100) + "%";
     views.delete(key);
     views.set(key, { ...view });
     if (views.size > 40) views.delete(views.keys().next().value);
@@ -47,19 +53,15 @@ export function mountCanvas(body, content, width, height, key, controls) {
     view.scale = scale;
     remember();
   };
-  const add = (name, text, action) => {
+  const add = (name, icon, action) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = text;
-    b.setAttribute("aria-label", name);
-    b.title = name;
     b.onclick = action;
-    controls.append(b);
+    toolbar.append(iconButton(b, icon, name));
   };
-  add("Zoom out", "−", () => zoom(1 / 1.25));
-  controls.append(label);
-  add("Zoom in", "+", () => zoom(1.25));
-  add("Fit map", "Fit", () => {
+  add("Zoom out", "zoomOut", () => zoom(1 / 1.25));
+  add("Zoom in", "zoomIn", () => zoom(1.25));
+  add("Fit map", "fit", () => {
     view.scale = Math.max(
       0.001,
       Math.min(
@@ -72,7 +74,7 @@ export function mountCanvas(body, content, width, height, key, controls) {
     view.y = (svg.clientHeight - height * view.scale) / 2;
     remember();
   });
-  add("Reset map view", "1:1", () => {
+  add("Reset map view", "reset", () => {
     view.x = (svg.clientWidth - width) / 2;
     view.y = 0;
     view.scale = 1;

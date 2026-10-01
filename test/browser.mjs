@@ -427,15 +427,17 @@ try {
     });
     await page.locator("#base").selectOption(peekSha);
     await page.locator("#notice").waitFor({ state: "hidden" });
-    await page.locator("#helperTools").evaluate((node) => {
-      node.open = true;
-    });
+    await page.locator("#closeRevision").click();
+    assert.equal(
+      await page.locator("#revisionDetails").evaluate((el) => el.open),
+      false,
+    );
     await page.locator('[data-tab="changes"]').click();
     await page.waitForFunction(
       () => document.querySelector("#change-summary")?.dataset.count === "0",
     );
     await page.locator("#search").fill("strata-no-such-file-000");
-    assert.ok(await page.locator("#changes .empty").isVisible());
+    await page.locator("#changes .empty").waitFor({ state: "visible" });
     await page.locator("#search").fill("");
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForTimeout(100);
