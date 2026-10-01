@@ -6,3 +6,6 @@ These scripts launch Strata, locate the Rust toolchain and measure backend perfo
 - `cargo.mjs`: invokes the installed Cargo toolchain.
 - `benchmark-rust.mjs`: compares the Rust service with the retained Node reference.
 - `benchmark.mjs`: measures the earlier Node analysis pipeline.
+
+- `manage.mjs`: installation, registry, dependency diagnostics, OS background service, pairing, revocation and Tailscale HTTPS setup.
+- `package.mjs`: platform archive with bundled Node/TypeScript and SHA-256 checksum; excludes private state.

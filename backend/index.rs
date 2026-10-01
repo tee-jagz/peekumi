@@ -32,9 +32,12 @@ impl Index {
                 std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
             }
             db.busy_timeout(std::time::Duration::from_secs(5))?;
-            db.execute_batch(
-                "CREATE TABLE IF NOT EXISTS analysis(key TEXT PRIMARY KEY,data TEXT NOT NULL)",
-            )?;
+            let version: i64 = db.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            anyhow::ensure!(
+                version <= 1,
+                "Analysis cache belongs to a newer Strata version"
+            );
+            db.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS analysis(key TEXT PRIMARY KEY,data TEXT NOT NULL); PRAGMA user_version=1; COMMIT;")?;
             Ok(db)
         })();
         let db = match result {

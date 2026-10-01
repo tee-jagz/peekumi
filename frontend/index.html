@@ -8,6 +8,9 @@
     />
     <meta name="theme-color" content="#EDF1F3" />
     <title>Repo Strata</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <script type="module" src="/pwa.js"></script>
     <link rel="icon" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
     <script type="module" src="/app.js"></script>
@@ -69,6 +72,10 @@
                   title="Close"
                 ></button>
               </div>
+              <label class="cmp" id="repositoryControl" hidden
+                >Repository
+                <select id="repositoryPicker" aria-label="Repository"></select>
+              </label>
               <label class="cmp"
                 >Branch
                 <select
@@ -78,6 +85,14 @@
                   hidden
                 ></select>
               </label>
+              <div class="pr-controls">
+                <button id="loadPrs" type="button" class="btn">
+                  Pull requests
+                </button>
+                <select id="prPicker" aria-label="Pull request" hidden></select>
+                <p id="prFeedback" class="read-note" role="status"></p>
+                <div id="prContext" hidden></div>
+              </div>
               <div id="commitHead"></div>
               <div id="commitBar"></div>
               <p class="read-note">

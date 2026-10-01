@@ -86,13 +86,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         let mut c = Command::new(&store.codex);
         // This preset already selects workspace-write and automatic approval review.
         // Codex rejects combining it with the separate --sandbox option.
-        c.args([
-            "exec",
-            "--approve-for-me",
-            "--json",
-            "--color",
-            "never",
-        ]);
+        c.args(["exec", "--approve-for-me", "--json", "--color", "never"]);
         c.arg("-c")
             .arg(format!("mcp_servers.strata.command={}", json!(exe)));
         c.arg("-c")

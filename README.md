@@ -14,6 +14,22 @@ Strata inspecting its own repository on a phone. Select a screenshot to view it 
 
 Explore the canvas, move through commits, and review agent changes while keeping Ask and Comment within reach.
 
+## Set up for everyday use
+
+See [setup and distribution](docs/SETUP.md), or give your agent the [Strata setup skill](skills/strata-setup/SKILL.md).
+
+```sh
+npm ci
+npm run build:rust
+node scripts/manage.mjs install
+# Use ~/.local/lib/strata/bin/strata (or add its bin directory to PATH):
+strata repo add /path/to/repo
+strata start
+strata pair
+```
+
+Register multiple local checkouts under one server. Use `strata share` for private Tailscale HTTPS, then install the PWA from your phone browser. The comparison menu includes repository selection and GitHub PR comparisons; agent work stays in isolated local worktrees. `strata doctor`, read-only pairing and device revocation help with setup and access. GitHub-only repository onboarding and PR publishing remain deferred.
+
 ## Directory responsibilities
 
 - [frontend/](frontend/README.md): browser map, navigation and review panel.

@@ -16,6 +16,9 @@ export async function startRust(
     node = process.execPath,
     codex,
     claude,
+    repositories = [],
+    extraEnv = {},
+    isolatePrimary = false,
   } = {},
 ) {
   const state =
@@ -34,10 +37,13 @@ export async function startRust(
       state,
       "--parser-root",
       root,
+      ...repositories.flatMap((repo) => ["--repo", repo]),
+      ...(isolatePrimary ? ["--isolate-primary"] : []),
     ],
     {
       env: {
         ...process.env,
+        ...extraEnv,
         STRATA_TOKEN: token,
         STRATA_PYTHON: python,
         STRATA_NODE: node,
