@@ -3272,55 +3272,7 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-}
-#crumbHost .crumbs {
-  flex: none;
-  width: 100%;
-  gap: 0;
-  overflow: hidden;
-}
-#crumbHost .crumbs button {
-  border: 0;
-  background: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  padding: 2px 4px;
-  min-height: 30px;
-  font-size: 13px;
-  font-weight: 600;
-  flex: 0 1 auto;
-  min-width: 2.2em;
-  max-width: 34vw;
-}
-/* Ancestors shrink first; the current level keeps its full name when it fits. */
-#crumbHost .crumbs button[aria-current="page"] {
-  flex: 0 0 auto;
-  font-size: 17px;
-  font-weight: 700;
-  max-width: 100%;
-}
-#crumbHost .crumbs .back,
-#crumbHost .crumbs .skip,
-#crumbHost .crumbs .chev {
-  flex: none;
-  min-width: 0;
-}
-#crumbHost .crumbs .back {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  padding: 0;
-  color: var(--accent);
-}
-#crumbHost .crumbs .back .glyph {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2;
-}
-#crumbHost .crumbs .skip {
-  color: var(--muted);
-}
-.top-actions {
+}.top-actions {
   gap: 6px;
 }
 .icon-seg button {
@@ -3557,22 +3509,6 @@ body {
   margin-left: auto;
   padding: 0;
   border-radius: 18px;
-}
-.canvas-controls #baSeg {
-  padding: 3px;
-  gap: 2px;
-  border-radius: 14px;
-}
-.canvas-controls #baSeg button {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 32px;
-  padding: 0;
-  color: var(--muted);
-}
-.canvas-controls #baSeg button[aria-pressed="true"] {
-  color: var(--ink);
 }
 
 /* Directory cards summarize changes as counts instead of truncated name chips. */
@@ -4280,55 +4216,10 @@ details.p-section[open] > summary::before {
   background: none;
   border: 0;
   box-shadow: none;
-}
-/* Long names: ancestors give up their space first, then the current name ellipsizes
-   rather than running under the header actions. */
-#crumbHost .crumbs button {
-  flex-shrink: 1000;
-  min-width: 0;
-}
-#crumbHost .crumbs button[aria-current="page"] {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* The run cue belongs to the overview; inspection views keep their space for content. */
+}/* The run cue belongs to the overview; inspection views keep their space for content. */
 .panel:not([data-view="details"]) #runBar {
   display: none;
-}
-/* The breadcrumb host spans the title column so the crumbs can shrink within it. */
-#crumbHost {
-  align-self: stretch;
-  min-width: 0;
-}
-#crumbHost .crumbs .crumb-root {
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.crumb-root .glyph {
-  display: none;
-  width: 18px;
-  height: 18px;
-}
-#crumbHost .crumbs.tight .crumb-root {
-  flex: none;
-  padding: 2px 6px;
-}
-.crumbs.tight .crumb-root .glyph {
-  display: block;
-}
-.crumbs.tight .crumb-root .crumb-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-
-.pwa-notice {
+}.pwa-notice {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
   left: 10px;
@@ -4357,8 +4248,7 @@ details.p-section[open] > summary::before {
   color: var(--accent);
 }
 
-/* Map navigation: the level breadcrumb is a frosted pill on the map, directly above the
-   floating controls, so it sits beside what it navigates and within thumb reach. */
+/* The header carries context only: repository name and comparison. */
 .top .repo {
   margin: 0;
   font-size: 17px;
@@ -4370,47 +4260,75 @@ details.p-section[open] > summary::before {
   flex-wrap: wrap;
   row-gap: 8px;
 }
-.canvas-controls #crumbHost {
-  order: -1;
-  flex: 1 0 100%;
+
+/* Map controls share one shape: compact frosted groups of 36px icon buttons.
+   Level navigation sits bottom-left beside the tools; Before/After sits top-left. */
+.map-group {
   display: flex;
-  min-width: 0;
-  padding: 0;
-}
-#crumbHost .crumbs {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 100%;
-  min-height: 44px;
-  padding: 2px 12px 2px 2px;
-  border-radius: 22px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
   box-shadow: var(--card-shadow);
   -webkit-backdrop-filter: blur(18px) saturate(1.5);
   backdrop-filter: blur(18px) saturate(1.5);
 }
-#crumbHost .crumbs:not(:has(.back)) {
-  padding-left: 12px;
+.map-group button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
 }
-#crumbHost .crumbs .back {
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
-  margin-right: 2px;
-  border-radius: 19px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+.map-group button .glyph {
+  width: 18px;
+  height: 18px;
 }
-#crumbHost .crumbs button {
-  min-height: 38px;
+.map-group button:disabled {
+  opacity: 0.35;
 }
-#crumbHost .crumbs button[aria-current="page"] {
-  font-size: 15px;
-}
-/* The navigation row spans the map width; only the pill itself takes touches. */
 .canvas-controls #crumbHost {
-  pointer-events: none;
+  display: flex;
+  padding: 0;
 }
-#crumbHost .crumbs {
-  pointer-events: auto;
+.sheet-body > #baSeg {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 14px;
+}
+.sheet-body > #baSeg button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  color: var(--muted);
+}
+.sheet-body > #baSeg button[aria-pressed="true"] {
+  color: var(--ink);
+}
+
+/* While typing at peek the sheet keeps its own size, so the map stays readable above it.
+   Map controls and the commit strip step aside until the keyboard closes. */
+@media (max-width: 899px) {
+  .keyboard-open .panel[data-height="peek"] {
+    height: auto;
+    max-height: calc(var(--viewer-height, 100dvh) - 96px);
+  }
+  .keyboard-open .canvas-controls,
+  .keyboard-open .sheet-body > #baSeg,
+  .keyboard-open #timeRail {
+    display: none;
+  }
 }
