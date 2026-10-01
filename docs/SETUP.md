@@ -14,7 +14,7 @@ npm run build:rust
 node scripts/manage.mjs install
 ```
 
-The default installation is `~/.local/lib/strata`. Add its `bin` directory to PATH, or invoke the full path. The bundle includes the server, UI, Node, TypeScript and parser helpers. Git remains a host dependency. Python 3.9+ enables Python extraction; `strata doctor` reports missing parsers and optional tools. We retain the proven adapters rather than introducing a parser rewrite during packaging.
+`install` and `upgrade` bundle the Node runtime that runs them, so use an official nodejs.org build of Node 22. Homebrew's Node depends on a shared library outside its binary; Strata refuses to bundle it and leaves the existing installation untouched. The default installation is `~/.local/lib/strata`. Add its `bin` directory to PATH, or invoke the full path. The bundle includes the server, UI, Node, TypeScript and parser helpers. Git remains a host dependency. Python 3.9+ enables Python extraction; `strata doctor` reports missing parsers and optional tools. We retain the proven adapters rather than introducing a parser rewrite during packaging.
 
 ```sh
 strata doctor

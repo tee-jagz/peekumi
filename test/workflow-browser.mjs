@@ -42,11 +42,11 @@ try {
         );
         const startHeight = (await page.locator("#panel").boundingBox()).height;
         await page
-          .locator("svg.map-canvas")
+          .locator(".map-canvas")
           .evaluate((el) => (el.dataset.dragIdentity = "preserved"));
         const originalTransform = await page
-          .locator("svg.map-canvas > g")
-          .getAttribute("transform");
+          .locator(".map-canvas > .map-layer")
+          .evaluate((el) => el.style.transform);
         await page.mouse.down();
         await page.mouse.move(
           bounds.x + bounds.width / 2,
@@ -65,12 +65,14 @@ try {
         );
         assert.equal(
           await page
-            .locator("svg.map-canvas")
+            .locator(".map-canvas")
             .getAttribute("data-drag-identity"),
           "preserved",
         );
         assert.equal(
-          await page.locator("svg.map-canvas > g").getAttribute("transform"),
+          await page
+            .locator(".map-canvas > .map-layer")
+            .evaluate((el) => el.style.transform),
           originalTransform,
         );
 

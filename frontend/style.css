@@ -1797,6 +1797,7 @@ button {
   flex-direction: column;
 }
 .map-canvas {
+  position: relative;
   display: block;
   width: 100%;
   flex: 1;
@@ -1805,12 +1806,22 @@ button {
   touch-action: none;
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  contain: layout paint;
 }
 .map-canvas:active {
   cursor: grabbing;
 }
-.map-canvas foreignObject {
-  overflow: visible;
+/* The whole map moves as one layer; it is promoted to the GPU only while moving. */
+.map-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.map-layer.is-moving {
+  will-change: transform;
 }
 .map-canvas .graph-inner {
   margin: 0;
@@ -3262,13 +3273,13 @@ body {
   align-items: flex-start;
   gap: 1px;
 }
-.top .crumbs {
+#crumbHost .crumbs {
   flex: none;
   width: 100%;
   gap: 0;
   overflow: hidden;
 }
-.top .crumbs button {
+#crumbHost .crumbs button {
   border: 0;
   background: none;
   box-shadow: none;
@@ -3282,31 +3293,31 @@ body {
   max-width: 34vw;
 }
 /* Ancestors shrink first; the current level keeps its full name when it fits. */
-.top .crumbs button[aria-current="page"] {
+#crumbHost .crumbs button[aria-current="page"] {
   flex: 0 0 auto;
   font-size: 17px;
   font-weight: 700;
   max-width: 100%;
 }
-.top .crumbs .back,
-.top .crumbs .skip,
-.top .crumbs .chev {
+#crumbHost .crumbs .back,
+#crumbHost .crumbs .skip,
+#crumbHost .crumbs .chev {
   flex: none;
   min-width: 0;
 }
-.top .crumbs .back {
+#crumbHost .crumbs .back {
   display: grid;
   place-items: center;
   width: 32px;
   padding: 0;
   color: var(--accent);
 }
-.top .crumbs .back .glyph {
+#crumbHost .crumbs .back .glyph {
   width: 20px;
   height: 20px;
   stroke-width: 2;
 }
-.top .crumbs .skip {
+#crumbHost .crumbs .skip {
   color: var(--muted);
 }
 .top-actions {
@@ -3615,7 +3626,9 @@ body {
 .panel
   button:not([aria-pressed="true"]):not([aria-selected="true"]):not(
     .primary
-  ):not(#sheetHandle):not(.frost-select):not(.row):not(.link-button),
+  ):not(#sheetHandle):not(.frost-select):not(.row):not(.link-button):not(
+    .crumbs button
+  ),
 .panel select,
 .panel .seg,
 .panel .tabs,
@@ -4270,11 +4283,11 @@ details.p-section[open] > summary::before {
 }
 /* Long names: ancestors give up their space first, then the current name ellipsizes
    rather than running under the header actions. */
-.top .crumbs button {
+#crumbHost .crumbs button {
   flex-shrink: 1000;
   min-width: 0;
 }
-.top .crumbs button[aria-current="page"] {
+#crumbHost .crumbs button[aria-current="page"] {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -4289,7 +4302,7 @@ details.p-section[open] > summary::before {
   align-self: stretch;
   min-width: 0;
 }
-.top .crumbs .crumb-root {
+#crumbHost .crumbs .crumb-root {
   display: inline-flex;
   align-items: center;
   overflow: hidden;
@@ -4300,7 +4313,7 @@ details.p-section[open] > summary::before {
   width: 18px;
   height: 18px;
 }
-.top .crumbs.tight .crumb-root {
+#crumbHost .crumbs.tight .crumb-root {
   flex: none;
   padding: 2px 6px;
 }
@@ -4342,4 +4355,62 @@ details.p-section[open] > summary::before {
 }
 #prContext a {
   color: var(--accent);
+}
+
+/* Map navigation: the level breadcrumb is a frosted pill on the map, directly above the
+   floating controls, so it sits beside what it navigates and within thumb reach. */
+.top .repo {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.canvas-controls {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.canvas-controls #crumbHost {
+  order: -1;
+  flex: 1 0 100%;
+  display: flex;
+  min-width: 0;
+  padding: 0;
+}
+#crumbHost .crumbs {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 2px 12px 2px 2px;
+  border-radius: 22px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+}
+#crumbHost .crumbs:not(:has(.back)) {
+  padding-left: 12px;
+}
+#crumbHost .crumbs .back {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  margin-right: 2px;
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+#crumbHost .crumbs button {
+  min-height: 38px;
+}
+#crumbHost .crumbs button[aria-current="page"] {
+  font-size: 15px;
+}
+/* The navigation row spans the map width; only the pill itself takes touches. */
+.canvas-controls #crumbHost {
+  pointer-events: none;
+}
+#crumbHost .crumbs {
+  pointer-events: auto;
 }
