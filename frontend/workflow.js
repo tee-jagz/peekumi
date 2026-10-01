@@ -150,6 +150,7 @@ export function createWorkflow({
 }) {
   let data = { comments: [], runs: [] },
     loaded = false,
+    lastSignature = "",
     refreshQueue = Promise.resolve();
   let composer = null,
     draft = "",
@@ -200,6 +201,8 @@ export function createWorkflow({
     l.append(t);
     return l;
   };
+  /** Reloads workflow state. `render` redraws the open view; "poll" redraws only when the
+   * data changed and a task view is open, so polling never rebuilds Source or Details. */
   function refresh(render = true) {
     const pending = refreshQueue
       .catch(() => {})
@@ -208,6 +211,15 @@ export function createWorkflow({
         loaded = true;
         if (runId) runDetail = await api("/api/runs/" + runId);
         bar();
+        const signature = JSON.stringify([data, runDetail]),
+          changed = signature !== lastSignature;
+        lastSignature = signature;
+        if (render === "poll")
+          render =
+            changed &&
+            ["comments", "runs"].includes(
+              document.querySelector("#panel")?.dataset.view,
+            );
         if (render) {
           const focused = document.activeElement;
           const focusLabel = focused?.matches("textarea,input,select")
@@ -263,7 +275,7 @@ export function createWorkflow({
     }
     if (
       ["comments", "runs"].includes(
-        document.querySelector("#panel")?.dataset.tab,
+        document.querySelector("#panel")?.dataset.view,
       )
     )
       return;
@@ -883,7 +895,7 @@ export function createWorkflow({
   // disclosure state, draft text, focus, cursor position and the reading position.
   setInterval(() => {
     if (document.hidden || !loaded || !data.runs.some(active)) return;
-    refresh().catch((e) => notice(e.message, true));
+    refresh("poll").catch((e) => notice(e.message, true));
   }, 3000);
   return {
     refresh,

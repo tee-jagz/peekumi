@@ -40,11 +40,21 @@ const glyphs = {
   refresh: "M16 10a6 6 0 1 1-2-4.5M16 3v4h-4",
   back: "M12 4l-6 6 6 6",
   chevron: "M5 8l5 5 5-5",
+  forward: "M8 4l6 6-6 6",
+  home: "M3 9l7-6 7 6v8H3ZM8 17v-5h4v5",
   file: "M4 2h8l4 4v12H4ZM12 2v5h4",
 };
 const paths = {
   folder: "M2 5h6l2 2h8v10H2Z",
   file: "M4 2h8l4 4v12H4ZM12 2v5h4",
+  code: "M4 2h8l4 4v12H4ZM12 2v5h4M8.5 10.5l-2 2 2 2M11.5 10.5l2 2-2 2",
+  document: "M4 2h8l4 4v12H4ZM12 2v5h4M7 10h6M7 13h6M7 15.5h4",
+  data: "M4 2h8l4 4v12H4ZM12 2v5h4M8.5 9.5c-1 0-1 .5-1 1.5v.5c0 .7-.4 1-1 1 .6 0 1 .3 1 1v.5c0 1 0 1.5 1 1.5M11.5 9.5c1 0 1 .5 1 1.5v.5c0 .7.4 1 1 1-.6 0-1 .3-1 1v.5c0 1 0 1.5-1 1.5",
+  image:
+    "M4 2h8l4 4v12H4ZM12 2v5h4M6.5 16l2.5-3 2 2 1.5-1.5 1.5 2.5" +
+    ring(8, 9.5, 1),
+  sealed:
+    "M4 2h8l4 4v12H4ZM12 2v5h4M7 11.5h6v4.5H7ZM8.5 11.5V10a1.5 1.5 0 0 1 3 0v1.5",
   files: "M6 5h10v13H6ZM3 14V2h10",
   class: "m10 2 7 4v8l-7 4-7-4V6Zm-7 4 7 4 7-4M10 10v8",
   function: "M15 3c-4-2-5 1-6 5l-2 7c-1 3-3 3-5 2M5 8h9",
@@ -126,8 +136,49 @@ export function interfaceIcon(direction) {
     : icon("output", "Outputs", "interface-icon");
 }
 
-/** Returns a neutral type icon from adapter metadata, never inferred from a name or Git status. */
+const extensionKinds = {
+  document: ["md", "mdx", "markdown", "rst", "txt", "adoc"],
+  data: [
+    ...["json", "jsonl", "toml", "yaml", "yml", "lock"],
+    ...["ini", "cfg", "conf", "env", "csv", "xml"],
+  ],
+  image: ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "avif"],
+  code: [
+    ...["html", "css", "scss", "sh", "bash", "zsh", "sql", "go"],
+    ...["java", "kt", "swift", "c", "h", "cpp", "rb", "php"],
+  ],
+};
+/** Classifies a file for its icon: adapter-parsed files are source, unreadable ones are sealed, and the rest follow their extension. */
+export function fileKind(file) {
+  if (file.readable === false) return "sealed";
+  const parsed = !/^file-level|binary|restricted|omitted/.test(file.analysis);
+  if (file.analysis && parsed) return "code";
+  const name = (file.path || file.name || "").split("/").at(-1).toLowerCase(),
+    extension = name.includes(".") ? name.split(".").at(-1) : name;
+  for (const [kind, list] of Object.entries(extensionKinds))
+    if (list.includes(extension)) return kind;
+  return "file";
+}
+const fileLabels = {
+  code: "Source file",
+  document: "Documentation",
+  data: "Data or configuration",
+  image: "Image",
+  sealed: "Binary or restricted file",
+  file: "File",
+};
+/** Returns the icon for one file kind from fileKind(); unknown kinds use the plain file icon. */
+export function fileKindIcon(kind) {
+  const known = Object.hasOwn(fileLabels, kind) ? kind : "file";
+  return icon(known, fileLabels[known], "object-type-icon");
+}
+/** Returns a neutral type icon from adapter metadata and, for files, the file kind; never from Git status. */
 export function objectTypeIcon(node) {
+  const isFile =
+    node.kind === "file" ||
+    node.kind === "boundary" ||
+    (node.kind === "stub" && (node.targetKind || "file") === "file");
+  if (isFile) return fileKindIcon(fileKind(node));
   const kind =
     node.kind === "symbol"
       ? node.symbolKind || "symbol"
