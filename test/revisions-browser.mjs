@@ -74,6 +74,12 @@ try {
   );
   await page.locator('[data-mode="time"]').click();
   await page.locator("#notice").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator("#revisionDetails").evaluate((el) => el.open),
+    false,
+    "The comparison popover closes when the owner works elsewhere",
+  );
+  await page.locator("#revisionDetails > summary").click();
   assert.match(await page.locator("#commitHead").innerText(), /manual base/);
   await page
     .getByRole("button", { name: "Use previous commit", exact: true })

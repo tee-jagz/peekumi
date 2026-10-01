@@ -1,4 +1,5 @@
 /** @module Anchored drafts, exact task previews, run reports and human verification. */
+import { iconButton } from "./icons.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   n.className = cls || "";
@@ -250,10 +251,12 @@ export function createWorkflow({
     );
     const tasksButton = document.querySelector("#openTasks");
     if (tasksButton) {
-      tasksButton.textContent = ready.length
-        ? `Tasks · ${ready.length}`
-        : "Tasks";
+      // The cue is the icon colour plus the accessible name, never a count badge.
       tasksButton.dataset.ready = String(ready.length > 0);
+      tasksButton.setAttribute(
+        "aria-label",
+        ready.length ? `Tasks, ${ready.length} ready to review` : "Tasks",
+      );
       tasksButton.title = ready.length
         ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
         : "Open tasks";
@@ -334,39 +337,41 @@ export function createWorkflow({
           (editing ? "Edit · " : "Comment · ") +
             label(composer.anchor) +
             " · " +
-            composer.sha.slice(0, 8),
+            composer.sha.slice(0, 7),
         ),
         field("What should change, and why", draft, (v) => (draft = v), 1),
       );
       const buttons = el("div", "sel-acts");
-      buttons.append(
-        action(
-          "Save draft",
-          async () => {
-            if (editing)
-              await write(
-                "/api/comments/" + editing.id,
-                { action: "edit", version: editing.version, text: draft },
-                "PATCH",
-              );
-            else await write("/api/comments", { ...composer, text: draft });
-            composer = null;
-            draft = "";
-            editing = null;
-            showTab("comments");
-            await refresh();
-          },
-          true,
-        ),
-        action("Cancel", () => {
+      const save = action(
+        "Save draft",
+        async () => {
+          if (editing)
+            await write(
+              "/api/comments/" + editing.id,
+              { action: "edit", version: editing.version, text: draft },
+              "PATCH",
+            );
+          else await write("/api/comments", { ...composer, text: draft });
           composer = null;
           draft = "";
           editing = null;
-          redraw();
-        }),
+          showTab("comments");
+          await refresh();
+        },
+        true,
       );
+      const cancel = action("Cancel", () => {
+        composer = null;
+        draft = "";
+        editing = null;
+        redraw();
+      });
+      iconButton(cancel, "close", "Cancel");
+      iconButton(save, "check", "Save draft");
+      for (const b of [cancel, save]) b.classList.add("icon-action");
+      buttons.append(cancel, save);
       const input = box.querySelector("textarea");
-      input.placeholder = "What should change, and why…";
+      input.placeholder = "What should change, and why?";
       input.setAttribute("aria-label", "What should change, and why");
       input.parentElement.firstChild.textContent = "";
       input.parentElement.classList.add("dock-input");
@@ -441,7 +446,7 @@ export function createWorkflow({
           el(
             "p",
             "rd",
-            `Left on ${c.sha.slice(0, 8)} · ${new Date(c.createdAt).toLocaleString()}`,
+            `Left on ${c.sha.slice(0, 7)} · ${new Date(c.createdAt).toLocaleString()}`,
           ),
         );
         const report = c.report;

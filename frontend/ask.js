@@ -1,4 +1,5 @@
 /** @module Contextual, non-executing review conversations and explicit draft suggestions. */
+import { iconButton } from "./icons.js";
 export function createAsk({ api, context, redraw, notice, makeDraft }) {
   const conversations = new Map();
   let selectedContext = null;
@@ -61,7 +62,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       title.className = "workflow-group";
       const note = el(
         "p",
-        `Claude Code · ${c.base.slice(0, 8)} → ${c.head.slice(0, 8)} · conversation only`,
+        `Claude Code · ${c.base.slice(0, 7)} → ${c.head.slice(0, 7)} · conversation only`,
       );
       note.className = "read-note";
       body.append(title, note);
@@ -98,7 +99,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       label.className = "workflow-field";
       form.className = "dock-form";
       input.rows = 1;
-      input.placeholder = "Ask about this code…";
+      input.placeholder = `Ask about ${c.anchor.symbol || c.anchor.path?.split("/").at(-1) || "this repository"}`;
       input.setAttribute("aria-label", "Your question");
       label.classList.add("dock-input");
       label.firstChild.textContent = "";
@@ -111,8 +112,12 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       };
       label.append(input);
       form.append(label);
-      const submit = el("button", chat.pending ? "Thinking…" : "Ask");
-      submit.className = "btn primary";
+      const submit = iconButton(
+        el("button"),
+        chat.pending ? "pending" : "send",
+        chat.pending ? "Thinking…" : "Send question",
+      );
+      submit.className = "btn primary icon-action";
       submit.type = "submit";
       submit.disabled = chat.pending;
       form.append(submit);
@@ -151,7 +156,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       };
       const anchor = el(
         "p",
-        `${c.anchor.symbol || c.anchor.path || "Repository"} · ${c.sha.slice(0, 8)}`,
+        `${c.anchor.symbol || c.anchor.path || "Repository"} · ${c.sha.slice(0, 7)}`,
       );
       anchor.className = "composer-anchor";
       anchor.title = anchor.textContent;

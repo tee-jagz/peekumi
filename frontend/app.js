@@ -2,7 +2,13 @@
 import { createAsk } from "./ask.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
-import { statusIcon, interfaceIcon, objectTypeIcon } from "./icons.js";
+import {
+  statusIcon,
+  interfaceIcon,
+  objectTypeIcon,
+  glyph,
+  iconButton,
+} from "./icons.js";
 import {
   rootScope,
   expandRelationships,
@@ -27,6 +33,9 @@ const button = (className, text, action) => {
   node.onclick = action;
   return node;
 };
+// Static controls declare their glyph in markup; their names come from aria-label or text.
+for (const node of document.querySelectorAll("[data-glyph]"))
+  node.prepend(glyph(node.dataset.glyph));
 const labels = {
   added: "Added",
   changed: "Modified",
@@ -74,7 +83,7 @@ const nodeScope = (node) => ({
 const commit = (sha) =>
   metadata?.commits.find((c) => c.sha === sha) || {
     sha,
-    short: sha?.slice(0, 8),
+    short: sha?.slice(0, 7),
     subject: "Selected revision",
   };
 /** Captures the selected declaration or dependency at its displayed immutable revision. */
@@ -407,11 +416,8 @@ function renderControls() {
 function breadcrumbs() {
   const nav = element("nav", "crumbs");
   nav.setAttribute("aria-label", "Level");
-  if (scope.kind !== "repo") {
-    const up = button("back", "‹", goUp);
-    up.setAttribute("aria-label", "Up one level");
-    nav.append(up);
-  }
+  if (scope.kind !== "repo")
+    nav.append(iconButton(button("back", "", goUp), "back", "Up one level"));
   const parts = [{ label: metadata.name, scope: rootScope() }];
   if (scope.kind === "rootfiles")
     parts.push({ label: "Repository files", scope });
@@ -425,10 +431,17 @@ function breadcrumbs() {
       });
     }
   }
-  // Keep the root and last two path segments in the compact header.
-  const visible = parts.length > 3 ? [parts[0], ...parts.slice(-2)] : parts;
+  // The header keeps the root and current level; Up and the collapsed step reach the rest.
+  const visible = parts.length > 2 ? [parts[0], parts.at(-1)] : parts;
   visible.forEach((part, index) => {
     if (index) nav.append(element("span", "chev", "›"));
+    if (index && parts.length > 2) {
+      const between = parts.at(-2);
+      const skip = button("skip", "…", () => navigate(between.scope));
+      skip.title = between.scope.path;
+      skip.setAttribute("aria-label", "Up to " + between.label);
+      nav.append(skip, element("span", "chev", "›"));
+    }
     const b = button("", part.label, () => navigate(part.scope));
     b.title = part.scope.path || metadata.name;
     if (index === visible.length - 1) b.setAttribute("aria-current", "page");
@@ -436,30 +449,24 @@ function breadcrumbs() {
   });
   return nav;
 }
-/** Recreates the Time or Diff commit sheets and renders the active map while preserving map-sheet scroll position. */
+/** Renders the header breadcrumbs and the active map, moving the persistent Before/After and key controls into the floating canvas controls. */
 function renderDeck() {
   const deck = $("#deck"),
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
-  const mapLegend = $("#mapLegend");
+  const mapLegend = $("#mapLegend"),
+    sides = $("#baSeg");
+  $("#crumbHost").replaceChildren(breadcrumbs());
   deck.replaceChildren();
   const sheet = element("div", "sheet");
   sheet.style.zIndex = "10";
   sheet.dataset.front = "true";
-  const header = element("div", "sheet-head");
-  header.append(
-    breadcrumbs(),
-    element(
-      "span",
-      "tag" + (before ? " base" : ""),
-      (before ? "Base " : "") + commit(before ? baseRef : headRef).short,
-    ),
-  );
   const body = element("div", "sheet-body");
-  sheet.append(header, body);
+  sheet.append(body);
   deck.append(sheet);
   renderGraph(body);
-  body.querySelector(".canvas-controls")?.append(mapLegend);
+  body.querySelector(".map-tools")?.append(mapLegend);
+  body.querySelector(".canvas-controls")?.prepend(sides);
   body.scrollTop = oldScroll;
 }
 /** Chooses a node colour from its Git status, or the neutral Structure accent. */
@@ -533,16 +540,6 @@ function renderGraph(body) {
         relationshipChanges.has(node.key) ||
         nodeRelations(node).some((r) => r.status !== "unchanged")),
   );
-  if (root) {
-    const hint = element(
-      "div",
-      "row-lbl",
-      `${current.length} components · drag or scroll to explore`,
-    );
-    hint.style.left = "12px";
-    hint.style.top = "3px";
-    canvas.append(hint);
-  }
   const stubs = new Map();
   for (const edge of edges.filter(
     (edge) => !changesOnly || edge.status !== "unchanged",
@@ -676,14 +673,22 @@ function renderGraph(body) {
   for (const p of positions.values()) p.y += verticalOffset;
   drawEdges(canvas, positions, graphWidth, height, false);
   for (const p of positions.values()) canvas.append(graphNode(p));
-  const controls = element("div", "canvas-controls");
-  const filter = button("change-filter", "Changes only", () => {
-    changesOnly = !changesOnly;
-    if (changesOnly && selected?.status === "unchanged") selected = null;
-    render();
-  });
+  const controls = element("div", "canvas-controls"),
+    tools = element("div", "map-tools");
+  tools.setAttribute("role", "toolbar");
+  tools.setAttribute("aria-label", "Map controls");
+  const filter = iconButton(
+    button("change-filter", "", () => {
+      changesOnly = !changesOnly;
+      if (changesOnly && selected?.status === "unchanged") selected = null;
+      render();
+    }),
+    "filter",
+    "Changes only",
+  );
   filter.setAttribute("aria-pressed", String(changesOnly));
-  controls.append(filter);
+  tools.append(filter);
+  controls.append(tools);
   mountCanvas(
     body,
     canvas,
@@ -691,6 +696,7 @@ function renderGraph(body) {
     height,
     [baseRef, headRef, scope.kind, scope.path, changesOnly].join(":"),
     controls,
+    tools,
   );
 }
 /** Creates an accessible map card with status, preview metadata and select-then-open behavior. */
@@ -721,9 +727,11 @@ function graphNode({ node, x, y, w, h }) {
   card.dataset.relationshipChanged = String(
     nodeRelations(node).some((r) => r.status !== "unchanged"),
   );
+  const changedFiles =
+    node.files?.filter((f) => f.status !== "unchanged").length || 0;
   card.setAttribute(
     "aria-label",
-    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}`,
+    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
   );
   card.title = node.name;
   Object.assign(card.style, {
@@ -740,12 +748,10 @@ function graphNode({ node, x, y, w, h }) {
       "span",
       "n-name",
       node.name +
-        (node.files
-          ? ` (${node.files.length})`
-          : node.kind === "symbol" &&
-              ["function", "method"].includes(node.symbolKind)
-            ? "()"
-            : ""),
+        (node.kind === "symbol" &&
+        ["function", "method"].includes(node.symbolKind)
+          ? "()"
+          : ""),
     ),
   );
   if (node.kind === "file")
@@ -767,22 +773,25 @@ function graphNode({ node, x, y, w, h }) {
       description.title = info.description;
       card.append(description);
     }
-    const kids = element("div", "n-kids");
-    const paths = [
-      ...new Set(
-        node.files.map((f) =>
-          node.path ? f.path.slice(node.path.length + 1).split("/")[0] : f.path,
-        ),
-      ),
-    ];
-    for (const name of paths.slice(0, 3)) {
-      const kid = element("span", "kid");
-      kid.append(document.createTextNode(name));
-      kids.append(kid);
-    }
-    if (paths.length > 3)
-      kids.append(element("span", "kid", `+${paths.length - 3}`));
-    card.append(kids);
+    // Counts replace child-name chips, which could not fit without truncation.
+    const counts = element("div", "n-counts");
+    if (lens === "changes")
+      for (const status of ["added", "changed", "removed"]) {
+        const count = node.files.filter((f) => f.status === status).length;
+        if (!count) continue;
+        const item = element("span", "n-count");
+        item.dataset.status = status;
+        item.append(statusIcon(status), document.createTextNode(count));
+        counts.append(item);
+      }
+    const total = element("span", "n-count");
+    total.append(
+      glyph("file"),
+      document.createTextNode(node.files.length),
+      element("span", "visually-hidden", " files"),
+    );
+    counts.append(total);
+    card.append(counts);
   } else if (
     node.kind === "file" &&
     (node.symbolCount ?? node.symbols?.length ?? 0)
@@ -1118,7 +1127,7 @@ function renderCommits() {
       picker.append(opt);
     }
     if (![...picker.options].some((o) => o.value === baseRef)) {
-      const opt = element("option", "", baseRef.slice(0, 8));
+      const opt = element("option", "", baseRef.slice(0, 7));
       opt.value = baseRef;
       picker.append(opt);
     }
@@ -1149,7 +1158,8 @@ function renderCommits() {
     `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
   );
   head.append(meta);
-  $("#revisionSummary").textContent = `${commit(baseRef).short} → ${c.short}`;
+  $("#revisionSummary").textContent =
+    `${metadata.selectedBranch?.name || "detached"} · ${commit(baseRef).short} → ${c.short}`;
   requestAnimationFrame(() => {
     const active = strip.querySelector('[aria-selected="true"]');
     if (active)
@@ -1544,10 +1554,15 @@ function renderMapLegend() {
     element("span", "", "Outputs"),
   );
   host.append(contractKey);
-  const close = button("btn", "Close legend", () => {
-    $("#mapLegend").open = false;
-  });
-  host.append(close);
+  host.append(
+    iconButton(
+      button("btn legend-close", "", () => {
+        $("#mapLegend").open = false;
+      }),
+      "close",
+      "Close legend",
+    ),
+  );
 }
 /** Creates a keyboard-accessible review-list entry that invokes its supplied navigation action. */
 function listRow(node, detail, action) {
@@ -1572,9 +1587,11 @@ function renderTab() {
   const conversation = element("div", "conversation");
   if (primaryTab === "ask") ask.render(conversation, composerHost);
   else workflow.renderComposer(composerHost);
-  const anchor = composerHost.querySelector(".composer-anchor");
-  $("#dockContext").textContent = anchor?.textContent || "";
-  $("#dockContext").title = anchor?.textContent || "";
+  const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
+  $("#dockContext").replaceChildren(
+    ...(anchor ? [glyph("pin"), document.createTextNode(anchor)] : []),
+  );
+  $("#dockContext").title = anchor || "";
   $("#selectionDetails").hidden = tab !== "details";
   if (tab === "details") return;
   if (tab === "ask") {
@@ -2290,14 +2307,24 @@ sheetHandle.onkeydown = (e) => {
   }
 };
 $("#refresh").onclick = () => boot(true);
+// Header and map popovers close when the owner interacts elsewhere.
+document.addEventListener("pointerdown", (event) => {
+  for (const id of ["#revisionDetails", "#mapLegend"])
+    if ($(id).open && !$(id).contains(event.target)) $(id).open = false;
+});
+$("#closeRevision").onclick = () => {
+  $("#revisionDetails").open = false;
+  $("#revisionDetails > summary").focus();
+};
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.target.closest("input,select,textarea"))
     return;
-  if ($("#mapLegend").open) {
-    $("#mapLegend").open = false;
-    $("#mapLegend summary").focus();
-    return;
-  }
+  for (const id of ["#mapLegend", "#revisionDetails"])
+    if ($(id).open) {
+      $(id).open = false;
+      $(id + " > summary").focus();
+      return;
+    }
   if (selected) {
     selected = null;
     renderDeck();
