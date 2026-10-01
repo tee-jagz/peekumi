@@ -425,8 +425,25 @@ try {
     await page.locator("#revisionDetails").evaluate((node) => {
       node.open = true;
     });
+    const baseTrigger = page.locator("#base + .frost-select");
+    await baseTrigger.click();
+    const menu = page.getByRole("listbox", { name: "Compare with revision" });
+    await menu.waitFor();
+    assert.equal(
+      await menu.getByRole("option").count(),
+      await page.locator("#base option").count(),
+      "The frosted menu lists every native option",
+    );
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
+    assert.equal(
+      await page.locator("#revisionDetails").evaluate((el) => el.open),
+      true,
+      "Closing a select menu keeps its popover open",
+    );
     await page.locator("#base").selectOption(peekSha);
     await page.locator("#notice").waitFor({ state: "hidden" });
+    assert.match(await baseTrigger.textContent(), new RegExp(peekSha.slice(0, 7)));
     await page.locator("#closeRevision").click();
     assert.equal(
       await page.locator("#revisionDetails").evaluate((el) => el.open),

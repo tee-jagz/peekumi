@@ -225,28 +225,28 @@ try {
             .value.startsWith("refs/heads/strata/"),
       );
       assert.equal(
-        await page.getByLabel("Viewing branch").inputValue(),
+        await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
       );
       assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
       await page.reload();
       await page.locator('.sheet[data-front="true"] .node').first().waitFor();
       assert.equal(
-        await page.getByLabel("Viewing branch").inputValue(),
+        await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
       );
       await page.screenshot({
         path: `test-results/agent-branch-${viewport.width}.png`,
       });
       await page.locator("#revisionDetails > summary").click();
-      await page.getByLabel("Viewing branch").selectOption("refs/heads/main");
+      await page.locator("#branchPicker").selectOption("refs/heads/main");
       await page.locator("#notice").waitFor({ state: "hidden" });
       await page.locator("#openTasks").click();
       await page.locator(".task-link").first().click();
       await page
         .getByRole("button", { name: "Review all changes", exact: true })
         .click();
-      await page.getByLabel("Changed file").waitFor();
+      await page.locator('select[aria-label="Changed file"]').waitFor();
       await page.locator(".readable-diff .addition").first().waitFor();
       assert.ok(
         (await page.locator(".readable-diff .line-number").count()) > 0,
