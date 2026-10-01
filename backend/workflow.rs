@@ -81,7 +81,12 @@ impl Workflow {
             std::fs::set_permissions(&this.state, std::fs::Permissions::from_mode(0o700))?;
         }
         let conn = this.connection()?;
-        conn.execute_batch("CREATE TABLE IF NOT EXISTS workflow (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL);")?;
+        let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        ensure!(
+            version <= 1,
+            "Workflow state was created by a newer Strata version; upgrade before opening it"
+        );
+        conn.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS workflow (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL); PRAGMA user_version=1; COMMIT;")?;
         conn.execute(
             "INSERT OR IGNORE INTO workflow VALUES (1,?1)",
             [json!({"repo":this.repo,"comments":[],"runs":[]}).to_string()],
@@ -160,11 +165,15 @@ impl Workflow {
     /// This is read-only and does not imply that a deployment has occurred.
     fn annotate_application(&self, run: &mut Value) {
         let applied = run["results"].as_array().is_some_and(|commits| {
-            !commits.is_empty() && commits.iter().all(|commit| {
-                commit.as_str().is_some_and(|sha| {
-                    !sha.starts_with('-') && self.git(&["merge-base", "--is-ancestor", sha, &self.watched]).is_ok()
+            !commits.is_empty()
+                && commits.iter().all(|commit| {
+                    commit.as_str().is_some_and(|sha| {
+                        !sha.starts_with('-')
+                            && self
+                                .git(&["merge-base", "--is-ancestor", sha, &self.watched])
+                                .is_ok()
+                    })
                 })
-            })
         });
         run["applied"] = json!(applied);
         run["targetBranch"] = json!(self.watched.trim_start_matches("refs/heads/"));

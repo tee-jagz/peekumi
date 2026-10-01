@@ -4,6 +4,7 @@ mod ask;
 mod engine;
 mod index;
 mod process;
+mod pull_requests;
 mod relationships;
 mod rules;
 mod runner;
@@ -33,11 +34,17 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 #[derive(Parser, Clone)]
 #[command(
     name = "strata",
+    version,
     about = "Explore committed repository structure from your phone"
 )]
 /// Launch configuration for the repository, listener, private state and installed parser helpers.
 struct Options {
     directory: PathBuf,
+    /// Additional local checkouts served at the same address, each with isolated state.
+    #[arg(long = "repo")]
+    repositories: Vec<PathBuf>,
+    #[arg(long)]
+    isolate_primary: bool,
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
     #[arg(long, default_value_t = 4317)]
@@ -65,6 +72,8 @@ struct Options {
     codex: String,
     #[arg(long, env = "STRATA_CLAUDE", default_value = "claude")]
     claude: String,
+    #[arg(long, env = "STRATA_GH", default_value = "gh")]
+    github: String,
     #[arg(long, hide = true)]
     report_run: Option<String>,
 }
@@ -146,10 +155,18 @@ struct App {
     workflow: workflow::Workflow,
     ask_lock: Mutex<()>,
     token: String,
+    reader_token: String,
     cookie_name: String,
-    sessions: Mutex<sessions::Sessions>,
+    sessions: Arc<Mutex<sessions::Sessions>>,
     options: Options,
 }
+/// One listener with independent repository workers and a shared device session registry.
+struct Fleet {
+    primary: Arc<App>,
+    repositories: HashMap<String, Arc<App>>,
+    _locks: Vec<std::fs::File>,
+}
+
 /// Generates 32 random bytes encoded as hexadecimal for access and session tokens.
 fn random_token() -> String {
     let mut bytes = [0u8; 32];
@@ -180,6 +197,13 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
         "/select.js" => Some(("text/javascript", include_bytes!("../frontend/select.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
+        "/manifest.webmanifest" => Some((
+            "application/manifest+json",
+            include_bytes!("../frontend/manifest.webmanifest"),
+        )),
+        "/pwa.js" => Some(("text/javascript", include_bytes!("../frontend/pwa.js"))),
+        "/icon-192.png" => Some(("image/png", include_bytes!("../frontend/icon-192.png"))),
+        "/icon-512.png" => Some(("image/png", include_bytes!("../frontend/icon-512.png"))),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
         _ => None,
     }
@@ -276,9 +300,42 @@ async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
 }
 /// Serves assets, pairs sessions, and authenticates inspection and owner workflow requests.
 /// Rejects cross-origin writes before dispatching blocking repository or workflow operations.
-async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
+async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
+    let app = fleet.primary.clone();
     let gzip = gzip_accepted(request.headers());
     let path = request.uri().path().to_string();
+    if request.method() == Method::GET && path == "/sw.js" {
+        let assets: Vec<u8> = [
+            "/",
+            "/app.js",
+            "/icons.js",
+            "/model.js",
+            "/ask.js",
+            "/workflow.js",
+            "/canvas.js",
+            "/select.js",
+            "/style.css",
+            "/pwa.js",
+            "/manifest.webmanifest",
+            "/favicon.svg",
+            "/icon-192.png",
+            "/icon-512.png",
+        ]
+        .iter()
+        .flat_map(|path| asset(path).unwrap().1.iter().copied())
+        .chain(include_bytes!("../frontend/sw.js").iter().copied())
+        .collect();
+        let script = include_str!("../frontend/sw.js")
+            .replace("__STRATA_BUILD__", &engine::hash(&assets)[..16]);
+        return respond(
+            StatusCode::OK,
+            "text/javascript",
+            script.into_bytes(),
+            gzip,
+            None,
+        )
+        .await;
+    }
     if request.method() == Method::GET
         && let Some((kind, bytes)) = asset(&path)
     {
@@ -308,19 +365,25 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
             Ok(v) => v,
             Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await,
         };
-        if !payload["token"]
-            .as_str()
-            .is_some_and(|token| equal(token, &app.token))
-        {
+        let supplied = payload["token"].as_str().unwrap_or("");
+        let role = if equal(supplied, &app.token) {
+            "owner"
+        } else if equal(supplied, &app.reader_token) {
+            "reader"
+        } else {
             return error(
                 StatusCode::UNAUTHORIZED,
                 "Access token not recognised",
                 gzip,
             )
             .await;
-        }
+        };
         let session = random_token();
-        if let Err(e) = app.sessions.lock().await.insert(&session) {
+        if let Err(e) = app.sessions.lock().await.insert_device(
+            &session,
+            role,
+            payload["name"].as_str().unwrap_or("Browser"),
+        ) {
             eprintln!("Unable to save browser session: {e}");
             return error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -348,17 +411,94 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         .split(';')
         .find_map(|s| s.trim().strip_prefix(&format!("{}=", app.cookie_name)))
         .unwrap_or("");
-    let authenticated = equal(bearer, &app.token) || app.sessions.lock().await.contains(session);
-    if !authenticated {
+    let role = if equal(bearer, &app.token) {
+        Some("owner".to_string())
+    } else if equal(bearer, &app.reader_token) {
+        Some("reader".to_string())
+    } else {
+        app.sessions.lock().await.role(session).map(str::to_string)
+    };
+    let Some(role) = role else {
         return error(
             StatusCode::UNAUTHORIZED,
             "Connect with the access link printed by Strata",
             gzip,
         )
         .await;
+    };
+    if role == "reader"
+        && (request.method() != Method::GET
+            || path == "/api/devices"
+            || path == "/api/workflow"
+            || path.starts_with("/api/runs")
+            || path.starts_with("/api/comments"))
+    {
+        return error(
+            StatusCode::FORBIDDEN,
+            "This device has read-only access",
+            gzip,
+        )
+        .await;
     }
+    if path == "/api/devices" && request.method() == Method::GET {
+        return json_response(
+            StatusCode::OK,
+            app.sessions.lock().await.devices(),
+            gzip,
+            None,
+        )
+        .await;
+    }
+    if path.starts_with("/api/devices/") && request.method() == Method::DELETE {
+        let origin = header(request.headers(), "origin");
+        if header(request.headers(), "sec-fetch-site") == "cross-site"
+            || (!origin.is_empty()
+                && url::Url::parse(origin).ok().is_none_or(|u| {
+                    u[url::Position::BeforeHost..url::Position::AfterPort]
+                        != *header(request.headers(), "host")
+                }))
+        {
+            return error(StatusCode::FORBIDDEN, "Origin rejected", gzip).await;
+        }
+        return match app
+            .sessions
+            .lock()
+            .await
+            .revoke(path.trim_start_matches("/api/devices/"))
+        {
+            Ok(()) => json_response(StatusCode::OK, json!({"ok":true}), gzip, None).await,
+            Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string(), gzip).await,
+        };
+    }
+    if path == "/api/repositories" && request.method() == Method::GET {
+        let mut repos: Vec<Value> = fleet.repositories.iter().map(|(id, repo)| json!({
+            "id": id, "name": repo.options.directory.file_name().unwrap_or_default().to_string_lossy(),
+            "path": repo.options.directory, "default": Arc::ptr_eq(repo, &fleet.primary)
+        })).collect();
+        repos.sort_by_key(|r| r["path"].as_str().unwrap_or("").to_string());
+        return json_response(
+            StatusCode::OK,
+            json!({"repositories": repos, "role": role}),
+            gzip,
+            None,
+        )
+        .await;
+    }
+    let selected = header(request.headers(), "x-strata-repository");
+    let app = if selected.is_empty() {
+        app
+    } else {
+        match fleet.repositories.get(selected) {
+            Some(repo) => repo.clone(),
+            None => {
+                return error(StatusCode::NOT_FOUND, "Repository is not registered", gzip).await;
+            }
+        }
+    };
     if path == "/api/ask"
         || path == "/api/workflow"
+        || path == "/api/prs"
+        || path == "/api/prs/open"
         || path.starts_with("/api/comments")
         || path.starts_with("/api/runs")
     {
@@ -392,6 +532,20 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
                 Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await,
             }
         };
+        if path.starts_with("/api/prs") {
+            let directory = app.options.directory.clone();
+            let github = app.options.github.clone();
+            let route = path.clone();
+            return match tokio::task::spawn_blocking(move || {
+                pull_requests::route(&directory, &github, &method, &route, body)
+            })
+            .await
+            {
+                Ok(Ok(value)) => json_response(StatusCode::OK, value, gzip, None).await,
+                Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "PR lookup failed", gzip).await,
+            };
+        }
         if path == "/api/ask" {
             if method != "POST" {
                 return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST for Ask", gzip).await;
@@ -439,11 +593,7 @@ async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
         .filter(|v| !v.is_empty())
         .unwrap_or(&app.options.head);
     let result = match path.as_str() {
-        "/api/repo" => {
-            app.engine
-                .call("metadata", json!([base, head]))
-                .await
-        }
+        "/api/repo" => app.engine.call("metadata", json!([base, head])).await,
         "/api/compare" => {
             app.engine
                 .call("compare", json!([base,head,{"view":query.get("view")}]))
@@ -504,7 +654,8 @@ fn token(options: &Options) -> Result<String> {
 /// Validates HEAD before serving, binds the listener and prints the local pairing link.
 /// Returns startup, configuration, repository or listener errors.
 async fn main() -> Result<()> {
-    let options = Options::parse();
+    let mut options = Options::parse();
+    options.directory = options.directory.canonicalize().context("Cannot open repository directory")?;
     if let Some(id) = &options.report_run {
         let store = workflow::Workflow::new(
             &options.directory,
@@ -546,74 +697,135 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     let access_token = token(&options)?;
-    // The API owns recovery; a second service must not mark a live run interrupted.
-    let service_lock = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(options.state_dir.join("workflow-service.lock"))?;
-    service_lock
-        .try_lock()
-        .context("Another Strata service is using this state directory")?;
-    let watched = if options.head == "HEAD" {
-        String::from_utf8(
-            process::run(
-                "git",
-                &[
-                    "-C",
-                    repo.directory.to_str().context("Invalid directory")?,
-                    "symbolic-ref",
-                    "-q",
-                    "HEAD",
-                ],
-                None,
-                vec![],
-            )
-            .unwrap_or_default(),
-        )?
-        .trim()
-        .to_string()
-    } else {
-        options.head.clone()
-    };
-    let workflow = workflow::Workflow::new(
-        &repo.directory,
-        &options.state_dir,
-        if watched.is_empty() {
-            &options.head
+    let server_lock = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(options.state_dir.join("server.lock"))?;
+    server_lock.try_lock().context("Another Strata server is using this state directory")?;
+    let mut reader_options = options.clone();
+    reader_options.token = None;
+    reader_options.state_dir = options.state_dir.join("read-only");
+    let reader_token = token(&reader_options)?;
+    let binding = if options.isolate_primary { options.state_dir.canonicalize()? } else { repo.directory.clone() };
+    let cookie_name = format!("strata_session_{}", &engine::hash(binding.to_string_lossy().as_bytes())[..12]);
+    let shared_sessions = Arc::new(Mutex::new(sessions::Sessions::load(
+        options.state_dir.join("sessions.json"),
+        &access_token,
+        &cookie_name,
+    )?));
+    let mut primary_options = options.clone();
+    if options.isolate_primary {
+        primary_options.state_dir = options
+            .state_dir
+            .join("repositories")
+            .join(&engine::hash(repo.directory.to_string_lossy().as_bytes())[..16]);
+        repo = Repository::new(
+            options.directory.clone(),
+            &primary_options.state_dir,
+            options.parser_root.clone(),
+            options.python.clone(),
+            options.node.clone(),
+        )?;
+    }
+    let mut configurations = vec![primary_options];
+    for directory in &options.repositories {
+        let directory = directory
+            .canonicalize()
+            .context("Cannot open registered repository")?;
+        if directory == repo.directory {
+            continue;
+        }
+        let mut extra = options.clone();
+        extra.directory = directory.clone();
+        extra.state_dir = options
+            .state_dir
+            .join("repositories")
+            .join(&engine::hash(directory.to_string_lossy().as_bytes())[..16]);
+        extra.base = "HEAD~1".into();
+        extra.head = "HEAD".into();
+        configurations.push(extra);
+    }
+    let mut repositories = HashMap::new();
+    let mut locks = vec![server_lock];
+    let mut primary = None;
+    let mut first_repo = Some(repo);
+    for config in configurations {
+        let repository = match first_repo.take() {
+            Some(repo) => repo,
+            None => Repository::new(
+                config.directory.clone(),
+                &config.state_dir,
+                config.parser_root.clone(),
+                config.python.clone(),
+                config.node.clone(),
+            )?,
+        };
+        repository.resolve("HEAD")?;
+        let id = engine::hash(repository.directory.to_string_lossy().as_bytes())[..16].to_string();
+        if repositories.contains_key(&id) {
+            continue;
+        }
+        std::fs::create_dir_all(&config.state_dir)?;
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(config.state_dir.join("workflow-service.lock"))?;
+        lock.try_lock()
+            .context("Another Strata service is using this state directory")?;
+        locks.push(lock);
+        let watched = if config.head == "HEAD" {
+            String::from_utf8(
+                process::run(
+                    "git",
+                    &["symbolic-ref", "-q", "HEAD"],
+                    Some(&repository.directory),
+                    vec![],
+                )
+                .unwrap_or_default(),
+            )?
+            .trim()
+            .to_string()
         } else {
-            &watched
-        },
-        &options.codex,
-        &options.claude,
-    )?;
-    runner::recover(workflow.clone())?;
+            config.head.clone()
+        };
+        let workflow = workflow::Workflow::new(
+            &repository.directory,
+            &config.state_dir,
+            if watched.is_empty() {
+                &config.head
+            } else {
+                &watched
+            },
+            &config.codex,
+            &config.claude,
+        )?;
+        runner::recover(workflow.clone())?;
+        let app = Arc::new(App {
+            cookie_name: cookie_name.clone(),
+            workflow,
+            ask_lock: Mutex::new(()),
+            engine: Engine::start(repository),
+            token: access_token.clone(),
+            reader_token: reader_token.clone(),
+            sessions: shared_sessions.clone(),
+            options: config,
+        });
+        if primary.is_none() {
+            primary = Some(app.clone());
+        }
+        repositories.insert(id, app);
+    }
     let listener = tokio::net::TcpListener::bind((options.host.as_str(), options.port)).await?;
     let address = listener.local_addr()?;
     println!(
         "Repo Strata · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
         json!({"port":address.port()})
     );
-    let cookie_name = format!(
-        "strata_session_{}",
-        &engine::hash(repo.directory.to_string_lossy().as_bytes())[..12]
-    );
-    let sessions = sessions::Sessions::load(
-        options.state_dir.join("sessions.json"),
-        &access_token,
-        &cookie_name,
-    )?;
-    let app = Arc::new(App {
-        cookie_name,
-        workflow,
-        ask_lock: Mutex::new(()),
-        engine: Engine::start(repo),
-        token: access_token,
-        sessions: Mutex::new(sessions),
-        options,
+    let fleet = Arc::new(Fleet {
+        primary: primary.context("No repository registered")?,
+        repositories,
+        _locks: locks,
     });
-    axum::serve(listener, Router::new().fallback(handle).with_state(app))
+    axum::serve(listener, Router::new().fallback(handle).with_state(fleet))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })

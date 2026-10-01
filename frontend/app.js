@@ -68,7 +68,7 @@ let viewingBranch = new URL(location.href).searchParams.get("branch"),
   bootId = 0;
 let baseRef,
   headRef,
-  diffBase,
+  diffBase = new URL(location.href).searchParams.get("base"),
   nodes = [],
   edges = [],
   sourceData,
@@ -205,8 +205,18 @@ function showNotice(message, error = false) {
 }
 /** Fetches an authenticated same-origin JSON API response. Rejects failed HTTP responses with the server error message. */
 async function api(route, options = {}) {
-  const response = await fetch(route, options),
-    result = await response.json();
+  const headers = new Headers(options.headers);
+  const repo = new URL(location.href).searchParams.get("repo");
+  if (repo) headers.set("X-Strata-Repository", repo);
+  let response;
+  try {
+    response = await fetch(route, { ...options, headers });
+  } catch {
+    throw new Error(
+      "Cannot reach Strata. Check that the server is running and your phone is connected to its network or Tailscale.",
+    );
+  }
+  const result = await response.json();
   if (response.status === 401) {
     $("#connect").hidden = false;
     $("#workspace").inert = true;
@@ -219,7 +229,7 @@ async function pair(token) {
   await api("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, name: navigator.userAgent.slice(0, 100) }),
   });
   await boot();
 }
@@ -239,6 +249,7 @@ async function boot(refresh = false, branch = viewingBranch) {
   $("#refresh").disabled = true;
   showNotice("Loading branch…");
   try {
+    await setupRepositories();
     const next = await api(
       "/api/repo" + (branch ? "?" + new URLSearchParams({ head: branch }) : ""),
     );
@@ -277,7 +288,8 @@ async function boot(refresh = false, branch = viewingBranch) {
     headRef = refresh ? metadata.initialHead : headRef || metadata.initialHead;
     baseRef = diffBase || parentRevision(headRef);
     await loadComparison();
-    workflow.refresh(false).catch((error) => showNotice(error.message, true));
+    if (document.documentElement.dataset.access !== "reader")
+      workflow.refresh(false).catch((error) => showNotice(error.message, true));
   } catch (error) {
     if (id === bootId) {
       $("#branchPicker").value = viewingBranch || "HEAD";
@@ -304,6 +316,127 @@ async function switchBranch(branch) {
   history.replaceState(null, "", url);
 }
 $("#branchPicker").onchange = (event) => switchBranch(event.target.value);
+/** Lists registered local checkouts; reload on switching prevents cross-repository task or source state. */
+async function setupRepositories() {
+  const data = await api("/api/repositories");
+  document.documentElement.dataset.access = data.role;
+  if (data.role === "reader") {
+    $("#openTasks").hidden = true;
+    $("#conversationDock").hidden = true;
+    $("#loadPrs").title =
+      "Read-only: PR listing is available; fetching a new comparison requires owner access";
+  }
+  const picker = $("#repositoryPicker");
+  picker.replaceChildren();
+  for (const repo of data.repositories) {
+    const option = element("option", "", repo.name);
+    option.value = repo.id;
+    option.title = repo.path;
+    picker.append(option);
+  }
+  picker.value =
+    new URL(location.href).searchParams.get("repo") ||
+    data.repositories.find((r) => r.default)?.id;
+  $("#repositoryControl").hidden = data.repositories.length < 2;
+}
+$("#repositoryPicker").onchange = (event) => {
+  const unsent = [
+    ...document.querySelectorAll("textarea, #conversationDock input"),
+  ].some((el) => el.value.trim());
+  if (unsent && !confirm("Switch repository? Save any unsent draft first.")) {
+    setupRepositories();
+    return;
+  }
+  const url = new URL(location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("repo", event.target.value);
+  location.assign(url);
+};
+$("#loadPrs").onclick = async () => {
+  $("#loadPrs").disabled = true;
+  $("#prFeedback").textContent = "Loading pull requests…";
+  try {
+    const prs = await api("/api/prs");
+    const picker = $("#prPicker");
+    picker.replaceChildren(element("option", "", "Select a pull request…"));
+    picker.firstChild.value = "";
+    for (const pr of prs) {
+      const o = element("option", "", `#${pr.number} ${pr.title}`);
+      o.value = pr.number;
+      picker.append(o);
+    }
+    picker.hidden = prs.length === 0;
+    $("#prFeedback").textContent = prs.length
+      ? "Opening a PR fetches its refs; your checkout stays unchanged."
+      : "No open pull requests.";
+  } catch (e) {
+    $("#prFeedback").textContent = e.message;
+  } finally {
+    $("#loadPrs").disabled = false;
+  }
+};
+$("#prPicker").onchange = async (event) => {
+  const number = Number(event.target.value);
+  if (!number) return;
+  event.target.disabled = true;
+  $("#prFeedback").textContent = "Fetching PR comparison…";
+  try {
+    const data = await api("/api/prs/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number }),
+    });
+    mode = "diff";
+    before = false;
+    scope = rootScope();
+    selected = null;
+    headRef = data.head;
+    diffBase = data.base;
+    baseRef = data.base;
+    await boot(true, data.head);
+    const url = new URL(location.href);
+    url.searchParams.set("branch", data.head);
+    url.searchParams.set("base", data.base);
+    history.replaceState(null, "", url);
+    const context = $("#prContext");
+    context.replaceChildren();
+    context.hidden = false;
+    const link = element("a", "", `#${number} ${data.pr.title}`);
+    link.href = data.pr.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    context.append(
+      link,
+      element("p", "read-note", data.pr.body || "No description."),
+    );
+    for (const check of data.pr.statusCheckRollup || [])
+      context.append(
+        element(
+          "p",
+          "read-note",
+          `${check.name || check.context}: ${check.conclusion || check.state || check.status}`,
+        ),
+      );
+    for (const entry of [
+      ...(data.pr.reviews || []),
+      ...(data.pr.comments || []),
+    ])
+      context.append(
+        element(
+          "p",
+          "read-note",
+          `${entry.author?.login || "Reviewer"}${entry.state ? " · " + entry.state : ""}: ${entry.body || ""}`,
+        ),
+      );
+    $("#prFeedback").textContent =
+      "PR comparison · merge base → head. Comments here remain local; publish on GitHub explicitly.";
+  } catch (e) {
+    $("#prFeedback").textContent = e.message;
+  } finally {
+    event.target.disabled = false;
+  }
+};
 /** Uses the selected commit's first parent, or itself when it has no parent. */
 function parentRevision(sha) {
   return commit(sha).parent || sha;
@@ -1278,7 +1411,9 @@ function selectionLine(node) {
   if (node.kind === "edge")
     return `${node.name} · static ${node.relationshipKind}, not runtime execution.`;
   if (node.kind === "symbol")
-    return node.signature || `${node.symbolKind} · lines ${node.start}–${node.end}`;
+    return (
+      node.signature || `${node.symbolKind} · lines ${node.start}–${node.end}`
+    );
   if (node.kind === "file")
     return `${node.symbolCount ?? node.symbols?.length ?? 0} declarations · ${node.analysis}`;
   return node.files
@@ -1299,7 +1434,10 @@ function selectionFacts(node) {
     for (const [status, count] of counts)
       if (status !== "unchanged") facts.push([labels[status], String(count)]);
   } else if (node.kind === "symbol") {
-    facts.push(["Kind", node.symbolKind], ["Lines", `${node.start}–${node.end}`]);
+    facts.push(
+      ["Kind", node.symbolKind],
+      ["Lines", `${node.start}–${node.end}`],
+    );
   } else if (node.kind === "file") {
     const total = node.symbolCount ?? node.symbols?.length ?? 0,
       known = node.symbols || node.symbolPreview || [];
@@ -1330,10 +1468,7 @@ function changedDeclarations(node) {
     list = element("ul", "list");
   for (const symbol of symbols.slice(0, 8)) {
     const li = element("li", "plain-row");
-    li.append(
-      statusIcon(symbol.status),
-      element("span", "mono", symbol.name),
-    );
+    li.append(statusIcon(symbol.status), element("span", "mono", symbol.name));
     list.append(li);
   }
   box.append(list);
@@ -1940,9 +2075,7 @@ function renderDependencies(body) {
       for (const pair of edge.pairs.values())
         for (const path of [pair.from, pair.to])
           pairs.append(
-            button("link-button", path, () =>
-              navigate({ kind: "file", path }),
-            ),
+            button("link-button", path, () => navigate({ kind: "file", path })),
           );
       li.append(pairs);
     }
@@ -2486,7 +2619,7 @@ $("#revisionDetails").addEventListener("toggle", () => {
 });
 const token = new URLSearchParams(location.hash.slice(1)).get("token");
 if (token) {
-  history.replaceState(null, "", location.pathname);
+  history.replaceState(null, "", location.pathname + location.search);
   pair(token).catch((error) => {
     showNotice(error.message, true);
     $("#connect").hidden = false;

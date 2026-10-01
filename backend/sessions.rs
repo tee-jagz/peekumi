@@ -16,6 +16,10 @@ pub const MAX_AGE: u64 = 30 * 86400;
 struct Saved {
     binding: String,
     sessions: HashMap<String, u64>,
+    #[serde(default)]
+    roles: HashMap<String, String>,
+    #[serde(default)]
+    names: HashMap<String, String>,
 }
 
 /// In-memory session index with an atomic, owner-readable persistence file.
@@ -40,11 +44,15 @@ impl Sessions {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Saved {
                 binding: binding.clone(),
                 sessions: HashMap::new(),
+                roles: HashMap::new(),
+                names: HashMap::new(),
             },
             Err(e) => return Err(e.into()),
         };
         if saved.binding != binding {
             saved.sessions.clear();
+            saved.roles.clear();
+            saved.names.clear();
             saved.binding = binding;
         }
         saved.sessions.retain(|_, expires| *expires > now());
@@ -62,7 +70,13 @@ impl Sessions {
     }
 
     /// Persists a new session before accepting it; errors leave the current index unchanged.
+    #[cfg(test)]
     pub fn insert(&mut self, session: &str) -> Result<()> {
+        self.insert_device(session, "owner", "Browser")
+    }
+
+    /// Persists device identity and access role alongside the hash; legacy sessions stay owner sessions.
+    pub fn insert_device(&mut self, session: &str, role: &str, name: &str) -> Result<()> {
         let mut sessions = self.saved.sessions.clone();
         sessions.retain(|_, expires| *expires > now());
         if sessions.len() >= 128 {
@@ -75,9 +89,18 @@ impl Sessions {
             }
         }
         sessions.insert(crate::engine::hash(session.as_bytes()), now() + MAX_AGE);
+        let mut roles = self.saved.roles.clone();
+        let mut names = self.saved.names.clone();
+        roles.retain(|id, _| sessions.contains_key(id));
+        names.retain(|id, _| sessions.contains_key(id));
+        let id = crate::engine::hash(session.as_bytes());
+        roles.insert(id.clone(), role.into());
+        names.insert(id, name.chars().take(100).collect());
         let saved = Saved {
             binding: self.saved.binding.clone(),
             sessions,
+            roles,
+            names,
         };
         let temporary = self.path.with_extension("json.next");
         let mut options = std::fs::OpenOptions::new();
@@ -92,6 +115,42 @@ impl Sessions {
         file.sync_all()?;
         std::fs::rename(temporary, &self.path)?;
         self.saved = saved;
+        Ok(())
+    }
+    /// Resolves only live credentials; raw session secrets are never returned.
+    pub fn role(&self, session: &str) -> Option<&str> {
+        self.contains(session).then(|| {
+            self.saved
+                .roles
+                .get(&crate::engine::hash(session.as_bytes()))
+                .map(String::as_str)
+                .unwrap_or("owner")
+        })
+    }
+    pub fn devices(&self) -> serde_json::Value {
+        serde_json::json!(self.saved.sessions.iter().filter(|(_, expires)| **expires > now()).map(|(id, expires)| serde_json::json!({
+            "id":id, "expires":expires, "role":self.saved.roles.get(id).map(String::as_str).unwrap_or("owner"), "name":self.saved.names.get(id).map(String::as_str).unwrap_or("Browser")
+        })).collect::<Vec<_>>())
+    }
+    /// Revokes a saved device atomically, without rotating other device sessions.
+    pub fn revoke(&mut self, id: &str) -> Result<()> {
+        let mut next = serde_json::to_value(&self.saved)?;
+        for field in ["sessions", "roles", "names"] {
+            next[field].as_object_mut().unwrap().remove(id);
+        }
+        let temporary = self.path.with_extension("json.next");
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary)?;
+        file.write_all(&serde_json::to_vec(&next)?)?;
+        file.sync_all()?;
+        std::fs::rename(temporary, &self.path)?;
+        self.saved = serde_json::from_value(next)?;
         Ok(())
     }
 }

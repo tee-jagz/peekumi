@@ -586,7 +586,6 @@ button {
   border-width: 2px;
 }
 
-
 .panel {
   background: var(--bg);
   max-height: 40vh;
@@ -3173,7 +3172,8 @@ select option {
   }
   .panel[data-height="peek"][data-view="comments"]
     #selectionContract:not([hidden]),
-  .panel[data-height="peek"][data-view="runs"] #selectionContract:not([hidden]) {
+  .panel[data-height="peek"][data-view="runs"]
+    #selectionContract:not([hidden]) {
     display: grid;
   }
 }
@@ -3883,7 +3883,11 @@ select.visually-hidden {
 }
 #selectionSummary[data-more="true"],
 #selectionContract[data-more="true"] {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 1.6em),
+    transparent
+  );
   mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
 }
 
@@ -4309,4 +4313,33 @@ details.p-section[open] > summary::before {
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+.pwa-notice {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 10px;
+  right: 10px;
+  z-index: 1000;
+  padding: 10px;
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+}
+.pwa-notice[hidden] {
+  display: none;
+}
+.pr-controls {
+  display: grid;
+  gap: 8px;
+}
+#prContext {
+  max-height: 220px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+#prContext a {
+  color: var(--accent);
 }

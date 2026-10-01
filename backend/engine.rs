@@ -195,18 +195,36 @@ impl Repository {
     pub fn metadata(&self, base: &str, head: &str) -> Result<Value> {
         let branch = string(self.git(&["branch", "--show-current"])?);
         let initial_head = self.resolve(head)?;
-        let refs = string(self.git(&["for-each-ref", "--format=%(refname)%00%(objectname)%00%(symref)", "refs/heads", "refs/remotes"])?);
-        let branches: Vec<Value> = refs.lines().filter_map(|line| {
-            let fields: Vec<_> = line.split('\0').collect();
-            if fields.len() < 3 || !fields[2].is_empty() { return None; }
-            let remote = fields[0].starts_with("refs/remotes/");
-            let name = fields[0].trim_start_matches("refs/heads/").trim_start_matches("refs/remotes/");
-            Some(json!({"ref":fields[0], "name":name, "sha":fields[1], "remote":remote}))
-        }).collect();
-        let selected_branch = branches.iter().find(|b| {
-            text(&b["ref"]) == head || text(&b["name"]) == head ||
-            (head == "HEAD" && !b["remote"].as_bool().unwrap_or(false) && text(&b["name"]) == branch.trim())
-        }).cloned();
+        let refs = string(self.git(&[
+            "for-each-ref",
+            "--format=%(refname)%00%(objectname)%00%(symref)",
+            "refs/heads",
+            "refs/remotes",
+        ])?);
+        let branches: Vec<Value> = refs
+            .lines()
+            .filter_map(|line| {
+                let fields: Vec<_> = line.split('\0').collect();
+                if fields.len() < 3 || !fields[2].is_empty() {
+                    return None;
+                }
+                let remote = fields[0].starts_with("refs/remotes/");
+                let name = fields[0]
+                    .trim_start_matches("refs/heads/")
+                    .trim_start_matches("refs/remotes/");
+                Some(json!({"ref":fields[0], "name":name, "sha":fields[1], "remote":remote}))
+            })
+            .collect();
+        let selected_branch = branches
+            .iter()
+            .find(|b| {
+                text(&b["ref"]) == head
+                    || text(&b["name"]) == head
+                    || (head == "HEAD"
+                        && !b["remote"].as_bool().unwrap_or(false)
+                        && text(&b["name"]) == branch.trim())
+            })
+            .cloned();
         let log = string(self.git(&[
             "log",
             "--first-parent",

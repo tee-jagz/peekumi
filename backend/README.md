@@ -18,3 +18,5 @@ Build from the repository root with `cargo build --release --locked`. Browser as
 `sessions.rs` persists hashed browser sessions in private state so bookmarked viewer URLs remain signed in across restarts. Sessions expire after 30 days and are bound to the repository and current access token.
 
 Codex runs use `exec --approve-for-me`, which selects the workspace-write sandbox with automatic approval review. Do not combine that preset with `--sandbox`: the CLI rejects the combination before executing the task.
+
+A listener may register additional local repositories, each with an independent worker and workflow directory. Browser device sessions are shared at the server level with owner/read-only roles and explicit revocation. `pull_requests.rs` obtains PR context through the installed GitHub CLI and fetches private refs without changing the checkout. Configuration, workflow and analysis storage carry schema versions; newer workflow schemas are rejected.
