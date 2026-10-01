@@ -178,6 +178,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/ask.js" => Some(("text/javascript", include_bytes!("../frontend/ask.js"))),
         "/workflow.js" => Some(("text/javascript", include_bytes!("../frontend/workflow.js"))),
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
+        "/select.js" => Some(("text/javascript", include_bytes!("../frontend/select.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
         _ => None,

@@ -224,6 +224,7 @@ test("Rust authentication, write content-type boundary, gzip negotiation and sta
     /frame-ancestors 'none'/,
   );
   assert.equal((await fetch(url + "/canvas.js")).status, 200);
+  assert.equal((await fetch(url + "/select.js")).status, 200);
 });
 test("Rust syntax index survives process restart and unavailable parsers remain explicit", async (t) => {
   const f = await fixture(t);

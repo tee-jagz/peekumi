@@ -2,6 +2,7 @@
 import { createAsk } from "./ask.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
+import { frostSelects } from "./select.js";
 import {
   statusIcon,
   interfaceIcon,
@@ -36,6 +37,7 @@ const button = (className, text, action) => {
 // Static controls declare their glyph in markup; their names come from aria-label or text.
 for (const node of document.querySelectorAll("[data-glyph]"))
   node.prepend(glyph(node.dataset.glyph));
+frostSelects();
 const labels = {
   added: "Added",
   changed: "Modified",
@@ -393,7 +395,7 @@ function render() {
 function renderControls() {
   renderMapLegend();
   document
-    .querySelectorAll("[data-mode]")
+    .querySelectorAll("button[data-mode]")
     .forEach((b) =>
       b.setAttribute("aria-pressed", String(b.dataset.mode === mode)),
     );
@@ -1254,7 +1256,9 @@ function renderSelection() {
       : scope.kind === "file"
         ? module
         : directoryInfo(selected?.path || scope.path);
-  $("#selectionSummary").textContent =
+  const summaryText = $("#selectionSummary");
+  summaryText.scrollTop = 0;
+  summaryText.textContent =
     detail?.description?.split("\n")[0] ||
     (selected?.kind === "symbol"
       ? selected.signature ||
@@ -1296,6 +1300,10 @@ function renderSelection() {
     );
   }
   contract.hidden = !contract.children.length;
+  requestAnimationFrame(() => {
+    markOverflow(summaryText);
+    markOverflow(contract);
+  });
   const strip = $("#selStrip");
   strip.replaceChildren();
   if (!selected) {
@@ -1373,6 +1381,16 @@ function renderSelection() {
   if (scope.kind === "file") box.append(adapterCard());
   strip.append(box);
 }
+/** Fades the last visible line while more peek text is scrollable, so clipping reads as "scroll for more". */
+function markOverflow(node) {
+  node.dataset.more = String(
+    node.scrollTop + node.clientHeight < node.scrollHeight - 1,
+  );
+}
+for (const id of ["#selectionSummary", "#selectionContract"])
+  $(id).addEventListener("scroll", (event) => markOverflow(event.target), {
+    passive: true,
+  });
 /** Displays revision-specific module or symbol documentation and explicit declaration metadata. Description, signature and arguments are readable directly in the expanded sheet. */
 function metadataCard() {
   const box = element("section", "code-metadata");
@@ -2104,7 +2122,7 @@ function chooseHead(sha) {
   baseRef = diffBase || parentRevision(sha);
   loadComparison();
 }
-document.querySelectorAll("[data-mode]").forEach(
+document.querySelectorAll("button[data-mode]").forEach(
   (b) =>
     (b.onclick = () => {
       if (busy || mode === b.dataset.mode) return;
@@ -2309,6 +2327,8 @@ sheetHandle.onkeydown = (e) => {
 $("#refresh").onclick = () => boot(true);
 // Header and map popovers close when the owner interacts elsewhere.
 document.addEventListener("pointerdown", (event) => {
+  // A select menu belongs to the popover that opened it, though it renders in <body>.
+  if (event.target.closest?.(".frost-menu")) return;
   for (const id of ["#revisionDetails", "#mapLegend"])
     if ($(id).open && !$(id).contains(event.target)) $(id).open = false;
 });
@@ -2345,7 +2365,14 @@ new ResizeObserver((entries) => {
   });
 }).observe($("#deck"));
 $("#mapLegend").addEventListener("toggle", () => {
-  if ($("#mapLegend").open) $("#revisionDetails").open = false;
+  if (!$("#mapLegend").open) return;
+  $("#revisionDetails").open = false;
+  // Fit the key between the map's top edge and its floating toolbar; it scrolls beyond that.
+  const map = $(".sheet-body")?.getBoundingClientRect(),
+    tools = $(".map-tools")?.getBoundingClientRect();
+  if (map && tools)
+    $("#mapLegend .legend-popover").style.maxHeight =
+      Math.max(160, tools.top - map.top - 16) + "px";
 });
 $("#revisionDetails").addEventListener("toggle", () => {
   if ($("#revisionDetails").open) $("#mapLegend").open = false;
