@@ -331,6 +331,18 @@ try {
     }
     if (!(await page.locator("#helperTools").isVisible()))
       await page.locator("#sheetHandle").click();
+    if (viewport.width === 390) {
+      await page.locator("#sheetHandle").focus();
+      await page.keyboard.press("End");
+      await page.locator('[data-tab="source"]').click();
+      assert.equal(
+        await page.locator("#panel").getAttribute("data-height"),
+        "full",
+        "Changing inspection views keeps a full sheet full",
+      );
+      await page.locator("#sheetHandle").focus();
+      await page.keyboard.press("ArrowDown");
+    }
     await page.locator('[data-tab="source"]').click();
     await page.locator('[data-tab="details"]').click();
     await page.locator(".code-metadata .signature").waitFor();

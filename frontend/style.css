@@ -2974,12 +2974,12 @@ select option {
 }
 
 @media (min-width: 900px) {
-  .panel[data-tab="details"] #selectionSummary {
+  .panel[data-view="details"] #selectionSummary {
     display: none;
   }
 }
 @media (max-width: 899px) {
-  .panel[data-tab="details"]:not([data-height="peek"]) #selectionSummary {
+  .panel[data-view="details"]:not([data-height="peek"]) #selectionSummary {
     display: none;
   }
 }
@@ -3044,14 +3044,14 @@ select option {
 }
 
 /* One task surface: request, updates, result and review stay together. */
-.panel[data-tab="comments"] #helperTools,
-.panel[data-tab="runs"] #helperTools,
-.panel[data-tab="comments"] #reviewScope,
-.panel[data-tab="runs"] #reviewScope,
-.panel[data-tab="comments"] #selectionSummary,
-.panel[data-tab="runs"] #selectionSummary,
-.panel[data-tab="comments"] #selectionContract,
-.panel[data-tab="runs"] #selectionContract {
+.panel[data-view="comments"] #helperTools,
+.panel[data-view="runs"] #helperTools,
+.panel[data-view="comments"] #reviewScope,
+.panel[data-view="runs"] #reviewScope,
+.panel[data-view="comments"] #selectionSummary,
+.panel[data-view="runs"] #selectionSummary,
+.panel[data-view="comments"] #selectionContract,
+.panel[data-view="runs"] #selectionContract {
   display: none;
 }
 #openTasks {
@@ -3163,17 +3163,17 @@ select option {
 }
 
 @media (max-width: 899px) {
-  .panel[data-height="peek"][data-tab="comments"] #reviewScope,
-  .panel[data-height="peek"][data-tab="runs"] #reviewScope {
+  .panel[data-height="peek"][data-view="comments"] #reviewScope,
+  .panel[data-height="peek"][data-view="runs"] #reviewScope {
     display: flex;
   }
-  .panel[data-height="peek"][data-tab="comments"] #selectionSummary,
-  .panel[data-height="peek"][data-tab="runs"] #selectionSummary {
+  .panel[data-height="peek"][data-view="comments"] #selectionSummary,
+  .panel[data-height="peek"][data-view="runs"] #selectionSummary {
     display: -webkit-box;
   }
-  .panel[data-height="peek"][data-tab="comments"]
+  .panel[data-height="peek"][data-view="comments"]
     #selectionContract:not([hidden]),
-  .panel[data-height="peek"][data-tab="runs"] #selectionContract:not([hidden]) {
+  .panel[data-height="peek"][data-view="runs"] #selectionContract:not([hidden]) {
     display: grid;
   }
 }
@@ -3615,7 +3615,7 @@ body {
 .panel
   button:not([aria-pressed="true"]):not([aria-selected="true"]):not(
     .primary
-  ):not(#sheetHandle):not(.frost-select),
+  ):not(#sheetHandle):not(.frost-select):not(.row):not(.link-button),
 .panel select,
 .panel .seg,
 .panel .tabs,
@@ -3902,4 +3902,411 @@ select.visually-hidden {
 .frost-menu * {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+/* Panel content system: every view is built from the same card, row and code
+   primitives, so Details, Changes, Relations and Source read as one design. */
+#helperTools {
+  flex: none;
+  margin: 0;
+  padding: 2px 12px 10px;
+  border: 0;
+}
+@media (max-width: 899px) {
+  .panel[data-height="peek"] #helperTools,
+  .panel[data-dragging] #helperTools,
+  .panel[data-settling][data-height="peek"] #helperTools,
+  .keyboard-open .panel[data-height="peek"] #helperTools {
+    display: none;
+  }
+  .panel[data-dragging][data-inspection="true"] #helperTools {
+    display: flex;
+  }
+}
+#reviewScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 14px;
+}
+#selectionDetails,
+#selStrip,
+#selStrip .selstrip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+#selectionDetails[hidden],
+#runBar:empty,
+#tabBody:empty {
+  display: none;
+}
+.panel:not([data-view="comments"]):not([data-view="runs"]) #tabBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.p-section {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.p-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.p-section p {
+  margin: 0 0 8px;
+}
+.p-section > :last-child {
+  margin-bottom: 0;
+}
+details.p-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+details.p-section > summary::-webkit-details-marker {
+  display: none;
+}
+details.p-section > summary::before {
+  content: "›";
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+details.p-section[open] > summary {
+  margin-bottom: 8px;
+}
+details.p-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+#selStrip .selection-facts .sel-kind {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.fact-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0 0 12px;
+}
+.fact-list dt {
+  color: var(--muted);
+}
+.fact-list dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.p-section .sel-acts {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+.p-section .sel-acts .btn,
+.documentation-link {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.documentation-link {
+  margin-top: 4px;
+}
+.code-metadata .signature {
+  margin: 0 0 10px;
+}
+
+/* Lists: one frosted card with separated rows, never stacked pills. */
+.panel .list {
+  display: block;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.panel .list > li + li {
+  border-top: 1px solid var(--line);
+}
+.panel .row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  color: var(--ink);
+}
+.panel .row:hover,
+.panel .row[aria-current="true"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.panel .row > .status-icon {
+  grid-row: auto;
+  margin: 0;
+}
+.panel .row > .glyph {
+  width: 16px;
+  height: 16px;
+  color: var(--faint);
+}
+.row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.panel .row .rt {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.panel .row .rd {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  opacity: 1;
+  overflow-wrap: anywhere;
+}
+.panel .list .empty {
+  padding: 14px;
+}
+.plain-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.changed-declarations .list {
+  margin: 0 -14px -12px;
+  border-radius: 0 0 16px 16px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.changed-declarations .list:not(:last-child) {
+  margin-bottom: 8px;
+}
+.panel .list .rule-error {
+  margin: 0;
+  padding: 0 14px 10px 46px;
+  font-size: 12px;
+  color: var(--del);
+}
+.relation-pairs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  padding: 0 14px 10px 46px;
+}
+.panel .link-button {
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font: 12.5px/1.4 var(--mono);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.relationship-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.relationship-controls .frost-select {
+  flex: 1;
+  width: auto;
+}
+.relationship-controls > .btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+#tabBody > .read-note {
+  margin: 0;
+}
+.relation-evidence-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.relation-evidence-row .rt {
+  margin: 0;
+  font-weight: 600;
+}
+.relation-evidence-row .rd {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.change-overview .sum {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.change-overview .legend-inline {
+  margin: 0;
+}
+.panel .search-wrap {
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid var(--el-line);
+}
+.panel .search-wrap input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+/* Source: header stays put; the code box fills the sheet and scrolls inside it. */
+.source-title {
+  margin: 0;
+  font: 12px/1.4 var(--mono);
+  color: var(--muted);
+}
+.source-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+}
+.source-tools .read-note {
+  margin: 0;
+}
+.panel[data-view="source"] #reviewScroll {
+  overflow: hidden;
+}
+.panel[data-view="source"] #tabBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.panel[data-view="source"] .patch {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--el-line);
+}
+.panel[data-view="source"] #source-code {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  background: var(--field-glass);
+}
+.panel[data-view="source"] .readable-diff {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+/* Expanded views show the full content, so the peek summary would only repeat it. */
+@media (max-width: 899px) {
+  .panel:not([data-height="peek"]):not([data-dragging]) #selectionSummary,
+  .panel:not([data-height="peek"]):not([data-dragging]) #selectionContract {
+    display: none;
+  }
+}
+/* Draft actions sit beside the text field rather than on a row of their own. */
+#composerHost .composer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+#composerHost .composer > .composer-anchor {
+  grid-column: 1 / -1;
+}
+#composerHost .draft-buttons {
+  flex-wrap: nowrap;
+}
+/* Every section card is frosted; the Details stack itself is only a layout wrapper. */
+.panel .p-section {
+  background: var(--el-glass);
+  border: 1px solid var(--el-line);
+  box-shadow: var(--el-shadow);
+}
+#selStrip .selstrip {
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+/* Long names: ancestors give up their space first, then the current name ellipsizes
+   rather than running under the header actions. */
+.top .crumbs button {
+  flex-shrink: 1000;
+  min-width: 0;
+}
+.top .crumbs button[aria-current="page"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The run cue belongs to the overview; inspection views keep their space for content. */
+.panel:not([data-view="details"]) #runBar {
+  display: none;
+}
+/* The breadcrumb host spans the title column so the crumbs can shrink within it. */
+#crumbHost {
+  align-self: stretch;
+  min-width: 0;
+}
+.top .crumbs .crumb-root {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crumb-root .glyph {
+  display: none;
+  width: 18px;
+  height: 18px;
+}
+.top .crumbs.tight .crumb-root {
+  flex: none;
+  padding: 2px 6px;
+}
+.crumbs.tight .crumb-root .glyph {
+  display: block;
+}
+.crumbs.tight .crumb-root .crumb-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }

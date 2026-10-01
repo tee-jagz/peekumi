@@ -7,6 +7,7 @@ import {
   statusIcon,
   interfaceIcon,
   objectTypeIcon,
+  fileKindIcon,
   glyph,
   iconButton,
 } from "./icons.js";
@@ -131,7 +132,7 @@ const workflow = createWorkflow({
   showTab(value) {
     tab = value;
     if (["comments", "runs"].includes(value)) primaryTab = "comments";
-    setSheetHeight("half");
+    expandSheet();
     renderPanel();
   },
   redraw() {
@@ -180,7 +181,7 @@ const ask = createAsk({
   notice: showNotice,
   redraw() {
     tab = "ask";
-    setSheetHeight("half");
+    expandSheet();
     renderTab();
   },
   async makeDraft(draft) {
@@ -192,7 +193,7 @@ const ask = createAsk({
     await workflow.refresh(false);
     tab = "comments";
     primaryTab = "comments";
-    setSheetHeight("half");
+    expandSheet();
     renderPanel();
   },
 });
@@ -447,6 +448,14 @@ function breadcrumbs() {
     const b = button("", part.label, () => navigate(part.scope));
     b.title = part.scope.path || metadata.name;
     if (index === visible.length - 1) b.setAttribute("aria-current", "page");
+    else if (index === 0) {
+      // When space runs out the root collapses to an icon, keeping its name for assistive tech.
+      b.classList.add("crumb-root");
+      b.replaceChildren(
+        glyph("home"),
+        element("span", "crumb-label", part.label),
+      );
+    }
     nav.append(b);
   });
   return nav;
@@ -458,7 +467,14 @@ function renderDeck() {
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
   const mapLegend = $("#mapLegend"),
     sides = $("#baSeg");
-  $("#crumbHost").replaceChildren(breadcrumbs());
+  const crumbs = breadcrumbs();
+  $("#crumbHost").replaceChildren(crumbs);
+  requestAnimationFrame(() => {
+    crumbs.classList.remove("tight");
+    const root = crumbs.querySelector(".crumb-root");
+    if (root && root.scrollWidth > root.clientWidth + 1)
+      crumbs.classList.add("tight");
+  });
   deck.replaceChildren();
   const sheet = element("div", "sheet");
   sheet.style.zIndex = "10";
@@ -668,7 +684,8 @@ function renderGraph(body) {
     canvas.append(more);
     y += 25;
   }
-  const height = Math.max(available, y + 8);
+  // Leave room to scroll the last row clear of the floating map controls.
+  const height = Math.max(available, y + 64);
   canvas.style.width = graphWidth + "px";
   canvas.style.height = height + "px";
   const verticalOffset = root && y < available ? (available - y) / 2 : 0;
@@ -960,7 +977,7 @@ function selectNode(node) {
 function openNode(node) {
   if (node.kind === "symbol") {
     tab = "source";
-    setSheetHeight("half");
+    expandSheet();
     sourceView = node.status === "removed" ? "before" : "after";
     renderPanel();
     if (!sourceData) loadSource();
@@ -968,7 +985,7 @@ function openNode(node) {
   }
   if (node.kind === "edge") {
     tab = "dependencies";
-    setSheetHeight("half");
+    expandSheet();
     renderPanel();
     return;
   }
@@ -1061,7 +1078,7 @@ function renderPanel() {
   renderCommits();
   renderSelection();
   document
-    .querySelectorAll("[data-tab]")
+    .querySelectorAll("button[data-tab]")
     .forEach((b) =>
       b.setAttribute("aria-pressed", String(b.dataset.tab === tab)),
     );
@@ -1179,11 +1196,16 @@ function directoryInfo(path, removed = false) {
     before || removed ? "before" : "after"
   ]?.[path];
 }
+/** Starts a titled panel section; every Details, Changes and Relations block uses this card. */
+function section(className, title) {
+  const box = element("section", "p-section " + className);
+  if (title) box.append(element("h3", "p-section-title", title));
+  return box;
+}
 /** Builds a directory Details section from committed documentation, with provenance and a link to the complete source file. */
 function directoryCard(path, removed = false) {
   const info = directoryInfo(path, removed),
-    box = element("section", "directory-details");
-  box.append(element("h3", "details-heading", "Details"));
+    box = section("directory-details", "Documentation");
   if (!info) {
     box.append(
       element(
@@ -1217,7 +1239,7 @@ function adapterCard() {
   const adapter = comparison?.directoryMetadata?.adapters?.find((a) =>
       a.extensions.includes(scope.path.split(".").at(-1)),
     ),
-    box = element("details", "adapter-details");
+    box = element("details", "adapter-details p-section");
   box.append(
     element(
       "summary",
@@ -1245,6 +1267,82 @@ function adapterCard() {
     );
   return box;
 }
+/** Explains what the current scope offers when nothing is selected. */
+function scopeHint() {
+  return scope.kind === "file"
+    ? "Select a declaration to inspect it, or open Source for the whole file."
+    : "Select a card to review it; tap it again to open.";
+}
+/** Describes a selection in one line when it has no committed documentation. */
+function selectionLine(node) {
+  if (node.kind === "edge")
+    return `${node.name} · static ${node.relationshipKind}, not runtime execution.`;
+  if (node.kind === "symbol")
+    return node.signature || `${node.symbolKind} · lines ${node.start}–${node.end}`;
+  if (node.kind === "file")
+    return `${node.symbolCount ?? node.symbols?.length ?? 0} declarations · ${node.analysis}`;
+  return node.files
+    ? `${node.files.filter((f) => f.status !== "unchanged").length} of ${node.files.length} files changed.`
+    : scopeHint();
+}
+/** Lists the selection's facts as label/value pairs. */
+function selectionFacts(node) {
+  const facts = [];
+  if (node.files) {
+    const counts = Object.keys(labels)
+      .map((status) => [
+        status,
+        node.files.filter((f) => f.status === status).length,
+      ])
+      .filter(([, count]) => count);
+    facts.push(["Files", String(node.files.length)]);
+    for (const [status, count] of counts)
+      if (status !== "unchanged") facts.push([labels[status], String(count)]);
+  } else if (node.kind === "symbol") {
+    facts.push(["Kind", node.symbolKind], ["Lines", `${node.start}–${node.end}`]);
+  } else if (node.kind === "file") {
+    const total = node.symbolCount ?? node.symbols?.length ?? 0,
+      known = node.symbols || node.symbolPreview || [];
+    facts.push(["Path", node.path], ["Declarations", String(total)]);
+    // The compact preview is capped; report a count only when it covers every declaration.
+    if (known.length && known.length === total)
+      facts.push([
+        "Changed declarations",
+        String(known.filter((symbol) => symbol.status !== "unchanged").length),
+      ]);
+    facts.push(["Analysis", node.analysis]);
+  } else if (node.kind === "edge") {
+    facts.push(
+      ["Kind", node.relationshipKind],
+      ["Before → after", `${node.before.size} → ${node.after.size}`],
+    );
+  }
+  return facts;
+}
+/** Shows changed declarations from the compact preview before a file is opened. */
+function changedDeclarations(node) {
+  // Names arrive with the file's details; the overview preview carries statuses only.
+  const symbols = (node.symbols || []).filter(
+    (symbol) => symbol.name && symbol.status && symbol.status !== "unchanged",
+  );
+  if (!symbols.length) return null;
+  const box = section("changed-declarations", "Changed declarations"),
+    list = element("ul", "list");
+  for (const symbol of symbols.slice(0, 8)) {
+    const li = element("li", "plain-row");
+    li.append(
+      statusIcon(symbol.status),
+      element("span", "mono", symbol.name),
+    );
+    list.append(li);
+  }
+  box.append(list);
+  if (symbols.length > 8)
+    box.append(
+      element("p", "metadata-muted", `${symbols.length - 8} more in Changes`),
+    );
+  return box;
+}
 /** Rebuilds selected-item actions and metadata, or directory context when nothing is selected. */
 function renderSelection() {
   const side =
@@ -1260,10 +1358,7 @@ function renderSelection() {
   summaryText.scrollTop = 0;
   summaryText.textContent =
     detail?.description?.split("\n")[0] ||
-    (selected?.kind === "symbol"
-      ? selected.signature ||
-        "Select Details or Source to inspect this declaration."
-      : "Explore the graph; select an item to inspect its implementation.");
+    (selected ? selectionLine(selected) : scopeHint());
   const contract = $("#selectionContract");
   contract.replaceChildren();
   const fact = (label, value) => {
@@ -1311,32 +1406,19 @@ function renderSelection() {
       strip.append(metadataCard(), adapterCard());
     if (["repo", "folder", "rootfiles"].includes(scope.kind))
       strip.append(directoryCard(scope.path));
-    strip.append(
-      element(
-        "div",
-        "hint-strip",
-        scope.kind === "file"
-          ? "Select a symbol to inspect its declaration."
-          : "Select a card to review · tap again to open.",
-      ),
-    );
+    strip.append(element("div", "hint-strip", scopeHint()));
     return;
   }
   const box = element("div", "selstrip"),
     top = element("div", "sel-top");
   top.append(element("span", "sel-name", selected.name));
   if (selected.status) top.append(statusIcon(selected.status));
-  const close = button("x", "×", () => {
-    selected = null;
-    renderDeck();
-    renderPanel();
-  });
-  close.setAttribute("aria-label", "Clear selection");
-  top.append(close);
   box.append(top);
-  box.append(
+  // The facts card replaces a bare action bar: what this is, its counts, and what to do next.
+  const facts = section("selection-facts");
+  facts.append(
     element(
-      "div",
+      "p",
       "sel-kind",
       selected.kind === "edge"
         ? selected.relationshipKind === "imports"
@@ -1347,29 +1429,33 @@ function renderSelection() {
           : selected.path || "Repository files",
     ),
   );
-  const stats = element("div", "sel-stats");
-  if (selected.files)
-    stats.textContent = `${selected.files.length} files · ${selected.files.filter((f) => f.status !== "unchanged").length} changed`;
-  else if (selected.kind === "symbol")
-    stats.textContent = `Lines ${selected.start}–${selected.end}`;
-  else if (selected.kind === "file")
-    stats.textContent = `${selected.symbolCount ?? selected.symbols?.length ?? 0} symbols · ${selected.analysis}`;
-  else if (selected.kind === "edge")
-    stats.textContent = `${selected.before.size} ${selected.relationshipKind} before → ${selected.after.size} after`;
-  box.append(stats);
-  const actions = element("div", "sel-acts");
-  actions.append(
-    button(
-      "btn primary",
-      selected.kind === "symbol"
-        ? "Open source"
-        : selected.kind === "edge"
-          ? "Inspect dependency"
-          : "Open",
-      () => openNode(selected),
-    ),
+  const list = element("dl", "fact-list");
+  for (const [label, value] of selectionFacts(selected))
+    list.append(element("dt", "", label), element("dd", "", value));
+  if (list.children.length) facts.append(list);
+  const action = button(
+    "btn primary",
+    selected.kind === "symbol"
+      ? "View source"
+      : selected.kind === "edge"
+        ? "Show evidence"
+        : selected.kind === "file"
+          ? "Open file"
+          : selected.kind === "rootfiles"
+            ? "Open file group"
+            : "Open folder",
+    () => openNode(selected),
   );
-  if (!["symbol", "edge"].includes(selected.kind)) box.append(actions);
+  if (selected.kind !== "boundary") {
+    const actions = element("div", "sel-acts");
+    actions.append(action);
+    facts.append(actions);
+  }
+  box.append(facts);
+  if (selected.kind === "file") {
+    const changed = changedDeclarations(selected);
+    if (changed) box.append(changed);
+  }
   if (
     scope.kind === "file" &&
     sourceData &&
@@ -1393,7 +1479,7 @@ for (const id of ["#selectionSummary", "#selectionContract"])
   });
 /** Displays revision-specific module or symbol documentation and explicit declaration metadata. Description, signature and arguments are readable directly in the expanded sheet. */
 function metadataCard() {
-  const box = element("section", "code-metadata");
+  const box = element("section", "code-metadata p-section");
   const useBefore = reviewContext().sha === baseRef && baseRef !== headRef;
   const module = sourceData?.details?.[useBefore ? "before" : "after"];
   const info =
@@ -1411,16 +1497,14 @@ function metadataCard() {
   )
     return element(
       "p",
-      "metadata-muted",
-      "Details · No declaration documentation available at this revision.",
+      "metadata-muted p-section",
+      "No declaration documentation at this revision.",
     );
   box.append(
     element(
       "h3",
-      "",
-      (selected?.kind === "symbol"
-        ? "Details · Declaration"
-        : "Details · Module description") +
+      "p-section-title",
+      (selected?.kind === "symbol" ? "Declaration" : "Module") +
         (useBefore ? " · Before" : " · After"),
     ),
   );
@@ -1530,7 +1614,6 @@ function renderMapLegend() {
   const types = element("div", "legend-inline");
   for (const [kind, label] of [
     ["folder", "Directory"],
-    ["file", "File / module"],
     ["class", "Class / struct"],
     ["function", "Function / method"],
     ["interface", "Interface / trait"],
@@ -1538,6 +1621,12 @@ function renderMapLegend() {
   ]) {
     const item = element("span");
     item.append(objectTypeIcon({ kind }), document.createTextNode(label));
+    types.append(item);
+  }
+  for (const kind of ["code", "document", "data", "image", "sealed", "file"]) {
+    const item = element("span"),
+      symbol = fileKindIcon(kind);
+    item.append(symbol, document.createTextNode(symbol.title));
     types.append(item);
   }
   host.append(element("strong", "", "Object types"), types);
@@ -1585,19 +1674,17 @@ function renderMapLegend() {
 /** Creates a keyboard-accessible review-list entry that invokes its supplied navigation action. */
 function listRow(node, detail, action) {
   const li = element("li"),
-    row = button("row", "", action);
+    row = button("row", "", action),
+    text = element("span", "row-text");
   row.dataset.status = node.status || "unchanged";
-  row.append(
-    statusIcon(node.status || "unchanged"),
-    element("span", "rt", node.name),
-    element("span", "rd", detail),
-  );
+  text.append(element("span", "rt", node.name), element("span", "rd", detail));
+  row.append(statusIcon(node.status || "unchanged"), text, glyph("forward"));
   li.append(row);
   return li;
 }
 /** Renders the scoped change inventory, source view or dependency list for the active review tab. */
 function renderTab() {
-  $("#panel").dataset.tab = tab;
+  $("#panel").dataset.view = tab;
   const body = $("#tabBody");
   body.replaceChildren();
   const composerHost = $("#composerHost");
@@ -1632,14 +1719,16 @@ function renderTab() {
   }
   const files = comparison.files.filter((f) => inScope(f, scope)),
     changed = files.filter((f) => f.status !== "unchanged");
-  const summary = element(
-    "p",
-    "sum",
-    `${changed.length} changed files · ${files.length} in this scope`,
-  );
+  const overview = section("change-overview"),
+    summary = element(
+      "p",
+      "sum",
+      `${changed.length} changed · ${files.length} files in this scope`,
+    );
   summary.id = "change-summary";
   summary.dataset.count = changed.length;
-  body.append(ruleSummary(), summary, legend(files));
+  overview.append(summary, legend(files));
+  body.append(overview);
   const searchBox = element("label", "search-wrap");
   searchBox.append(element("span", "", "⌕"));
   const input = element("input");
@@ -1721,7 +1810,7 @@ function renderTab() {
 function ruleSummary() {
   const phase = before ? "before" : "after",
     checks = comparison.relationshipData?.checks?.[phase];
-  const box = element("details", "rule-summary");
+  const box = element("details", "rule-summary p-section");
   if (!checks) return box;
   box.append(
     element(
@@ -1814,10 +1903,10 @@ function renderDependencies(body) {
     element(
       "p",
       "read-note",
-      "Static declarations, not runtime execution. Solid: imports/calls · dotted: implements · dashed: inherits · red: rule violation. Select a symbol to focus its calls.",
+      "Static declarations, not runtime execution. The map key explains line styles; select a symbol to focus its calls.",
     ),
   );
-  const list = element("ul", "list");
+  const list = element("ul", "list relation-list");
   body.append(list);
   let relevant = selected?.kind === "edge" ? [selected] : edges;
   if (selected?.kind === "symbol")
@@ -1825,40 +1914,38 @@ function renderDependencies(body) {
       [e.from.key, e.to.key].includes(selected.key),
     );
   for (const edge of relevant) {
-    const li = element("li", "cm"),
-      buttonNode = button(
-        "anchor",
-        `${edge.relationshipKind} · ${edge.name}`,
-        () => {
-          selected = edge;
-          renderDeck();
-          renderPanel();
-        },
-      );
-    li.append(
-      buttonNode,
+    const li = element("li"),
+      row = button("row", "", () => {
+        selected = edge;
+        renderDeck();
+        renderPanel();
+      }),
+      text = element("span", "row-text");
+    row.dataset.status = edge.status;
+    if (selected?.key === edge.key) row.setAttribute("aria-current", "true");
+    text.append(
+      element("span", "rt", edge.name),
       element(
-        "p",
+        "span",
         "rd",
-        `${labels[edge.status]} · ${edge.before.size} before → ${edge.after.size} after`,
+        `${edge.relationshipKind} · ${labels[edge.status]} · ${edge.before.size} before → ${edge.after.size} after`,
       ),
     );
+    row.append(statusIcon(edge.status), text, glyph("forward"));
+    li.append(row);
     for (const v of before ? edge.violationsBefore : edge.violationsAfter)
-      li.append(element("p", "rule-error", `! ${v.id}: ${v.message}`));
-    if (selected?.key === edge.key)
-      for (const pair of edge.pairs.values()) {
-        const row = element("div", "sel-acts");
-        row.append(
-          button("btn sm", pair.from, () =>
-            navigate({ kind: "file", path: pair.from }),
-          ),
-          element("span", "", "→"),
-          button("btn sm", pair.to, () =>
-            navigate({ kind: "file", path: pair.to }),
-          ),
-        );
-        li.append(row);
-      }
+      li.append(element("p", "rule-error", `${v.id}: ${v.message}`));
+    if (selected?.key === edge.key) {
+      const pairs = element("div", "relation-pairs");
+      for (const pair of edge.pairs.values())
+        for (const path of [pair.from, pair.to])
+          pairs.append(
+            button("link-button", path, () =>
+              navigate({ kind: "file", path }),
+            ),
+          );
+      li.append(pairs);
+    }
     list.append(li);
   }
   if (!relevant.length)
@@ -1890,8 +1977,8 @@ function renderDependencies(body) {
         ))
     );
   });
-  const unresolved = element("details", "unresolved-relations"),
-    evidence = element("details", "relationship-evidence");
+  const unresolved = element("details", "unresolved-relations p-section"),
+    evidence = element("details", "relationship-evidence p-section");
   const unknown = scoped.filter(
       (r) =>
         (before ? r.before : r.after || r.before).resolution !== "resolved",
@@ -1921,20 +2008,20 @@ function renderDependencies(body) {
       item.append(
         element(
           "p",
-          "",
-          `${fact.source.symbol || fact.source.path} ${fact.kind} ${fact.target} · ${r.status}`,
+          "rt",
+          `${fact.source.symbol || fact.source.path} ${fact.kind} ${fact.target}`,
         ),
         element(
           "small",
-          "metadata-muted",
-          `${fact.resolution} · ${fact.reason}`,
+          "rd",
+          `${fact.resolution} · ${fact.reason} · ${r.status}`,
         ),
       );
       for (const v of fact.violations)
-        item.append(element("p", "rule-error", `! ${v.id}: ${v.message}`));
+        item.append(element("p", "rule-error", `${v.id}: ${v.message}`));
       item.append(
         button(
-          "btn sm",
+          "link-button",
           `${fact.source.path}${fact.sites?.[0] ? ":" + fact.sites[0] : ""}`,
           () => openEvidence(r),
         ),
@@ -2011,13 +2098,6 @@ function renderSource(body) {
     );
     return;
   }
-  body.append(
-    element(
-      "h3",
-      "source-title",
-      scope.path + (selected?.kind === "symbol" ? " → " + selected.name : ""),
-    ),
-  );
   const tools = element("div", "source-tools"),
     seg = element("div", "seg");
   seg.setAttribute("aria-label", "Source view");
@@ -2036,14 +2116,14 @@ function renderSource(body) {
     body.append(element("p", "empty", "Loading source…"));
     return;
   }
-  body.append(
+  tools.append(
     element(
       "p",
       "read-note",
       sourceData.analysis +
         (selected?.kind === "symbol" && sourceView === "diff"
-          ? " · Diff hunks for the selected symbol."
-          : " · Complete file context, including changes outside symbols."),
+          ? " · selected symbol's hunks"
+          : " · whole file"),
     ),
   );
   const container = element("div", "patch"),
@@ -2149,11 +2229,12 @@ document.querySelectorAll("[data-ba]").forEach(
       render();
     }),
 );
-document.querySelectorAll("[data-tab]").forEach(
+document.querySelectorAll("button[data-tab]").forEach(
   (b) =>
     (b.onclick = () => {
+      if (tab !== b.dataset.tab) $("#reviewScroll").scrollTop = 0;
       tab = b.dataset.tab;
-      setSheetHeight("half");
+      expandSheet();
       if (comparison) renderPanel();
       if (tab === "source" && scope.kind === "file" && !sourceData)
         loadSource();
@@ -2171,13 +2252,13 @@ document.querySelectorAll("[data-compose]").forEach(
 $("#openTasks").onclick = () => {
   tab = "comments";
   primaryTab = "comments";
-  setSheetHeight("half");
+  expandSheet();
   renderPanel();
   workflow.refresh();
 };
 $("#showDiscussion").onclick = () => {
   tab = primaryTab;
-  setSheetHeight("half");
+  expandSheet();
   renderPanel();
 };
 let sheetPointer = null,
@@ -2208,6 +2289,11 @@ function freezeStage(height) {
 /** Returns the map to its grid row once the sheet has settled; it resizes once. */
 function releaseStage() {
   $("#stage").style.removeProperty("height");
+}
+/** Raises a peeking sheet to half height for inspection. Never lowers a full sheet, so
+ * switching views keeps the height the owner chose. */
+function expandSheet() {
+  if ($("#panel").dataset.height === "peek") setSheetHeight("half");
 }
 /** Settles from the current pixel height; reduced motion still follows direct finger movement. */
 function setSheetHeight(height) {
