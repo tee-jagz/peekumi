@@ -1479,44 +1479,50 @@ function renderSelection() {
     detail?.description?.split("\n")[0] ||
     (selected ? selectionLine(selected) : scopeHint());
   const contract = $("#selectionContract");
+  contract
+    .querySelectorAll(".contract-line")
+    .forEach((line) => contractLines.unobserve(line));
   contract.replaceChildren();
-  const fact = (label, value) => {
-    const term = element("dt", "", label);
-    if (label === "In" || label === "Out") {
-      term.replaceChildren(interfaceIcon(label));
+  // Each contract row is one line of name/type tokens that scrolls sideways.
+  const row = (kind, tokens) => {
+    const term = element("dt"),
+      line = element("dd", "contract-line");
+    term.append(interfaceIcon(kind));
+    for (const [name, type] of tokens) {
+      const token = element("span", "contract-token");
+      if (name) token.append(element("b", "", name));
+      if (type) token.append(element("span", "", type));
+      line.append(token);
     }
-    contract.append(term, element("dd", "", value));
+    line.addEventListener("scroll", () => markOverflowX(line), {
+      passive: true,
+    });
+    contractLines.observe(line);
+    contract.append(term, line);
   };
+  // Peek shows declared types only; Details labels every missing annotation explicitly.
   if (detail?.parameters) {
-    fact(
+    row(
       "In",
       detail.parameters.length
-        ? detail.parameters
-            .map(
-              (p) =>
-                `${p.name}${p.optional ? "?" : ""} · ${p.type || "type unspecified"}`,
-            )
-            .join("; ")
-        : "No parameters",
+        ? detail.parameters.map((p) => [
+            p.name + (p.optional ? "?" : ""),
+            p.type || "",
+          ])
+        : [["", "No parameters"]],
     );
-    fact(
-      "Out",
-      [detail.returns || "type unspecified", detail.returnDescription]
-        .filter(Boolean)
-        .join(" · "),
-    );
+    if (detail.returns || detail.returnDescription)
+      row("Out", [[detail.returns || "", detail.returnDescription || ""]]);
   } else if (detail?.fields?.length) {
-    fact(
+    row(
       "Fields",
-      detail.fields
-        .map((f) => `${f.name} · ${f.type || "type unspecified"}`)
-        .join("; "),
+      detail.fields.map((f) => [f.name + (f.optional ? "?" : ""), f.type || ""]),
     );
   }
   contract.hidden = !contract.children.length;
   requestAnimationFrame(() => {
     markOverflow(summaryText);
-    markOverflow(contract);
+    contract.querySelectorAll(".contract-line").forEach(markOverflowX);
   });
   const strip = $("#selStrip");
   strip.replaceChildren();
@@ -1592,7 +1598,17 @@ function markOverflow(node) {
     node.scrollTop + node.clientHeight < node.scrollHeight - 1,
   );
 }
-for (const id of ["#selectionSummary", "#selectionContract"])
+/** Fades a contract line's trailing edge while more tokens are scrollable sideways. */
+function markOverflowX(node) {
+  node.dataset.more = String(
+    node.scrollLeft + node.clientWidth < node.scrollWidth - 1,
+  );
+}
+// Lines are often measured while the sheet hides them; re-check when they gain size.
+const contractLines = new ResizeObserver((entries) =>
+  entries.forEach((entry) => markOverflowX(entry.target)),
+);
+for (const id of ["#selectionSummary"])
   $(id).addEventListener("scroll", (event) => markOverflow(event.target), {
     passive: true,
   });

@@ -69,6 +69,7 @@ const paths = {
   unchanged: "M4 7h12M4 13h12",
   input: "M16 3v14M3 10h9M8 6l4 4-4 4",
   output: "M4 3v14M8 10h9M13 6l4 4-4 4",
+  fields: "M3 5h2M3 10h2M3 15h2M8 5h9M8 10h9M8 15h9",
 };
 const statuses = {
   added: ["Added", "--add"],
@@ -128,13 +129,16 @@ export function statusIcon(status) {
   return host;
 }
 
-/** Returns an input (In) or output (Out) arrow; other directions throw a RangeError. */
+/** Returns an input (In) or output (Out) arrow, or the declared-fields icon (Fields); other values throw a RangeError. */
 export function interfaceIcon(direction) {
-  if (direction !== "In" && direction !== "Out")
+  const kinds = {
+    In: ["input", "Inputs"],
+    Out: ["output", "Outputs"],
+    Fields: ["fields", "Fields"],
+  };
+  if (!Object.hasOwn(kinds, direction))
     throw new RangeError(`Unknown contract direction: ${direction}`);
-  return direction === "In"
-    ? icon("input", "Inputs", "interface-icon")
-    : icon("output", "Outputs", "interface-icon");
+  return icon(...kinds[direction], "interface-icon");
 }
 
 const extensionKinds = {

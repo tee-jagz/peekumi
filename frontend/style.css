@@ -4332,3 +4332,70 @@ details.p-section[open] > summary::before {
     display: none;
   }
 }
+
+/* Inputs, outputs and fields: one sideways-scrolling line of name/type tokens per row. */
+#selectionContract {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 8px;
+  max-height: none;
+  overflow: visible;
+}
+#selectionContract dt {
+  display: flex;
+}
+#selectionContract dd.contract-line {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-line-clamp: unset;
+  touch-action: pan-x;
+}
+#selectionContract dd.contract-line::-webkit-scrollbar {
+  display: none;
+}
+#selectionContract dd.contract-line[data-more="true"] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.contract-token {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--el-glass);
+  border: 1px solid var(--el-line);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.contract-token b {
+  font: 600 12px/1.35 var(--mono);
+  color: var(--ink);
+}
+.contract-token span {
+  color: var(--muted);
+}
+/* Contract tokens read as plain inline text, not boxed badges. */
+#selectionContract dd.contract-line {
+  gap: 0;
+}
+.contract-token {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 12.5px;
+}
+.contract-token + .contract-token::before {
+  content: "·";
+  margin: 0 8px;
+  color: var(--faint);
+}

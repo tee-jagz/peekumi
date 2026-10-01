@@ -19,7 +19,7 @@ The sheet follows pointer movement continuously and animates to a snap height on
 
 Both Time and Diff follow the selected commit’s first parent by default, independent of the launch-time base. Selecting a base pins it while changing heads, refreshing or switching modes. The revision picker’s automatic option or “Use previous commit” clears that override. Explicit comment/run inspection preserves its requested comparison range.
 
-The compact phone sheet shows the selection description and available input/output types, without inspection controls. Half and full heights reveal navigation and complete declaration details; missing types remain explicitly unspecified. The map key lives in the floating canvas toolbar, opens upward over the graph and holds the Structure/Changes colour lens.
+The compact phone sheet shows the selection description and available input/output types, without inspection controls. Inputs, outputs and fields are sideways-scrolling lines of name/type tokens that show declared types only; an Out row appears only for a declared return type or description. Half and full heights reveal navigation and complete declaration details, where every missing annotation is labelled explicitly. The map key lives in the floating canvas toolbar, opens upward over the graph and holds the Structure/Changes colour lens.
 
 Selection status, review lists and the legend use shape-distinct coloured SVG icons without badge borders or backgrounds, and the contract uses entering/leaving arrows for inputs/outputs. Icons have accessible names and tooltips; the canvas legend explains them. Modified items use orange in both themes.
 
