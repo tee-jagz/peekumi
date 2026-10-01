@@ -599,9 +599,10 @@ function renderDeck() {
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
   const mapLegend = $("#mapLegend"),
-    sides = $("#baSeg");
+    sides = $("#baSeg"),
+    crumbHost = $("#crumbHost");
   const crumbs = breadcrumbs();
-  $("#crumbHost").replaceChildren(crumbs);
+  crumbHost.replaceChildren(crumbs);
   requestAnimationFrame(() => {
     crumbs.classList.remove("tight");
     const root = crumbs.querySelector(".crumb-root");
@@ -617,7 +618,7 @@ function renderDeck() {
   deck.append(sheet);
   renderGraph(body);
   body.querySelector(".map-tools")?.append(mapLegend);
-  body.querySelector(".canvas-controls")?.prepend(sides);
+  body.querySelector(".canvas-controls")?.prepend(crumbHost, sides);
   body.scrollTop = oldScroll;
 }
 /** Chooses a node colour from its Git status, or the neutral Structure accent. */
@@ -817,8 +818,8 @@ function renderGraph(body) {
     canvas.append(more);
     y += 25;
   }
-  // Leave room to scroll the last row clear of the floating map controls.
-  const height = Math.max(available, y + 64);
+  // Leave room to scroll the last row clear of the floating navigation and controls.
+  const height = Math.max(available, y + 112);
   canvas.style.width = graphWidth + "px";
   canvas.style.height = height + "px";
   const verticalOffset = root && y < available ? (available - y) / 2 : 0;

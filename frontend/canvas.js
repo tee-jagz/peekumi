@@ -1,9 +1,16 @@
-/** @module SVG viewport supporting touch, mouse and keyboard navigation around repository cards. */
-// SVG viewport with HTML card contents, preserving the reference's glass styling.
+/** @module Pan, pinch and zoom viewport for repository cards, moved as one GPU-composited layer. */
 import { iconButton } from "./icons.js";
-const NS = "http://www.w3.org/2000/svg";
 const views = new Map();
-/** Mounts HTML card content inside an SVG viewport and binds pan, pinch and zoom controls. Remembers the transform by view key, suppresses gesture clicks and pans focused cards into view. Mutates the supplied container and controls; icon buttons are appended to `toolbar`, which defaults to `controls`. */
+// Momentum: velocity decays by this factor per 16 ms frame; flings below the floor stop.
+const FRICTION = 0.94,
+  MIN_SPEED = 0.02;
+
+/** Mounts map content in a pannable, zoomable viewport and binds touch, mouse, wheel and
+ * keyboard controls. The content layer is moved with a CSS transform, so panning composites
+ * on the GPU instead of repainting every card. Remembers the view by key, adds momentum to
+ * flings, suppresses clicks after gestures and brings keyboard-focused cards into view.
+ * Mutates the supplied container and controls; icon buttons are appended to `toolbar`,
+ * which defaults to `controls`. */
 export function mountCanvas(
   body,
   content,
@@ -13,22 +20,21 @@ export function mountCanvas(
   controls,
   toolbar = controls,
 ) {
-  const svg = document.createElementNS(NS, "svg");
-  svg.classList.add("map-canvas");
-  svg.setAttribute(
+  const viewport = document.createElement("div");
+  viewport.className = "map-canvas";
+  viewport.setAttribute(
     "aria-label",
     "Repository map. Drag to pan, scroll to move, pinch or Control-scroll to zoom.",
   );
-  svg.setAttribute("role", "group");
-  svg.tabIndex = 0;
-  const layer = document.createElementNS(NS, "g");
-  const foreign = document.createElementNS(NS, "foreignObject");
-  foreign.setAttribute("width", width);
-  foreign.setAttribute("height", height);
-  foreign.append(content);
-  layer.append(foreign);
-  svg.append(layer);
-  body.replaceChildren(svg, controls);
+  viewport.setAttribute("role", "group");
+  viewport.tabIndex = 0;
+  const layer = document.createElement("div");
+  layer.className = "map-layer";
+  layer.style.width = width + "px";
+  layer.style.height = height + "px";
+  layer.append(content);
+  viewport.append(layer);
+  body.replaceChildren(viewport, controls);
   const view = {
     ...(views.get(key) || {
       x: (body.clientWidth - width) / 2,
@@ -36,62 +42,82 @@ export function mountCanvas(
       scale: 1,
     }),
   };
+  let settle = 0,
+    glide = 0;
+  // Promote the layer only while it moves; afterwards it re-rasterizes crisply at its scale.
+  const moving = () => {
+    layer.classList.add("is-moving");
+    clearTimeout(settle);
+    settle = setTimeout(() => layer.classList.remove("is-moving"), 160);
+  };
   const remember = () => {
-    layer.setAttribute(
-      "transform",
-      `translate(${view.x} ${view.y}) scale(${view.scale})`,
-    );
+    layer.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`;
     views.delete(key);
     views.set(key, { ...view });
     if (views.size > 40) views.delete(views.keys().next().value);
   };
-  const zoom = (factor, x = svg.clientWidth / 2, y = svg.clientHeight / 2) => {
-    const scale = Math.max(0.001, Math.min(3, view.scale * factor));
+  const stopGlide = () => {
+    cancelAnimationFrame(glide);
+    glide = 0;
+  };
+  const zoom = (
+    factor,
+    x = viewport.clientWidth / 2,
+    y = viewport.clientHeight / 2,
+  ) => {
+    const scale = Math.max(0.05, Math.min(3, view.scale * factor));
     const ratio = scale / view.scale;
     view.x = x - (x - view.x) * ratio;
     view.y = y - (y - view.y) * ratio;
     view.scale = scale;
+    moving();
     remember();
   };
   const add = (name, icon, action) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.onclick = action;
+    b.onclick = () => {
+      stopGlide();
+      action();
+    };
     toolbar.append(iconButton(b, icon, name));
   };
   add("Zoom out", "zoomOut", () => zoom(1 / 1.25));
   add("Zoom in", "zoomIn", () => zoom(1.25));
   add("Fit map", "fit", () => {
     view.scale = Math.max(
-      0.001,
+      0.05,
       Math.min(
         1.5,
-        (svg.clientWidth - 16) / width,
-        (svg.clientHeight - 16) / height,
+        (viewport.clientWidth - 16) / width,
+        (viewport.clientHeight - 16) / height,
       ),
     );
-    view.x = (svg.clientWidth - width * view.scale) / 2;
-    view.y = (svg.clientHeight - height * view.scale) / 2;
+    view.x = (viewport.clientWidth - width * view.scale) / 2;
+    view.y = (viewport.clientHeight - height * view.scale) / 2;
+    moving();
     remember();
   });
   add("Reset map view", "reset", () => {
-    view.x = (svg.clientWidth - width) / 2;
+    view.x = (viewport.clientWidth - width) / 2;
     view.y = 0;
     view.scale = 1;
+    moving();
     remember();
   });
-  svg.addEventListener(
+  viewport.addEventListener(
     "wheel",
     (event) => {
       event.preventDefault();
+      stopGlide();
       const unit =
         event.deltaMode === 1
           ? 16
           : event.deltaMode === 2
-            ? svg.clientHeight
+            ? viewport.clientHeight
             : 1;
       if (event.ctrlKey || event.metaKey) {
-        const rect = svg.getBoundingClientRect();
+        const rect = viewport.getBoundingClientRect();
         zoom(
           Math.exp(-event.deltaY * unit * 0.008),
           event.clientX - rect.left,
@@ -100,6 +126,7 @@ export function mountCanvas(
       } else {
         view.x -= event.deltaX * unit;
         view.y -= event.deltaY * unit;
+        moving();
         remember();
       }
     },
@@ -108,7 +135,8 @@ export function mountCanvas(
   const pointers = new Map();
   let moved = false,
     start = null,
-    captured = false;
+    captured = false,
+    track = [];
   const geometry = () => {
     const points = [...pointers.values()];
     return {
@@ -120,21 +148,23 @@ export function mountCanvas(
           : 0,
     };
   };
-  svg.addEventListener("pointerdown", (event) => {
+  viewport.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    stopGlide();
     if (!pointers.size) {
       moved = false;
       captured = false;
       start = { x: event.clientX, y: event.clientY };
+      track = [];
     }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size > 1) {
       moved = true;
-      for (const id of pointers.keys()) svg.setPointerCapture(id);
+      for (const id of pointers.keys()) viewport.setPointerCapture(id);
       captured = true;
     }
   });
-  svg.addEventListener("pointermove", (event) => {
+  viewport.addEventListener("pointermove", (event) => {
     if (!pointers.has(event.pointerId)) return;
     const old = geometry();
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -145,29 +175,68 @@ export function mountCanvas(
     )
       return;
     if (!captured) {
-      svg.setPointerCapture(event.pointerId);
+      viewport.setPointerCapture(event.pointerId);
       captured = true;
     }
     moved = true;
     if (old.distance && next.distance) {
-      const rect = svg.getBoundingClientRect();
+      const rect = viewport.getBoundingClientRect();
       zoom(next.distance / old.distance, old.x - rect.left, old.y - rect.top);
     }
     view.x += next.x - old.x;
     view.y += next.y - old.y;
+    // Keep the last ~100 ms of single-finger movement to estimate fling velocity.
+    if (pointers.size === 1) {
+      track.push({ x: view.x, y: view.y, t: event.timeStamp });
+      while (track.length > 2 && event.timeStamp - track[0].t > 100)
+        track.shift();
+    } else track = [];
+    moving();
     remember();
   });
-  const end = (event) => {
-    pointers.delete(event.pointerId);
-    if (svg.hasPointerCapture(event.pointerId))
-      svg.releasePointerCapture(event.pointerId);
+  /** Continues a released single-finger pan with decaying velocity. */
+  const fling = () => {
+    if (track.length < 2) return;
+    const first = track[0],
+      last = track.at(-1),
+      elapsed = last.t - first.t;
+    if (elapsed <= 0 || performance.now() - last.t > 80) return;
+    let vx = (last.x - first.x) / elapsed,
+      vy = (last.y - first.y) / elapsed,
+      previous = performance.now();
+    const step = (now) => {
+      const dt = Math.min(48, now - previous);
+      previous = now;
+      view.x += vx * dt;
+      view.y += vy * dt;
+      const decay = Math.pow(FRICTION, dt / 16);
+      vx *= decay;
+      vy *= decay;
+      moving();
+      remember();
+      glide =
+        Math.hypot(vx, vy) > MIN_SPEED ? requestAnimationFrame(step) : 0;
+    };
+    if (Math.hypot(vx, vy) > MIN_SPEED) glide = requestAnimationFrame(step);
   };
-  svg.addEventListener("pointerup", end);
-  svg.addEventListener("pointercancel", end);
-  svg.addEventListener(
+  const end = (event) => {
+    if (!pointers.delete(event.pointerId)) return;
+    if (viewport.hasPointerCapture(event.pointerId))
+      viewport.releasePointerCapture(event.pointerId);
+    if (!pointers.size) {
+      if (moved && event.type === "pointerup") fling();
+      // A drag produces no click; clear the flag so the next keyboard activation works.
+      setTimeout(() => {
+        if (!pointers.size) moved = false;
+      }, 0);
+    }
+  };
+  viewport.addEventListener("pointerup", end);
+  viewport.addEventListener("pointercancel", end);
+  viewport.addEventListener(
     "click",
     (event) => {
-      if (moved) {
+      if (moved && event.detail !== 0) {
         event.preventDefault();
         event.stopPropagation();
         moved = false;
@@ -175,8 +244,8 @@ export function mountCanvas(
     },
     true,
   );
-  svg.addEventListener("keydown", (event) => {
-    if (event.target !== svg) return;
+  viewport.addEventListener("keydown", (event) => {
+    if (event.target !== viewport) return;
     const delta = {
       ArrowLeft: [40, 0],
       ArrowRight: [-40, 0],
@@ -185,8 +254,10 @@ export function mountCanvas(
     }[event.key];
     if (delta) {
       event.preventDefault();
+      stopGlide();
       view.x += delta[0];
       view.y += delta[1];
+      moving();
       remember();
     } else if (event.key === "+" || event.key === "=") {
       event.preventDefault();
@@ -196,23 +267,25 @@ export function mountCanvas(
       zoom(1 / 1.25);
     }
   });
-  // Keyboard navigation brings the focused card into the viewport.
-  svg.addEventListener("focusin", (event) => {
-    if (event.target === svg) return;
+  // Keyboard navigation brings the focused card into the viewport. Pointer focus does not,
+  // so tapping a card near the edge never shifts the map under the finger.
+  viewport.addEventListener("focusin", (event) => {
+    if (event.target === viewport || !event.target.matches(":focus-visible"))
+      return;
     const card = event.target.getBoundingClientRect(),
-      viewport = svg.getBoundingClientRect();
+      bounds = viewport.getBoundingClientRect();
     if (
-      card.top < viewport.top ||
-      card.bottom > viewport.bottom ||
-      card.left < viewport.left ||
-      card.right > viewport.right
+      card.top < bounds.top ||
+      card.bottom > bounds.bottom ||
+      card.left < bounds.left ||
+      card.right > bounds.right
     ) {
-      if (card.left < viewport.left || card.right > viewport.right)
-        view.x +=
-          viewport.left + viewport.width / 2 - (card.left + card.width / 2);
-      if (card.top < viewport.top || card.bottom > viewport.bottom)
-        view.y +=
-          viewport.top + viewport.height / 2 - (card.top + card.height / 2);
+      stopGlide();
+      if (card.left < bounds.left || card.right > bounds.right)
+        view.x += bounds.left + bounds.width / 2 - (card.left + card.width / 2);
+      if (card.top < bounds.top || card.bottom > bounds.bottom)
+        view.y += bounds.top + bounds.height / 2 - (card.top + card.height / 2);
+      moving();
       remember();
     }
   });

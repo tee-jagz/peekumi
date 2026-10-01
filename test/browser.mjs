@@ -147,10 +147,10 @@ try {
       rootColumns > 1,
       "Repository graph uses multiple node columns, not a vertical stack",
     );
-    const canvas = front.locator("svg.map-canvas");
+    const canvas = front.locator(".map-canvas");
     assert.equal(await canvas.count(), 1);
     const transform = () =>
-      canvas.locator(":scope > g").getAttribute("transform");
+      canvas.locator(":scope > .map-layer").evaluate((el) => el.style.transform);
     const initialTransform = await transform();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     assert.notEqual(await transform(), initialTransform);

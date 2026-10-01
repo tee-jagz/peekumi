@@ -6,7 +6,23 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#EDF1F3" />
+    <meta
+      name="theme-color"
+      content="#EDF1F3"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0A0C0E"
+      media="(prefers-color-scheme: dark)"
+    />
+    <!-- Installed app runs edge to edge; content keeps clear of notches through safe-area insets. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <title>Repo Strata</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -38,8 +54,7 @@
     <div class="app" id="workspace">
       <header class="top">
         <div class="title-block">
-          <h1 class="visually-hidden" id="repo-name">Repo strata</h1>
-          <div id="crumbHost"></div>
+          <h1 class="repo" id="repo-name">Repo strata</h1>
           <span class="sub" id="repo-sub">Connecting to your repository…</span>
           <details id="revisionDetails" class="revision-details">
             <summary
@@ -137,6 +152,8 @@
           <div class="loading-message">Opening your workspace…</div>
         </div>
         <div id="mapParts" hidden>
+          <!-- Level navigation floats on the map it navigates, within thumb reach. -->
+          <div id="crumbHost"></div>
           <div
             class="seg glass"
             id="baSeg"

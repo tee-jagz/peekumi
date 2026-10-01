@@ -487,6 +487,16 @@ async function main() {
       );
       await chmod(join(staging, "libexec/strata"), 0o755);
       await chmod(join(staging, "libexec/node"), 0o755);
+      // The bundle copies the running Node binary. Refuse one that depends on shared
+      // libraries outside it (Homebrew's Node needs libnode), before replacing anything.
+      const runtime = spawnSync(join(staging, "libexec/node"), ["--version"], {
+        encoding: "utf8",
+      });
+      if (runtime.status !== 0)
+        throw new Error(
+          `The Node runtime ${node} is not self-contained and would not run from the bundle. ` +
+            "Run install/upgrade with an official nodejs.org build of Node 22.",
+        );
       if (await exists(dest)) {
         backup = dest + ".previous-" + Date.now();
         await rename(dest, backup);
