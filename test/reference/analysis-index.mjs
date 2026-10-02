@@ -26,7 +26,7 @@ export class AnalysisIndex {
   }
   disable(error) {
     console.warn(
-      "Strata index unavailable; using memory cache:",
+      "Peekumi index unavailable; using memory cache:",
       error.message,
     );
     try {

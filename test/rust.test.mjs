@@ -14,7 +14,7 @@ import os from "node:os";
 import { Repository, command } from "./reference/engine.mjs";
 import { startRust, rustRpc } from "./rust-support.mjs";
 async function fixture(t) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "strata-parity-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "peekumi-parity-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const git = (...args) => command("git", ["-C", directory, ...args]);
   const put = async (file, text) => {
@@ -22,7 +22,7 @@ async function fixture(t) {
     await writeFile(path.join(directory, file), text);
   };
   await git("init", "-b", "main");
-  await git("config", "user.name", "Strata Test");
+  await git("config", "user.name", "Peekumi Test");
   await git("config", "user.email", "test@example.invalid");
   await put(
     "pkg/model.py",
@@ -80,7 +80,7 @@ async function fixture(t) {
     git,
     base,
     repo: new Repository(directory, {
-      python: process.env.STRATA_PYTHON || "/usr/bin/python3",
+      python: process.env.PEEKUMI_PYTHON || "/usr/bin/python3",
     }),
   };
 }
@@ -228,7 +228,7 @@ test("Rust authentication, write content-type boundary, gzip negotiation and sta
 });
 test("Rust syntax index survives process restart and unavailable parsers remain explicit", async (t) => {
   const f = await fixture(t);
-  const state = await mkdtemp(path.join(os.tmpdir(), "strata-rust-index-"));
+  const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-rust-index-"));
   t.after(() => rm(state, { recursive: true, force: true }));
   const requests = [
     { method: "compare", args: [f.base, "HEAD", { view: "overview" }] },
@@ -263,7 +263,7 @@ test("Rust syntax index survives process restart and unavailable parsers remain 
 
 test("Rust keeps serving when its optional disk index is unavailable", async (t) => {
   const f = await fixture(t);
-  const state = await mkdtemp(path.join(os.tmpdir(), "strata-rust-fallback-"));
+  const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-rust-fallback-"));
   t.after(() => rm(state, { recursive: true, force: true }));
   await writeFile(path.join(state, "index-rust"), "not a directory");
   const server = await startRust(f.directory, {
@@ -397,7 +397,7 @@ test("directory descriptions use committed revision-specific docs and package fa
 test("remembered browser survives service restart and token rotation revokes it", async (t) => {
   const f = await fixture(t);
   const stateDirectory = await mkdtemp(
-    path.join(os.tmpdir(), "strata-sessions-"),
+    path.join(os.tmpdir(), "peekumi-sessions-"),
   );
   t.after(() => rm(stateDirectory, { recursive: true, force: true }));
   let server = await startRust(f.directory, { base: f.base, stateDirectory });

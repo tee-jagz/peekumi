@@ -1,10 +1,10 @@
 [package]
-name = "repo-strata"
+name = "peekumi"
 version = "0.2.0"
 edition = "2024"
 
 [[bin]]
-name = "strata"
+name = "peekumi"
 path = "backend/main.rs"
 
 [dependencies]

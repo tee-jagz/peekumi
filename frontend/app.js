@@ -240,7 +240,7 @@ const UNREACHABLE =
 async function api(route, options = {}) {
   const headers = new Headers(options.headers);
   const repo = new URL(location.href).searchParams.get("repo");
-  if (repo) headers.set("X-Strata-Repository", repo);
+  if (repo) headers.set("X-Peekumi-Repository", repo);
   let response;
   try {
     response = await fetch(route, { ...options, headers });
@@ -261,7 +261,7 @@ async function api(route, options = {}) {
 async function apiStream(route, body, onEvent) {
   const headers = new Headers({ "Content-Type": "application/json" });
   const repo = new URL(location.href).searchParams.get("repo");
-  if (repo) headers.set("X-Strata-Repository", repo);
+  if (repo) headers.set("X-Peekumi-Repository", repo);
   let response;
   try {
     response = await fetch(route, {
@@ -2133,7 +2133,7 @@ function ruleSummary() {
       element(
         "p",
         "",
-        "Commit a .strata.json file to define path groups and forbidden relationships. No rules have been assumed.",
+        "Commit a .peekumi.json file to define path groups and forbidden relationships. No rules have been assumed.",
       ),
     );
   const other = comparison.relationshipData.checks[before ? "after" : "before"];

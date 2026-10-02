@@ -2,6 +2,8 @@
 use anyhow::{Result, bail, ensure};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+/// Rule configuration files, preferred first: `.peekumi.json`, then `.strata.json` from before the rename.
+pub const CONFIG_FILES: [&str; 2] = [".peekumi.json", ".strata.json"];
 /// Compiled path groups and directional deny rules from the committed root configuration.
 pub struct Rules {
     groups: BTreeMap<String, Vec<String>>,

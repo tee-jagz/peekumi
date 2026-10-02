@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 test("setup registry is idempotent and refuses unknown configuration versions", async (t) => {
-  const state = await mkdtemp(join(tmpdir(), "strata-config-"));
+  const state = await mkdtemp(join(tmpdir(), "peekumi-config-"));
   t.after(() => rm(state, { recursive: true, force: true }));
   const command = (...args) =>
     spawnSync(process.execPath, ["scripts/manage.mjs", ...args], {
       encoding: "utf8",
-      env: { ...process.env, STRATA_HOME: state },
+      env: { ...process.env, PEEKUMI_HOME: state },
     });
   for (let i = 0; i < 2; i++)
     assert.equal(command("repo", "add", process.cwd()).status, 0);

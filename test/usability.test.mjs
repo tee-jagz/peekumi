@@ -26,7 +26,7 @@ async function repo(root, name) {
   return dir;
 }
 test("multiple checkouts isolate comments; reader sessions persist and can be revoked; PWA never opts into API caching", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "strata-setup-"));
+  const root = await mkdtemp(join(tmpdir(), "peekumi-setup-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const a = await repo(root, "one"),
     b = await repo(root, "two"),
@@ -45,7 +45,7 @@ test("multiple checkouts isolate comments; reader sessions persist and can be re
   const registry = await (await request("/api/repositories")).json();
   assert.equal(registry.repositories.length, 2);
   const second = registry.repositories.find((r) => r.name === "two");
-  const scoped = { "X-Strata-Repository": second.id };
+  const scoped = { "X-Peekumi-Repository": second.id };
   const sha = git(b, "rev-parse", "HEAD");
   let r = await request("/api/comments", {
     method: "POST",
@@ -69,7 +69,7 @@ test("multiple checkouts isolate comments; reader sessions persist and can be re
   assert.equal(
     (
       await request("/api/repo", {
-        headers: { "X-Strata-Repository": "../one" },
+        headers: { "X-Peekumi-Repository": "../one" },
       })
     ).status,
     404,
@@ -158,7 +158,7 @@ test("multiple checkouts isolate comments; reader sessions persist and can be re
     401,
   );
   const sw = await (await request("/sw.js")).text();
-  assert.ok(!sw.includes("__STRATA_BUILD__"));
+  assert.ok(!sw.includes("__PEEKUMI_BUILD__"));
   assert.match(sw, /!SHELL.includes/);
   assert.equal(
     (await request("/api/repo")).headers.get("cache-control"),
@@ -166,7 +166,7 @@ test("multiple checkouts isolate comments; reader sessions persist and can be re
   );
 });
 test("PR comparison fetches private refs and uses merge base without touching dirty checkout", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "strata-pr-"));
+  const root = await mkdtemp(join(tmpdir(), "peekumi-pr-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const dir = await repo(root, "repo");
   const common = git(dir, "rev-parse", "HEAD");
@@ -221,7 +221,7 @@ fi
   await writeFile(join(dir, "module.py"), "uncommitted work");
   const before = git(dir, "status", "--porcelain");
   const server = await startRust(dir, {
-    extraEnv: { STRATA_GH: gh, GIT_CONFIG_GLOBAL: config },
+    extraEnv: { PEEKUMI_GH: gh, GIT_CONFIG_GLOBAL: config },
   });
   t.after(() => server.close());
   const r = await fetch(server.url + "/api/prs/open", {
@@ -238,12 +238,12 @@ fi
   assert.equal(data.head, head);
   assert.equal(git(dir, "status", "--porcelain"), before);
   assert.equal(git(dir, "branch", "--show-current"), "main");
-  assert.equal(git(dir, "rev-parse", "refs/strata/pr/7/head"), head);
+  assert.equal(git(dir, "rev-parse", "refs/peekumi/pr/7/head"), head);
 });
 
 test("workflow migration retains comments and refuses newer schemas", async (t) => {
   const { DatabaseSync } = await import("node:sqlite");
-  const root = await mkdtemp(join(tmpdir(), "strata-migrate-"));
+  const root = await mkdtemp(join(tmpdir(), "peekumi-migrate-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const directory = await repo(root, "repo"),
     state = join(root, "state");
@@ -284,10 +284,60 @@ test("workflow migration retains comments and refuses newer schemas", async (t) 
   db.close();
   await assert.rejects(
     startRust(directory, { stateDirectory: state }),
-    /newer Strata/,
+    /newer Peekumi/,
   );
   db = new DatabaseSync(join(state, "workflow.sqlite"));
   assert.equal(db.prepare("SELECT body FROM workflow").get().body, body);
   assert.equal(db.prepare("PRAGMA user_version").get().user_version, 999);
   db.close();
+});
+
+test("settings and sessions from before the rename keep working", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "peekumi-former-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dir = await repo(root, "one");
+  // Only STRATA_* names are set: the server adopts them for its PEEKUMI_* settings.
+  const server = await startRust(dir, { base: "HEAD", prefix: "STRATA_", token: "former-token" });
+  t.after(() => server.close());
+  const authorized = await fetch(server.url + "/api/repo", {
+    headers: { Authorization: "Bearer former-token" },
+  });
+  assert.equal(authorized.status, 200, "STRATA_TOKEN still authenticates");
+  const paired = await fetch(server.url + "/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "former-token" }),
+  });
+  const [cookie] = paired.headers.get("set-cookie").split(";");
+  assert.match(cookie, /^peekumi_session_[0-9a-f]+=/);
+  const former = cookie.replace(/^peekumi_session_/, "strata_session_");
+  const signedIn = await fetch(server.url + "/api/repo", { headers: { Cookie: former } });
+  assert.equal(signedIn.status, 200, "A cookie saved before the rename still signs in");
+  // A stale former cookie sent first must not shadow the fresh one.
+  const both = await fetch(server.url + "/api/repo", {
+    headers: { Cookie: former.replace(/=.*/, "=stale") + "; " + cookie },
+  });
+  assert.equal(both.status, 200, "The current cookie wins over a stale former one");
+});
+
+test("moving the state folder keeps devices signed in", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "peekumi-move-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dir = await repo(root, "one");
+  const before = join(root, "state-before"),
+    after = join(root, "state-after");
+  const first = await startRust(dir, { base: "HEAD", stateDirectory: before, isolatePrimary: true });
+  const paired = await fetch(first.url + "/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "rust-test-token" }),
+  });
+  const [cookie] = paired.headers.get("set-cookie").split(";");
+  await first.close();
+  const { rename } = await import("node:fs/promises");
+  await rename(before, after);
+  const second = await startRust(dir, { base: "HEAD", stateDirectory: after, isolatePrimary: true });
+  t.after(() => second.close());
+  const response = await fetch(second.url + "/api/repo", { headers: { Cookie: cookie } });
+  assert.equal(response.status, 200, "The saved session works from the moved folder");
 });

@@ -27,7 +27,7 @@ const after = {
 
 /** Creates the two-commit repository and returns its directory; the caller removes it. */
 export async function changesRepo() {
-  const dir = await mkdtemp(join(tmpdir(), "strata-changes-"));
+  const dir = await mkdtemp(join(tmpdir(), "peekumi-changes-"));
   git(dir, "init", "-b", "main");
   git(dir, "config", "user.email", "test@example.com");
   git(dir, "config", "user.name", "Test");

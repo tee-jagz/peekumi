@@ -29,6 +29,8 @@ pub fn run_for(
 ) -> Result<Vec<u8>> {
     let mut command = Command::new(program);
     command
+        .env_remove("PEEKUMI_TOKEN")
+        .env_remove("PEEKUMI_REPORT_TOKEN")
         .env_remove("STRATA_TOKEN")
         .env_remove("STRATA_REPORT_TOKEN")
         .args(args)
@@ -97,6 +99,8 @@ pub fn stream_lines(
     };
     let mut command = Command::new(program);
     command
+        .env_remove("PEEKUMI_TOKEN")
+        .env_remove("PEEKUMI_REPORT_TOKEN")
         .env_remove("STRATA_TOKEN")
         .env_remove("STRATA_REPORT_TOKEN")
         .args(args)

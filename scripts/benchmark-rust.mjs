@@ -11,11 +11,11 @@ if (!directory)
   throw Error(
     "Usage: node scripts/benchmark-rust.mjs /path/to/repo [base] [head]",
   );
-const state = await mkdtemp(path.join(os.tmpdir(), "strata-backends-"));
+const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-backends-"));
 const token = "benchmark-local-token";
 const options = {
   python:
-    process.env.STRATA_PYTHON ||
+    process.env.PEEKUMI_PYTHON ||
     (process.platform === "darwin" ? "/usr/bin/python3" : "python3"),
   cacheDirectory: path.join(state, "node"),
 };

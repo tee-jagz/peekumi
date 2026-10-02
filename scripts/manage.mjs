@@ -16,21 +16,39 @@ import { homedir, platform } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+/** Reads a PEEKUMI_* setting, or its STRATA_* name from before the rename. */
+const setting = (name) =>
+  process.env["PEEKUMI_" + name] ?? process.env["STRATA_" + name];
+// The private state directory. Without a setting it is ~/.local/share/peekumi; an existing
+// ~/.local/share/strata from before the rename is used in place until `start` moves it.
+const newState = join(homedir(), ".local/share/peekumi"),
+  formerState = join(homedir(), ".local/share/strata");
+const chosenState = setting("HOME");
 const state = resolve(
-  process.env.STRATA_HOME || join(homedir(), ".local/share/strata"),
+  chosenState ||
+    (!(await exists(newState)) && (await exists(formerState))
+      ? formerState
+      : newState),
 );
 const configPath = join(state, "config.json");
-const service =
-  "dev.repostrata." +
-  createHash("sha256").update(state).digest("hex").slice(0, 12);
+const serviceId = (path) =>
+  createHash("sha256").update(path).digest("hex").slice(0, 12);
+const service = "dev.peekumi." + serviceId(state);
+// Service registrations from before the rename, which start and stop retire.
+const formerServices = [
+  ...new Set([
+    "dev.repostrata." + serviceId(state),
+    "dev.repostrata." + serviceId(formerState),
+  ]),
+];
 const system = platform();
 const uid = process.getuid?.();
 const node = process.execPath;
 const executable =
-  process.env.STRATA_BINARY ||
-  ((await exists(join(root, "libexec/strata"))) &&
-    join(root, "libexec/strata")) ||
-  join(root, "target/release/strata");
+  setting("BINARY") ||
+  ((await exists(join(root, "libexec/peekumi"))) &&
+    join(root, "libexec/peekumi")) ||
+  join(root, "target/release/peekumi");
 async function exists(path) {
   try {
     await access(path);
@@ -52,7 +70,7 @@ function run(program, args, options = {}) {
   return result.stdout?.trim() || "";
 }
 const NO_SERVICE_MANAGER =
-  "No systemd user service manager is available here (common in containers, WSL without systemd and minimal systems). Run strata serve to keep Strata in the foreground, or run it under your own process manager.";
+  "No systemd user service manager is available here (common in containers, WSL without systemd and minimal systems). Run peekumi serve to keep Peekumi in the foreground, or run it under your own process manager.";
 /** Reports whether this Linux session can run a systemd user service; macOS always can. */
 function serviceManagerAvailable() {
   if (system !== "linux") return true;
@@ -67,7 +85,7 @@ async function config() {
     const c = JSON.parse(await readFile(configPath, "utf8"));
     if (c.version !== 1)
       throw new Error(
-        "Unsupported config version; use a compatible Strata release.",
+        "Unsupported config version; use a compatible Peekumi release.",
       );
     return c;
   } catch (e) {
@@ -100,8 +118,37 @@ function unitArg(value) {
     '"'
   );
 }
-const plist = join(homedir(), "Library/LaunchAgents", service + ".plist");
-const unit = join(homedir(), ".config/systemd/user", service + ".service");
+const plistFor = (label) =>
+  join(homedir(), "Library/LaunchAgents", label + ".plist");
+const unitFor = (label) =>
+  join(homedir(), ".config/systemd/user", label + ".service");
+const plist = plistFor(service);
+const unit = unitFor(service);
+/** Stops and removes the service registrations from before the rename, if any exist. */
+async function retireFormerServices() {
+  const { rm } = await import("node:fs/promises");
+  for (const label of formerServices) {
+    const file = system === "darwin" ? plistFor(label) : unitFor(label);
+    if (!(await exists(file))) continue;
+    try {
+      if (system === "darwin") run("launchctl", ["bootout", `gui/${uid}`, file]);
+      else run("systemctl", ["--user", "disable", "--now", label]);
+    } catch {}
+    await rm(file, { force: true });
+  }
+  if (system === "linux" && serviceManagerAvailable())
+    try {
+      run("systemctl", ["--user", "daemon-reload"]);
+    } catch {}
+}
+/** Moves ~/.local/share/strata to ~/.local/share/peekumi when it is the state in use, no
+ * setting chose another place, nothing is serving from it and the new folder is free. */
+async function moveFormerState() {
+  if (chosenState || state !== formerState || (await exists(newState))) return state;
+  await rename(formerState, newState);
+  console.log(`Moved ${formerState} to ${newState}`);
+  return newState;
+}
 async function running() {
   try {
     const c = await config();
@@ -132,7 +179,7 @@ async function ensureIdle() {
   const { repositories } = await api("/api/repositories");
   for (const repo of repositories) {
     const workflow = await api("/api/workflow", {
-      headers: { "X-Strata-Repository": repo.id },
+      headers: { "X-Peekumi-Repository": repo.id },
     });
     if (
       workflow.runs.some((r) =>
@@ -140,7 +187,7 @@ async function ensureIdle() {
       )
     )
       throw new Error(
-        `Finish or stop active agent runs in ${repo.name} before restarting Strata`,
+        `Finish or stop active agent runs in ${repo.name} before restarting Peekumi`,
       );
   }
 }
@@ -150,7 +197,7 @@ async function installService() {
   if (system === "darwin") {
     await mkdir(dirname(plist), { recursive: true });
     const env = {
-      STRATA_HOME: state,
+      PEEKUMI_HOME: state,
       PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
     };
     await writeFile(
@@ -169,21 +216,30 @@ async function installService() {
     await mkdir(dirname(unit), { recursive: true });
     await writeFile(
       unit,
-      `[Unit]\nDescription=Repo Strata\nAfter=network.target\n[Service]\nExecStart=${args.map(unitArg).join(" ")}\nEnvironment=${unitArg("STRATA_HOME=" + state)}\nEnvironment=${unitArg("PATH=" + process.env.PATH)}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n[Install]\nWantedBy=default.target\n`,
+      `[Unit]\nDescription=Peekumi\nAfter=network.target\n[Service]\nExecStart=${args.map(unitArg).join(" ")}\nEnvironment=${unitArg("PEEKUMI_HOME=" + state)}\nEnvironment=${unitArg("PATH=" + process.env.PATH)}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n[Install]\nWantedBy=default.target\n`,
       { mode: 0o600 },
     );
     run("systemctl", ["--user", "daemon-reload"]);
   } else
     throw new Error(
-      "Background service supports macOS and Linux. Use strata serve on other platforms.",
+      "Background service supports macOS and Linux. Use peekumi serve on other platforms.",
     );
 }
 async function start() {
   const c = await config();
   if (!c.repositories.length)
-    throw new Error("Add a repository first: strata repo add /path/to/repo");
+    throw new Error("Add a repository first: peekumi repo add /path/to/repo");
   if (await running()) {
-    console.log("Strata is already serving on port " + c.port);
+    console.log("Peekumi is already serving on port " + c.port);
+    return;
+  }
+  await retireFormerServices();
+  if ((await moveFormerState()) !== state) {
+    // The state moved; run again so every path, label and log points at the new folder.
+    const again = spawnSync(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
+      stdio: "inherit",
+    });
+    process.exitCode = again.status ?? 1;
     return;
   }
   let occupied = false;
@@ -195,7 +251,7 @@ async function start() {
   } catch {}
   if (occupied)
     throw new Error(
-      `Port ${c.port} is already in use by another service. Choose another port with strata port <number>.`,
+      `Port ${c.port} is already in use by another service. Choose another port with peekumi port <number>.`,
     );
   await installService();
   if (system === "darwin") {
@@ -207,7 +263,7 @@ async function start() {
   for (let i = 0; i < 40; i++) {
     if (await running()) {
       console.log(
-        `Strata ready at http://127.0.0.1:${c.port}/ · run strata pair for your private link`,
+        `Peekumi ready at http://127.0.0.1:${c.port}/ · run peekumi pair for your private link`,
       );
       return;
     }
@@ -218,15 +274,21 @@ async function start() {
     else run("systemctl", ["--user", "disable", "--now", service]);
   } catch {}
   throw new Error(
-    "Service did not become ready. Run strata logs and strata doctor. Check that the configured port is free.",
+    "Service did not become ready. Run peekumi logs and peekumi doctor. Check that the configured port is free.",
   );
 }
 async function stop() {
   if (!serviceManagerAvailable()) throw new Error(NO_SERVICE_MANAGER);
   await ensureIdle();
-  if (system === "darwin") run("launchctl", ["bootout", `gui/${uid}`, plist]);
-  else run("systemctl", ["--user", "disable", "--now", service]);
-  console.log("Strata stopped. Repositories and review state retained.");
+  // The service may still be registered under its name from before the rename.
+  await retireFormerServices();
+  try {
+    if (system === "darwin") run("launchctl", ["bootout", `gui/${uid}`, plist]);
+    else run("systemctl", ["--user", "disable", "--now", service]);
+  } catch (error) {
+    if (await running()) throw error;
+  }
+  console.log("Peekumi stopped. Repositories and review state retained.");
 }
 async function doctor() {
   const checks = [];
@@ -234,7 +296,7 @@ async function doctor() {
     ["Git", "git", ["--version"], true],
     ["Server", executable, ["--version"], true],
     ["Node", node, ["--version"], true],
-    ["Python", process.env.STRATA_PYTHON || "python3", ["--version"], false],
+    ["Python", setting("PYTHON") || "python3", ["--version"], false],
     ["GitHub CLI", "gh", ["--version"], false],
     ["Claude Code", "claude", ["--version"], false],
     ["Codex", "codex", ["--version"], false],
@@ -263,7 +325,7 @@ async function doctor() {
       required: false,
       detail: serviceManagerAvailable()
         ? "systemd user services"
-        : "No systemd user session; use strata serve in the foreground",
+        : "No systemd user session; use peekumi serve in the foreground",
     });
   try {
     run(
@@ -303,7 +365,7 @@ async function main() {
       return;
     }
     if (!["add", "remove"].includes(sub) || !args[0])
-      throw new Error("Use strata repo add|remove /path/to/repo");
+      throw new Error("Use peekumi repo add|remove /path/to/repo");
     const directory = await realpath(args[0]);
     if (sub === "add") {
       const actual = await realpath(
@@ -314,7 +376,7 @@ async function main() {
     } else c.repositories = c.repositories.filter((p) => p !== directory);
     await save(c);
     console.log(
-      "Repository registry saved. Run strata restart if the service is already running.",
+      "Repository registry saved. Run peekumi restart if the service is already running.",
     );
     return;
   }
@@ -322,7 +384,7 @@ async function main() {
     process.umask(0o077);
     const c = await config();
     if (!c.repositories.length)
-      throw new Error("Add a repository with strata repo add first");
+      throw new Error("Add a repository with peekumi repo add first");
     const params = [
       c.repositories[0],
       "--state-dir",
@@ -340,12 +402,13 @@ async function main() {
     for (const repo of c.repositories.slice(1)) params.push("--repo", repo);
     if (c.secureCookie) params.push("--secure-cookie");
     const env = { ...process.env };
+    delete env.PEEKUMI_TOKEN;
     delete env.STRATA_TOKEN;
     const child = spawn(executable, params, { stdio: "inherit", env });
     for (const signal of ["SIGTERM", "SIGINT"])
       process.on(signal, () => child.kill(signal));
     child.on("error", (e) => {
-      console.error(e.message + "; run strata doctor");
+      console.error(e.message + "; run peekumi doctor");
       process.exitCode = 1;
     });
     child.on("exit", (code) => {
@@ -404,7 +467,7 @@ async function main() {
   }
   if (command === "devices") {
     if (sub === "revoke") {
-      if (!args[0]) throw new Error("Use strata devices revoke <id>");
+      if (!args[0]) throw new Error("Use peekumi devices revoke <id>");
       await api("/api/devices/" + encodeURIComponent(args[0]), {
         method: "DELETE",
       });
@@ -414,7 +477,7 @@ async function main() {
   }
   if (command === "share") {
     const c = await config();
-    if (!(await running())) throw new Error("Start Strata first");
+    if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
     const ts = JSON.parse(run("tailscale", ["status", "--json"]));
     const host = ts.Self?.DNSName?.replace(/\.$/, "");
@@ -427,7 +490,7 @@ async function main() {
       !JSON.stringify(existing).includes(`http://127.0.0.1:${c.port}`)
     )
       throw new Error(
-        "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Strata.",
+        "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Peekumi.",
       );
     // No Funnel/public exposure: Serve is restricted to devices on the tailnet.
     run("tailscale", ["serve", "--bg", `http://127.0.0.1:${c.port}`]);
@@ -437,13 +500,13 @@ async function main() {
     await stop();
     await start();
     console.log(
-      `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run strata pair`,
+      `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run peekumi pair`,
     );
     return;
   }
   if (command === "port") {
     if (await running())
-      throw new Error("Stop Strata before changing its port");
+      throw new Error("Stop Peekumi before changing its port");
     const value = Number(sub);
     if (!Number.isInteger(value) || value < 1024 || value > 65535)
       throw new Error("Choose a port between 1024 and 65535");
@@ -455,7 +518,7 @@ async function main() {
   }
   if (command === "install" || command === "upgrade") {
     await ensureIdle();
-    const dest = resolve(sub || join(homedir(), ".local/lib/strata"));
+    const dest = resolve(sub || join(homedir(), ".local/lib/peekumi"));
     if (dest === root)
       throw new Error(
         "Choose an installation directory outside the source tree",
@@ -497,18 +560,21 @@ async function main() {
         join(staging, "libexec/node.next"),
         join(staging, "libexec/node"),
       );
-      await copyFile(executable, join(staging, "libexec/strata.next"));
+      await copyFile(executable, join(staging, "libexec/peekumi.next"));
       await rename(
-        join(staging, "libexec/strata.next"),
-        join(staging, "libexec/strata"),
+        join(staging, "libexec/peekumi.next"),
+        join(staging, "libexec/peekumi"),
       );
       await writeFile(
-        join(staging, "bin/strata"),
-        // Resolve symlinks first, so a link such as ~/.local/bin/strata finds the bundle.
-        '#!/bin/sh\nself=$0\nwhile [ -L "$self" ]; do\n  target=$(readlink "$self")\n  case $target in /*) self=$target ;; *) self=$(dirname -- "$self")/$target ;; esac\ndone\nSTRATA_ROOT=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)\nexec "$STRATA_ROOT/libexec/node" "$STRATA_ROOT/scripts/manage.mjs" "$@"\n',
+        join(staging, "bin/peekumi"),
+        // Resolve symlinks first, so a link such as ~/.local/bin/peekumi finds the bundle.
+        '#!/bin/sh\nself=$0\nwhile [ -L "$self" ]; do\n  target=$(readlink "$self")\n  case $target in /*) self=$target ;; *) self=$(dirname -- "$self")/$target ;; esac\ndone\nPEEKUMI_ROOT=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)\nexec "$PEEKUMI_ROOT/libexec/node" "$PEEKUMI_ROOT/scripts/manage.mjs" "$@"\n',
         { mode: 0o755 },
       );
-      await chmod(join(staging, "libexec/strata"), 0o755);
+      // The command's name before the rename keeps working.
+      const { symlink } = await import("node:fs/promises");
+      await symlink("peekumi", join(staging, "bin/strata"));
+      await chmod(join(staging, "libexec/peekumi"), 0o755);
       await chmod(join(staging, "libexec/node"), 0o755);
       // The bundle copies the running Node binary. Refuse one that depends on shared
       // libraries outside it (Homebrew's Node needs libnode), before replacing anything.
@@ -547,14 +613,14 @@ async function main() {
     }
     // install.sh prints its own next steps; a direct install explains them here.
     console.log(
-      process.env.STRATA_INSTALLER
+      setting("INSTALLER")
         ? `Installed ${dest}`
-        : `Installed ${join(dest, "bin/strata")}\nAdd ${join(dest, "bin")} to PATH. Run the installed strata doctor, then strata start.\nExisting state is retained. Stop the old service and start using the installed command to switch service paths.`,
+        : `Installed ${join(dest, "bin/peekumi")}\nAdd ${join(dest, "bin")} to PATH. Run the installed peekumi doctor, then peekumi start.\nExisting state is retained. Stop the old service and start using the installed command to switch service paths.`,
     );
     return;
   }
   console.log(
-    "Strata setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share                 Private Tailscale HTTPS access\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nSTRATA_HOME selects the private registry/state directory. Agents: read docs/SETUP.md.",
+    "Peekumi setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share                 Private Tailscale HTTPS access\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nPEEKUMI_HOME (or the former STRATA_HOME) selects the private registry/state directory. Agents: read docs/SETUP.md.",
   );
 }
 main().catch((e) => {

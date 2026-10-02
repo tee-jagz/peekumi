@@ -1,8 +1,8 @@
-# Using Strata
+# Using Peekumi
 
-This guide walks through every part of the Strata interface on a phone, then the desktop layout. Each screenshot has numbered orange markers, and the table under it explains what each numbered element is and how to use it. The screenshots show Strata inspecting its own repository.
+This guide walks through every part of the Peekumi interface on a phone, then the desktop layout. Each screenshot has numbered orange markers, and the table under it explains what each numbered element is and how to use it. The screenshots show Peekumi inspecting its own repository.
 
-To install Strata, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Instructions, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
+To install Peekumi, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Instructions, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
 
 The screenshots and icon images are generated from the live interface by `node scripts/guide-screenshots.mjs`, so they can be refreshed whenever the interface changes.
 
@@ -166,12 +166,12 @@ The only labelled view button is the one that is open; the others show just thei
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Rule summary | Results of the dependency rules committed in `.strata.json`. Expand it for configuration details and analysis gaps. Without a rules file it says rules are not configured. |
+| 1 | Rule summary | Results of the dependency rules committed in `.peekumi.json`. Expand it for configuration details and analysis gaps. Without a rules file it says rules are not configured. |
 | 2 | Relationship kind | Show all relationships, or only imports, calls, implementations or inheritance. |
 | 3 | Violations only | Show only relationships that break a dependency rule. |
 | 4 | Relationship | `from → to`, with its kind, change status and how many sites exist before and after. Tap to select it and see buttons for each file involved. |
 | 5 | Resolved evidence | Each relationship found in the code, with a link that opens the exact source line. |
-| 6 | Unresolved targets | References Strata could not resolve with certainty, and why. These are listed rather than guessed. |
+| 6 | Unresolved targets | References Peekumi could not resolve with certainty, and why. These are listed rather than guessed. |
 
 ## Ask, instructions and tasks
 
@@ -196,7 +196,7 @@ The only labelled view button is the one that is open; the others show just thei
 
 After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. **Review agent branch** opens the agent's work on the map, and **Mark task reviewed** or **Request changes** records your decision.
 
-Approving a task does not change your code. Strata never merges: the agent's commits stay on their task branch. Once you approve, the task shows **Next: apply to main** with the exact command, such as `git merge --ff-only strata/run-…`, and a copy button. Run it in the repository with main checked out, or open a pull request from that branch. When the commits reach main, the task reads **Applied to main**. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
+Approving a task does not change your code. Peekumi never merges: the agent's commits stay on their task branch. Once you approve, the task shows **Next: apply to main** with the exact command, such as `git merge --ff-only peekumi/run-…`, and a copy button. Run it in the repository with main checked out, or open a pull request from that branch. When the commits reach main, the task reads **Applied to main**. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
 ## Typing on a phone
 
@@ -208,7 +208,7 @@ When the keyboard opens, the header and the map controls step aside, the sheet k
 
 <img src="guide/14-desktop.jpg" width="720" alt="The desktop layout in dark mode">
 
-On a wide screen the header (1) spans the top, the map (2) fills the left, and the review sheet (3) sits on the right at full height. Everything else works the same way. Strata follows the system light or dark appearance.
+On a wide screen the header (1) spans the top, the map (2) fills the left, and the review sheet (3) sits on the right at full height. Everything else works the same way. Peekumi follows the system light or dark appearance.
 
 ## Icon reference
 
@@ -295,4 +295,4 @@ A modified declaration says which parts changed, on its card and in the sheet. T
 
 ## Offline and updates
 
-Strata runs on your own computer; the phone app is a window onto it. If the phone loses its connection, a banner says so, and no code is stored on the phone. When the server has a new version, the app shows **Update available · reload**. Save any unsent text, then tap it. Changes to the app's name, icon or full-screen mode take effect after removing the app from the home screen and adding it again.
+Peekumi runs on your own computer; the phone app is a window onto it. If the phone loses its connection, a banner says so, and no code is stored on the phone. When the server has a new version, the app shows **Update available · reload**. Save any unsent text, then tap it. Changes to the app's name, icon or full-screen mode take effect after removing the app from the home screen and adding it again.

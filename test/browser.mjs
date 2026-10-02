@@ -4,15 +4,15 @@ import { chromium } from "@playwright/test";
 import { Repository } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
 
-const repo = new Repository(process.env.STRATA_TEST_REPO || process.cwd(), {
+const repo = new Repository(process.env.PEEKUMI_TEST_REPO || process.cwd(), {
   python:
-    process.env.STRATA_PYTHON ||
+    process.env.PEEKUMI_PYTHON ||
     (process.platform === "darwin" ? "/usr/bin/python3" : "python3"),
 });
 const head = await repo.resolve("HEAD");
 let base;
 try {
-  base = await repo.resolve(process.env.STRATA_TEST_BASE || "HEAD~1");
+  base = await repo.resolve(process.env.PEEKUMI_TEST_BASE || "HEAD~1");
 } catch {
   base = head;
 }
@@ -25,8 +25,8 @@ const server = await startRust(repo.directory, {
 const url = server.url;
 const browser = await chromium.launch({
   headless: true,
-  ...(process.env.STRATA_BROWSER_CHANNEL
-    ? { channel: process.env.STRATA_BROWSER_CHANNEL }
+  ...(process.env.PEEKUMI_BROWSER_CHANNEL
+    ? { channel: process.env.PEEKUMI_BROWSER_CHANNEL }
     : {}),
 });
 await mkdir("test-results", { recursive: true });
@@ -37,8 +37,8 @@ try {
     })
   ).json();
   const target =
-    (process.env.STRATA_TEST_FILE &&
-      data.files.find((f) => f.path === process.env.STRATA_TEST_FILE)) ||
+    (process.env.PEEKUMI_TEST_FILE &&
+      data.files.find((f) => f.path === process.env.PEEKUMI_TEST_FILE)) ||
     data.files.find(
       (f) =>
         f.status === "changed" && f.symbols.length && f.path.endsWith(".py"),
@@ -63,7 +63,7 @@ try {
     const front = page.locator('.sheet[data-front="true"]');
     await front.locator(".node").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
-    if (process.env.STRATA_TEST_BASE) {
+    if (process.env.PEEKUMI_TEST_BASE) {
       await page.locator("#revisionDetails > summary").click();
       await page.locator("#base").selectOption(base);
       await page.locator("#notice").waitFor({ state: "hidden" });
@@ -235,13 +235,13 @@ try {
         .first();
       await card.focus();
       await card.click();
-      if (process.env.STRATA_TEST_DIRECTORY_DOC)
+      if (process.env.PEEKUMI_TEST_DIRECTORY_DOC)
         assert.ok(
           (
             await page
               .locator(".directory-details .code-description")
               .textContent()
-          ).includes(process.env.STRATA_TEST_DIRECTORY_DOC),
+          ).includes(process.env.PEEKUMI_TEST_DIRECTORY_DOC),
         );
       assert.equal(await page.locator(".sel-name").textContent(), folder);
       assert.equal(
@@ -475,7 +475,7 @@ try {
     await page.waitForFunction(
       () => document.querySelector("#change-summary")?.dataset.count === "0",
     );
-    await page.locator("#search").fill("strata-no-such-file-000");
+    await page.locator("#search").fill("peekumi-no-such-file-000");
     await page.locator("#changes .empty").waitFor({ state: "visible" });
     await page.locator("#search").fill("");
     if (viewport.width === 390) {
@@ -517,7 +517,7 @@ try {
       ),
       "No page overflow",
     );
-    if (process.env.STRATA_TEST_DIRECTORY_DOC) {
+    if (process.env.PEEKUMI_TEST_DIRECTORY_DOC) {
       await page.reload();
       await page.locator("#notice").waitFor({ state: "hidden" });
       const card = page.locator(
@@ -529,7 +529,7 @@ try {
       await page.locator("#source-code").waitFor();
       assert.ok(
         (await page.locator("#source-code").textContent()).includes(
-          process.env.STRATA_TEST_DIRECTORY_DOC,
+          process.env.PEEKUMI_TEST_DIRECTORY_DOC,
         ),
       );
     }

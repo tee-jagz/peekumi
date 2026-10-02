@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
-const dir = await mkdtemp(path.join(os.tmpdir(), "strata-rel-browser-"));
+const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-rel-browser-"));
 const git = (...args) => command("git", ["-C", dir, ...args]);
 let server, browser;
 try {
@@ -25,7 +25,7 @@ try {
   await git("commit", "-m", "Code");
   const base = (await git("rev-parse", "HEAD")).toString().trim();
   await writeFile(
-    path.join(dir, ".strata.json"),
+    path.join(dir, ".peekumi.json"),
     JSON.stringify({
       version: 1,
       groups: { consumer: ["web/consumer.ts"], provider: ["web/provider.ts"] },

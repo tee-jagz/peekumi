@@ -11,8 +11,8 @@ if (values.includes("--tools")) {
     !values.includes("--disable-slash-commands")
   )
     throw Error("Ask must have no tools");
-  if (process.env.STRATA_TOKEN || process.env.STRATA_REPORT_TOKEN)
-    throw Error("Ask inherited a Strata credential");
+  if (process.env.PEEKUMI_TOKEN || process.env.PEEKUMI_REPORT_TOKEN)
+    throw Error("Ask inherited a Peekumi credential");
   if (values[values.indexOf("--effort") + 1] !== "low")
     throw Error("Ask must run at low effort for fast answers");
   if (values[values.indexOf("--model") + 1] !== "sonnet")
@@ -23,7 +23,7 @@ if (values.includes("--tools")) {
   // Exercises the read-only lookup endpoint the way Claude Code does (Streamable HTTP MCP).
   async function lookups() {
     const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
-      .mcpServers.strata;
+      .mcpServers.peekumi;
     const headers = {
       ...config.headers,
       "Content-Type": "application/json",
@@ -80,11 +80,11 @@ let command, args;
 if (values.includes("--mcp-config")) {
   if (
     !values.includes("--strict-mcp-config") ||
-    !values.some((v) => v.includes("mcp__strata__resolve_comment"))
+    !values.some((v) => v.includes("mcp__peekumi__resolve_comment"))
   )
     throw Error("Missing scoped reporting tool configuration");
   const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
-    .mcpServers.strata;
+    .mcpServers.peekumi;
   command = config.command;
   args = config.args;
 } else {
@@ -96,14 +96,14 @@ if (values.includes("--mcp-config")) {
     throw Error("Use the approval-review preset without conflicting sandbox flags");
   command = JSON.parse(
     values
-      .find((v) => v.startsWith("mcp_servers.strata.command="))
+      .find((v) => v.startsWith("mcp_servers.peekumi.command="))
       .split("=")
       .slice(1)
       .join("="),
   );
   args = JSON.parse(
     values
-      .find((v) => v.startsWith("mcp_servers.strata.args="))
+      .find((v) => v.startsWith("mcp_servers.peekumi.args="))
       .split("=")
       .slice(1)
       .join("="),
@@ -166,7 +166,7 @@ git(
   "commit",
   "--amend",
   "-m",
-  `Fixture change\n\nStrata-Run: ${run.id}\nStrata-Comment: ${first.id}\nStrata-Agent: ${run.agent}`,
+  `Fixture change\n\nPeekumi-Run: ${run.id}\nPeekumi-Comment: ${first.id}\nPeekumi-Agent: ${run.agent}`,
 );
 sha = git("rev-parse", "HEAD");
 const report = call("resolve_comment", {

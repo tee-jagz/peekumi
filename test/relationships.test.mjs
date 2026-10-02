@@ -8,7 +8,7 @@ import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
 
 test("relationships retain language evidence, unresolved dispatch and versioned rule-only changes", async (t) => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "strata-relationships-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-relationships-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const git = (...args) => command("git", ["-C", dir, ...args]);
   const put = async (p, text) => {
@@ -61,10 +61,10 @@ test("relationships retain language evidence, unresolved dispatch and versioned 
       },
     ],
   };
-  await put(".strata.json", JSON.stringify(config));
+  await put(".peekumi.json", JSON.stringify(config));
   await git("add", ".");
   await git("commit", "-m", "Rules only");
-  await put(".strata.json", "uncommitted invalid rules");
+  await put(".peekumi.json", "uncommitted invalid rules");
   const server = await startRust(dir, { base });
   t.after(() => server.close());
   const get = async (q = "") => {
@@ -167,11 +167,59 @@ test("relationships retain language evidence, unresolved dispatch and versioned 
   const reverse = await get("base=HEAD&head=" + base);
   assert.equal(reverse.checks.after.state, "not configured");
   assert.equal(reverse.checks.after.violations, 0);
-  await put(".strata.json", '{"version":1,"groups":{},"rules":[{"typo":1}]}');
+  await put(".peekumi.json", '{"version":1,"groups":{},"rules":[{"typo":1}]}');
   await git("add", ".");
   await git("commit", "-m", "Invalid config");
   const invalid = await get();
   assert.equal(invalid.checks.after.state, "invalid");
   assert.ok(invalid.checks.after.errors.length);
   assert.equal((await fetch(server.url + "/api/relationships")).status, 401);
+});
+
+test("rules in .strata.json from before the rename still apply; .peekumi.json wins when both exist", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-former-rules-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const git = (...args) => command("git", ["-C", dir, ...args]);
+  const rules = (count) =>
+    JSON.stringify({
+      version: 1,
+      groups: { all: ["**"] },
+      rules: Array.from({ length: count }, (_, i) => ({
+        id: "rule" + i,
+        from: "all",
+        to: ["all"],
+        kinds: ["imports"],
+        message: "Example",
+      })),
+    });
+  await git("init", "-b", "main");
+  await git("config", "user.name", "Test");
+  await git("config", "user.email", "test@example.invalid");
+  await writeFile(path.join(dir, "main.py"), "def run():\n    return 1\n");
+  await writeFile(path.join(dir, ".strata.json"), rules(1));
+  await git("add", ".");
+  await git("commit", "-m", "Former rules");
+  const former = (await git("rev-parse", "HEAD")).toString().trim();
+  await writeFile(path.join(dir, ".peekumi.json"), rules(2));
+  await git("add", ".");
+  await git("commit", "-m", "New rules");
+  const both = (await git("rev-parse", "HEAD")).toString().trim();
+  const server = await startRust(dir, { base: former });
+  t.after(() => server.close());
+  const checks = async (sha) =>
+    (
+      await (
+        await fetch(`${server.url}/api/relationships?base=${sha}&head=${sha}`, {
+          headers: { Authorization: "Bearer " + server.token },
+        })
+      ).json()
+    ).checks.after;
+  assert.deepEqual(
+    [(await checks(former)).config, (await checks(former)).rules],
+    [".strata.json", 1],
+  );
+  assert.deepEqual(
+    [(await checks(both)).config, (await checks(both)).rules],
+    [".peekumi.json", 2],
+  );
 });

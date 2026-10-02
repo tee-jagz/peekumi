@@ -156,7 +156,7 @@ test("anchored drafts, immutable previews, scoped MCP reports, verification and 
   assert.equal(verified.status, "verified");
   assert.equal(verified.verification.commit, addressed.report.commit);
   assert.equal((await req("/api/runs/" + preview.id)).applied, false);
-  // Simulate the owner applying the reviewed branch outside Strata.
+  // Simulate the owner applying the reviewed branch outside Peekumi.
   await f.git("merge", "--ff-only", finished.branch);
   assert.equal((await req("/api/runs/" + preview.id)).applied, true);
   assert.equal(
@@ -406,7 +406,7 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
   assert.equal(result.status, 200, JSON.stringify(result));
   const used = JSON.parse(result.answer.text);
   assert.deepEqual(used.tools, ["find_declarations", "search_code", "read_declaration", "read_file", "relationships"]);
-  for (const name of used.tools) assert.ok(used.allowed.includes("mcp__strata__" + name));
+  for (const name of used.tools) assert.ok(used.allowed.includes("mcp__peekumi__" + name));
   assert.equal(used.notified, 202);
   assert.match(used.found, /"path":"late.py","name":"target"/);
   assert.match(used.read, /3  def target\(value\):/);

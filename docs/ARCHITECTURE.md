@@ -25,7 +25,7 @@ API requests require a session or bearer token except pairing. Repository string
 
 Repository inspection is read-only; an explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects, not working-tree traversal. Symlinks are not followed; restricted filenames, binary content, large files and submodules remain labelled. Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. No architecture or health scores are invented.
 
-`backend/relationships.rs` normalizes adapter evidence, resolves candidate declarations through the shared index and compares relationship/rule outcomes. `backend/rules.rs` validates committed `.strata.json` files and checks directional constraints. Rule evaluation is separate from syntax caching, so configuration-only commits can change violations.
+`backend/relationships.rs` normalizes adapter evidence, resolves candidate declarations through the shared index and compares relationship/rule outcomes. `backend/rules.rs` validates committed `.peekumi.json` files and checks directional constraints. Rule evaluation is separate from syntax caching, so configuration-only commits can change violations.
 
 ## Review workflow
 

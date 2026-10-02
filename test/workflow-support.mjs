@@ -5,7 +5,7 @@ import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
 const root = path.resolve(import.meta.dirname, "..");
 export async function fixture() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "strata-workflow-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-workflow-"));
   const git = (...args) => command("git", ["-C", dir, ...args]);
   await git("init", "-b", "main");
   await git("config", "user.name", "Workflow Test");
@@ -17,7 +17,7 @@ export async function fixture() {
   await git("add", ".");
   await git("commit", "-m", "Initial");
   const sha = (await git("rev-parse", "HEAD")).toString().trim();
-  const state = await mkdtemp(path.join(os.tmpdir(), "strata-workflow-state-"));
+  const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-workflow-state-"));
   const fake = path.join(state, "agent");
   await writeFile(
     fake,

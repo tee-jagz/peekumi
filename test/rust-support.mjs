@@ -11,7 +11,7 @@ export async function startRust(
     head = "HEAD",
     token = "rust-test-token",
     stateDirectory,
-    python = process.env.STRATA_PYTHON ||
+    python = process.env.PEEKUMI_PYTHON ||
       (process.platform === "darwin" ? "/usr/bin/python3" : "python3"),
     node = process.execPath,
     codex,
@@ -19,12 +19,14 @@ export async function startRust(
     repositories = [],
     extraEnv = {},
     isolatePrimary = false,
+    // "STRATA_" starts the server with only the setting names from before the rename.
+    prefix = "PEEKUMI_",
   } = {},
 ) {
   const state =
-    stateDirectory || (await mkdtemp(path.join(os.tmpdir(), "strata-rust-")));
+    stateDirectory || (await mkdtemp(path.join(os.tmpdir(), "peekumi-rust-")));
   const proc = spawn(
-    path.join(root, "target/release/strata"),
+    path.join(root, "target/release/peekumi"),
     [
       directory,
       "--port",
@@ -44,11 +46,11 @@ export async function startRust(
       env: {
         ...process.env,
         ...extraEnv,
-        STRATA_TOKEN: token,
-        STRATA_PYTHON: python,
-        STRATA_NODE: node,
-        ...(codex ? { STRATA_CODEX: codex } : {}),
-        ...(claude ? { STRATA_CLAUDE: claude } : {}),
+        [prefix + "TOKEN"]: token,
+        [prefix + "PYTHON"]: python,
+        [prefix + "NODE"]: node,
+        ...(codex ? { [prefix + "CODEX"]: codex } : {}),
+        ...(claude ? { [prefix + "CLAUDE"]: claude } : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -71,7 +73,7 @@ export async function startRust(
       reject(Error("Rust startup failed " + code + ": " + errors));
     });
     lines.on("line", (line) => {
-      if (line.startsWith("STRATA_READY ")) {
+      if (line.startsWith("PEEKUMI_READY ")) {
         clearTimeout(timer);
         resolve("http://127.0.0.1:" + JSON.parse(line.slice(13)).port);
       }
@@ -91,7 +93,7 @@ export async function startRust(
 }
 export async function rustRpc(directory, stateDirectory, requests) {
   const proc = spawn(
-    path.join(root, "target/release/strata"),
+    path.join(root, "target/release/peekumi"),
     [
       directory,
       "--stdio",
@@ -103,8 +105,8 @@ export async function rustRpc(directory, stateDirectory, requests) {
     {
       env: {
         ...process.env,
-        STRATA_PYTHON: process.env.STRATA_PYTHON || "/usr/bin/python3",
-        STRATA_NODE: process.execPath,
+        PEEKUMI_PYTHON: process.env.PEEKUMI_PYTHON || "/usr/bin/python3",
+        PEEKUMI_NODE: process.execPath,
       },
       stdio: ["pipe", "pipe", "pipe"],
     },

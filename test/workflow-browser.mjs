@@ -234,7 +234,7 @@ try {
           !document.querySelector("#branchPicker").disabled &&
           document
             .querySelector("#branchPicker")
-            .value.startsWith("refs/heads/strata/"),
+            .value.startsWith("refs/heads/peekumi/"),
       );
       assert.equal(
         await page.locator("#branchPicker").inputValue(),
@@ -291,7 +291,7 @@ try {
         .waitFor();
       assert.match(
         await page.locator(".apply-step code").innerText(),
-        /^git merge --ff-only strata\/run-[\w-]+$/,
+        /^git merge --ff-only peekumi\/run-[\w-]+$/,
         "After approval the task names the branch and the command that applies it",
       );
       assert.ok(

@@ -1,4 +1,4 @@
-# Repo Strata MVP
+# Peekumi MVP
 
 The owner wants to stay connected to the engineering behind agent implementations from a phone, moving between the whole repository and exact code details as needed.
 
@@ -14,7 +14,7 @@ The phone review sheet has peek, half and full heights, controlled by dragging i
 
 - Run a service beside a Git repository on macOS or Linux and access its web UI by URL.
 - Browse the real directory hierarchy, with static import, call, implementation and inheritance relationships. Show source evidence and unresolved targets.
-- Evaluate versioned .strata.json dependency rules against committed snapshots and show violations and configuration errors.
+- Evaluate versioned .peekumi.json dependency rules against committed snapshots and show violations and configuration errors.
 - Compare two explicit commits. Roll added, changed, and removed files up into their directories.
 - Drill into Rust, Python and JavaScript/TypeScript symbols, then source and complete file diffs. Svelte script symbols are extracted; template changes remain visible at file level.
 - Show directory README summaries (or Python package docstrings) with revision provenance and links to the complete documentation. Expose adapter capabilities and limitations.

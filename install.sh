@@ -1,27 +1,29 @@
 #!/bin/sh
-# Installs or upgrades Repo Strata from a release archive.
+# Installs or upgrades Peekumi from a release archive.
 #
 #   curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | sh
 #
 # Detects the platform, downloads the matching release archive and its SHA-256 checksum,
-# verifies the archive, installs it to STRATA_PREFIX and links `strata` into STRATA_BIN.
+# verifies the archive, installs it to PEEKUMI_PREFIX and links `peekumi` into PEEKUMI_BIN.
 # Re-running upgrades in place; the previous installation is kept as one backup.
 #
-# Environment:
-#   STRATA_VERSION  release tag to install, such as v0.2.0 (default: the latest release)
-#   STRATA_REPO     GitHub repository (default: tee-jagz/peekumi)
-#   STRATA_PREFIX   installation directory (default: ~/.local/lib/strata)
-#   STRATA_BIN      directory for the `strata` link (default: ~/.local/bin)
-#   STRATA_ARCHIVE  install this local archive instead of downloading; its .sha256 must sit beside it
-#   GITHUB_TOKEN    token for downloads while the repository is private
+# Environment (each also accepts its STRATA_ name from before the rename):
+#   PEEKUMI_VERSION  release tag to install, such as v0.2.0 (default: the latest release)
+#   PEEKUMI_REPO     GitHub repository (default: tee-jagz/peekumi)
+#   PEEKUMI_PREFIX   installation directory (default: ~/.local/lib/peekumi)
+#   PEEKUMI_BIN      directory for the `peekumi` and `strata` links (default: ~/.local/bin)
+#   PEEKUMI_ARCHIVE  install this local archive instead of downloading; its .sha256 must sit beside it
+#   GITHUB_TOKEN     token for downloads while the repository is private
 set -eu
 
-repo=${STRATA_REPO:-tee-jagz/peekumi}
-prefix=${STRATA_PREFIX:-$HOME/.local/lib/strata}
-bindir=${STRATA_BIN:-$HOME/.local/bin}
+repo=${PEEKUMI_REPO:-${STRATA_REPO:-tee-jagz/peekumi}}
+prefix=${PEEKUMI_PREFIX:-${STRATA_PREFIX:-$HOME/.local/lib/peekumi}}
+bindir=${PEEKUMI_BIN:-${STRATA_BIN:-$HOME/.local/bin}}
+version=${PEEKUMI_VERSION:-${STRATA_VERSION:-}}
+local_archive=${PEEKUMI_ARCHIVE:-${STRATA_ARCHIVE:-}}
 
 fail() {
-  echo "strata install: $*" >&2
+  echo "peekumi install: $*" >&2
   exit 1
 }
 
@@ -31,7 +33,7 @@ command -v tar >/dev/null 2>&1 || fail "tar is required."
 case $(uname -s) in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
-  *) fail "unsupported system $(uname -s); Strata runs on Linux and macOS" ;;
+  *) fail "unsupported system $(uname -s); Peekumi runs on Linux and macOS" ;;
 esac
 case $(uname -m) in
   x86_64 | amd64) arch=x64 ;;
@@ -58,16 +60,16 @@ fetch() {
   fi
 }
 
-if [ -n "${STRATA_ARCHIVE:-}" ]; then
-  [ -f "$STRATA_ARCHIVE" ] || fail "no archive at $STRATA_ARCHIVE"
-  [ -f "$STRATA_ARCHIVE.sha256" ] || fail "no checksum at $STRATA_ARCHIVE.sha256"
-  archive=$STRATA_ARCHIVE
-  expected=$(cut -d' ' -f1 "$STRATA_ARCHIVE.sha256")
+if [ -n "$local_archive" ]; then
+  [ -f "$local_archive" ] || fail "no archive at $local_archive"
+  [ -f "$local_archive.sha256" ] || fail "no checksum at $local_archive.sha256"
+  archive=$local_archive
+  expected=$(cut -d' ' -f1 "$local_archive.sha256")
 else
-  command -v curl >/dev/null 2>&1 || fail "curl is required to download Strata"
+  command -v curl >/dev/null 2>&1 || fail "curl is required to download Peekumi"
   api=https://api.github.com/repos/$repo/releases
-  if [ -n "${STRATA_VERSION:-}" ]; then
-    release=$api/tags/$STRATA_VERSION
+  if [ -n "$version" ]; then
+    release=$api/tags/$version
   else
     release=$api/latest
   fi
@@ -86,7 +88,7 @@ else
       }
       index($0, "\"name\": \"" want "\"") || index($0, "\"name\":\"" want "\"") { print url; exit }'
   }
-  name=$(tr ',' '\n' <"$work/release.json" | grep '"name": *"strata-[^"]*-'"$os-$arch"'\.tar\.gz"' |
+  name=$(tr ',' '\n' <"$work/release.json" | grep '"name": *"peekumi-[^"]*-'"$os-$arch"'\.tar\.gz"' |
     head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')
   [ -n "$name" ] || fail "the release has no archive for $os-$arch"
   archive=$work/$name
@@ -100,26 +102,28 @@ actual=$(sha256 "$archive")
 [ "$actual" = "$expected" ] || fail "checksum mismatch for $(basename "$archive"); nothing was installed"
 
 tar -xzf "$archive" -C "$work"
-bundle=$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'strata-*' | head -1)
-[ -x "$bundle/bin/strata" ] || fail "the archive does not contain a Strata bundle"
+bundle=$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'peekumi-*' | head -1)
+[ -x "$bundle/bin/peekumi" ] || fail "the archive does not contain a Peekumi bundle"
 
 # The bundle installs itself: staged copy, atomic swap, one backup, and a refusal to replace
 # an installation while an agent run is active.
-STRATA_INSTALLER=1 "$bundle/bin/strata" upgrade "$prefix"
+PEEKUMI_INSTALLER=1 "$bundle/bin/peekumi" upgrade "$prefix"
 
 mkdir -p "$bindir"
-ln -sf "$prefix/bin/strata" "$bindir/strata"
-echo "Linked $bindir/strata"
+ln -sf "$prefix/bin/peekumi" "$bindir/peekumi"
+# The command's name before the rename keeps working.
+ln -sf "$prefix/bin/peekumi" "$bindir/strata"
+echo "Linked $bindir/peekumi (and strata)"
 case ":$PATH:" in
   *":$bindir:"*) ;;
   *) echo "Add $bindir to your PATH, for example: export PATH=\"$bindir:\$PATH\"" ;;
 esac
 
-if "$prefix/bin/strata" status 2>/dev/null | grep -q '"running": true'; then
+if "$prefix/bin/peekumi" status 2>/dev/null | grep -q '"running": true'; then
   echo "Restarting the running service with the new version"
-  "$prefix/bin/strata" restart
+  "$prefix/bin/peekumi" restart
 fi
 
 echo
-echo "Next: strata doctor, then strata repo add /path/to/repository and strata start."
+echo "Next: peekumi doctor, then peekumi repo add /path/to/repository and peekumi start."
 echo "Setup guide: https://github.com/$repo/blob/main/docs/SETUP.md"
