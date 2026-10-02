@@ -1,5 +1,7 @@
 # First integration validation
 
+Peekumi was called Repo Strata, or Strata, until October 2026. The records below keep the command, file and archive names that were actually run at the time.
+
 Validated on 29 September 2026 against the local Visalytics repository, without modifying its working tree.
 
 ## Comparison

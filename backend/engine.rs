@@ -790,9 +790,13 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
         }
     }
     let mut values = merged.into_values().collect::<Vec<_>>();
-    let config = files.get(".strata.json");
-    let mut checks =
-        json!({"config":".strata.json","state":"not configured","rules":0,"errors":[]});
+    // `.peekumi.json` holds dependency rules; `.strata.json` is read in repositories that
+    // configured rules before the rename.
+    let (name, config) = crate::rules::CONFIG_FILES
+        .iter()
+        .find_map(|name| files.get(*name).map(|file| (*name, Some(file))))
+        .unwrap_or((crate::rules::CONFIG_FILES[0], None));
+    let mut checks = json!({"config":name,"state":"not configured","rules":0,"errors":[]});
     if let Some(file) = config {
         match file
             .source

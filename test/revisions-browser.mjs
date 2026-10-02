@@ -7,13 +7,13 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { startRust } from "./rust-support.mjs";
 const run = promisify(execFile);
-const repo = await mkdtemp(path.join(os.tmpdir(), "strata-revisions-"));
+const repo = await mkdtemp(path.join(os.tmpdir(), "peekumi-revisions-"));
 const git = async (...args) =>
   (await run("git", ["-C", repo, ...args])).stdout.trim();
 let server, browser;
 try {
   await git("init", "-b", "main");
-  await git("config", "user.name", "Strata tests");
+  await git("config", "user.name", "Peekumi tests");
   await git("config", "user.email", "test@example.invalid");
   await writeFile(path.join(repo, "README.md"), "# Root\n");
   await git("add", ".");

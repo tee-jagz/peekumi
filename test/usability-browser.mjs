@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { startRust } from "./rust-support.mjs";
-const temp = await mkdtemp(join(tmpdir(), "strata-pwa-"));
+const temp = await mkdtemp(join(tmpdir(), "peekumi-pwa-"));
 const second = join(temp, "second");
 await mkdir(second);
 const git = (...args) =>

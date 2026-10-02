@@ -307,7 +307,7 @@ const statusOf = (a, b) =>
 export class Repository {
   constructor(
     directory,
-    { python = process.env.STRATA_PYTHON || "python3", cacheDirectory } = {},
+    { python = process.env.PEEKUMI_PYTHON || "python3", cacheDirectory } = {},
   ) {
     this.directory = path.resolve(directory);
     this.python = python;

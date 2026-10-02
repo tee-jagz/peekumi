@@ -1,4 +1,4 @@
-//! Read-only repository lookups for Ask, served as a Streamable HTTP MCP endpoint on the Strata
+//! Read-only repository lookups for Ask, served as a Streamable HTTP MCP endpoint on the Peekumi
 //! listener at `/mcp/ask`. A grant exists only while one Ask answer runs: it pins the compared
 //! revisions, carries a random bearer key and allows a bounded number of calls. Every tool reads
 //! committed code through the repository worker; none writes state, runs code or reaches another
@@ -9,13 +9,13 @@ use serde_json::{Value, json};
 
 /// Tool calls one answer may make before it must reply with what it has.
 pub const MAX_CALLS: usize = 12;
-/// Tool names as Claude Code sees them through the `strata` server.
+/// Tool names as Claude Code sees them through the `peekumi` server.
 pub const TOOLS: [&str; 5] = [
-    "mcp__strata__find_declarations",
-    "mcp__strata__search_code",
-    "mcp__strata__read_declaration",
-    "mcp__strata__read_file",
-    "mcp__strata__relationships",
+    "mcp__peekumi__find_declarations",
+    "mcp__peekumi__search_code",
+    "mcp__peekumi__read_declaration",
+    "mcp__peekumi__read_file",
+    "mcp__peekumi__relationships",
 ];
 
 /// One Ask answer's lookup permission: the key, the revisions it may read and the calls made.
@@ -56,7 +56,7 @@ pub async fn handle(app: &App, request: Value) -> Option<Value> {
         "initialize" => Ok(json!({
             "protocolVersion": request["params"]["protocolVersion"].as_str().unwrap_or("2025-03-26"),
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "strata-ask", "version": env!("CARGO_PKG_VERSION")}
+            "serverInfo": {"name": "peekumi-ask", "version": env!("CARGO_PKG_VERSION")}
         })),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({"tools": tool_list()})),

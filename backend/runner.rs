@@ -1,5 +1,5 @@
 //! Isolated agent processes and a run-scoped stdio MCP reporting bridge.
-//! Agents retain their own permission controls. Strata never pushes or merges their branches.
+//! Agents retain their own permission controls. Peekumi never pushes or merges their branches.
 use crate::workflow::{Workflow, active};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -27,16 +27,16 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         .write(true)
         .create(true)
         .truncate(false)
-        .open(common.join("strata-run.lock"))?;
+        .open(common.join("peekumi-run.lock"))?;
     repo_lock
         .try_lock()
-        .context("Another Strata instance is running an agent for this repository")?;
+        .context("Another Peekumi instance is running an agent for this repository")?;
     let mut prior = String::new();
     repo_lock.read_to_string(&mut prior)?;
     if let Ok(pid) = prior.trim().parse::<u32>() {
         ensure!(
             !alive(pid),
-            "An agent from an interrupted Strata instance is still running"
+            "An agent from an interrupted Peekumi instance is still running"
         );
     }
     let run = store.run(id)?;
@@ -88,11 +88,11 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         // Codex rejects combining it with the separate --sandbox option.
         c.args(["exec", "--approve-for-me", "--json", "--color", "never"]);
         c.arg("-c")
-            .arg(format!("mcp_servers.strata.command={}", json!(exe)));
+            .arg(format!("mcp_servers.peekumi.command={}", json!(exe)));
         c.arg("-c")
-            .arg(format!("mcp_servers.strata.args={}", json!(args)));
+            .arg(format!("mcp_servers.peekumi.args={}", json!(args)));
         c.arg("-c")
-            .arg("mcp_servers.strata.env_vars=[\"STRATA_REPORT_TOKEN\"]");
+            .arg("mcp_servers.peekumi.env_vars=[\"PEEKUMI_REPORT_TOKEN\"]");
         c.arg("-");
         c
     } else {
@@ -106,15 +106,17 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
             "acceptEdits",
             "--strict-mcp-config",
             "--allowedTools",
-            "Read,Edit,Write,Glob,Grep,Bash,mcp__strata__get_run,mcp__strata__resolve_comment,mcp__strata__flag_comment",
+            "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment",
         ]);
-        c.arg("--mcp-config").arg(json!({"mcpServers":{"strata":{"command":exe,"args":args,"env":{"STRATA_REPORT_TOKEN":token}}}}).to_string());
+        c.arg("--mcp-config").arg(json!({"mcpServers":{"peekumi":{"command":exe,"args":args,"env":{"PEEKUMI_REPORT_TOKEN":token}}}}).to_string());
         c
     };
     command
         .current_dir(&worktree)
-        .env("STRATA_REPORT_TOKEN", token)
+        .env("PEEKUMI_REPORT_TOKEN", token)
+        .env_remove("PEEKUMI_TOKEN")
         .env_remove("STRATA_TOKEN")
+        .env_remove("STRATA_REPORT_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -313,7 +315,7 @@ pub fn recover(store: Workflow) -> Result<()> {
 /// Serves a minimal stdio MCP transport with only three run-scoped reporting tools.
 /// Credentials are inherited from the dispatcher, never supplied by an HTTP owner request.
 pub fn mcp(store: Workflow, id: &str) -> Result<()> {
-    let token = std::env::var("STRATA_REPORT_TOKEN").context("Missing reporting credential")?;
+    let token = std::env::var("PEEKUMI_REPORT_TOKEN").context("Missing reporting credential")?;
     ensure!(!token.is_empty(), "Empty reporting credential");
     for line in std::io::stdin().lock().lines() {
         let line = line?;
@@ -324,7 +326,7 @@ pub fn mcp(store: Workflow, id: &str) -> Result<()> {
         }
         let result: Result<Value> = (|| match request["method"].as_str().unwrap_or("") {
             "initialize" => Ok(
-                json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"strata","version":"0.3.0"}}),
+                json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"peekumi","version":"0.3.0"}}),
             ),
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({"tools":[

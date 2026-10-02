@@ -63,8 +63,8 @@ pub fn route(directory: &Path, executable: &str, method: &str, path: &str, body:
         "Only github.com PRs are supported initially"
     );
     let base = pr["baseRefName"].as_str().context("Missing base branch")?;
-    let head_ref = format!("refs/strata/pr/{number}/head");
-    let base_ref = format!("refs/strata/pr/{number}/base");
+    let head_ref = format!("refs/peekumi/pr/{number}/head");
+    let base_ref = format!("refs/peekumi/pr/{number}/base");
     // Use gh's credential helper only for this fetch; never write repository Git configuration.
     let command = executable.replace('\'', "'\\''");
     let credential = format!("credential.https://github.com.helper=!'{command}' auth git-credential");

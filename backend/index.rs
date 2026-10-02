@@ -35,7 +35,7 @@ impl Index {
             let version: i64 = db.pragma_query_value(None, "user_version", |row| row.get(0))?;
             anyhow::ensure!(
                 version <= 1,
-                "Analysis cache belongs to a newer Strata version"
+                "Analysis cache belongs to a newer Peekumi version"
             );
             db.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS analysis(key TEXT PRIMARY KEY,data TEXT NOT NULL); PRAGMA user_version=1; COMMIT;")?;
             Ok(db)
@@ -43,7 +43,7 @@ impl Index {
         let db = match result {
             Ok(db) => Some(db),
             Err(error) => {
-                eprintln!("Strata index unavailable; using memory: {error}");
+                eprintln!("Peekumi index unavailable; using memory: {error}");
                 None
             }
         };
@@ -127,7 +127,7 @@ impl Index {
         })();
         self.pending.clear();
         if let Err(error) = result {
-            eprintln!("Strata index write failed; using memory: {error}");
+            eprintln!("Peekumi index write failed; using memory: {error}");
             self.db = None;
         }
     }

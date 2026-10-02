@@ -1,5 +1,5 @@
 /* Cache only public application assets. Repository data, credentials and API responses never enter Cache Storage. */
-const CACHE = "strata-shell-__STRATA_BUILD__";
+const CACHE = "peekumi-shell-__PEEKUMI_BUILD__";
 const SHELL = [
   "/",
   "/app.js",
@@ -25,7 +25,8 @@ self.addEventListener("activate", (event) =>
   event.waitUntil(
     (async () => {
       for (const name of await caches.keys())
-        if (name.startsWith("strata-shell-") && name !== CACHE)
+        // Caches from before the rename are cleared too.
+        if (/^(peekumi|strata)-shell-/.test(name) && name !== CACHE)
           await caches.delete(name);
       await self.clients.claim();
     })(),

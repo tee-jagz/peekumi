@@ -725,6 +725,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "peekumi"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "flate2",
+ "proc-macro2",
+ "quote",
+ "rand",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "syn 2.0.119",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "url",
+ "wait-timeout",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -817,30 +841,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
-]
-
-[[package]]
-name = "repo-strata"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "axum",
- "clap",
- "flate2",
- "proc-macro2",
- "quote",
- "rand",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "subtle",
- "syn 2.0.119",
- "tempfile",
- "tokio",
- "tokio-stream",
- "url",
- "wait-timeout",
 ]
 
 [[package]]

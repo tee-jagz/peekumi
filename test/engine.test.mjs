@@ -7,10 +7,10 @@ import { Repository, command } from "./reference/engine.mjs";
 import { createServer } from "./reference/server.mjs";
 
 async function fixture() {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "strata-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "peekumi-test-"));
   const git = (...args) => command("git", ["-C", directory, ...args]);
   await git("init", "-b", "main");
-  await git("config", "user.name", "Strata Test");
+  await git("config", "user.name", "Peekumi Test");
   await git("config", "user.email", "test@example.invalid");
   async function put(file, text) {
     await mkdir(path.dirname(path.join(directory, file)), { recursive: true });
@@ -56,7 +56,7 @@ async function fixture() {
     base,
     repo: new Repository(directory, {
       python:
-        process.env.STRATA_PYTHON ||
+        process.env.PEEKUMI_PYTHON ||
         (process.platform === "darwin" ? "/usr/bin/python3" : "python3"),
     }),
   };
@@ -276,7 +276,7 @@ export interface Result { name?: string; }
 
 test("blob index persists across restarts, reuses unchanged syntax, and resolves moved imports per snapshot", async (t) => {
   const f = await fixture();
-  const cacheDirectory = await mkdtemp(path.join(os.tmpdir(), "strata-index-"));
+  const cacheDirectory = await mkdtemp(path.join(os.tmpdir(), "peekumi-index-"));
   t.after(async () => {
     await rm(f.directory, { recursive: true, force: true });
     await rm(cacheDirectory, { recursive: true, force: true });

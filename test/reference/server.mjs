@@ -94,15 +94,15 @@ export function createServer(
         sessions.set(session, Date.now() + 7 * 86400000);
         response.setHeader(
           "Set-Cookie",
-          `strata_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${secureCookie ? "; Secure" : ""}`,
+          `peekumi_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${secureCookie ? "; Secure" : ""}`,
         );
         return await send(200, { ok: true });
       }
       const session = request.headers.cookie
         ?.split(";")
         .map((c) => c.trim())
-        .find((c) => c.startsWith("strata_session="))
-        ?.slice(15);
+        .find((c) => c.startsWith("peekumi_session="))
+        ?.slice("peekumi_session=".length);
       const bearer = request.headers.authorization?.replace(/^Bearer /, "");
       if (!(sessions.get(session) > Date.now()) && !equal(bearer, token))
         return await send(401, {
@@ -150,7 +150,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help") || !args.length) {
     console.log(
-      "Usage: npm start -- /path/to/repo [--host 127.0.0.1] [--port 4317] [--base HEAD~1] [--head HEAD] [--secure-cookie]\nSTRATA_PYTHON selects the Python interpreter. Access is token protected. Bind a private interface for phone access.",
+      "Usage: npm start -- /path/to/repo [--host 127.0.0.1] [--port 4317] [--base HEAD~1] [--head HEAD] [--secure-cookie]\nPEEKUMI_PYTHON selects the Python interpreter. Access is token protected. Bind a private interface for phone access.",
     );
     return;
   }
@@ -167,7 +167,7 @@ async function main() {
     else throw new Error(`Unknown or missing argument: ${key}`);
   }
   const repo = new RepositoryClient(directory, {
-    cacheDirectory: path.join(process.cwd(), ".strata", "index"),
+    cacheDirectory: path.join(process.cwd(), ".peekumi", "index"),
   });
   try {
     await repo.resolve("HEAD");
@@ -175,7 +175,7 @@ async function main() {
     await repo.close();
     throw error;
   }
-  const state = path.join(process.cwd(), ".strata");
+  const state = path.join(process.cwd(), ".peekumi");
   await mkdir(state, { recursive: true, mode: 0o700 });
   const tokenFile = path.join(state, "access-token");
   let token;

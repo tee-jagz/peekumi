@@ -84,7 +84,7 @@ impl Workflow {
         let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
         ensure!(
             version <= 1,
-            "Workflow state was created by a newer Strata version; upgrade before opening it"
+            "Workflow state was created by a newer Peekumi version; upgrade before opening it"
         );
         conn.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS workflow (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL); PRAGMA user_version=1; COMMIT;")?;
         conn.execute(
@@ -358,9 +358,10 @@ impl Workflow {
         let brief = body["brief"].as_str().unwrap_or("");
         ensure!(brief.len() <= 20000, "Brief too large");
         let base = self.resolve(&self.watched)?;
-        let rules = self
-            .git(&["show", &format!("{base}:.strata.json")])
-            .unwrap_or_else(|_| "No dependency rule configuration at this revision.".into());
+        let rules = crate::rules::CONFIG_FILES
+            .iter()
+            .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
+            .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
         ensure!(rules.len() <= 65536, "Rule configuration is too large");
         self.update(|v| {
             let mut comments=vec![];
@@ -371,11 +372,11 @@ impl Workflow {
                 comments.push(c);
             }
             let id = crate::random_token()[..16].to_string();
-            let branch = format!("strata/run-{id}");
+            let branch = format!("peekumi/run-{id}");
             let mut task=format!("# Task for {agent}, run {id}\nRepository: {}\nStart from {base} on {}. Work only on {branch} in the supplied worktree. Do not push or merge.\n\n## Brief\n{brief}\n\n## Review comments\n", self.repo.file_name().unwrap_or_default().to_string_lossy(), self.watched);
             for c in &comments { task.push_str(&format!("\n[{}] {} (left on {})\n{}\n",c["id"].as_str().unwrap(),c["anchor"],c["sha"].as_str().unwrap(),c["text"].as_str().unwrap()));
             }
-            task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the strata MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Strata-Run: {id}, Strata-Comment: <comment id> (repeat for each comment), and Strata-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Strata state or another worktree. Run appropriate checks and describe failures honestly.\n"));
+            task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Strata state or another worktree. Run appropriate checks and describe failures honestly.\n"));
             let r=json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
@@ -435,7 +436,8 @@ impl Workflow {
                 self.git(&["merge-base","--is-ancestor",run["base"].as_str().unwrap(),&sha])?;
                 self.git(&["merge-base","--is-ancestor",&sha,run["branch"].as_str().unwrap()])?;
                 let trailers=self.git(&["show","-s","--format=%(trailers:only,unfold)",&sha])?;
-                for required in [format!("Strata-Run: {id}"),format!("Strata-Comment: {cid}"),format!("Strata-Agent: {}",run["agent"].as_str().unwrap())] {ensure!(trailers.lines().any(|l|l==required),"Commit is missing required attribution trailers");
+                // Commits from runs started before the rename carry Strata- trailers; both are accepted.
+                for required in [format!("Run: {id}"),format!("Comment: {cid}"),format!("Agent: {}",run["agent"].as_str().unwrap())] {ensure!(trailers.lines().any(|l|l==format!("Peekumi-{required}")||l==format!("Strata-{required}")),"Commit is missing required attribution trailers");
                 }
                 json!({"commit":sha,"note":text(args,"note",12000)?,"checks":text(args,"checks",20000)?,"at":now(),"agent":run["agent"]})
             }else{json!({"reason":text(args,"reason",12000)?,"at":now(),"agent":run["agent"]})};

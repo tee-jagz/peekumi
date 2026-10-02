@@ -1,5 +1,5 @@
-// Usage: STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /path/to/repo [base] [head]
-// Optional STRATA_BASELINE_ENGINE points to a previous engine.mjs for a before/after comparison.
+// Usage: PEEKUMI_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /path/to/repo [base] [head]
+// Optional PEEKUMI_BASELINE_ENGINE points to a previous engine.mjs for a before/after comparison.
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,10 +10,10 @@ import { RepositoryClient } from "../test/reference/repository-client.mjs";
 const [directory, base = "HEAD~10", head = "HEAD"] = process.argv.slice(2);
 if (!directory) throw Error("Provide a repository path");
 const cacheDirectory = await mkdtemp(
-  path.join(os.tmpdir(), "strata-benchmark-"),
+  path.join(os.tmpdir(), "peekumi-benchmark-"),
 );
 const options = {
-  python: process.env.STRATA_PYTHON || "python3",
+  python: process.env.PEEKUMI_PYTHON || "python3",
   cacheDirectory,
 };
 let worker;
@@ -24,9 +24,9 @@ const measure = async (fn) => {
 };
 try {
   let baseline;
-  if (process.env.STRATA_BASELINE_ENGINE) {
+  if (process.env.PEEKUMI_BASELINE_ENGINE) {
     const { Repository } = await import(
-      pathToFileURL(path.resolve(process.env.STRATA_BASELINE_ENGINE))
+      pathToFileURL(path.resolve(process.env.PEEKUMI_BASELINE_ENGINE))
     );
     const repo = new Repository(directory, { python: options.python });
     baseline = await measure(() => repo.compare(base, head));

@@ -35,7 +35,7 @@ use tokio_stream::StreamExt as _;
 
 #[derive(Parser, Clone)]
 #[command(
-    name = "strata",
+    name = "peekumi",
     version,
     about = "Explore committed repository structure from your phone"
 )]
@@ -57,27 +57,28 @@ struct Options {
     head: String,
     #[arg(long)]
     secure_cookie: bool,
-    #[arg(long, default_value = ".strata")]
+    /// Private state directory; `.peekumi` by default, or an existing `.strata` from before the rename.
+    #[arg(long, default_value = ".peekumi")]
     state_dir: PathBuf,
-    #[arg(long,env="STRATA_PARSER_ROOT",default_value=env!("CARGO_MANIFEST_DIR"))]
+    #[arg(long,env = "PEEKUMI_PARSER_ROOT",default_value=env!("CARGO_MANIFEST_DIR"))]
     parser_root: PathBuf,
-    #[arg(long, env = "STRATA_PYTHON", default_value = "python3")]
+    #[arg(long, env = "PEEKUMI_PYTHON", default_value = "python3")]
     python: String,
-    #[arg(long, env = "STRATA_NODE", default_value = "node")]
+    #[arg(long, env = "PEEKUMI_NODE", default_value = "node")]
     node: String,
-    #[arg(long, env = "STRATA_TOKEN", hide_env_values = true, hide = true)]
+    #[arg(long, env = "PEEKUMI_TOKEN", hide_env_values = true, hide = true)]
     token: Option<String>,
     #[arg(long, hide = true)]
     stdio: bool,
     /// Installed agent executable; invoked only after an explicit run dispatch.
-    #[arg(long, env = "STRATA_CODEX", default_value = "codex")]
+    #[arg(long, env = "PEEKUMI_CODEX", default_value = "codex")]
     codex: String,
-    #[arg(long, env = "STRATA_CLAUDE", default_value = "claude")]
+    #[arg(long, env = "PEEKUMI_CLAUDE", default_value = "claude")]
     claude: String,
     /// Model for Ask answers: a fast model by default; set `opus` for slower, deeper answers.
-    #[arg(long, env = "STRATA_ASK_MODEL", default_value = "sonnet")]
+    #[arg(long, env = "PEEKUMI_ASK_MODEL", default_value = "sonnet")]
     ask_model: String,
-    #[arg(long, env = "STRATA_GH", default_value = "gh")]
+    #[arg(long, env = "PEEKUMI_GH", default_value = "gh")]
     github: String,
     #[arg(long, hide = true)]
     report_run: Option<String>,
@@ -385,7 +386,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         .chain(include_bytes!("../frontend/sw.js").iter().copied())
         .collect();
         let script = include_str!("../frontend/sw.js")
-            .replace("__STRATA_BUILD__", &engine::hash(&assets)[..16]);
+            .replace("__PEEKUMI_BUILD__", &engine::hash(&assets)[..16]);
         return respond(
             StatusCode::OK,
             "text/javascript",
@@ -469,9 +470,18 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     let bearer = header(request.headers(), "authorization")
         .strip_prefix("Bearer ")
         .unwrap_or("");
-    let session = header(request.headers(), "cookie")
+    // The current cookie wins; one saved before the rename is only a fallback, so a stale
+    // former cookie left in the browser cannot shadow a fresh pairing.
+    let cookies: Vec<&str> = header(request.headers(), "cookie")
         .split(';')
-        .find_map(|s| s.trim().strip_prefix(&format!("{}=", app.cookie_name)))
+        .map(str::trim)
+        .collect();
+    let named = |name: String| {
+        let prefix = format!("{name}=");
+        cookies.iter().find_map(|c| c.strip_prefix(&prefix))
+    };
+    let session = named(app.cookie_name.clone())
+        .or_else(|| named(app.cookie_name.replacen("peekumi_", "strata_", 1)))
         .unwrap_or("");
     let role = if equal(bearer, &app.token) {
         Some("owner".to_string())
@@ -546,7 +556,11 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         )
         .await;
     }
-    let selected = header(request.headers(), "x-strata-repository");
+    // The former header name still works for pages loaded before the rename.
+    let selected = match header(request.headers(), "x-peekumi-repository") {
+        "" => header(request.headers(), "x-strata-repository"),
+        name => name,
+    };
     let app = if selected.is_empty() {
         app
     } else {
@@ -732,12 +746,39 @@ fn token(options: &Options) -> Result<String> {
         Err(e) => Err(e.into()),
     }
 }
-#[tokio::main]
+/// Copies each former `STRATA_*` setting to its `PEEKUMI_*` name when that is unset, so
+/// configurations from before the rename keep working.
+fn adopt_former_settings() {
+    for (key, value) in std::env::vars_os() {
+        let Some(rest) = key.to_str().and_then(|k| k.strip_prefix("STRATA_")) else {
+            continue;
+        };
+        let current = format!("PEEKUMI_{rest}");
+        if std::env::var_os(&current).is_none() {
+            // SAFETY: runs first in main, before the runtime or any other thread starts.
+            unsafe { std::env::set_var(current, value) };
+        }
+    }
+}
+fn main() -> Result<()> {
+    adopt_former_settings();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(serve())
+}
 /// Starts the configured repository service or the internal line-oriented test protocol.
 /// Validates HEAD before serving, binds the listener and prints the local pairing link.
 /// Returns startup, configuration, repository or listener errors.
-async fn main() -> Result<()> {
+async fn serve() -> Result<()> {
     let mut options = Options::parse();
+    // Before the rename the default state directory was `.strata`; keep using it if present.
+    if options.state_dir == std::path::Path::new(".peekumi")
+        && !options.state_dir.exists()
+        && std::path::Path::new(".strata").is_dir()
+    {
+        options.state_dir = ".strata".into();
+    }
     options.directory = options.directory.canonicalize().context("Cannot open repository directory")?;
     if let Some(id) = &options.report_run {
         let store = workflow::Workflow::new(
@@ -781,13 +822,29 @@ async fn main() -> Result<()> {
     }
     let access_token = token(&options)?;
     let server_lock = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(options.state_dir.join("server.lock"))?;
-    server_lock.try_lock().context("Another Strata server is using this state directory")?;
+    server_lock.try_lock().context("Another Peekumi server is using this state directory")?;
     let mut reader_options = options.clone();
     reader_options.token = None;
     reader_options.state_dir = options.state_dir.join("read-only");
     let reader_token = token(&reader_options)?;
-    let binding = if options.isolate_primary { options.state_dir.canonicalize()? } else { repo.directory.clone() };
-    let cookie_name = format!("strata_session_{}", &engine::hash(binding.to_string_lossy().as_bytes())[..12]);
+    // A stable identity names the session cookie and binds saved sessions, so moving the
+    // repository or state folder does not sign devices out. It is derived once from the path
+    // the cookie used before, then kept in the state folder.
+    let identity_path = options.state_dir.join("instance-id");
+    let identity = match std::fs::read_to_string(&identity_path) {
+        Ok(saved) if saved.trim().len() == 12 => saved.trim().to_string(),
+        _ => {
+            let binding = if options.isolate_primary {
+                options.state_dir.canonicalize()?
+            } else {
+                repo.directory.clone()
+            };
+            let derived = engine::hash(binding.to_string_lossy().as_bytes())[..12].to_string();
+            std::fs::write(&identity_path, &derived)?;
+            derived
+        }
+    };
+    let cookie_name = format!("peekumi_session_{identity}");
     let shared_sessions = Arc::new(Mutex::new(sessions::Sessions::load(
         options.state_dir.join("sessions.json"),
         &access_token,
@@ -853,7 +910,7 @@ async fn main() -> Result<()> {
             .truncate(false)
             .open(config.state_dir.join("workflow-service.lock"))?;
         lock.try_lock()
-            .context("Another Strata service is using this state directory")?;
+            .context("Another Peekumi service is using this state directory")?;
         locks.push(lock);
         let watched = if config.head == "HEAD" {
             String::from_utf8(
@@ -902,7 +959,7 @@ async fn main() -> Result<()> {
     let address = listener.local_addr()?;
     let _ = LOCAL_ORIGIN.set(loopback_origin(address));
     println!(
-        "Peekumi · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
+        "Peekumi · Rust\nOpen: http://{address}/#token={access_token}\nPEEKUMI_READY {}",
         json!({"port":address.port()})
     );
     let fleet = Arc::new(Fleet {

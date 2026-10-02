@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** @module Regenerates the user-guide screenshots and icon images. Starts a private,
- * temporary Strata instance on this repository (temporary state, loopback only), drives
+ * temporary Peekumi instance on this repository (temporary state, loopback only), drives
  * each interface state in Chromium, overlays numbered markers on the elements the guide
  * describes, and writes docs/guide/*.jpg, docs/guide/icons/*.svg and the README
  * screenshots. Never writes to the inspected checkout. Requires `npm run build:rust`. */
@@ -14,23 +14,23 @@ const root = resolve(import.meta.dirname, "..");
 const guide = join(root, "docs/guide");
 const icons = join(guide, "icons");
 const readmeShots = join(root, "docs/screenshots");
-const state = await mkdtemp(join(tmpdir(), "strata-guide-"));
-const port = Number(process.env.STRATA_GUIDE_PORT || 4398);
+const state = await mkdtemp(join(tmpdir(), "peekumi-guide-"));
+const port = Number(process.env.PEEKUMI_GUIDE_PORT || 4398);
 
 const server = spawn(
-  join(root, "target/release/strata"),
+  join(root, "target/release/peekumi"),
   [root, "--host", "127.0.0.1", "--port", String(port), "--state-dir", state],
   { stdio: ["ignore", "pipe", "pipe"], env: withoutToken() },
 );
 /** A generated pairing token keeps this instance private; never reuse the owner's. */
 function withoutToken() {
   const env = { ...process.env };
-  delete env.STRATA_TOKEN;
+  delete env.PEEKUMI_TOKEN;
   return env;
 }
 const url = await new Promise((done, fail) => {
   let output = "";
-  const timer = setTimeout(() => fail(new Error("Strata did not start")), 60000);
+  const timer = setTimeout(() => fail(new Error("Peekumi did not start")), 60000);
   for (const stream of [server.stdout, server.stderr])
     stream.on("data", (chunk) => {
       output += chunk;
@@ -41,7 +41,7 @@ const url = await new Promise((done, fail) => {
       }
     });
   server.on("exit", (code) =>
-    fail(new Error(`Strata exited (${code}): ${output.slice(-400)}`)),
+    fail(new Error(`Peekumi exited (${code}): ${output.slice(-400)}`)),
   );
 });
 

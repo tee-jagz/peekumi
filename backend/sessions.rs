@@ -38,7 +38,11 @@ fn now() -> u64 {
 impl Sessions {
     /// Restores sessions for the same repository and token; rejects unreadable or malformed state.
     pub fn load(path: PathBuf, token: &str, repository: &str) -> Result<Self> {
-        let binding = crate::engine::hash(format!("{repository}\0{token}").as_bytes());
+        let bound = |name: &str| crate::engine::hash(format!("{name}\0{token}").as_bytes());
+        let binding = bound(repository);
+        // Sessions saved before the rename were bound to the cookie's former name; renaming
+        // must not sign every device out, so that binding is accepted and updated.
+        let former = bound(&repository.replacen("peekumi_", "strata_", 1));
         let mut saved = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<Saved>(&bytes)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Saved {
@@ -49,6 +53,9 @@ impl Sessions {
             },
             Err(e) => return Err(e.into()),
         };
+        if saved.binding == former {
+            saved.binding = binding.clone();
+        }
         if saved.binding != binding {
             saved.sessions.clear();
             saved.roles.clear();
@@ -186,5 +193,20 @@ mod tests {
             .sessions
             .insert(crate::engine::hash(b"browser-secret"), now() - 1);
         assert!(!restored.contains("browser-secret"));
+    }
+    #[test]
+    fn sessions_saved_before_the_rename_survive_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sessions.json");
+        let mut before = Sessions::load(path.clone(), "owner", "strata_session_abc").unwrap();
+        before.insert("phone-secret").unwrap();
+        let after = Sessions::load(path.clone(), "owner", "peekumi_session_abc").unwrap();
+        assert!(after.contains("phone-secret"), "Renaming must not sign devices out");
+        assert!(
+            !Sessions::load(path, "rotated", "peekumi_session_abc")
+                .unwrap()
+                .contains("phone-secret"),
+            "A rotated token still signs every device out"
+        );
     }
 }

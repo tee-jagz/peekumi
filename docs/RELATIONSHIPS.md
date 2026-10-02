@@ -1,6 +1,6 @@
 # Relationships and dependency rules
 
-Strata shows static declaration relationships and the evidence behind them. A call edge identifies a declaration that syntax refers to; it does not prove which implementation executes at runtime.
+Peekumi shows static declaration relationships and the evidence behind them. A call edge identifies a declaration that syntax refers to; it does not prove which implementation executes at runtime.
 
 ## Adapter contract
 
@@ -14,7 +14,7 @@ A matching name must have a compatible declaration kind. Shadowed names are cons
 
 ## Rules
 
-Commit a `.strata.json` at the repository root. The viewer never executes the file or reads uncommitted edits. Each side of a comparison uses its own configuration.
+Commit a `.peekumi.json` at the repository root. The viewer never executes the file or reads uncommitted edits. Each side of a comparison uses its own configuration.
 
 ```json
 {
