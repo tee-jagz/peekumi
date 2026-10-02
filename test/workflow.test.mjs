@@ -320,6 +320,36 @@ test("Ask receives committed context without tools and never automatically creat
   );
 });
 
+test("One Ask conversation spans selections: earlier turns keep what they were about", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const ask = (history) =>
+    f.req("/api/ask", {
+      base: f.sha,
+      head: f.sha,
+      sha: f.sha,
+      anchor: { kind: "file", path: "module.py" },
+      question: "Echo the conversation.",
+      history,
+    });
+  const about = "run in module.py (abc1234 → def5678)";
+  const echoed = await ask([
+    { role: "user", text: "What does this do?", about, extra: "dropped" },
+    { role: "assistant", text: "It runs the module.", about },
+    { role: "user", text: "And the folder?" },
+  ]);
+  assert.equal(echoed.status, 200, JSON.stringify(echoed));
+  assert.deepEqual(JSON.parse(echoed.answer.text), [
+    { role: "user", text: "What does this do?", about },
+    { role: "assistant", text: "It runs the module.", about },
+    { role: "user", text: "And the folder?" },
+  ]);
+  assert.equal(
+    (await ask([{ role: "user", text: "Hi", about: "x".repeat(301) }])).status,
+    400,
+  );
+});
+
 test("Ask about a folder reads its README, declarations and changed code, not only file names", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

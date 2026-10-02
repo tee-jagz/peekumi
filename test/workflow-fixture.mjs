@@ -54,6 +54,8 @@ if (values.includes("--tools")) {
       ? await lookups()
       : input.question === "Echo the context."
       ? JSON.stringify(input.repositoryContext.source)
+      : input.question === "Echo the conversation."
+      ? JSON.stringify(input.conversation)
       : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
   console.log(JSON.stringify({ is_error: false, result }));
   process.exit(0);

@@ -131,7 +131,7 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 2 | Source | The code, as a diff or as the Before or After version. |
 | 3 | Changes | Changed files or declarations in the current scope, and file search. |
 | 4 | Relations | Dependencies, dependency rules and their evidence. |
-| 5 | Discussion | Shows the conversation for the selection that matches the box below: your Ask questions and answers, or the instructions left on it. |
+| 5 | Discussion | Shows the conversation that matches the box below: your Ask conversation, or the instructions left on the selection. |
 | 6 | Facts | What the selection is: kind, path, line range, declaration count or file counts, and how it was analysed. |
 | 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. |
 | 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
@@ -176,7 +176,7 @@ The only labelled view button is the one that is open; the others show just thei
 
 ## Ask, instructions and tasks
 
-**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff, plus what the code calls, imports or inherits and what calls it. When that is not enough, it can look up more of the repository at the same revisions (search declarations, read a declaration or file, follow relationships), up to 12 lookups per answer. The answer lists what it looked up. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. Ask conversations live in the open page and are lost on reload.
+**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff, plus what the code calls, imports or inherits and what calls it. When that is not enough, it can look up more of the repository at the same revisions (search declarations, read a declaration or file, follow relationships), up to 12 lookups per answer. The answer lists what it looked up. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. Answers are written in ASD-STE100 Simplified Technical English: short sentences, one meaning per word, and checks written as numbered steps. One conversation follows you as you move around the map: each question is about what you have selected when you send it, and the thread marks each move (**About** …), so you can start at the repository and keep asking as you drill down to a function. **New conversation** starts again. If an answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the selection that answer was about. The conversation lives in the open page and is lost on reload.
 
 <img src="guide/11-comment.jpg" width="340" alt="Writing an instruction draft">
 
