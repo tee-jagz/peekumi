@@ -661,7 +661,8 @@ fn directory_descriptions(snapshot: &Snapshot) -> Value {
     json!(descriptions)
 }
 /// Extracts the first prose block used as a directory description.
-/// Skips fenced code, headings and selected decorative lines; returns plain text, not rendered Markdown.
+/// Skips fenced code, headings, images, badges, rules and lines of pure HTML markup; returns
+/// plain text, not rendered Markdown.
 fn document_summary(source: &str) -> String {
     let mut lines = vec![];
     let mut fence = false;
@@ -680,9 +681,13 @@ fn document_summary(source: &str) -> String {
             }
             continue;
         }
+        // Headings, images, badges, rules and lines of pure HTML markup (a centred logo, say)
+        // are decoration, not the description.
         if trimmed.starts_with('#')
             || trimmed.starts_with("![")
+            || trimmed.starts_with("[![")
             || trimmed.starts_with("<!--")
+            || (trimmed.starts_with('<') && trimmed.ends_with('>'))
             || trimmed.chars().all(|c| c == '=' || c == '-')
         {
             continue;
@@ -814,6 +819,14 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readme_summaries_skip_decorative_markup() {
+        let readme = "<p align=\"center\"><img src=\"logo.svg\" alt=\"Logo\"></p>\n\n# Name\n\n[![CI](https://x/badge.svg)](https://x)\n\nExplore a repository from your phone.\nSecond line.\n\nLater paragraph.";
+        assert_eq!(
+            document_summary(readme),
+            "Explore a repository from your phone. Second line."
+        );
+    }
     #[test]
     fn source_restrictions_preserve_examples() {
         for path in [
