@@ -4399,3 +4399,7 @@ details.p-section[open] > summary::before {
   margin: 0 8px;
   color: var(--faint);
 }
+/* An open map key sits above every other floating map control. */
+.canvas-controls:has(#mapLegend[open]) {
+  z-index: 8;
+}

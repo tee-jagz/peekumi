@@ -8,11 +8,11 @@ Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects
 
 Strata inspecting its own repository on a phone. Select a screenshot to view it at full size.
 
-| Repository map | Time travel | Task review |
+| Repository map | Time travel | Tasks |
 | --- | --- | --- |
-| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes and the Ask and Comment composer">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Selectable commit cards above the repository map">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-task-review.png" width="260" alt="Task review with actions to inspect the agent branch or diff">](docs/screenshots/mobile-task-review.png) |
+| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes, floating map controls and the Ask and Comment box">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Commit cards above the repository map in Time mode">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-tasks.png" width="260" alt="Tasks view with a draft comment ready to send to an agent">](docs/screenshots/mobile-tasks.png) |
 
-Explore the canvas, move through commits, and review agent changes while keeping Ask and Comment within reach.
+Explore the map, move through commits, and steer agents while keeping Ask and Comment within reach. **[The user guide](docs/USER-GUIDE.md) labels every control, view and icon with screenshots.**
 
 ## Set up for everyday use
 
@@ -81,13 +81,13 @@ The Rust service uses Git subprocesses and has been built and tested on this Int
 ## Explore
 
 - Select explicit base and head commits. The commit strip and comparison picker list the latest 80 first-parent commits from HEAD; startup flags can select other Git revisions.
-- Explore the glass card deck from the supplied mockup. Tap once to select, then tap the selected card or Open to zoom in. Nested packages follow the repository's actual structure.
-- Added is green, modified is orange, removed is red, unchanged is grey. Compact status icons have distinct shapes, accessible names and a labelled legend.
+- Explore the map of the repository's real folders, files and declarations. Tap once to select, then tap again to open. Home and Up, at the map's bottom-left, return to the root or the parent folder.
+- Added is green, modified is orange, removed is red, unchanged is grey. Status icons have distinct shapes, accessible names and a map key.
 - Time and Diff compare the selected commit with its first parent by default. Tap a commit chip or select a head revision to move through history. A manually selected base stays pinned across navigation and refresh; choose Previous commit (automatic) to reset it. Diff also supports Before and After.
 - Pan the SVG map by dragging with a finger or mouse, or scrolling. Pinch or Control/Command-scroll to zoom; the floating map toolbar has zoom out, zoom in, Fit and Reset (actual size). Keyboard users can focus the map and use arrows and +/−. The review panel scrolls independently.
 - Turn on Changes only to hide unchanged cards at every level, while keeping changed parent folders available for drill-down. Changed dependencies retain their external neighbours as context. File-level edits can have no changed symbols; the complete source diff remains available.
-- Use file search, breadcrumbs, and the scoped Changes list to navigate.
-- Select curved dependency lines in the map, then inspect their endpoints in Dependencies. Neighbours appear as dashed cards. These are static import relationships, not a runtime call graph.
+- Use file search, Home and Up, and the scoped Changes list to navigate.
+- Select curved dependency lines in the map, then inspect their endpoints in Relations. Neighbours appear as dashed cards. These are static import relationships, not a runtime call graph.
 - Structure shows the current topology; Changes colours the comparison. Health scoring is not yet measured.
 - Open a symbol to highlight it in the full source. Switch between Before, After and a complete file diff.
 - Open a file for its module description, then select a class or function for documented descriptions, signatures, arguments, defaults, annotations, returns, and declared class fields. The inspector follows Before/After and labels missing annotations.
