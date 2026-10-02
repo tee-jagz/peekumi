@@ -8,6 +8,7 @@ import {
   interfaceIcon,
   objectTypeIcon,
   fileKindIcon,
+  partIcon,
   glyph,
   iconButton,
 } from "./icons.js";
@@ -79,6 +80,13 @@ let baseRef,
   sourceId = 0;
 const comparisons = new Map(),
   sources = new Map();
+/** Words for the changed parts of a declaration, in a fixed order: "signature and implementation". */
+const partWords = (changes = []) =>
+  changes.length > 1
+    ? changes.slice(0, -1).join(", ") + " and " + changes.at(-1)
+    : changes[0] || "";
+// Keys of cards connected to the current selection; set while the map renders.
+let linkedKeys = null;
 const nodeScope = (node) => ({
   kind: node.kind === "stub" ? node.targetKind : node.kind,
   path: node.path,
@@ -848,6 +856,11 @@ function graphNode({ node, x, y, w, h }) {
           : "",
     lens === "changes" ? "c-" + node.status : "",
     selected?.key === node.key ? "sel" : "",
+    linkedKeys && node.kind !== "boundary" && selected?.key !== node.key
+      ? linkedKeys.has(node.key)
+        ? "linked"
+        : "faded"
+      : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -867,7 +880,7 @@ function graphNode({ node, x, y, w, h }) {
     node.files?.filter((f) => f.status !== "unchanged").length || 0;
   card.setAttribute(
     "aria-label",
-    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
+    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
   );
   card.title = node.name;
   Object.assign(card.style, {
@@ -894,6 +907,12 @@ function graphNode({ node, x, y, w, h }) {
     top.append(
       element("span", "n-meta", node.symbolCount ?? node.symbols?.length ?? 0),
     );
+  // Which parts of a modified declaration changed: signature, documentation, implementation.
+  if (lens === "changes" && node.changes?.length) {
+    const parts = element("span", "n-parts");
+    parts.append(...node.changes.map(partIcon));
+    top.append(parts);
+  }
   const violations = nodeViolations(node);
   if (violations.length) {
     const badge = element("span", "rule-badge", "!");
@@ -966,6 +985,8 @@ function drawEdges(canvas, positions, width, height, arcs) {
     ...tones,
     structure: "var(--edge)",
     violation: "var(--del)",
+    out: "var(--accent)",
+    in: "var(--link-in)",
   })) {
     const marker = document.createElementNS(NS, "marker");
     marker.id = "arrow-" + status;
@@ -1007,6 +1028,20 @@ function drawEdges(canvas, positions, width, height, arcs) {
         e.relationshipKind !== "calls" ||
         [e.from.key, e.to.key].includes(selected?.key),
     );
+  // A selected card emphasises its own connections by direction and quiets the rest; a
+  // selected line does the same for its two ends.
+  const focus = selected && selected.kind !== "edge" ? selected.key : null;
+  linkedKeys = selected ? new Set() : null;
+  for (const edge of drawable.slice(0, 40))
+    if (
+      selected &&
+      (edge.key === selected.key ||
+        edge.from.key === focus ||
+        edge.to.key === focus)
+    )
+      linkedKeys.add(edge.from.key).add(edge.to.key);
+  // With nothing connected there is nothing to emphasise, so keep the full context visible.
+  if (!linkedKeys?.size) linkedKeys = null;
   for (const [index, edge] of drawable.slice(0, 40).entries()) {
     const a = positions.get(edge.from.key),
       b = positions.get(edge.to.key);
@@ -1042,6 +1077,13 @@ function drawEdges(canvas, positions, width, height, arcs) {
       : lens === "changes"
         ? edge.status
         : "structure";
+    const direction = !focus
+      ? null
+      : edge.from.key === focus
+        ? "out"
+        : edge.to.key === focus
+          ? "in"
+          : null;
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", d);
     path.setAttribute(
@@ -1050,9 +1092,18 @@ function drawEdges(canvas, positions, width, height, arcs) {
         edge.relationshipKind +
         " " +
         (status === "unchanged" ? "quiet" : status) +
-        (selected?.key === edge.key ? " sel hl" : ""),
+        (selected?.key === edge.key
+          ? " sel hl"
+          : direction
+            ? " hl " + direction
+            : linkedKeys
+              ? " dim"
+              : ""),
     );
-    path.setAttribute("marker-end", `url(#arrow-${status})`);
+    path.setAttribute(
+      "marker-end",
+      `url(#arrow-${direction && status !== "violation" ? direction : status})`,
+    );
     svg.append(path);
     const hit = document.createElementNS(NS, "path");
     hit.setAttribute("d", d);
@@ -1176,6 +1227,18 @@ function renderPanel() {
       ? `${selected.symbolKind} · ${scope.path}`
       : selected?.kind || scope.kind;
   scopeBar.append(element("span", "review-kind", caption));
+  if (selected?.changes?.length) {
+    // Say what changed inside a modified declaration, so the reader knows what to inspect.
+    const parts = element("span", "review-parts");
+    parts.append(
+      ...selected.changes.map(partIcon),
+      document.createTextNode(
+        partWords(selected.changes).replace(/^./, (c) => c.toUpperCase()) +
+          " changed",
+      ),
+    );
+    scopeBar.append(parts);
+  }
   if (selected?.status)
     scopeBar.insertBefore(
       statusIcon(selected.status),
@@ -1422,6 +1485,11 @@ function selectionFacts(node) {
       ["Kind", node.symbolKind],
       ["Lines", `${node.start}–${node.end}`],
     );
+    if (node.changes?.length)
+      facts.push([
+        "Changed",
+        partWords(node.changes).replace(/^./, (c) => c.toUpperCase()),
+      ]);
   } else if (node.kind === "file") {
     const total = node.symbolCount ?? node.symbols?.length ?? 0,
       known = node.symbols || node.symbolPreview || [];
@@ -1765,8 +1833,23 @@ function renderMapLegend() {
     types.append(item);
   }
   host.append(element("strong", "", "Object types"), types);
+  if (lens === "changes") {
+    const parts = element("div", "legend-inline");
+    for (const [part, label] of [
+      ["signature", "Signature"],
+      ["documentation", "Documentation"],
+      ["implementation", "Implementation"],
+    ]) {
+      const item = element("span");
+      item.append(partIcon(part), document.createTextNode(label));
+      parts.append(item);
+    }
+    host.append(element("strong", "", "Changed inside a declaration"), parts);
+  }
   const lines = element("div", "legend-lines");
   for (const [kind, label] of [
+    ["out", "The selection uses"],
+    ["in", "Uses the selection"],
     ["solid", "Import or call"],
     ["implements", "Implementation"],
     ["inherits", "Inheritance"],
@@ -1904,7 +1987,13 @@ function renderTab() {
         listRow(
           node,
           node.kind === "symbol"
-            ? `${node.symbolKind} · lines ${node.start}–${node.end}`
+            ? [
+                node.symbolKind,
+                node.changes?.length ? partWords(node.changes) + " changed" : "",
+                `lines ${node.start}–${node.end}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")
             : node.path,
           () => {
             if (node.kind === "symbol") selectNode(node);

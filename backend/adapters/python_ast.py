@@ -38,6 +38,16 @@ def details(node):
     return result
 
 
+def body_hash(node):
+    """Hash a declaration's statements without its leading docstring, so documentation and signature edits stay separate."""
+    body = list(node.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], 'value', None), ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if isinstance(node, ast.ClassDef):
+        body = [item for item in body if not isinstance(item, ast.AnnAssign)]
+    return hashlib.sha256(''.join(ast.dump(item, include_attributes=False) for item in body).encode()).hexdigest()
+
+
 def relationships(tree, symbols):
     """Extract declaration-level relationships; dynamic receivers and shadowed names stay unresolved."""
     result, bindings = [], {}
@@ -119,7 +129,8 @@ def analyze(source):
                 start = min([node.lineno] + [d.lineno for d in node.decorator_list])
                 symbols.append({'name': name, 'kind': 'class' if isinstance(node, ast.ClassDef) else ('method' if prefix else 'function'),
                                 'start': start, 'end': node.end_lineno, 'details': details(node),
-                                'hash': hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()})
+                                'hash': hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest(),
+                                'body': body_hash(node)})
                 if isinstance(node, ast.ClassDef):
                     walk(node.body, name + '.')
     walk(tree.body)

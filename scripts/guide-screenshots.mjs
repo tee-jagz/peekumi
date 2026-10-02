@@ -318,6 +318,8 @@ try {
     ];
     for (const [label, node] of objects)
       result.push(["object-" + label, d(m.objectTypeIcon(node)), ""]);
+    for (const part of ["signature", "documentation", "implementation"])
+      result.push(["part-" + part, d(m.partIcon(part)), "changed"]);
     for (const direction of ["In", "Out", "Fields"])
       result.push(["contract-" + direction.toLowerCase(), d(m.interfaceIcon(direction)), ""]);
     return result;

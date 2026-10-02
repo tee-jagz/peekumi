@@ -9,6 +9,16 @@ import ts from "typescript";
 const pythonScript = fileURLToPath(new URL("../../backend/adapters/python_ast.py", import.meta.url));
 const MAX_SOURCE = 512 * 1024;
 const hash = (value) => createHash("sha256").update(value).digest("hex");
+/** Mirrors the Rust engine's classification of a changed declaration's parts. */
+const changedParts = (a, b) => {
+  const shape = ({ description, provenance, ...rest } = {}) => rest;
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  return [
+    ...(same(shape(a.details), shape(b.details)) ? [] : ["signature"]),
+    ...(same(a.details?.description, b.details?.description) ? [] : ["documentation"]),
+    ...(a.body === b.body ? [] : ["implementation"]),
+  ];
+};
 export function command(
   executable,
   args,
@@ -189,6 +199,21 @@ function jsAnalyze(file, source) {
     }
     return result;
   }
+  // Body only: the code a declaration runs or contains, without signature or documentation.
+  // Class bodies are their methods; their typed fields belong to the signature.
+  function bodyOf(node) {
+    if (ts.isClassDeclaration(node))
+      return node.members
+        .filter((member) => !ts.isPropertyDeclaration(member))
+        .map((member) => printer.printNode(ts.EmitHint.Unspecified, member, tree))
+        .join("\n");
+    const part = ts.isVariableDeclaration(node)
+      ? node.initializer
+      : ts.isTypeAliasDeclaration(node)
+        ? node.type
+        : node.body;
+    return part ? printer.printNode(ts.EmitHint.Unspecified, part, tree) : "";
+  }
   function add(node, name, kind) {
     symbols.push({
       name,
@@ -200,6 +225,7 @@ function jsAnalyze(file, source) {
         printer.printNode(ts.EmitHint.Unspecified, node, tree) +
           JSON.stringify(details(node, name, kind)),
       ),
+      body: hash(bodyOf(node)),
     });
   }
   for (const node of tree.statements) {
@@ -579,14 +605,19 @@ export class Repository {
         );
         const symbols = [
           ...new Set([...Object.keys(a), ...Object.keys(b)]),
-        ].map((name) => ({
-          name,
-          kind: (b[name] || a[name]).kind,
-          start: (b[name] || a[name]).start,
-          end: (b[name] || a[name]).end,
-          status: statusOf(a[name]?.hash, b[name]?.hash),
-          before: a[name] ? { start: a[name].start, end: a[name].end } : null,
-        }));
+        ].map((name) => {
+          const symbol = {
+            name,
+            kind: (b[name] || a[name]).kind,
+            start: (b[name] || a[name]).start,
+            end: (b[name] || a[name]).end,
+            status: statusOf(a[name]?.hash, b[name]?.hash),
+            before: a[name] ? { start: a[name].start, end: a[name].end } : null,
+          };
+          if (symbol.status === "changed" && a[name] && b[name])
+            symbol.changes = changedParts(a[name], b[name]);
+          return symbol;
+        });
         return {
           path: file,
           status: statusOf(
@@ -600,7 +631,11 @@ export class Repository {
                 symbolCount: symbols.length,
                 symbolPreview: symbols
                   .slice(0, 22)
-                  .map((s) => ({ status: s.status })),
+                  .map((s) =>
+                    s.changes
+                      ? { status: s.status, changes: s.changes }
+                      : { status: s.status },
+                  ),
               }
             : { symbols }),
           deps: after?.deps || [],

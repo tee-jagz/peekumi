@@ -87,6 +87,7 @@ The Rust service uses Git subprocesses and has been built and tested on this Int
 - Pan the SVG map by dragging with a finger or mouse, or scrolling. Pinch or Control/Command-scroll to zoom; the floating map toolbar has zoom out, zoom in, Fit and Reset (actual size). Keyboard users can focus the map and use arrows and +/−. The review panel scrolls independently.
 - Turn on Changes only to hide unchanged cards at every level, while keeping changed parent folders available for drill-down. Changed dependencies retain their external neighbours as context. File-level edits can have no changed symbols; the complete source diff remains available.
 - Use file search, Home and Up, and the scoped Changes list to navigate.
+- Selecting a card highlights what it uses and what uses it, and fades the rest. A modified declaration says whether its signature, documentation or implementation changed.
 - Select curved dependency lines in the map, then inspect their endpoints in Relations. Neighbours appear as dashed cards. These are static import relationships, not a runtime call graph.
 - Structure shows the current topology; Changes colours the comparison. Health scoring is not yet measured.
 - Open a symbol to highlight it in the full source. Switch between Before, After and a complete file diff.

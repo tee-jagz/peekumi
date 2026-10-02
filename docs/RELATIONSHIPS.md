@@ -43,7 +43,7 @@ Rules apply only to resolved relationships. “0 observed violations” is not p
 
 ## Inspecting evidence
 
-Open Dependencies to filter imports, calls, implementations or inheritance, or show violations only. Select a symbol to focus incoming/outgoing relationships. Resolved edges appear on the map; uncertainty stays in an expandable list. Implementations are dotted, inheritance dashed and violations red with a badge on the source card. Before/After switches both the graph and rule outcomes.
+Open Dependencies to filter imports, calls, implementations or inheritance, or show violations only. Select a symbol to focus incoming/outgoing relationships. Resolved edges appear on the map; uncertainty stays in an expandable list. Selecting a card emphasises its own edges by direction, accent for what it uses and teal for what uses it, and fades unrelated edges and cards. Implementations are dotted, inheritance dashed and violations red with a badge on the source card. Before/After switches both the graph and rule outcomes.
 
 Open a file to see source evidence and unresolved reasons; evidence buttons open the source declaration in the appropriate revision. Imports currently provide file-level evidence, while calls and heritage include line numbers. Dense function maps draw calls for the selected symbol; other edges are capped at 40 and the evidence list shows the first 200 records, with an explicit count. Select a symbol or relationship kind to narrow larger lists.
 

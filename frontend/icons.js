@@ -70,6 +70,10 @@ const paths = {
   input: "M16 3v14M3 10h9M8 6l4 4-4 4",
   output: "M4 3v14M8 10h9M13 6l4 4-4 4",
   fields: "M3 5h2M3 10h2M3 15h2M8 5h9M8 10h9M8 15h9",
+  signature: "M7 3c-3.5 3.5-3.5 10.5 0 14M13 3c3.5 3.5 3.5 10.5 0 14",
+  implementation:
+    "M8 3c-2 0-2 1-2 3v2c0 1-1 2-2 2 1 0 2 1 2 2v2c0 2 0 3 2 3M12 3c2 0 2 1 2 3v2c0 1 1 2 2 2-1 0-2 1-2 2v2c0 2 0 3-2 3",
+  documentation: "M4 6h12M4 10h12M4 14h7",
 };
 const statuses = {
   added: ["Added", "--add"],
@@ -172,6 +176,17 @@ const fileLabels = {
   sealed: "Binary or restricted file",
   file: "File",
 };
+const partLabels = {
+  signature: "Signature changed",
+  documentation: "Documentation changed",
+  implementation: "Implementation changed",
+};
+/** Returns an icon for one changed part of a declaration: signature, documentation or implementation. Unknown parts throw a RangeError. */
+export function partIcon(part) {
+  if (!Object.hasOwn(partLabels, part))
+    throw new RangeError(`Unknown declaration part: ${part}`);
+  return icon(part, partLabels[part], "part-icon");
+}
 /** Returns the icon for one file kind from fileKind(); unknown kinds use the plain file icon. */
 export function fileKindIcon(kind) {
   const known = Object.hasOwn(fileLabels, kind) ? kind : "file";

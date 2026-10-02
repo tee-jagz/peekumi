@@ -79,6 +79,20 @@ try {
     await consumer.click();
     await front.locator('.node[data-key="symbol:run"]').waitFor();
     await front.locator('.node[data-key="symbol:run"]').click();
+    // Selecting a declaration emphasises its own connections and quiets the rest.
+    assert.ok(
+      await front.locator("path.e.hl.out").count(),
+      "The selection's outgoing relationships are emphasised",
+    );
+    assert.equal(
+      await front.locator('.node[data-key="symbol:run"].faded').count(),
+      0,
+    );
+    if (await front.locator('.node[data-key="symbol:Client"]').count())
+      assert.ok(
+        await front.locator('.node.faded[data-key="symbol:Client"]').count(),
+        "An unrelated declaration recedes",
+      );
     if (!(await page.locator("#helperTools").isVisible()))
       await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="dependencies"]').click();
