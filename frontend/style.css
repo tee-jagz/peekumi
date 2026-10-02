@@ -4590,7 +4590,7 @@ details.p-section[open] > summary::before {
   color: var(--muted);
   font-size: 13px;
 }
-.ask-message.is-pending span::after {
+.ask-message.is-pending .pending-text::after {
   content: "…";
   display: inline-block;
   animation: ask-wait 1.2s ease-in-out infinite;
@@ -4601,7 +4601,7 @@ details.p-section[open] > summary::before {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ask-message.is-pending span::after {
+  .ask-message.is-pending .pending-text::after {
     animation: none;
   }
 }
@@ -4999,4 +4999,12 @@ details.p-section[open] > summary::before {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
+}
+/* Marks the subject of the next question when it changes as the map moves. */
+.ask-about {
+  align-self: flex-end;
+  margin: 6px 4px -4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
 }

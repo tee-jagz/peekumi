@@ -89,9 +89,6 @@ const partWords = (changes = []) =>
     : changes[0] || "";
 // Keys of cards connected to the current selection; set while the map renders.
 let linkedKeys = null;
-// False after an Ask answer's link moved the map: the conversation stays until the reader
-// selects something themselves or asks about the new selection.
-let followAsk = true;
 const nodeScope = (node) => ({
   kind: node.kind === "stub" ? node.targetKind : node.kind,
   path: node.path,
@@ -202,7 +199,6 @@ const ask = createAsk({
    * conversation stays in view. */
   async openReference(target) {
     if (busy) return;
-    followAsk = false;
     if (mode === "diff") before = target.side === "before";
     await navigate({ kind: "file", path: target.path }, "file:" + target.path, {
       keepAsk: true,
@@ -215,12 +211,6 @@ const ask = createAsk({
     }
     if ($("#panel").dataset.height === "full") setSheetHeight("half");
     render();
-  },
-  pinned: () => !followAsk,
-  unpin() {
-    followAsk = true;
-    ask.followSelection();
-    renderPanel();
   },
   async makeDraft(draft) {
     await api("/api/comments", {
@@ -1221,13 +1211,11 @@ function drawEdges(canvas, positions, width, height, arcs) {
 }
 /** Selects a card or dependency for review and loads file details when needed. */
 function selectNode(node) {
-  followAsk = true;
   selected = node;
   if (["comments", "runs"].includes(tab)) tab = "details";
   if (node.kind === "symbol") {
     sourceView = node.status === "removed" ? "before" : "diff";
   }
-  if (tab === "ask") ask.open();
   renderDeck();
   renderPanel();
   if (scope.kind === "file" && !sourceData) loadSource();
@@ -1254,7 +1242,6 @@ function openNode(node) {
 /** Animates a scope change, clears stale selection and source state, and loads file details after entering a file. */
 async function navigate(next, originKey, { keepAsk = false } = {}) {
   if (busy) return;
-  if (!keepAsk) followAsk = true;
   const graph = $(".sheet:not(.peek) .graph-inner");
   const zoomIn =
     next.path.split("/").length > scope.path.split("/").length ||
@@ -1279,8 +1266,8 @@ async function navigate(next, originKey, { keepAsk = false } = {}) {
   sourceData = null;
   ++sourceId;
   search = "";
-  tab = keepAsk ? "ask" : "details";
-  if (followAsk) ask.followSelection();
+  // A conversation in view stays in view as the map moves.
+  tab = keepAsk || tab === "ask" ? "ask" : "details";
   render();
   const body = $(".sheet:not(.peek) .sheet-body");
   if (body) body.scrollTop = 0;
@@ -1304,7 +1291,6 @@ function goUp() {
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
-  if (followAsk) ask.followSelection();
 
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(
@@ -1338,9 +1324,7 @@ function renderPanel() {
     );
   if (selected) {
     const clear = button("x", "×", () => {
-      followAsk = true;
       selected = null;
-      if (tab === "ask") ask.open();
       render();
     });
     clear.setAttribute("aria-label", "Clear selection");
@@ -2580,7 +2564,6 @@ document.querySelectorAll("[data-compose]").forEach(
   (b) =>
     (b.onclick = () => {
       primaryTab = b.dataset.compose;
-      if (primaryTab === "ask" && followAsk) ask.open();
       // The conversation on screen follows the dock, so Ask never shows under a comment draft.
       if (discussing()) showDiscussion();
       if (comparison) renderPanel();
