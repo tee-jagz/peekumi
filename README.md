@@ -1,8 +1,12 @@
-# Repo Strata
+<p align="center"><img src="docs/brand/peek.svg" width="120" alt="Peek, the Peekumi mascot: a round, one-eyed character looking over three layered lines"></p>
+
+# Peekumi
 
 Explore a repository and its changes from your phone, from the overall structure down to the implementation.
 
-Strata uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. Inspection leaves the working tree, branches and hooks untouched. Explicit agent dispatch creates a separate run branch and worktree.
+Peekumi was called Repo Strata; the `strata` command, settings and folders keep that name until the rename is finished. Peek, the mascot, looks over the layers of your code. The artwork lives in [docs/brand](docs/brand).
+
+Peekumi uses a Rust backend (Axum/Tokio and SQLite) to read committed Git objects and serve the existing SVG mobile web interface. Inspection leaves the working tree, branches and hooks untouched. Explicit agent dispatch creates a separate run branch and worktree.
 
 ## Screenshots
 
@@ -19,7 +23,7 @@ Explore the map, move through commits, and steer agents while keeping Ask and In
 See [setup and distribution](docs/SETUP.md), or give your agent the [Strata setup skill](skills/strata-setup/SKILL.md).
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | sh
 strata doctor
 strata repo add /path/to/repo
 strata start

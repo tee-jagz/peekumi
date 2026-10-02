@@ -177,7 +177,7 @@ test("API requires auth, rejects cross-origin pairing, and serves source through
     headers: { "Accept-Encoding": "gzip" },
   });
   assert.equal(html.headers.get("content-encoding"), "gzip");
-  assert.match(await html.text(), /Repo Strata/);
+  assert.match(await html.text(), /Peekumi/);
   assert.equal(
     data.files.find((f) => f.path === "docs/new.md").status,
     "added",

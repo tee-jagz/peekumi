@@ -1,5 +1,5 @@
 
-<svg viewBox="20 42 160 160" xmlns="http://www.w3.org/2000/svg">
+<svg role="img" aria-label="Peek, the Peekumi mascot" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
 <defs>
  <radialGradient id="tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
  <radialGradient id="dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>

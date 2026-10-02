@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs or upgrades Repo Strata from a release archive.
 #
-#   curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | sh
 #
 # Detects the platform, downloads the matching release archive and its SHA-256 checksum,
 # verifies the archive, installs it to STRATA_PREFIX and links `strata` into STRATA_BIN.
@@ -9,14 +9,14 @@
 #
 # Environment:
 #   STRATA_VERSION  release tag to install, such as v0.2.0 (default: the latest release)
-#   STRATA_REPO     GitHub repository (default: tee-jagz/repo-strata)
+#   STRATA_REPO     GitHub repository (default: tee-jagz/peekumi)
 #   STRATA_PREFIX   installation directory (default: ~/.local/lib/strata)
 #   STRATA_BIN      directory for the `strata` link (default: ~/.local/bin)
 #   STRATA_ARCHIVE  install this local archive instead of downloading; its .sha256 must sit beside it
 #   GITHUB_TOKEN    token for downloads while the repository is private
 set -eu
 
-repo=${STRATA_REPO:-tee-jagz/repo-strata}
+repo=${STRATA_REPO:-tee-jagz/peekumi}
 prefix=${STRATA_PREFIX:-$HOME/.local/lib/strata}
 bindir=${STRATA_BIN:-$HOME/.local/bin}
 

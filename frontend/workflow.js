@@ -1,6 +1,7 @@
 /** @module Anchored drafts, exact task previews, run reports and human verification. */
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
+import { peek } from "./peek.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   n.className = cls || "";
@@ -456,16 +457,17 @@ export function createWorkflow({
       : here
         ? data.comments.filter(visible)
         : data.comments.filter((c) => c.status === "draft");
-    if (here && !items.length)
-      body.append(
-        el(
-          "p",
-          "empty",
-          loaded
-            ? `No instructions for ${label(context().anchor)} yet. Write one below.`
-            : "Loading instructions…",
-        ),
+    if (here && !items.length) {
+      const empty = el(
+        "p",
+        "empty",
+        loaded
+          ? `No instructions for ${label(context().anchor)} yet. Write one below.`
+          : "Loading instructions…",
       );
+      empty.prepend(peek(loaded ? "empty" : "loading"));
+      body.append(empty);
+    }
     else if (!here && !items.length && !data.runs.some((r) => r.status !== "preview"))
       body.append(
         el(
@@ -672,11 +674,14 @@ export function createWorkflow({
       body.append(b);
     }
   }
-  /** The step after approval. Strata never merges, so it names the branch and the exact command. */
+  /** The step after approval. Peekumi never merges, so it names the branch and the exact command. */
   function applyStep(r) {
     const target = r.targetBranch || "main",
       command = `git merge --ff-only ${r.branch}`;
     const step = el("section", "apply-step");
+    // Approval is the happy moment: Peek celebrates beside the next step.
+    const heading = el("h3", "workflow-group");
+    heading.append(peek("success"), document.createTextNode(`Next: apply to ${target}`));
     const line = el("div", "command-line"),
       code = el("code", "", command),
       copy = iconButton(el("button", "btn icon-action"), "copy", "Copy command");
@@ -694,11 +699,11 @@ export function createWorkflow({
     };
     line.append(code, copy);
     step.append(
-      el("h3", "workflow-group", `Next: apply to ${target}`),
+      heading,
       el(
         "p",
         "read-note",
-        `Strata never merges. In the repository, with ${target} checked out, run:`,
+        `Peekumi never merges. In the repository, with ${target} checked out, run:`,
       ),
       line,
       el(
