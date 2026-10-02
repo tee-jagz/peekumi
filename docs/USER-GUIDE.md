@@ -34,7 +34,7 @@ The screen has three parts. The header names the repository and the comparison. 
 | 3 | Time / Diff | **Time** shows commit cards to step through history one commit at a time. **Diff** compares any head with any base you choose. |
 | 4 | Tasks | Opens your draft comments and agent runs. The icon turns blue when an agent has finished work that is ready for review. |
 | 5 | Before / After | Shown in Diff. Switches the map and source between the base (dot on the left) and the head (dot on the right). |
-| 6 | Card | A folder, file or declaration. Tap once to select it, tap again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, plain is unchanged. |
+| 6 | Card | A folder, file or declaration. Tap once to select it, tap again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
 | 7 | Card counts | How many files inside were added, modified or removed, followed by the total number of files. |
 | 8 | Home and Up | Home returns to the repository root. Up goes to the parent folder. Both are dimmed at the root. |
 | 9 | Changes only | Hides unchanged cards at every level, keeping changed folders so you can still drill in. |
@@ -51,6 +51,8 @@ The screen has three parts. The header names the repository and the comparison. 
 | 20 | Send | Sends the question. In Comment mode this is replaced by Cancel and Save draft. |
 
 Lines between cards are static dependencies: imports, calls, implementations and inheritance found in the code, not runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
+
+Selecting a card highlights its own connections and fades everything unrelated. Blue lines are what the selection uses; teal lines are what uses the selection. If the selection has no connections, nothing fades.
 
 ## Gestures and keys
 
@@ -72,8 +74,8 @@ Lines between cards are static dependencies: imports, calls, implementations and
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Colour lens | **Changes** colours cards by Git status. **Structure** hides change colours to show the plain layout. |
-| 2 | Colours and types | What each change colour and shape means, and the icon for each kind of folder, declaration and file. |
-| 3 | Line styles | Solid lines are imports or calls, dotted are implementations, dashed are inheritance, red marks a removed relationship or a broken dependency rule. |
+| 2 | Colours and types | What each change colour and shape means, the icon for each kind of folder, declaration and file, and the icons for what changed inside a declaration. |
+| 3 | Line styles | Blue lines are what a selection uses and teal lines use the selection. Solid lines are imports or calls, dotted are implementations, dashed are inheritance, red marks a removed relationship or a broken dependency rule. |
 
 ## Choosing what to compare
 
@@ -110,7 +112,7 @@ In **Time**, a strip of commit cards appears above the map. The highlighted card
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Selected card | A blue outline marks the selection. Tap it again to open it: a folder or file opens on the map, a declaration opens in Source. |
-| 2 | Name and status | The selection's name, its change status icon, and what kind of thing it is. |
+| 2 | Name and status | The selection's name, its change status icon, and what kind of thing it is. For a modified declaration, a line such as **Signature and implementation changed** says which parts to inspect. |
 | 3 | Summary | Its committed documentation. Scroll it to read more. |
 | 4 | Inputs, outputs and fields | One line each for parameters, the return type and class fields. Swipe sideways to see them all; a fade on the right means there is more. Only declared types appear here. The Details view labels any missing annotation. |
 | 5 | Up | Leaves the file and returns to its folder. |
@@ -268,6 +270,16 @@ Icons describe what a card is, never its change status. Source files are files a
 | <img src="guide/icons/object-function.svg" width="20" alt=""> | Function or method | <img src="guide/icons/file-image.svg" width="20" alt=""> | Image |
 | <img src="guide/icons/object-interface.svg" width="20" alt=""> | Interface or trait | <img src="guide/icons/file-sealed.svg" width="20" alt=""> | Binary or restricted file (no preview) |
 | <img src="guide/icons/object-enum.svg" width="20" alt=""> | Enum | <img src="guide/icons/file-file.svg" width="20" alt=""> | Other file |
+
+### Changed parts of a declaration
+
+A modified declaration says which parts changed, on its card and in the sheet. The comparison is of the code's structure, not its behaviour: whitespace-only edits do not count as changes, and "implementation" means the body's code changed, not that it behaves differently. A change outside these parts, such as a Python decorator, shows as plain **Modified**.
+
+| Icon | Part | What changed |
+|---|---|---|
+| <img src="guide/icons/part-signature.svg" width="20" alt=""> | Signature | Parameters, return type, generics, base classes, or a struct's or class's declared fields |
+| <img src="guide/icons/part-documentation.svg" width="20" alt=""> | Documentation | Doc comments or docstrings |
+| <img src="guide/icons/part-implementation.svg" width="20" alt=""> | Implementation | The body's code, excluding documentation |
 
 ### Inputs and outputs
 

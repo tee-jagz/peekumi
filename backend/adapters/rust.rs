@@ -53,10 +53,19 @@ fn function(sig: &Signature, attrs: &[Attribute]) -> Value {
     value
 }
 /// Records a symbol's qualified name, kind, source span, token hash and declaration metadata.
-fn add(symbols: &mut Vec<Value>, node: &impl ToTokens, name: String, kind: &str, details: Value) {
+/// `body` is the declaration's code without signature or documentation (empty for shapes such
+/// as structs, whose fields belong to the signature), so changes can be classified.
+fn add(
+    symbols: &mut Vec<Value>,
+    node: &impl ToTokens,
+    name: String,
+    kind: &str,
+    details: Value,
+    body: String,
+) {
     let tokens = node.to_token_stream();
     let span = node.span();
-    symbols.push(json!({"name":name,"kind":kind,"start":span.start().line,"end":span.end().line,"hash":crate::engine::hash(tokens.to_string()),"details":details}));
+    symbols.push(json!({"name":name,"kind":kind,"start":span.start().line,"end":span.end().line,"hash":crate::engine::hash(tokens.to_string()),"body":crate::engine::hash(body),"details":details}));
 }
 /// Flattens Rust use trees, including groups and aliases, into import specifiers.
 fn use_paths(tree: &UseTree, prefix: &str, imports: &mut Vec<Value>) {
@@ -83,6 +92,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                 format!("{prefix}{}", n.sig.ident),
                 "function",
                 function(&n.sig, &n.attrs),
+                code(&n.block),
             ),
             Item::Struct(n) => {
                 let mut details = info(
@@ -98,6 +108,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                     format!("{prefix}{}", n.ident),
                     "struct",
                     details,
+                    String::new(),
                 );
             }
             Item::Enum(n) => {
@@ -108,7 +119,14 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                         .map(|v| json!({"name":v.ident.to_string(),"type":code(&v.fields)}))
                         .collect::<Vec<_>>()
                 );
-                add(symbols, n, format!("{prefix}{}", n.ident), "enum", details);
+                add(
+                    symbols,
+                    n,
+                    format!("{prefix}{}", n.ident),
+                    "enum",
+                    details,
+                    String::new(),
+                );
             }
             Item::Trait(n) => {
                 add(
@@ -117,6 +135,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                     format!("{prefix}{}", n.ident),
                     "trait",
                     info(&n.attrs, format!("trait {}{}", n.ident, code(&n.generics))),
+                    n.items.iter().map(code).collect::<Vec<_>>().join("\n"),
                 );
                 for member in &n.items {
                     if let syn::TraitItem::Fn(f) = member {
@@ -126,6 +145,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                             format!("{prefix}{}.{}", n.ident, f.sig.ident),
                             "method",
                             function(&f.sig, &f.attrs),
+                            f.default.as_ref().map(code).unwrap_or_default(),
                         );
                     }
                 }
@@ -144,6 +164,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                             format!("{prefix}{owner}.{}", f.sig.ident),
                             "method",
                             function(&f.sig, &f.attrs),
+                            code(&f.block),
                         ),
                         syn::ImplItem::Const(c) => add(
                             symbols,
@@ -151,6 +172,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                             format!("{prefix}{owner}.{}", c.ident),
                             "constant",
                             info(&c.attrs, format!("const {}: {}", c.ident, code(&c.ty))),
+                            code(&c.expr),
                         ),
                         _ => {}
                     }
@@ -162,6 +184,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                 format!("{prefix}{}", n.ident),
                 "type",
                 info(&n.attrs, code(n)),
+                String::new(),
             ),
             Item::Const(n) => add(
                 symbols,
@@ -169,6 +192,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                 format!("{prefix}{}", n.ident),
                 "constant",
                 info(&n.attrs, format!("const {}: {}", n.ident, code(&n.ty))),
+                code(&n.expr),
             ),
             Item::Static(n) => add(
                 symbols,
@@ -176,6 +200,7 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                 format!("{prefix}{}", n.ident),
                 "variable",
                 info(&n.attrs, format!("static {}: {}", n.ident, code(&n.ty))),
+                code(&n.expr),
             ),
             Item::Mod(n) => {
                 add(
@@ -184,6 +209,10 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                     format!("{prefix}{}", n.ident),
                     "module",
                     info(&n.attrs, format!("mod {}", n.ident)),
+                    n.content
+                        .as_ref()
+                        .map(|(_, items)| items.iter().map(code).collect::<Vec<_>>().join("\n"))
+                        .unwrap_or_default(),
                 );
                 if let Some((_, items)) = &n.content {
                     walk(items, &format!("{prefix}{}::", n.ident), symbols, imports)

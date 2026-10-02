@@ -274,6 +274,21 @@ function jsAnalyze(file, source) {
     }
     return result;
   }
+  // Body only: the code a declaration runs or contains, without signature or documentation.
+  // Class bodies are their methods; their typed fields belong to the signature.
+  function bodyOf(node) {
+    if (ts.isClassDeclaration(node))
+      return node.members
+        .filter((member) => !ts.isPropertyDeclaration(member))
+        .map((member) => printer.printNode(ts.EmitHint.Unspecified, member, tree))
+        .join("\n");
+    const part = ts.isVariableDeclaration(node)
+      ? node.initializer
+      : ts.isTypeAliasDeclaration(node)
+        ? node.type
+        : node.body;
+    return part ? printer.printNode(ts.EmitHint.Unspecified, part, tree) : "";
+  }
   function add(node, name, kind) {
     symbols.push({
       name,
@@ -285,6 +300,7 @@ function jsAnalyze(file, source) {
         printer.printNode(ts.EmitHint.Unspecified, node, tree) +
           JSON.stringify(details(node, name, kind)),
       ),
+      body: hash(bodyOf(node)),
     });
   }
   for (const node of tree.statements) {

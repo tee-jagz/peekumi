@@ -4403,3 +4403,96 @@ details.p-section[open] > summary::before {
 .canvas-controls:has(#mapLegend[open]) {
   z-index: 8;
 }
+
+/* Selection focus: a selected card's connections stand out by direction, unrelated lines and
+   cards recede. Outgoing (the selection uses) is the accent; incoming (uses the selection) teal. */
+:root {
+  --link-in: #0b8f9c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --link-in: #33c3c8;
+  }
+}
+:root[data-theme="dark"] {
+  --link-in: #33c3c8;
+}
+.edges path.e {
+  transition:
+    opacity 0.15s ease,
+    stroke 0.15s ease;
+}
+.edges path.e.dim {
+  opacity: 0.12;
+}
+.edges path.e.hl.out,
+.edges path.e.hl.in {
+  opacity: 1;
+  stroke-width: 2.2;
+  animation: none;
+}
+.edges path.e.hl.out {
+  stroke: var(--accent);
+}
+.edges path.e.hl.in {
+  stroke: var(--link-in);
+}
+.edges path.e.hl.violation {
+  stroke: var(--del);
+}
+.node {
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+.node.faded {
+  opacity: 0.3;
+}
+.node.linked {
+  opacity: 1;
+}
+.legend-line.out {
+  border-color: var(--accent);
+}
+.legend-line.in {
+  border-color: var(--link-in);
+}
+
+/* Changed parts of a declaration: small icons beside its name, and words in the sheet. */
+.part-icon {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--mod);
+}
+.part-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.n-parts {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 6px;
+}
+#reviewScope .review-parts {
+  order: 4;
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mod);
+}
+.legend-popover .part-icon {
+  width: 16px;
+  height: 16px;
+}

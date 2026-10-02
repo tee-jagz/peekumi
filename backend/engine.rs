@@ -561,7 +561,32 @@ fn compare_symbols(a: Option<&File>, b: Option<&File>) -> Vec<Value> {
             names.push(name)
         }
     }
-    names.into_iter().map(|name|{let a=before.get(name).copied();let b=after.get(name).copied();let cur=b.or(a).unwrap();json!({"name":name,"kind":cur["kind"],"start":cur["start"],"end":cur["end"],"status":status(a.map(|v|&v["hash"]),b.map(|v|&v["hash"])),"before":a.map(|v|json!({"start":v["start"],"end":v["end"]}))})}).collect()
+    names.into_iter().map(|name|{let a=before.get(name).copied();let b=after.get(name).copied();let cur=b.or(a).unwrap();let mut v=json!({"name":name,"kind":cur["kind"],"start":cur["start"],"end":cur["end"],"status":status(a.map(|v|&v["hash"]),b.map(|v|&v["hash"])),"before":a.map(|v|json!({"start":v["start"],"end":v["end"]}))});if v["status"]=="changed"&&let(Some(a),Some(b))=(a,b){v["changes"]=changes(a,b);}v}).collect()
+}
+/// Names which parts of a changed declaration differ: `signature` (parameters, return type,
+/// bases or fields), `documentation` (authored doc comments or docstrings) and
+/// `implementation` (the body without documentation). This is a syntactic comparison, not a
+/// behavioural one; a change outside these parts, such as a decorator, yields an empty list.
+fn changes(a: &Value, b: &Value) -> Value {
+    let shape = |v: &Value| {
+        let mut details = v["details"].clone();
+        if let Some(fields) = details.as_object_mut() {
+            fields.remove("description");
+            fields.remove("provenance");
+        }
+        details
+    };
+    let mut parts = Vec::new();
+    if shape(a) != shape(b) {
+        parts.push("signature");
+    }
+    if a["details"]["description"] != b["details"]["description"] {
+        parts.push("documentation");
+    }
+    if a["body"] != b["body"] {
+        parts.push("implementation");
+    }
+    json!(parts)
 }
 /// Builds one comparison entry from optional before/after files.
 /// Includes both dependency sets and either full symbols or compact overview previews.
@@ -575,7 +600,10 @@ fn compare_file(path: &str, a: Option<&File>, b: Option<&File>, overview: bool) 
             symbols
                 .iter()
                 .take(22)
-                .map(|s| json!({"status":s["status"]}))
+                .map(|s| match s.get("changes") {
+                    Some(changes) => json!({"status":s["status"],"changes":changes}),
+                    None => json!({"status":s["status"]}),
+                })
                 .collect::<Vec<_>>()
         );
     } else {

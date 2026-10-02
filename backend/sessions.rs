@@ -79,14 +79,13 @@ impl Sessions {
     pub fn insert_device(&mut self, session: &str, role: &str, name: &str) -> Result<()> {
         let mut sessions = self.saved.sessions.clone();
         sessions.retain(|_, expires| *expires > now());
-        if sessions.len() >= 128 {
-            if let Some(oldest) = sessions
+        if sessions.len() >= 128
+            && let Some(oldest) = sessions
                 .iter()
                 .min_by_key(|(_, expires)| **expires)
                 .map(|(key, _)| key.clone())
-            {
-                sessions.remove(&oldest);
-            }
+        {
+            sessions.remove(&oldest);
         }
         sessions.insert(crate::engine::hash(session.as_bytes()), now() + MAX_AGE);
         let mut roles = self.saved.roles.clone();
