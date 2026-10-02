@@ -132,11 +132,11 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 3 | Changes | Changed files or declarations in the current scope, and file search. |
 | 4 | Relations | Dependencies, dependency rules and their evidence. |
 | 5 | Discussion | Shows the conversation for the selection that matches the box below: your Ask questions and answers, or the instructions left on it. |
-| 6 | Facts | What the selection is: kind, path, line range, declaration count or file counts, and how it was analysed. |
-| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. |
+| 6 | Facts | One quiet line after the content: the line range, or file and change counts for a folder. |
+| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**, beside the facts. |
 | 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
 
-Below the facts, Details shows the declaration's signature, description, every argument with its annotation or **Unannotated**, and the return type. For a folder it shows its README or package docstring, with a **Read documentation** button. The **Analyzed by** section explains which language adapter read the file and its limits.
+Details shows the declaration's signature and description, then its arguments and return type where the code declares types or descriptions. For a folder it shows its README or package docstring as plain text, with a link to read the whole file. A small **adapter** note at the end names the language adapter that read the file; tap it for what the adapter extracts and its limits.
 
 The only labelled view button is the one that is open; the others show just their icons. All of them are listed in the [icon reference](#icon-reference).
 
@@ -147,9 +147,8 @@ The only labelled view button is the one that is open; the others show just thei
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Diff / After / Before | **Diff** shows the changes with old and new line numbers. **After** and **Before** show the whole file at the head or base. |
-| 2 | Analysis | How the file was parsed, and whether the diff covers the whole file or only the selected declaration. |
-| 3 | Code | Scrolls inside its own box, which fills the sheet, so the controls above stay in place. |
-| 4 | Highlight | The selected declaration's lines are highlighted and scrolled into view. |
+| 2 | Code | Scrolls inside its own box, which fills the sheet, so the controls above stay in place. With a declaration selected, **Diff** shows only that declaration's changes. |
+| 3 | Highlight | The selected declaration's lines are highlighted and scrolled into view. |
 
 ### Changes
 
