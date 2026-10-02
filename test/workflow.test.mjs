@@ -435,6 +435,30 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
   assert.equal(owner.status, 401, "The owner token is not a lookup key");
 });
 
+test("Answer code spans link to the map only when they name exactly one file or declaration", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  await writeFile(path.join(f.dir, "a.py"), "def helper():\n    return 1\n");
+  await writeFile(path.join(f.dir, "b.py"), "def helper():\n    return 2\n");
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Two helpers");
+  const head = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const result = await f.req("/api/ask", {
+    base: f.sha,
+    head,
+    sha: head,
+    anchor: { kind: "repo", path: "" },
+    question: "Name references.",
+    history: [],
+  });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.deepEqual(result.references.run, { kind: "symbol", path: "module.py", symbol: "run", line: 2, side: "after" });
+  assert.deepEqual(result.references["module.py"], { kind: "file", path: "module.py", line: null, side: "after" });
+  assert.equal(result.references["module.py:2"].line, 2);
+  assert.equal(result.references.nowhere_at_all, undefined, "Unknown names stay plain text");
+  assert.equal(result.references.helper, undefined, "Ambiguous names stay plain text");
+});
+
 test("Ask streams its answer: working turns are replaced, lookups and the final answer arrive as events", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

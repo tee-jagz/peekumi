@@ -393,8 +393,107 @@ fn split_suggestion(raw: &str) -> Result<Value> {
     }
     Ok(json!({"text":prose.join("\n").trim(),"suggestion":suggestion}))
 }
-/// The reply body: the answer, the lookups it made and what the context left out.
-fn reply(app: &App, prepared: &Prepared, answer: Value) -> Value {
+/// The distinct code spans in backticks, in order of appearance, at most 40.
+fn code_spans(text: &str) -> Vec<String> {
+    let mut spans: Vec<String> = vec![];
+    for span in text.split('`').skip(1).step_by(2) {
+        let span = span.trim();
+        if !span.is_empty() && span.len() <= 200 && !spans.iter().any(|s| s == span) {
+            spans.push(span.to_string());
+        }
+        if spans.len() == 40 {
+            break;
+        }
+    }
+    spans
+}
+fn is_identifier(name: &str) -> bool {
+    name.len() <= 100
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+/// Resolves the answer's code spans to places on the map, keyed by the span exactly as written.
+/// A path (optionally `path:line`) must name one file; a name must name one declaration, or one in
+/// the file being asked about. Ambiguous or unknown spans get no entry, so they stay plain text.
+/// Removed files and declarations point at the older side of the comparison.
+async fn resolve_references(app: &App, prepared: &Prepared, answer: &Value) -> Result<Value> {
+    let mut text = text_of(&answer["text"]).to_string();
+    if let Some(suggestion) = answer["suggestion"].as_str() {
+        text.push('\n');
+        text.push_str(suggestion);
+    }
+    let spans = code_spans(&text);
+    if spans.is_empty() {
+        return Ok(json!({}));
+    }
+    let full = app
+        .engine
+        .call("compare", json!([prepared.base, prepared.head]))
+        .await
+        .map_err(anyhow::Error::msg)?;
+    let files = full["files"].as_array().context("Missing comparison")?;
+    let asked_about = text_of(&prepared.anchor["path"]);
+    let side = |removed: bool| if removed { "before" } else { "after" };
+    let mut found = serde_json::Map::new();
+    for span in spans {
+        let (path, line) = match span.rsplit_once(':') {
+            Some((path, line)) if line.parse::<u64>().is_ok() => (path, line.parse::<u64>().ok()),
+            _ => (span.as_str(), None),
+        };
+        let pathlike = path.contains('/') || path.contains('.');
+        let files_named: Vec<&Value> = files
+            .iter()
+            .filter(|f| {
+                let candidate = text_of(&f["path"]);
+                candidate == path || (pathlike && candidate.ends_with(&format!("/{path}")))
+            })
+            .collect();
+        if let [file] = files_named.as_slice() {
+            found.insert(span.clone(), json!({"kind":"file","path":file["path"],"line":line,"side":side(file["status"] == "removed")}));
+            continue;
+        }
+        let name = span.trim_end_matches("()");
+        if !files_named.is_empty() || !is_identifier(name) {
+            continue;
+        }
+        let declared: Vec<(&Value, &Value)> = files
+            .iter()
+            .flat_map(|f| {
+                f["symbols"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(move |s| (f, s))
+            })
+            .filter(|(_, s)| s["name"] == name)
+            .collect();
+        let local: Vec<_> = declared
+            .iter()
+            .filter(|(f, _)| f["path"] == asked_about)
+            .collect();
+        let pick = match (declared.as_slice(), local.as_slice()) {
+            ([only], _) => Some(*only),
+            (_, [only]) => Some(**only),
+            _ => None,
+        };
+        if let Some((file, symbol)) = pick {
+            let removed = symbol["status"] == "removed";
+            let line = if removed {
+                &symbol["before"]["start"]
+            } else {
+                &symbol["start"]
+            };
+            found.insert(span.clone(), json!({"kind":"symbol","path":file["path"],"symbol":name,"line":line,"side":side(removed)}));
+        }
+    }
+    Ok(Value::Object(found))
+}
+/// The reply body: the answer, the places its code spans name, the lookups it made and what
+/// the context left out.
+fn reply(app: &App, prepared: &Prepared, answer: Value, references: Value) -> Value {
     let lookups = app
         .ask_grant
         .lock()
@@ -402,7 +501,7 @@ fn reply(app: &App, prepared: &Prepared, answer: Value) -> Value {
         .as_ref()
         .map(|grant| grant.calls.clone())
         .unwrap_or_default();
-    json!({"answer":answer,"lookups":lookups,"context":{"base":prepared.base,"head":prepared.head,"anchor":prepared.anchor,"omitted":prepared.omitted},"provider":"Claude Code"})
+    json!({"answer":answer,"references":references,"lookups":lookups,"context":{"base":prepared.base,"head":prepared.head,"anchor":prepared.anchor,"omitted":prepared.omitted},"provider":"Claude Code"})
 }
 
 /// Requests one non-executing answer and returns it whole.
@@ -438,7 +537,10 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
             .as_str()
             .context("Ask provider returned no answer")?,
     )?;
-    Ok(reply(app, &prepared, answer))
+    let references = resolve_references(app, &prepared, &answer)
+        .await
+        .unwrap_or_else(|_| json!({}));
+    Ok(reply(app, &prepared, answer, references))
 }
 
 /// Streams one answer as events while Claude writes it: `{"type":"text","text"}` pieces,
@@ -505,7 +607,10 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
         })
         .await??;
         let answer = split_suggestion(&raw)?;
-        Ok::<Value, anyhow::Error>(reply(&app, &prepared, answer))
+        let references = resolve_references(&app, &prepared, &answer)
+            .await
+            .unwrap_or_else(|_| json!({}));
+        Ok::<Value, anyhow::Error>(reply(&app, &prepared, answer, references))
     }
     .await;
     let event = match result {
@@ -561,6 +666,14 @@ mod tests {
         assert_eq!(readme_rank("docs/guide/README.md", "docs"), None);
         assert_eq!(readme_rank("docs/readme.txt", "docs"), Some(2));
         assert_eq!(readme_rank("docs/SETUP.md", "docs"), None);
+    }
+    #[test]
+    fn code_spans_are_distinct_and_in_order() {
+        assert_eq!(
+            code_spans("Call `run` in `a/b.py`, then `run` again; `` and ` spaced ` too"),
+            ["run", "a/b.py", "spaced"]
+        );
+        assert!(is_identifier("selected_source") && !is_identifier("a.b") && !is_identifier("9x"));
     }
     #[test]
     fn declarations_name_their_changed_parts() {

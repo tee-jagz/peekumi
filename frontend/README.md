@@ -9,7 +9,7 @@ The browser interface lets you explore repository structure, compare commits, fo
 - `icons.js`: original rounded-stroke SVGs shared by object types, Git status, input/output indicators and icon-only controls. Control glyphs are decorative; each button carries its own accessible name and tooltip.
 - `canvas.js`: SVG pan, pinch, zoom and card positioning.
 - `select.js`: frosted menus in place of native select popups. Each `<select>` stays in the DOM as the value and change-event source; a button and listbox mirror it, with arrow, Home/End, Enter and Escape keys.
-- `text.js`: safe Markdown rendering (paragraphs, lists, code, bold, italic) for answers, instructions and agent reports; builds DOM nodes and never parses HTML.
+- `text.js`: safe Markdown rendering (paragraphs, lists, code, bold, italic) for answers, instructions and agent reports; builds DOM nodes and never parses HTML. Code spans the server resolved become links into the map.
 - `peek.js`: Peek, the mascot, as an inline SVG whose state (idle, loading, thinking, success, error, empty) is animated by CSS; decorative and still under reduced motion.
 - `index.html` and `style.css`: page structure and responsive appearance.
 
