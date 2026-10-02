@@ -2917,7 +2917,7 @@ select option {
 }
 
 /* Peek is useful content, with inspection navigation revealed at half height. */
-#selectionContract {
+.contract-lines {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 4px 6px;
@@ -2930,10 +2930,10 @@ select option {
 #selectionContract[hidden] {
   display: none;
 }
-#selectionContract dt {
+.contract-lines dt {
   color: var(--muted);
 }
-#selectionContract dd {
+.contract-lines dd {
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -3045,7 +3045,7 @@ select option {
 .contract-key .interface-icon:nth-of-type(3) {
   margin-left: 12px;
 }
-#selectionContract {
+.contract-lines {
   grid-template-columns: 18px minmax(0, 1fr);
 }
 #reviewScope .review-name {
@@ -4349,7 +4349,7 @@ details.p-section[open] > summary::before {
 #selectionContract dt {
   display: flex;
 }
-#selectionContract dd.contract-line {
+.contract-lines dd.contract-line {
   display: flex;
   gap: 6px;
   min-width: 0;
@@ -4361,10 +4361,10 @@ details.p-section[open] > summary::before {
   -webkit-line-clamp: unset;
   touch-action: pan-x;
 }
-#selectionContract dd.contract-line::-webkit-scrollbar {
+.contract-lines dd.contract-line::-webkit-scrollbar {
   display: none;
 }
-#selectionContract dd.contract-line[data-more="true"] {
+.contract-lines dd.contract-line[data-more="true"] {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
@@ -4389,7 +4389,7 @@ details.p-section[open] > summary::before {
   color: var(--muted);
 }
 /* Contract tokens read as plain inline text, not boxed badges. */
-#selectionContract dd.contract-line {
+.contract-lines dd.contract-line {
   gap: 0;
 }
 .contract-token {
@@ -5144,18 +5144,20 @@ details.p-section[open] > summary::before {
   font-size: 13px;
   border-radius: 10px;
 }
-.panel .directory-details {
+/* Outranks the panel-wide glass rule (an :is() list whose strongest entry is two classes). */
+.panel #selStrip .directory-details {
+  margin: 0;
   padding: 2px 4px;
   background: none;
   border: 0;
   box-shadow: none;
 }
-.panel .directory-details .code-description {
+.panel #selStrip .directory-details .code-description {
   margin: 0 0 2px;
 }
-.panel .directory-details .documentation-link {
+.panel #selStrip .directory-details .documentation-link {
   min-height: 30px;
-  font-size: 12px;
+  font: 600 13px var(--font);
 }
 /* Arguments read as plain lines under the signature: the name in code, details muted. */
 .panel .code-metadata .contract-details {
@@ -5173,4 +5175,43 @@ details.p-section[open] > summary::before {
 .panel .code-metadata .metadata-parameters dd {
   font-size: 12px;
   color: var(--muted);
+}
+/* A list holding only its empty message is a line of text, not a card. */
+.panel .list:has(> .empty:only-child) {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Expanded Details mirrors the peek summary: plain text and the same In/Out lines, no cards.
+   The #selStrip id outranks the panel-wide glass rule. */
+.panel #selStrip .code-metadata {
+  margin: 0;
+  padding: 2px 4px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.panel #selStrip .signature-line {
+  display: block;
+  overflow-x: auto;
+  white-space: pre;
+  font: 12.5px/1.5 var(--mono);
+  color: var(--ink);
+  scrollbar-width: none;
+}
+.panel #selStrip .code-metadata .code-description {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.panel #selStrip .code-metadata .contract-lines {
+  margin-top: 8px;
+  padding: 0;
+}
+.panel #selStrip .code-metadata .contract-lines dd {
+  display: block;
+}
+.panel #selStrip .code-metadata .metadata-parameters {
+  margin-top: 6px;
+  font-size: 12px;
 }

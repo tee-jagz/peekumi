@@ -136,7 +136,7 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**, beside the facts. |
 | 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
 
-Details shows the declaration's signature and description, then its arguments and return type where the code declares types or descriptions. For a folder it shows its README or package docstring as plain text, with a link to read the whole file. A small **adapter** note at the end names the language adapter that read the file; tap it for what the adapter extracts and its limits.
+Expanded Details is the peek view in full: the whole description and the same **In** and **Out** lines, with parameter defaults, plus notes on parameters where the code documents them. For a folder it shows its README or package docstring as plain text, with a link to read the whole file. A small **adapter** note at the end names the language adapter that read the file; tap it for what the adapter extracts and its limits.
 
 The only labelled view button is the one that is open; the others show just their icons. All of them are listed in the [icon reference](#icon-reference).
 

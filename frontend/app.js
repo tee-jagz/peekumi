@@ -1601,6 +1601,46 @@ function changedDeclarations(node) {
   return box;
 }
 /** Rebuilds selected-item actions and metadata, or directory context when nothing is selected. */
+/** Fills `list` with the In, Out or Fields lines of a declaration: each one line of name/type
+ * tokens that scrolls sideways. Shared by the peek summary and expanded Details. */
+function fillContract(list, detail) {
+  const row = (kind, tokens) => {
+    const term = element("dt"),
+      line = element("dd", "contract-line");
+    term.append(interfaceIcon(kind));
+    for (const [name, type] of tokens) {
+      const token = element("span", "contract-token");
+      if (name) token.append(element("b", "", name));
+      if (type) token.append(element("span", "", type));
+      line.append(token);
+    }
+    line.addEventListener("scroll", () => markOverflowX(line), {
+      passive: true,
+    });
+    contractLines.observe(line);
+    list.append(term, line);
+  };
+  if (detail?.parameters) {
+    row(
+      "In",
+      detail.parameters.length
+        ? detail.parameters.map((p) => [
+            p.name + (p.optional ? "?" : ""),
+            [p.type, p.default != null ? "= " + p.default : ""]
+              .filter(Boolean)
+              .join(" "),
+          ])
+        : [["", "No parameters"]],
+    );
+    if (detail.returns || detail.returnDescription)
+      row("Out", [[detail.returns || "", detail.returnDescription || ""]]);
+  } else if (detail?.fields?.length) {
+    row(
+      "Fields",
+      detail.fields.map((f) => [f.name + (f.optional ? "?" : ""), f.type || ""]),
+    );
+  }
+}
 function renderSelection() {
   const side =
     reviewContext().sha === baseRef && baseRef !== headRef ? "before" : "after";
@@ -1621,42 +1661,7 @@ function renderSelection() {
     .querySelectorAll(".contract-line")
     .forEach((line) => contractLines.unobserve(line));
   contract.replaceChildren();
-  // Each contract row is one line of name/type tokens that scrolls sideways.
-  const row = (kind, tokens) => {
-    const term = element("dt"),
-      line = element("dd", "contract-line");
-    term.append(interfaceIcon(kind));
-    for (const [name, type] of tokens) {
-      const token = element("span", "contract-token");
-      if (name) token.append(element("b", "", name));
-      if (type) token.append(element("span", "", type));
-      line.append(token);
-    }
-    line.addEventListener("scroll", () => markOverflowX(line), {
-      passive: true,
-    });
-    contractLines.observe(line);
-    contract.append(term, line);
-  };
-  // Peek shows declared types only; Details labels every missing annotation explicitly.
-  if (detail?.parameters) {
-    row(
-      "In",
-      detail.parameters.length
-        ? detail.parameters.map((p) => [
-            p.name + (p.optional ? "?" : ""),
-            p.type || "",
-          ])
-        : [["", "No parameters"]],
-    );
-    if (detail.returns || detail.returnDescription)
-      row("Out", [[detail.returns || "", detail.returnDescription || ""]]);
-  } else if (detail?.fields?.length) {
-    row(
-      "Fields",
-      detail.fields.map((f) => [f.name + (f.optional ? "?" : ""), f.type || ""]),
-    );
-  }
+  fillContract(contract, detail);
   contract.hidden = !contract.children.length;
   requestAnimationFrame(() => {
     markOverflow(summaryText);
@@ -1750,7 +1755,7 @@ for (const id of ["#selectionSummary"])
   });
 /** Displays revision-specific module or symbol documentation and explicit declaration metadata. Description, signature and arguments are readable directly in the expanded sheet. */
 function metadataCard() {
-  const box = element("section", "code-metadata p-section");
+  const box = element("section", "code-metadata");
   const useBefore = reviewContext().sha === baseRef && baseRef !== headRef;
   const module = sourceData?.details?.[useBefore ? "before" : "after"];
   const info =
@@ -1771,65 +1776,26 @@ function metadataCard() {
       "metadata-muted p-section",
       "No declaration documentation at this revision.",
     );
-  // The panel header already names the selection, so no title; a file's description is
-  // plain text rather than a card.
-  if (selected?.kind !== "symbol") box.classList.add("is-module");
-  if (info.signature) box.append(element("pre", "signature", info.signature));
+  // The expanded twin of the peek summary: the whole description and the same In/Out lines,
+  // without cards. The header names the selection and the In line carries the signature.
   if (info.description)
     box.append(element("p", "code-description", info.description));
-  // Arguments add to the signature only where they say more: a type or a description.
-  // Defaults already show in the signature itself.
-  const contract = element("section", "contract-details");
-  const telling = (info.parameters || []).filter(
-    (param) => param.type || param.description,
-  );
-  if (telling.length) {
+  const lines = element("dl", "contract-lines");
+  fillContract(lines, info);
+  if (lines.children.length) {
+    box.append(lines);
+    requestAnimationFrame(() =>
+      lines.querySelectorAll(".contract-line").forEach(markOverflowX),
+    );
+  }
+  // Parameter notes only where the code documents them.
+  const notes = (info.parameters || []).filter((param) => param.description);
+  if (notes.length) {
     const list = element("dl", "metadata-parameters");
-    for (const param of telling) {
-      list.append(element("dt", "", param.name + (param.optional ? "?" : "")));
-      list.append(
-        element(
-          "dd",
-          "",
-          [
-            param.type,
-            param.default != null ? "default " + param.default : "",
-            param.description,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        ),
-      );
-    }
-    contract.append(list);
+    for (const param of notes)
+      list.append(element("dt", "", param.name), element("dd", "", param.description));
+    box.append(list);
   }
-  if (info.returns || info.returnDescription)
-    contract.append(
-      element(
-        "p",
-        "metadata-return",
-        "Returns " +
-          [info.returns, info.returnDescription].filter(Boolean).join(" · "),
-      ),
-    );
-  if (info.fields?.length) {
-    contract.append(
-      element(
-        "p",
-        "",
-        "Fields: " +
-          info.fields
-            .map(
-              (field) =>
-                field.name +
-                (field.optional ? "?" : "") +
-                (field.type ? ": " + field.type : ""),
-            )
-            .join("; "),
-      ),
-    );
-  }
-  if (contract.children.length) box.append(contract);
   // Where the description came from matters only for a file's own documentation.
   const source = [
     selected?.kind === "symbol" ? "" : info.provenance,
