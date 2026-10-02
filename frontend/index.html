@@ -23,7 +23,7 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <title>Repo Strata</title>
+    <title>Peekumi</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <script type="module" src="/pwa.js"></script>
@@ -34,7 +34,8 @@
   <body>
     <div id="connect" class="connect" hidden>
       <section class="connect-card">
-        <h1>Repo strata</h1>
+        <span id="connectMark"></span>
+        <h1>Peekumi</h1>
         <p>
           Open your private access link to explore the repository, or enter its
           access token.
@@ -54,7 +55,7 @@
     <div class="app" id="workspace">
       <header class="top">
         <div class="title-block">
-          <h1 class="repo" id="repo-name">Repo strata</h1>
+          <h1 class="repo" id="repo-name">Peekumi</h1>
           <span class="sub" id="repo-sub">Connecting to your repository…</span>
           <details id="revisionDetails" class="revision-details">
             <summary
@@ -111,7 +112,7 @@
               <div id="commitHead"></div>
               <div id="commitBar"></div>
               <p class="read-note">
-                Strata compares committed Git objects. Uncommitted work is not
+                Peekumi compares committed Git objects. Uncommitted work is not
                 included, and the checkout is never switched.
               </p>
             </div>

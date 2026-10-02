@@ -9,4 +9,5 @@ This directory records Strata's product scope, architecture, validation results 
 - `RELATIONSHIPS.md`: supported static relationships, dependency rule configuration and analysis limits.
 - `WORKFLOW.md`: comments, runs, reporting, verification and operational boundaries.
 - `VALIDATION.md`: recorded test and benchmark evidence.
+- `brand/`: the Peek mascot and Peekumi app icon artwork, with colours and usage.
 - `context/`: the original specification and visual prototype archive.

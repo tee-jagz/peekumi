@@ -10,6 +10,7 @@ The browser interface lets you explore repository structure, compare commits, fo
 - `canvas.js`: SVG pan, pinch, zoom and card positioning.
 - `select.js`: frosted menus in place of native select popups. Each `<select>` stays in the DOM as the value and change-event source; a button and listbox mirror it, with arrow, Home/End, Enter and Escape keys.
 - `text.js`: safe Markdown rendering (paragraphs, lists, code, bold, italic) for answers, instructions and agent reports; builds DOM nodes and never parses HTML.
+- `peek.js`: Peek, the mascot, as an inline SVG whose state (idle, loading, thinking, success, error, empty) is animated by CSS; decorative and still under reduced motion.
 - `index.html` and `style.css`: page structure and responsive appearance.
 
 The phone sheet expands from a compact selection summary to half or full height using pointer or keyboard controls. Details, Source, Changes, Relations and Discussion are direct views, while the Ask/Instruction composer remains independent at the bottom. The dock follows the visual viewport when a phone keyboard opens. A single SVG graph remains the navigation surface; commit mini cards appear only in Time mode. The review sheet is frosted glass over the background gradient, and its buttons, tabs, rows and inputs are frosted with it; text inputs stay more opaque for legibility (native select popups follow the browser).

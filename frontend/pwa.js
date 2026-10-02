@@ -1,4 +1,5 @@
 /** @module Installable app shell with explicit updates and no offline repository storage. */
+import { peek } from "./peek.js";
 const notice = document.createElement("div");
 notice.className = "pwa-notice";
 notice.hidden = true;
@@ -6,10 +7,18 @@ notice.setAttribute("role", "status");
 document.body.append(notice);
 function connectivity() {
   if (!navigator.onLine) {
-    notice.textContent =
-      "Offline · reconnect to your Strata server to inspect code.";
+    notice.replaceChildren(
+      peek("error"),
+      document.createTextNode(
+        "Offline · reconnect to your Peekumi server to inspect code.",
+      ),
+    );
+    notice.classList.add("is-offline");
     notice.hidden = false;
-  } else notice.hidden = true;
+  } else {
+    notice.classList.remove("is-offline");
+    notice.hidden = true;
+  }
 }
 window.addEventListener("offline", connectivity);
 window.addEventListener("online", connectivity);

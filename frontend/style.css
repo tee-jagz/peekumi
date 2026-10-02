@@ -1667,7 +1667,12 @@ button {
   line-height: 1.5;
 }
 .map-empty {
-  padding: 30px 20px;
+  /* Above the folder or file card it sits in, which is drawn after it. */
+  z-index: 2;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 12px 20px;
+  text-align: center;
   font-size: 13px;
   color: var(--muted);
   line-height: 1.7;
@@ -4751,4 +4756,220 @@ details.p-section[open] > summary::before {
   flex: none;
   width: 40px;
   height: 40px;
+}
+
+/* Peek, the mascot (peek.js): small, decorative and only where a state needs a face.
+   Each state is one class; reduced motion holds it still. */
+.peek-mark {
+  display: inline-block;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  vertical-align: middle;
+}
+.peek {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.peek:not(.tiled) .tile {
+  display: none;
+}
+.peek .head,
+.peek .pupil,
+.peek .lid,
+.peek .dots circle,
+.peek .sparkle path {
+  transform-box: fill-box;
+}
+.peek .lid {
+  transform-origin: 50% 0;
+  transform: scaleY(0);
+}
+.peek .head {
+  transform-origin: 50% 100%;
+}
+.peek .squint,
+.peek .dots,
+.peek .sparkle {
+  opacity: 0;
+}
+.peek.is-idle .lid {
+  animation: peek-blink 4.6s infinite;
+}
+.peek.is-idle .pupil {
+  animation: peek-glance 7s ease-in-out infinite;
+}
+.peek.is-loading .head {
+  animation: peek-bob 1.8s ease-in-out infinite;
+}
+.peek.is-loading .pupil {
+  animation: peek-scan 1.8s ease-in-out infinite;
+}
+.peek.is-thinking .pupil {
+  transform: translate(3px, -7px);
+}
+.peek.is-thinking .lid {
+  transform: scaleY(0.18);
+}
+.peek.is-thinking .dots {
+  opacity: 1;
+}
+.peek.is-thinking .dots circle {
+  transform-origin: 50% 50%;
+  animation: peek-dot 1.4s ease-in-out infinite;
+  opacity: 0.25;
+}
+.peek.is-thinking .dots circle:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.peek.is-thinking .dots circle:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.peek.is-success .open {
+  opacity: 0;
+}
+.peek.is-success .squint,
+.peek.is-success .sparkle {
+  opacity: 1;
+}
+.peek.is-success .head {
+  animation: peek-hop 2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+.peek.is-success .sparkle path {
+  transform-origin: 50% 50%;
+  animation: peek-twinkle 2s ease-in-out infinite;
+}
+.peek.is-success .sparkle path:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.peek.is-error .head {
+  transform: translateY(22px);
+}
+.peek.is-error .lid {
+  transform: scaleY(0.48);
+}
+.peek.is-error .pupil {
+  animation: peek-sway 4s ease-in-out infinite;
+}
+.peek.is-empty .head {
+  animation: peek-up 5s ease-in-out infinite;
+}
+.peek.is-empty .pupil {
+  animation: peek-look 5s ease-in-out infinite;
+}
+@keyframes peek-blink {
+  0%, 90%, 100% { transform: scaleY(0); }
+  94% { transform: scaleY(1); }
+}
+@keyframes peek-glance {
+  0%, 38%, 100% { transform: translate(0, 0); }
+  46%, 60% { transform: translate(-10px, 2px); }
+  70%, 86% { transform: translate(2px, -2px); }
+}
+@keyframes peek-bob {
+  0%, 100% { transform: translateY(7px); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes peek-scan {
+  0%, 100% { transform: translateX(-10px); }
+  50% { transform: translateX(3px); }
+}
+@keyframes peek-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+@keyframes peek-hop {
+  0%, 55%, 100% { transform: translateY(0); }
+  20% { transform: translateY(-14px) scaleY(1.03); }
+  38% { transform: translateY(0) scaleY(0.96); }
+}
+@keyframes peek-twinkle {
+  0%, 100% { transform: scale(0.4); opacity: 0.2; }
+  25% { transform: scale(1); opacity: 1; }
+  55% { transform: scale(0.5); opacity: 0.3; }
+}
+@keyframes peek-sway {
+  0%, 100% { transform: translate(-6px, 4px); }
+  50% { transform: translate(2px, 5px); }
+}
+@keyframes peek-up {
+  0%, 8% { transform: translateY(64px); }
+  22%, 78% { transform: translateY(0); }
+  92%, 100% { transform: translateY(64px); }
+}
+@keyframes peek-look {
+  0%, 26% { transform: translate(0, 0); }
+  36%, 46% { transform: translate(-10px, 1px); }
+  56%, 66% { transform: translate(4px, 0); }
+  76%, 100% { transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .peek * {
+    animation: none !important;
+  }
+}
+/* Sizes per context. */
+.connect-mark {
+  width: 72px;
+  height: 72px;
+  margin: -8px 0 4px -8px;
+}
+.loading-message .peek-mark {
+  width: 76px;
+  height: 76px;
+}
+.map-empty .peek-mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 6px;
+}
+.empty .peek-mark {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+}
+.ask-message.is-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ask-message .peek-mark {
+  width: 30px;
+  height: 30px;
+}
+.apply-step .workflow-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.apply-step .peek-mark {
+  width: 38px;
+  height: 38px;
+  margin: -6px 0;
+}
+.notice.error,
+.pwa-notice.is-offline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notice[hidden],
+.pwa-notice[hidden] {
+  display: none;
+}
+.notice .peek-mark,
+.pwa-notice .peek-mark {
+  width: 26px;
+  height: 26px;
+}
+.loading-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }

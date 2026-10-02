@@ -106,7 +106,7 @@ export function createServer(
       const bearer = request.headers.authorization?.replace(/^Bearer /, "");
       if (!(sessions.get(session) > Date.now()) && !equal(bearer, token))
         return await send(401, {
-          error: "Connect with the access link printed by Strata",
+          error: "Connect with the access link printed by Peekumi",
         });
       if (request.method !== "GET")
         return await send(405, { error: "Read-only API" });
@@ -196,7 +196,7 @@ async function main() {
   });
   server.listen(port, host, () => {
     console.log(
-      `Repo Strata · ${repo.directory}\nOpen: http://${host.includes(":") ? `[${host}]` : host}:${port}/#token=${token}\nRead-only Git inspection. Ctrl+C to stop.`,
+      `Peekumi · ${repo.directory}\nOpen: http://${host.includes(":") ? `[${host}]` : host}:${port}/#token=${token}\nRead-only Git inspection. Ctrl+C to stop.`,
     );
   });
 }

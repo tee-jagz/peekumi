@@ -3,6 +3,7 @@ import { createAsk } from "./ask.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
+import { peek } from "./peek.js";
 import {
   statusIcon,
   interfaceIcon,
@@ -40,6 +41,7 @@ const button = (className, text, action) => {
 for (const node of document.querySelectorAll("[data-glyph]"))
   node.prepend(glyph(node.dataset.glyph));
 frostSelects();
+$("#connectMark").replaceWith(peek("idle", { className: "connect-mark" }));
 const labels = {
   added: "Added",
   changed: "Modified",
@@ -206,7 +208,11 @@ const ask = createAsk({
 });
 /** Updates the status banner and distinguishes ordinary progress from errors. */
 function showNotice(message, error = false) {
-  $("#notice").textContent = message;
+  // Errors get Peek's sunken face; progress notices stay plain text.
+  $("#notice").replaceChildren(
+    ...(error && message ? [peek("error")] : []),
+    document.createTextNode(message),
+  );
   $("#notice").classList.toggle("error", error);
   $("#notice").hidden = !message;
 }
@@ -220,7 +226,7 @@ async function api(route, options = {}) {
     response = await fetch(route, { ...options, headers });
   } catch {
     throw new Error(
-      "Cannot reach Strata. Check that the server is running and your phone is connected to its network or Tailscale.",
+      "Cannot reach Peekumi. Check that the server is running and your phone is connected to its network or Tailscale.",
     );
   }
   const result = await response.json();
@@ -289,7 +295,7 @@ async function boot(refresh = false, branch = viewingBranch) {
     $("#connect").hidden = true;
     $("#workspace").inert = false;
     $("#repo-name").textContent = metadata.name;
-    document.title = metadata.name + " · Repo strata";
+    document.title = metadata.name + " · Peekumi";
     $("#repo-sub").textContent =
       `${metadata.branch} · ${metadata.commits.length} recent commits`;
     headRef = refresh ? metadata.initialHead : headRef || metadata.initialHead;
@@ -457,10 +463,14 @@ async function loadComparison() {
   sourceData = null;
   $("#refresh").disabled = true;
   showNotice("Loading this comparison…");
-  if (!comparison)
-    $("#deck").replaceChildren(
-      element("div", "loading-message", "Reading repository structure…"),
+  if (!comparison) {
+    const waiting = element("div", "loading-message");
+    waiting.append(
+      peek("loading"),
+      element("span", "", "Reading repository structure…"),
     );
+    $("#deck").replaceChildren(waiting);
+  }
   try {
     const key = baseRef + ":" + headRef;
     let data = comparisons.get(key);
@@ -715,6 +725,7 @@ function renderGraph(body) {
     y += Math.ceil(list.length / cols) * 46 + 20;
   }
   if (!root) stubRow(incoming, "Depended on by");
+  let emptyTop = null;
   const boundaryTop = y;
   if (scope.kind === "file") {
     positions.set("boundary", {
@@ -774,7 +785,12 @@ function renderGraph(body) {
         h,
       }),
     );
-    y += Math.max(1, Math.ceil(current.length / cols)) * (h + gap) + 10;
+    // An empty level keeps its message inside the folder or file card, not below it.
+    if (current.length) y += Math.ceil(current.length / cols) * (h + gap) + 10;
+    else {
+      emptyTop = y;
+      y += 150;
+    }
     if (scope.kind === "file") positions.get("boundary").h = y - boundaryTop;
   }
   if (!current.length) {
@@ -789,10 +805,17 @@ function renderGraph(body) {
             ? "No extracted symbols. Open Source to inspect the complete file."
             : "No items in this revision.",
     );
-    message.style.position = "absolute";
-    message.style.top = y + "px";
+    message.prepend(
+      peek(scope.kind === "file" && !sourceData ? "loading" : "empty"),
+    );
+    Object.assign(message.style, {
+      position: "absolute",
+      top: (emptyTop ?? y) + "px",
+      left: "16px",
+      width: graphWidth - 32 + "px",
+    });
     canvas.append(message);
-    y += 65;
+    if (emptyTop === null) y += 135;
   }
   if (!root) {
     y += 25;

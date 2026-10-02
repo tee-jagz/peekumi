@@ -9,7 +9,7 @@ Strata keeps its existing map and review workflow. One private server can inspec
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | sh
 ```
 
 The installer picks the release archive for your system, verifies its SHA-256 checksum, installs it to `~/.local/lib/strata` and links `strata` into `~/.local/bin`. If the checksum does not match, nothing is installed. Each archive carries the server, the interface, its own Node runtime, TypeScript and the parser helpers, so you do not need Node, Rust or a compiler.
@@ -35,7 +35,7 @@ The installer reads these optional variables:
 | `STRATA_ARCHIVE` | Install a local archive instead of downloading; its `.sha256` file must sit beside it |
 | `GITHUB_TOKEN` | Download from a private repository |
 
-For example: `curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | STRATA_VERSION=v0.2.0 sh`. If `~/.local/bin` is not on your PATH, the installer prints the line to add.
+For example: `curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | STRATA_VERSION=v0.2.0 sh`. If `~/.local/bin` is not on your PATH, the installer prints the line to add.
 
 ### From source
 

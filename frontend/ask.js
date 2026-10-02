@@ -1,6 +1,7 @@
 /** @module Contextual, non-executing review conversations and explicit draft suggestions. */
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
+import { peek } from "./peek.js";
 export function createAsk({ api, context, redraw, notice, makeDraft }) {
   const conversations = new Map();
   let selectedContext = null;
@@ -122,7 +123,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         const waiting = el("article");
         waiting.className = "ask-message from-assistant is-pending";
         waiting.setAttribute("aria-live", "polite");
-        waiting.append(el("span", "Reading the code"));
+        waiting.append(peek("thinking"), el("span", "Reading the code"));
         thread.append(waiting);
       }
       body.append(thread);

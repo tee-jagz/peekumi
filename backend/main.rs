@@ -247,6 +247,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
         "/select.js" => Some(("text/javascript", include_bytes!("../frontend/select.js"))),
         "/text.js" => Some(("text/javascript", include_bytes!("../frontend/text.js"))),
+        "/peek.js" => Some(("text/javascript", include_bytes!("../frontend/peek.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -366,6 +367,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/canvas.js",
             "/select.js",
             "/text.js",
+            "/peek.js",
             "/style.css",
             "/pwa.js",
             "/manifest.webmanifest",
@@ -476,7 +478,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     let Some(role) = role else {
         return error(
             StatusCode::UNAUTHORIZED,
-            "Connect with the access link printed by Strata",
+            "Connect with the access link printed by Peekumi",
             gzip,
         )
         .await;
@@ -874,7 +876,7 @@ async fn main() -> Result<()> {
     let address = listener.local_addr()?;
     let _ = LOCAL_ORIGIN.set(loopback_origin(address));
     println!(
-        "Repo Strata · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
+        "Peekumi · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
         json!({"port":address.port()})
     );
     let fleet = Arc::new(Fleet {

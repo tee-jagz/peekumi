@@ -10,6 +10,7 @@ const SHELL = [
   "/canvas.js",
   "/select.js",
   "/text.js",
+  "/peek.js",
   "/style.css",
   "/pwa.js",
   "/manifest.webmanifest",

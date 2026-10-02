@@ -1,5 +1,5 @@
 
-<svg viewBox="20 42 160 160" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
 <defs>
  <radialGradient id="tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
  <radialGradient id="dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
@@ -11,7 +11,7 @@
  <clipPath id="horizon"><rect x="0" y="0" width="200" height="127"/></clipPath>
  <clipPath id="eyeclip"><circle cx="100" cy="94" r="22"/></clipPath>
 </defs>
-
+<rect width="200" height="200" fill="url(#tile)"/><g transform="translate(14 -0.5) scale(.86)">
 <g clip-path="url(#horizon)">
  <g>
   <circle cx="100" cy="122" r="60" fill="url(#dome)"/>
@@ -38,4 +38,4 @@
 <rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#ffffff" opacity=".25"/>
 
 
-</svg>
+</g></svg>
