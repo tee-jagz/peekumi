@@ -199,9 +199,8 @@ const ask = createAsk({
       body: JSON.stringify(draft),
     });
     await workflow.refresh(false);
-    tab = "comments";
     primaryTab = "comments";
-    expandSheet();
+    showDiscussion();
     renderPanel();
   },
 });
@@ -438,7 +437,7 @@ $("#prPicker").onchange = async (event) => {
         ),
       );
     $("#prFeedback").textContent =
-      "PR comparison · merge base → head. Comments here remain local; publish on GitHub explicitly.";
+      "PR comparison · merge base → head. Instructions here stay local; nothing is published to GitHub.";
   } catch (e) {
     $("#prFeedback").textContent = e.message;
   } finally {
@@ -1257,17 +1256,17 @@ function renderPanel() {
   $("#panel").dataset.selection = String(!!selected);
   renderCommits();
   renderSelection();
-  document
-    .querySelectorAll("button[data-tab]")
-    .forEach((b) =>
-      b.setAttribute("aria-pressed", String(b.dataset.tab === tab)),
-    );
-  document
-    .querySelectorAll("[data-compose]")
-    .forEach((b) =>
-      b.setAttribute("aria-selected", String(b.dataset.compose === primaryTab)),
-    );
   renderTab();
+}
+/** True while the panel shows the conversation that belongs to the dock: Ask, or comments here. */
+function discussing() {
+  return tab === "ask" || (tab === "comments" && workflow.scoped());
+}
+/** Shows the dock's conversation for the current selection: the Ask thread or its comments. */
+function showDiscussion() {
+  tab = primaryTab === "ask" ? "ask" : "comments";
+  if (tab === "comments") workflow.scope("here");
+  expandSheet();
 }
 /** Builds commit history controls and the base-revision picker from the loaded repository history. */
 function renderCommits() {
@@ -1902,14 +1901,35 @@ function listRow(node, detail, action) {
 }
 /** Renders the scoped change inventory, source view or dependency list for the active review tab. */
 function renderTab() {
-  $("#panel").dataset.view = tab;
+  // Comments on the selection keep the selection's header and tools; Tasks takes the panel.
+  $("#panel").dataset.view =
+    tab === "comments" && workflow.scoped() ? "discussion" : tab;
+  document
+    .querySelectorAll("button[data-tab]")
+    .forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.tab === tab)),
+    );
+  $("#showDiscussion").setAttribute("aria-pressed", String(discussing()));
+  document
+    .querySelectorAll("[data-compose]")
+    .forEach((b) =>
+      b.setAttribute("aria-selected", String(b.dataset.compose === primaryTab)),
+    );
   const body = $("#tabBody");
   body.replaceChildren();
   const composerHost = $("#composerHost");
+  // Redraws replace the composer; keep focus and the caret so the keyboard stays open.
+  const typing = document.activeElement?.closest?.("#composerHost textarea");
+  const caret = typing && [typing.selectionStart, typing.selectionEnd];
   composerHost.replaceChildren();
   const conversation = element("div", "conversation");
   if (primaryTab === "ask") ask.render(conversation, composerHost);
   else workflow.renderComposer(composerHost);
+  if (caret) {
+    const input = composerHost.querySelector("textarea");
+    input?.focus({ preventScroll: true });
+    input?.setSelectionRange(...caret);
+  }
   const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
   $("#dockContext").replaceChildren(
     ...(anchor ? [glyph("pin"), document.createTextNode(anchor)] : []),
@@ -2467,6 +2487,8 @@ document.querySelectorAll("[data-compose]").forEach(
     (b.onclick = () => {
       primaryTab = b.dataset.compose;
       if (primaryTab === "ask") ask.open();
+      // The conversation on screen follows the dock, so Ask never shows under a comment draft.
+      if (discussing()) showDiscussion();
       if (comparison) renderPanel();
       $("#composerHost textarea")?.focus({ preventScroll: true });
     }),
@@ -2474,13 +2496,13 @@ document.querySelectorAll("[data-compose]").forEach(
 $("#openTasks").onclick = () => {
   tab = "comments";
   primaryTab = "comments";
+  workflow.scope("all");
   expandSheet();
   renderPanel();
   workflow.refresh();
 };
 $("#showDiscussion").onclick = () => {
-  tab = primaryTab;
-  expandSheet();
+  showDiscussion();
   renderPanel();
 };
 let sheetPointer = null,

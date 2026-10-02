@@ -16,13 +16,12 @@ if (values.includes("--tools")) {
   const input = JSON.parse(task);
   if (!input.repositoryContext || !input.question)
     throw Error("Missing grounded context");
-  console.log(
-    JSON.stringify({
-      is_error: false,
-      result:
-        "The supplied comparison shows the selected module. I have not run tests.\nSuggested comment: Add a focused regression test for this behavior.",
-    }),
-  );
+  // Echoing lets tests inspect exactly what context the server supplied.
+  const result =
+    input.question === "Echo the context."
+      ? JSON.stringify(input.repositoryContext.source)
+      : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
+  console.log(JSON.stringify({ is_error: false, result }));
   process.exit(0);
 }
 let command, args;

@@ -196,6 +196,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/workflow.js" => Some(("text/javascript", include_bytes!("../frontend/workflow.js"))),
         "/canvas.js" => Some(("text/javascript", include_bytes!("../frontend/canvas.js"))),
         "/select.js" => Some(("text/javascript", include_bytes!("../frontend/select.js"))),
+        "/text.js" => Some(("text/javascript", include_bytes!("../frontend/text.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -314,6 +315,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/workflow.js",
             "/canvas.js",
             "/select.js",
+            "/text.js",
             "/style.css",
             "/pwa.js",
             "/manifest.webmanifest",

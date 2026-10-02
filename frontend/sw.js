@@ -9,6 +9,7 @@ const SHELL = [
   "/workflow.js",
   "/canvas.js",
   "/select.js",
+  "/text.js",
   "/style.css",
   "/pwa.js",
   "/manifest.webmanifest",

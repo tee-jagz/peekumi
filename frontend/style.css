@@ -4496,3 +4496,220 @@ details.p-section[open] > summary::before {
   width: 16px;
   height: 16px;
 }
+
+/* Ask and comments-here: a light conversation under the selection, newest at the bottom. */
+.ask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ask-head .read-note {
+  margin: 0;
+  min-width: 0;
+}
+.ask-head .btn {
+  flex: none;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.ask-empty {
+  padding: 4px 0;
+  margin: 0;
+}
+.ask-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ask-message {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.ask-message.from-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 9px 13px;
+  border-radius: 16px 16px 4px 16px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--field-glass));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ask-message.from-assistant {
+  padding: 11px 13px;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--el-glass);
+  border: 1px solid var(--el-line);
+  box-shadow: var(--el-shadow);
+}
+.ask-text p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.ask-text p + p {
+  margin-top: 8px;
+}
+.ask-text code {
+  font: 12.5px var(--mono);
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.ask-message .read-note {
+  margin: 8px 0 0;
+}
+.ask-suggestion {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--el-line);
+}
+.ask-suggestion > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ask-suggestion .workflow-text {
+  margin: 4px 0 8px;
+}
+.ask-suggestion .btn {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.ask-message.is-pending {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ask-message.is-pending span::after {
+  content: "…";
+  display: inline-block;
+  animation: ask-wait 1.2s ease-in-out infinite;
+}
+@keyframes ask-wait {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ask-message.is-pending span::after {
+    animation: none;
+  }
+}
+
+/* Markdown from answers, instructions and agent reports (text.js). */
+.md {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.md > * {
+  margin: 0;
+}
+.md > * + * {
+  margin-top: 8px;
+}
+.md .md-heading {
+  font-weight: 650;
+}
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+.md li + li {
+  margin-top: 4px;
+}
+.md code {
+  font: 0.9em var(--mono);
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.md pre {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font: 12px/1.5 var(--mono);
+}
+.md pre code {
+  padding: 0;
+  background: none;
+}
+.ask-message,
+.task-preview {
+  scroll-margin-top: 8px;
+}
+
+/* Instruction cards: the anchor reads as a link and the state as quiet text, on one line. */
+.workflow-card .cm-top {
+  align-items: baseline;
+  flex-wrap: nowrap;
+}
+.panel .workflow-card .cm-top .link-button {
+  min-height: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+.card-state {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.card-state[data-state="with_agent"] {
+  color: var(--accent);
+}
+.card-state[data-state="addressed"],
+.card-state[data-state="verified"] {
+  color: var(--add);
+}
+.card-state[data-state="flagged"],
+.card-state[data-state="unreported"] {
+  color: var(--del);
+}
+.workflow-card > .workflow-text {
+  margin: 10px 0 6px;
+  font-size: 14px;
+}
+
+/* Disclosure rows: one compact frosted row with a chevron, content padded inside. */
+.panel details.workflow-evidence {
+  margin: 10px 0;
+  padding: 0;
+  border: 1px solid var(--el-line);
+  border-radius: 12px;
+}
+.panel .workflow-evidence > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.panel .workflow-evidence > summary::-webkit-details-marker {
+  display: none;
+}
+.panel .workflow-evidence > summary::after {
+  content: "›";
+  margin-left: auto;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+.panel .workflow-evidence[open] > summary::after {
+  transform: rotate(90deg);
+}
+.panel .workflow-evidence > :not(summary) {
+  margin: 0 14px 12px;
+}
+.panel .workflow-evidence > details.workflow-evidence {
+  margin: 0 10px 10px;
+}

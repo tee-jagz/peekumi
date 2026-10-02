@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, chmod, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, chmod, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { command } from "./reference/engine.mjs";
@@ -137,11 +137,12 @@ test("anchored drafts, immutable previews, scoped MCP reports, verification and 
     (
       await req(
         "/api/comments/" + a.id,
-        { action: "verify", version: addressed.version, note: "" },
+        { action: "verify", version: addressed.version, note: "x".repeat(12001) },
         "PATCH",
       )
     ).status,
     400,
+    "An oversized review note is rejected",
   );
   const verified = await req(
     "/api/comments/" + a.id,
@@ -317,6 +318,36 @@ test("Ask receives committed context without tools and never automatically creat
     ).status,
     400,
   );
+});
+
+test("Ask about a folder reads its README, declarations and changed code, not only file names", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  await mkdir(path.join(f.dir, "lib"));
+  await writeFile(path.join(f.dir, "lib/README.md"), "# Lib\n\nShared helpers for parsing.\n");
+  await writeFile(path.join(f.dir, "lib/util.py"), "def helper(x):\n    return x\n");
+  await writeFile(path.join(f.dir, "outside.py"), "def elsewhere():\n    return 0\n");
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Add lib");
+  const base = (await f.git("rev-parse", "HEAD")).toString().trim();
+  await writeFile(path.join(f.dir, "lib/util.py"), "def helper(x, strict=False):\n    return x\n");
+  await f.git("commit", "-am", "Tighten helper");
+  const head = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const result = await f.req("/api/ask", {
+    base,
+    head,
+    sha: head,
+    anchor: { kind: "folder", path: "lib" },
+    question: "Echo the context.",
+    history: [],
+  });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  const context = JSON.parse(result.answer.text);
+  assert.equal(context.readme.path, "lib/README.md");
+  assert.match(context.readme.text, /Shared helpers for parsing/);
+  assert.match(context.declarations, /function helper \(changed: signature\)/);
+  assert.match(context.patches, /--- lib\/util\.py[\s\S]*strict=False/);
+  assert.doesNotMatch(context.declarations, /elsewhere/, "Context stays within the folder");
 });
 
 test("branch inspection reads selected history without switching or changing the checkout", async (t) => {

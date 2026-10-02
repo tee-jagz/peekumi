@@ -1,21 +1,21 @@
-# Comments, runs and verification
+# Instructions, runs and verification
 
-Collect feedback while inspecting a repository, preview it as one task, then send it to an agent in a separate worktree. Agent reports return to the comments for owner review. The map, source viewer and dependency evidence remain the inspection surface.
+Collect feedback while inspecting a repository, preview it as one task, then send it to an agent in a separate worktree. Agent reports return to the instructions for owner review. The interface calls them instructions; the API, MCP tools and commit trailers keep the name `comment`. The map, source viewer and dependency evidence remain the inspection surface.
 
 ## Using the loop
 
-1. Select a folder, file, declaration or dependency and choose **Comment**. The Comments tab also supports a comment on the current scope. A draft stores its immutable Git SHA and anchor; navigation does not move a draft to another selection.
+1. Select a folder, file, declaration or dependency and choose **Instruction**. With nothing selected, the instruction applies to the current folder or repository. Saved drafts are listed under **Discussion** for that selection and under **Tasks**. A draft stores its immutable Git SHA and anchor; navigation does not move a draft to another selection.
 2. Edit or delete drafts freely. **Prepare run** selects the drafts, Codex or Claude Code, and an optional brief. **Preview task** shows the exact task, start SHA, new branch and committed dependency rules.
 3. **Dispatch run** consumes that saved preview. If the watched branch or any selected draft changed, make a new preview. Repeated dispatch of the same preview returns the original run. One active run is allowed per repository.
-4. Follow progress through **Comment → Discussion → View runs**. Inspect the agent output, original task and result commits. **Stop run** terminates the agent process group. A run is limited to one hour; logs retain the first MiB while further output is drained.
+4. Follow progress through **Tasks**. Inspect the agent output, original task and result commits. **Stop run** terminates the agent process group. A run is limited to one hour; logs retain the first MiB while further output is drained.
 5. **Review fix** opens the run's base-to-result comparison. Agent-reported check results are evidence supplied by the agent, not an independent test execution by Strata.
-6. **Verify** records your review note against that exact commit. **Reopen** returns addressed, flagged or unreported feedback to Draft with its earlier history preserved.
+6. **Verify** records your review against that exact commit, with an optional note. **Reopen** returns addressed, flagged or unreported feedback to Draft with its earlier history preserved.
 
 ## State and reporting
 
-Comments move through Draft → With agent → Addressed / Flagged / Unreported. Only the owner can turn Addressed into Verified. Finishing a process never verifies a comment. Unanswered comments become Unreported even when the agent exits successfully. Verification and reopening wait for the run to end.
+Instructions move through Draft → With agent → Addressed / Flagged / Unreported. Only the owner can turn Addressed into Verified. Finishing a process never verifies an instruction. Unanswered instructions become Unreported even when the agent exits successfully. Verification and reopening wait for the run to end.
 
-Draft edits use version checks to prevent silently overwriting another open phone or browser. Every transition appends an audit event with the previous text and report retained. The UI explicitly shows **current review status**, including when browsing an older commit. Anchors remain on their original revision; revision-relative comment state and rename continuity are not implemented yet.
+Draft edits use version checks to prevent silently overwriting another open phone or browser. Every transition appends an audit event with the previous text and report retained. The UI explicitly shows **current review status**, including when browsing an older commit. Anchors remain on their original revision; revision-relative instruction state and rename continuity are not implemented yet.
 
 The installed Strata binary doubles as a stdio MCP server. Each agent receives a credential scoped to its active run and these tools:
 
@@ -43,7 +43,7 @@ Authenticated owner writes require same-origin JSON. Untrusted repository text, 
 
 ## API
 
-- `POST /api/ask`: `{base, head, sha, anchor, question, history}`; returns an answer, optional suggested comment and context omissions.
+- `POST /api/ask`: `{base, head, sha, anchor, question, history}`; returns an answer, optional suggested instruction and context omissions. Folder and repository questions include the directory README, its declarations and changed-file diffs.
 - `GET /api/workflow`: comments, history, run summaries and watched ref.
 - `POST /api/comments`: `{anchor, sha, text}`.
 - `PATCH /api/comments/<id>`: `{action, version, text? , note?}`; actions `edit`, `delete`, `reopen`, `verify`.
@@ -60,8 +60,8 @@ The deterministic integration agent performs real Git commits and reports throug
 
 Automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE and automatic merges remain outside this slice. Dependency rules are included in every task; owners can explicitly ask the agent to propose changes to `.strata.json` through a draft.
 
-## Ask versus Comment
+## Ask versus Instruction
 
-**Ask** and **Comment** stay visible at the bottom edge, outside the scrolling review content, including source, diffs, dependencies and run results. The question or draft input stays directly below the mode switch with its anchor and revision visible. They use the selected item or current folder/repository scope; reopening an unfinished comment preserves its original anchor and text. Drag the sheet up for direct Details, Source, Changes, Relations and Discussion views. Commit mini cards appear above the graph only in Time mode; Diff uses base/head selectors. Comments capture instructions; **Comment → Discussion → View runs** holds preparation and progress. Ask is a contextual conversation using the installed, signed-in Claude Code client, with all tools, skills and extra MCP servers disabled. No provider call occurs until the owner submits a question. Source and comparison context, committed rules and scoped comments are bounded and any omissions are disclosed. Provider calls time out after 30 seconds.
+**Ask** and **Instruction** stay visible at the bottom edge, outside the scrolling review content, including source, diffs, dependencies and run results. The question or draft input stays directly below the mode switch with its anchor and revision visible. They use the selected item or current folder/repository scope; reopening an unfinished instruction preserves its original anchor and text. Drag the sheet up for direct Details, Source, Changes, Relations and Discussion views. Commit mini cards appear above the graph only in Time mode; Diff uses base/head selectors. **Discussion** shows the conversation that matches the box: Ask questions and answers, or the instructions on the selection. **Tasks** holds every draft, preparation and progress. Ask is a contextual conversation using the installed, signed-in Claude Code client, with all tools, skills and extra MCP servers disabled. No provider call occurs until the owner submits a question. Source and comparison context, committed rules and scoped instructions are bounded and any omissions are disclosed. Provider calls time out after 30 seconds.
 
-Ask history stays in the open browser page and is lost on reload; each selected revision/scope has a separate conversation. Responses arrive when complete, rather than token streaming. An answer can propose a comment, but only **Make draft comment** saves it, anchored to the original question's selection and viewed revision. Ask cannot verify comments or start runs. Pinned answers and automatic brief generation remain deferred.
+Ask history stays in the open browser page and is lost on reload; each selected revision/scope has a separate conversation. Responses arrive when complete, rather than token streaming. An answer can propose an instruction, but only **Save as draft instruction** saves it, anchored to the original question's selection and viewed revision. Ask cannot verify instructions or start runs. Pinned answers and automatic brief generation remain deferred.
