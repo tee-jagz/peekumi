@@ -246,7 +246,7 @@ try {
     ["#search", "2", "tr"],
     ["#changes .row", "3"],
   ]);
-  // 6. Comment draft and Tasks.
+  // 6. Instruction draft and Tasks.
   await height(page, "Home");
   await page.locator("#newComment").click();
   await page.locator("#composerHost textarea").fill("Document the momentum constants.");

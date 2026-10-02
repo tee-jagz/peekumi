@@ -10,9 +10,9 @@ Strata inspecting its own repository on a phone. Select a screenshot to view it 
 
 | Repository map | Time travel | Tasks |
 | --- | --- | --- |
-| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes, floating map controls and the Ask and Comment box">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Commit cards above the repository map in Time mode">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-tasks.png" width="260" alt="Tasks view with a draft comment ready to send to an agent">](docs/screenshots/mobile-tasks.png) |
+| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes, floating map controls and the Ask and Instruction box">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Commit cards above the repository map in Time mode">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-tasks.png" width="260" alt="Tasks view with a draft instruction ready to send to an agent">](docs/screenshots/mobile-tasks.png) |
 
-Explore the map, move through commits, and steer agents while keeping Ask and Comment within reach. **[The user guide](docs/USER-GUIDE.md) labels every control, view and icon with screenshots.**
+Explore the map, move through commits, and steer agents while keeping Ask and Instruction within reach. **[The user guide](docs/USER-GUIDE.md) labels every control, view and icon with screenshots.**
 
 ## Set up for everyday use
 
@@ -153,4 +153,4 @@ The Dependencies panel now distinguishes static imports, calls, implementations 
 
 ## Review and steer
 
-Use **Ask** to discuss a selection or **Comment** to capture an instruction. Runs live inside Comments. Use **Prepare run** to choose drafts and preview the exact task. Dispatch starts Codex or Claude Code in a dedicated worktree. Agent reports link commits and check evidence back to comments; **Review fix**, **Verify**, or **Reopen** completes the loop. See [the workflow guide](docs/WORKFLOW.md) for setup, persistence and boundaries.
+Use **Ask** to discuss a selection or **Instruction** to write one for an agent. Runs live in Tasks. Use **Prepare run** to choose drafts and preview the exact task. Dispatch starts Codex or Claude Code in a dedicated worktree. Agent reports link commits and check evidence back to instructions; **Review fix**, **Verify**, or **Reopen** completes the loop. See [the workflow guide](docs/WORKFLOW.md) for setup, persistence and boundaries.

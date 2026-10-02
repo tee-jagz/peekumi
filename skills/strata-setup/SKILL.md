@@ -3,7 +3,7 @@ name: strata-setup
 description: Install Repo Strata, register local repositories, and configure persistent private phone access. Use when someone asks their agent to set up or upgrade Strata.
 ---
 
-Preserve Strata's existing canvas, Ask/Comment and isolated agent-worktree workflow. Setup does not authorize editing inspected repositories or dispatching agents.
+Preserve Strata's existing canvas, Ask/Instruction and isolated agent-worktree workflow. Setup does not authorize editing inspected repositories or dispatching agents.
 
 Read `docs/SETUP.md` in the Strata distribution for the commands and platform requirements. Locate the distribution from the user's supplied path or installed `strata`; do not assume a checkout location.
 

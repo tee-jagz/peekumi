@@ -254,7 +254,12 @@ impl Workflow {
                         c["runId"] = Value::Null;
                     }
                     "verify" => { ensure!(c["status"] == "addressed", "Only addressed comments can be verified");
-                        c["verification"] = json!({"note":text(&body,"note",12000)?,"commit":c["report"]["commit"],"at":now(),"actor":"owner"});
+                        // The note is optional; a blank note is stored as null.
+                        let note = match body["note"].as_str().map(str::trim) {
+                            None | Some("") => Value::Null,
+                            Some(_) => json!(text(&body,"note",12000)?),
+                        };
+                        c["verification"] = json!({"note":note,"commit":c["report"]["commit"],"at":now(),"actor":"owner"});
                         c["status"] = json!("verified");
                     }
                     _ => bail!("Unknown comment action"),

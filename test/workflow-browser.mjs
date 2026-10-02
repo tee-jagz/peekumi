@@ -144,7 +144,7 @@ try {
         );
         await page.getByLabel("Your question").fill("");
       }
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page
         .getByLabel("What should change, and why")
         .fill("Make the implementation easier to review.");
@@ -156,10 +156,20 @@ try {
         await page.locator(".workflow-card[data-comment-id]").count(),
         1,
       );
-      assert.equal(await page.locator("#helperTools").isVisible(), false);
+      assert.equal(
+        await page.locator("#helperTools").isVisible(),
+        true,
+        "A saved instruction stays with its selection instead of jumping to Tasks",
+      );
+      assert.equal(
+        await page.locator("#showDiscussion").getAttribute("aria-pressed"),
+        "true",
+      );
       await page.screenshot({
         path: `test-results/workflow-comments-${viewport.width}.png`,
       });
+      await page.locator("#openTasks").click();
+      assert.equal(await page.locator("#helperTools").isVisible(), false);
       await page
         .getByRole("button", { name: "Review task · 1 draft", exact: true })
         .click();
@@ -194,7 +204,7 @@ try {
           .getByRole("button", { name: "Back to tasks", exact: true })
           .isVisible(),
       );
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       // Keeping diagnostics open must not freeze the terminal state or review actions.
       await page.locator(".diagnostics > summary").click();
       await page
@@ -267,13 +277,15 @@ try {
       await page
         .getByRole("button", { name: "Mark task reviewed", exact: true })
         .click();
-      await page
-        .getByLabel("Review note")
-        .fill("Inspected the result commit and the agent's reported checks.");
+      // The note is optional: the phone run confirms without one.
+      if (viewport.width > 600)
+        await page
+          .getByLabel("Review note")
+          .fill("Inspected the result commit and the agent's reported checks.");
       await page
         .getByRole("button", { name: "Confirm review", exact: true })
         .click();
-      await page.getByText("Reviewed by you:", { exact: false }).waitFor();
+      await page.getByText("Reviewed by you", { exact: false }).first().waitFor();
       await page
         .getByText("Reviewed · not applied to main", { exact: true })
         .waitFor();
@@ -295,7 +307,7 @@ try {
         await page.locator("#sheetHandle").click();
       await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
@@ -322,12 +334,12 @@ try {
         .getByRole("button", { name: "Send question", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "Make draft comment", exact: true })
+        .getByRole("button", { name: "Save as draft instruction", exact: true })
         .waitFor();
       const countBefore = (await f.req("/api/workflow")).comments.length;
       await page.screenshot({ path: `test-results/ask-${viewport.width}.png` });
       await page
-        .getByRole("button", { name: "Make draft comment", exact: true })
+        .getByRole("button", { name: "Save as draft instruction", exact: true })
         .click();
       await waitFor(
         async () =>
@@ -335,7 +347,7 @@ try {
       );
       assert.equal(
         await page
-          .getByRole("tab", { name: "Comment", exact: true })
+          .getByRole("tab", { name: "Instruction", exact: true })
           .getAttribute("aria-selected"),
         "true",
       );
@@ -377,7 +389,7 @@ try {
       await page.screenshot({
         path: `test-results/bottom-ask-${viewport.width}.png`,
       });
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
@@ -387,7 +399,7 @@ try {
         path: `test-results/bottom-comment-${viewport.width}.png`,
       });
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.getByRole("tab", { name: "Comment", exact: true }).click();
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page.locator("#openTasks").click();
       assert.equal(
         await page.getByLabel("What should change, and why").inputValue(),

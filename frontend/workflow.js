@@ -1,5 +1,6 @@
 /** @module Anchored drafts, exact task previews, run reports and human verification. */
 import { iconButton } from "./icons.js";
+import { richText } from "./text.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   n.className = cls || "";
@@ -15,6 +16,11 @@ const states = {
   unreported: "Needs retry",
 };
 const active = (r) => ["starting", "running", "interrupted"].includes(r.status);
+/** Short anchor for the one-line dock: file name plus declaration, never the full path. */
+const dockLabel = (a) =>
+  [a.path?.split("/").at(-1) || "Repository", a.symbol || a.target]
+    .filter(Boolean)
+    .join(" · ");
 const label = (a) =>
   a.symbol
     ? `${a.path} · ${a.symbol}`
@@ -166,7 +172,8 @@ export function createWorkflow({
     taskSource = null,
     taskPath = "",
     reviewing = false;
-  let filter = "scope",
+  // "here" lists comments on the current selection; "all" is the Tasks overview.
+  let filter = "all",
     verification = null,
     verificationNote = "";
   const write = (path, body, method = "POST") =>
@@ -217,7 +224,7 @@ export function createWorkflow({
         if (render === "poll")
           render =
             changed &&
-            ["comments", "runs"].includes(
+            ["comments", "runs", "discussion"].includes(
               document.querySelector("#panel")?.dataset.view,
             );
         if (render) {
@@ -313,6 +320,7 @@ export function createWorkflow({
       editing = null;
       draft = "";
     }
+    filter = "here";
     showTab("comments");
     document
       .querySelector("#composerHost textarea")
@@ -346,8 +354,8 @@ export function createWorkflow({
         el(
           "p",
           "composer-anchor",
-          (editing ? "Edit · " : "Comment · ") +
-            label(composer.anchor) +
+          (editing ? "Edit · " : "") +
+            dockLabel(composer.anchor) +
             " · " +
             composer.sha.slice(0, 7),
         ),
@@ -364,6 +372,8 @@ export function createWorkflow({
               "PATCH",
             );
           else await write("/api/comments", { ...composer, text: draft });
+          // A new comment stays with its selection; an edit stays in the list it came from.
+          if (!editing) filter = "here";
           composer = null;
           draft = "";
           editing = null;
@@ -393,7 +403,19 @@ export function createWorkflow({
     }
   }
   function comments(body, task = null) {
-    if (!task) {
+    const here = !task && filter === "here";
+    if (here) {
+      const top = el("div", "ask-head");
+      top.append(
+        el("p", "read-note", "Instructions here · drafts wait until you send them as a task"),
+        action("All tasks", () => {
+          filter = "all";
+          showTab("comments");
+        }),
+      );
+      body.append(top);
+    }
+    if (!task && !here) {
       body.append(el("h2", "task-heading", "Tasks"));
       const drafts = data.comments.filter((c) => c.status === "draft");
       if (drafts.length)
@@ -431,30 +453,47 @@ export function createWorkflow({
             task.comments.some((snapshot) => snapshot.id === c.id) &&
             c.status !== "deleted",
         )
-      : data.comments.filter((c) => c.status === "draft");
-    if (!items.length && !data.runs.some((r) => r.status !== "preview"))
+      : here
+        ? data.comments.filter(visible)
+        : data.comments.filter((c) => c.status === "draft");
+    if (here && !items.length)
       body.append(
         el(
           "p",
           "empty",
-          loaded ? "Add a comment below to start a task." : "Loading tasks…",
+          loaded
+            ? `No instructions for ${label(context().anchor)} yet. Write one below.`
+            : "Loading instructions…",
+        ),
+      );
+    else if (!here && !items.length && !data.runs.some((r) => r.status !== "preview"))
+      body.append(
+        el(
+          "p",
+          "empty",
+          loaded ? "Add an instruction below to start a task." : "Loading tasks…",
         ),
       );
     for (const state of Object.keys(states)) {
       const group = items.filter((c) => c.status === state);
       if (!group.length) continue;
-      if (!task) body.append(el("h3", "workflow-group", "Your draft comments"));
+      if (!task && !here)
+        body.append(el("h3", "workflow-group", "Your draft instructions"));
       for (const c of group) {
         const card = el("article", "workflow-card");
         card.dataset.commentId = c.id;
         const top = el("div", "cm-top");
-        top.append(
-          action(label(c.anchor), () => inspect(c.sha, c.sha, c.anchor)),
-          el("span", "pill", states[c.status]),
+        const anchor = action(label(c.anchor), () =>
+          inspect(c.sha, c.sha, c.anchor),
         );
+        anchor.classList.add("link-button");
+        anchor.title = "Open " + label(c.anchor);
+        const state = el("span", "card-state", states[c.status]);
+        state.dataset.state = c.status;
+        top.append(anchor, state);
         card.append(
           top,
-          el("p", "workflow-text", c.text),
+          richText(c.text, "workflow-text"),
           el(
             "p",
             "rd",
@@ -465,13 +504,13 @@ export function createWorkflow({
         if (report) {
           card.append(
             el("strong", "report-label", "Agent result"),
-            el("p", "workflow-text", report.note || report.reason),
+            richText(report.note || report.reason, "workflow-text"),
           );
           if (report.checks) {
             const d = el("details", "workflow-evidence");
             d.append(
               el("summary", "", "Agent-reported checks"),
-              el("p", "workflow-text", report.checks),
+              richText(report.checks, "workflow-text"),
             );
             card.append(d);
           }
@@ -481,7 +520,9 @@ export function createWorkflow({
             el(
               "p",
               "verification-note",
-              "Reviewed by you: " + c.verification.note,
+              c.verification.note
+                ? "Reviewed by you: " + c.verification.note
+                : "Reviewed by you",
             ),
           );
         const controls = el("div", "sel-acts"),
@@ -509,7 +550,7 @@ export function createWorkflow({
         if (["addressed", "flagged", "unreported"].includes(c.status) && !busy)
           controls.append(
             action(
-              c.status === "unreported" ? "Retry comment" : "Request changes",
+              c.status === "unreported" ? "Retry instruction" : "Request changes",
               () => transition(c, "reopen"),
             ),
           );
@@ -526,7 +567,7 @@ export function createWorkflow({
       el(
         "p",
         "read-note",
-        `The task starts from ${(data.watched || "main").replace("refs/heads/", "")}. Choose the comments to send; results return here for review.`,
+        `The task starts from ${(data.watched || "main").replace("refs/heads/", "")}. Choose the instructions to send; results return here for review.`,
       ),
     );
     const l = el("label", "workflow-field", "Agent"),
@@ -581,6 +622,12 @@ export function createWorkflow({
             brief,
           });
           redraw();
+          // The preview renders below the form; on a phone that is off screen, so show it.
+          requestAnimationFrame(() =>
+            document
+              .querySelector(".task-preview")
+              ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+          );
         },
         true,
       ),
@@ -596,13 +643,13 @@ export function createWorkflow({
         el(
           "p",
           "workflow-text",
-          `${preview.agent === "codex" ? "Codex" : "Claude Code"} will work on ${preview.comments.length} comment${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
+          `${preview.agent === "codex" ? "Codex" : "Claude Code"} will work on ${preview.comments.length} instruction${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
         ),
       );
       for (const c of preview.comments)
-        summary.append(el("p", "workflow-text", c.text));
+        summary.append(richText(c.text, "workflow-text"));
       if (preview.brief)
-        summary.append(el("p", "workflow-text", preview.brief));
+        summary.append(richText(preview.brief, "workflow-text"));
       const exact = el("details", "workflow-evidence");
       exact.dataset.key = "preview-diagnostics";
       exact.append(
@@ -630,7 +677,7 @@ export function createWorkflow({
       ...new Set((r.comments || []).map((c) => c.anchor.path || "Repository")),
     ];
     const scope = paths.length === 1 ? paths[0] : `${paths.length} locations`;
-    return `${r.comments?.length || 0} comment${r.comments?.length === 1 ? "" : "s"} · ${scope}`;
+    return `${r.comments?.length || 0} instruction${r.comments?.length === 1 ? "" : "s"} · ${scope}`;
   }
   function runStatus(r) {
     if (r.applied) return `Applied to ${r.targetBranch || "main"}`;
@@ -707,13 +754,13 @@ export function createWorkflow({
           "p",
           "workflow-text",
           progress.errors.join("\n") ||
-            "This task stopped before finishing. Review the updates, then retry any unanswered comments.",
+            "This task stopped before finishing. Review the updates, then retry any unanswered instructions.",
         ),
       );
     }
     const latest = progress.messages.at(-1);
     if (latest && active(r))
-      live.append(el("p", "workflow-text agent-message", latest));
+      live.append(richText(latest, "workflow-text agent-message"));
     if (r.status === "completed")
       live.append(
         el(
@@ -824,10 +871,10 @@ export function createWorkflow({
           el(
             "p",
             "read-note",
-            "Records your review of all ready comments. This does not apply or deploy changes to main.",
+            "Records your review of all ready instructions. This does not apply or deploy changes to main.",
           ),
           field(
-            "Review note",
+            "Review note (optional)",
             verificationNote,
             (value) => (verificationNote = value),
           ),
@@ -867,7 +914,7 @@ export function createWorkflow({
       updates.dataset.key = "updates";
       updates.append(el("summary", "", "Earlier agent updates"));
       for (const message of progress.messages)
-        updates.append(el("p", "workflow-text", message));
+        updates.append(richText(message, "workflow-text"));
       body.append(updates);
     }
     const diagnostics = el("details", "workflow-evidence diagnostics");
@@ -901,6 +948,11 @@ export function createWorkflow({
     refresh,
     compose,
     renderComposer,
+    /** Chooses between instructions on the selection ("here") and the Tasks overview ("all"). */
+    scope(value) {
+      filter = value;
+    },
+    scoped: () => filter === "here",
     render(body, tab) {
       bar();
       tab === "comments" ? comments(body) : runs(body);

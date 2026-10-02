@@ -2,7 +2,7 @@
 
 This guide walks through every part of the Strata interface on a phone, then the desktop layout. Each screenshot has numbered orange markers, and the table under it explains what each numbered element is and how to use it. The screenshots show Strata inspecting its own repository.
 
-To install Strata, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Comments, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
+To install Strata, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Instructions, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
 
 The screenshots and icon images are generated from the live interface by `node scripts/guide-screenshots.mjs`, so they can be refreshed whenever the interface changes.
 
@@ -15,7 +15,7 @@ The screenshots and icon images are generated from the live interface by `node s
 - [Moving through history](#moving-through-history)
 - [Selecting something](#selecting-something)
 - [The review sheet](#the-review-sheet): Details, Source, Changes, Relations
-- [Comments and tasks](#comments-and-tasks)
+- [Ask, instructions and tasks](#ask-instructions-and-tasks)
 - [Typing on a phone](#typing-on-a-phone)
 - [Desktop layout](#desktop-layout)
 - [Icon reference](#icon-reference)
@@ -25,14 +25,14 @@ The screenshots and icon images are generated from the live interface by `node s
 
 <img src="guide/01-map.jpg" width="340" alt="The phone layout: header, map with floating controls, and the review sheet at peek height">
 
-The screen has three parts. The header names the repository and the comparison. The map in the glass card shows the repository's real folders, files and declarations. The review sheet at the bottom describes what you're looking at and holds the Ask and Comment box.
+The screen has three parts. The header names the repository and the comparison. The map in the glass card shows the repository's real folders, files and declarations. The review sheet at the bottom describes what you're looking at and holds the Ask and Instruction box.
 
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Repository name | The repository being inspected. With several repositories registered, switch between them in the comparison popover (2). |
 | 2 | Comparison line | Shows the branch and the two commits being compared, as `base → head`. Tap it to change branch, head, base or pull request. |
 | 3 | Time / Diff | **Time** shows commit cards to step through history one commit at a time. **Diff** compares any head with any base you choose. |
-| 4 | Tasks | Opens your draft comments and agent runs. The icon turns blue when an agent has finished work that is ready for review. |
+| 4 | Tasks | Opens your draft instructions and agent runs. The icon turns blue when an agent has finished work that is ready for review. |
 | 5 | Before / After | Shown in Diff. Switches the map and source between the base (dot on the left) and the head (dot on the right). |
 | 6 | Card | A folder, file or declaration. Tap once to select it, tap again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
 | 7 | Card counts | How many files inside were added, modified or removed, followed by the total number of files. |
@@ -45,10 +45,10 @@ The screen has three parts. The header names the repository and the comparison. 
 | 14 | Key | Opens the map key, which also holds the colour lens. See [Map key](#map-key). |
 | 15 | Sheet handle | Drag up or down, or tap, to move the sheet between peek, half and full height. |
 | 16 | Summary | The description of the selection or the current folder, taken from committed documentation. Long text scrolls and fades its last line while more is available. |
-| 17 | Ask / Comment | Ask a question about the selection, or write a comment for an agent. |
-| 18 | Anchor | What your question or comment is about, and the commit it refers to. |
-| 19 | Text field | Type your question or comment here. |
-| 20 | Send | Sends the question. In Comment mode this is replaced by Cancel and Save draft. |
+| 17 | Ask / Instruction | Ask a question about the selection, or write an instruction for an agent. |
+| 18 | Anchor | What your question or instruction is about, and the commit it refers to. |
+| 19 | Text field | Type your question or instruction here. |
+| 20 | Send | Sends the question. In Instruction mode this is replaced by Cancel and Save draft. |
 
 Lines between cards are static dependencies: imports, calls, implementations and inheritance found in the code, not runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
 
@@ -131,7 +131,7 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 2 | Source | The code, as a diff or as the Before or After version. |
 | 3 | Changes | Changed files or declarations in the current scope, and file search. |
 | 4 | Relations | Dependencies, dependency rules and their evidence. |
-| 5 | Discussion | Returns to your Ask conversation or comments for the selection. |
+| 5 | Discussion | Shows the conversation for the selection that matches the box below: your Ask questions and answers, or the instructions left on it. |
 | 6 | Facts | What the selection is: kind, path, line range, declaration count or file counts, and how it was analysed. |
 | 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. |
 | 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
@@ -174,24 +174,26 @@ The only labelled view button is the one that is open; the others show just thei
 | 5 | Resolved evidence | Each relationship found in the code, with a link that opens the exact source line. |
 | 6 | Unresolved targets | References Strata could not resolve with certainty, and why. These are listed rather than guessed. |
 
-## Comments and tasks
+## Ask, instructions and tasks
 
-<img src="guide/11-comment.jpg" width="340" alt="Writing a comment draft">
+**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. Ask conversations live in the open page and are lost on reload.
+
+<img src="guide/11-comment.jpg" width="340" alt="Writing an instruction draft">
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Comment | Switches the box from asking to commenting. |
-| 2 | Anchor | The selection and commit the comment is attached to. It stays attached even if you navigate elsewhere before saving. |
-| 3 | Comment text | Describe what should change and why. |
-| 4 | Cancel | Discards the unsent comment. |
-| 5 | Save draft | Saves the comment as a draft. Drafts are private until you send them to an agent. |
+| 1 | Instruction | Switches the box from asking to writing an instruction for an agent. |
+| 2 | Anchor | The selection and commit the instruction is attached to. It stays attached even if you navigate elsewhere before saving. |
+| 3 | Instruction text | Describe what should change and why. |
+| 4 | Cancel | Discards the unsent instruction. |
+| 5 | Save draft | Saves the instruction as a draft and lists it under Discussion for that selection. Drafts are private until you send them to an agent. |
 
-<img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft comment">
+<img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft instruction">
 
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Review task | Turns your drafts into a task: choose which drafts, which agent (Codex or Claude Code) and optional extra instructions, then preview the exact task before starting it. |
-| 2 | Draft | A saved comment with its anchor and commit. Edit or delete it while it is a draft. |
+| 2 | Draft | A saved instruction with its anchor and commit. Edit or delete it while it is a draft. |
 
 After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. **Review agent branch** opens the agent's work on the map, and **Verify** or **Reopen** records your decision. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
@@ -238,12 +240,12 @@ Every icon button has a name that appears as a tooltip and is read by screen rea
 | <img src="guide/icons/glyph-source.svg" width="20" alt=""> | Source | Code and diff. |
 | <img src="guide/icons/glyph-changes.svg" width="20" alt=""> | Changes | Changed files and search. |
 | <img src="guide/icons/glyph-relations.svg" width="20" alt=""> | Relations | Dependencies and rules. |
-| <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Discussion | Your conversation or comments. |
+| <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Discussion | Your Ask conversation, or the instructions on the selection. |
 | <img src="guide/icons/glyph-ask.svg" width="20" alt=""> | Ask | Ask a question about the selection. |
-| <img src="guide/icons/glyph-comment.svg" width="20" alt=""> | Comment | Write a comment for an agent. |
-| <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | What the question or comment refers to. |
+| <img src="guide/icons/glyph-comment.svg" width="20" alt=""> | Instruction | Write an instruction for an agent. |
+| <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | What the question or instruction refers to. |
 | <img src="guide/icons/glyph-send.svg" width="20" alt=""> | Send | Send the question. |
-| <img src="guide/icons/glyph-check.svg" width="20" alt=""> | Save draft | Save the comment. |
+| <img src="guide/icons/glyph-check.svg" width="20" alt=""> | Save draft | Save the instruction. |
 | <img src="guide/icons/glyph-close.svg" width="20" alt=""> | Cancel or close | Discard, or close a popover. |
 | <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Check for new commits. |
 
