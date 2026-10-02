@@ -77,7 +77,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       if (!chat.messages.length && !chat.pending) {
         const empty = el(
           "p",
-          `Ask about ${subject}: what it does, what changed or what to check. Answers use the README, declarations and diffs at this revision.`,
+          `Ask about ${subject}: what it does, what changed or what to check. Answers use the code, its callers and dependencies at this revision, and can look up more of the repository read-only.`,
         );
         empty.className = "empty ask-empty";
         body.append(empty);
@@ -88,6 +88,12 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         const bubble = el("article");
         bubble.className = "ask-message from-" + message.role;
         bubble.append(richText(message.text, "ask-text"));
+        if (message.lookups?.length) {
+          // Show what the answer read beyond the selection, so it can be judged.
+          const read = el("p", "Looked up: " + [...new Set(message.lookups)].join(" · "));
+          read.className = "read-note ask-lookups";
+          bubble.append(read);
+        }
         if (message.omitted?.length) {
           const limited = el("p", "Context limited: " + message.omitted.join("; "));
           limited.className = "read-note";
@@ -180,6 +186,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
             role: "assistant",
             ...response.answer,
             omitted: response.context.omitted,
+            lookups: response.lookups || [],
           });
         } catch (e) {
           // Put the question back so it can be retried or edited.

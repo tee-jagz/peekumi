@@ -3,6 +3,7 @@ mod adapters;
 mod ask;
 mod engine;
 mod index;
+mod lookup;
 mod process;
 mod pull_requests;
 mod relationships;
@@ -154,6 +155,8 @@ struct App {
     engine: Engine,
     workflow: workflow::Workflow,
     ask_lock: Mutex<()>,
+    /// Read-only lookup permission for the Ask answer in progress; `None` between answers.
+    ask_grant: std::sync::Mutex<Option<lookup::Grant>>,
     token: String,
     reader_token: String,
     cookie_name: String,
@@ -167,6 +170,53 @@ struct Fleet {
     _locks: Vec<std::fs::File>,
 }
 
+/// The loopback origin of this listener, set once after binding. Ask's lookup client connects
+/// here; an unspecified bind address (0.0.0.0 or ::) is reached through loopback.
+static LOCAL_ORIGIN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+fn local_origin() -> Option<&'static str> {
+    LOCAL_ORIGIN.get().map(String::as_str)
+}
+fn loopback_origin(address: std::net::SocketAddr) -> String {
+    let ip = match address.ip() {
+        std::net::IpAddr::V4(ip) if ip.is_unspecified() => std::net::Ipv4Addr::LOCALHOST.into(),
+        std::net::IpAddr::V6(ip) if ip.is_unspecified() => std::net::Ipv6Addr::LOCALHOST.into(),
+        ip => ip,
+    };
+    format!("http://{}", std::net::SocketAddr::new(ip, address.port()))
+}
+/// Serves Ask's read-only lookup tools over Streamable HTTP MCP. Only the key of an answer in
+/// progress is accepted; it never authenticates any other route and ends with the answer.
+async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
+    if request.method() != Method::POST {
+        return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
+    }
+    let key = header(request.headers(), "authorization")
+        .strip_prefix("Bearer ")
+        .unwrap_or("");
+    let app = fleet.repositories.values().find(|app| {
+        !key.is_empty()
+            && app
+                .ask_grant
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .is_some_and(|grant| equal(key, &grant.key))
+    });
+    let Some(app) = app.cloned() else {
+        return error(StatusCode::UNAUTHORIZED, "No Ask answer is in progress", gzip).await;
+    };
+    let body = match to_bytes(request.into_body(), 65536).await {
+        Ok(body) => body,
+        Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "Request too large", gzip).await,
+    };
+    let Ok(message) = serde_json::from_slice::<Value>(&body) else {
+        return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await;
+    };
+    match lookup::handle(&app, message).await {
+        Some(reply) => json_response(StatusCode::OK, reply, gzip, None).await,
+        None => respond(StatusCode::ACCEPTED, "application/json", vec![], gzip, None).await,
+    }
+}
 /// Generates 32 random bytes encoded as hexadecimal for access and session tokens.
 fn random_token() -> String {
     let mut bytes = [0u8; 32];
@@ -342,6 +392,9 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         && let Some((kind, bytes)) = asset(&path)
     {
         return respond(StatusCode::OK, kind, bytes.to_vec(), gzip, None).await;
+    }
+    if path == "/mcp/ask" {
+        return ask_lookup(&fleet, request, gzip).await;
     }
     if request.method() == Method::POST && path == "/api/session" {
         let origin = header(request.headers(), "origin");
@@ -805,6 +858,7 @@ async fn main() -> Result<()> {
             cookie_name: cookie_name.clone(),
             workflow,
             ask_lock: Mutex::new(()),
+            ask_grant: std::sync::Mutex::new(None),
             engine: Engine::start(repository),
             token: access_token.clone(),
             reader_token: reader_token.clone(),
@@ -818,6 +872,7 @@ async fn main() -> Result<()> {
     }
     let listener = tokio::net::TcpListener::bind((options.host.as_str(), options.port)).await?;
     let address = listener.local_addr()?;
+    let _ = LOCAL_ORIGIN.set(loopback_origin(address));
     println!(
         "Repo Strata · Rust\nOpen: http://{address}/#token={access_token}\nSTRATA_READY {}",
         json!({"port":address.port()})
@@ -838,6 +893,12 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lookup_origin_uses_loopback_for_unspecified_binds() {
+        assert_eq!(loopback_origin("0.0.0.0:4319".parse().unwrap()), "http://127.0.0.1:4319");
+        assert_eq!(loopback_origin("[::]:4319".parse().unwrap()), "http://[::1]:4319");
+        assert_eq!(loopback_origin("100.64.0.2:80".parse().unwrap()), "http://100.64.0.2:80");
+    }
     #[test]
     fn compression_respects_explicit_opt_out() {
         for (value, expected) in [

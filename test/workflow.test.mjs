@@ -350,6 +350,80 @@ test("Ask about a folder reads its README, declarations and changed code, not on
   assert.doesNotMatch(context.declarations, /elsewhere/, "Context stays within the folder");
 });
 
+test("Ask about a declaration late in a file receives that declaration's source", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const filler = Array.from({ length: 300 }, (_, i) => `X${i} = ${i}`).join("\n");
+  await writeFile(
+    path.join(f.dir, "late.py"),
+    `import os\n${filler}\n\ndef target(value):\n    return value * 42\n`,
+  );
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Add late declaration");
+  const head = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const result = await f.req("/api/ask", {
+    base: f.sha,
+    head,
+    sha: head,
+    anchor: { kind: "symbol", path: "late.py", symbol: "target" },
+    question: "Echo the context.",
+    history: [],
+  });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  const context = JSON.parse(result.answer.text);
+  assert.match(context.after, /def target\(value\):\n    return value \* 42/);
+  assert.doesNotMatch(context.after, /import os/, "Only the declaration's lines, not the file head");
+  assert.equal(context.before, "", "A new declaration has no earlier source");
+});
+
+test("Ask sees callers and may use bounded read-only lookups that end with the answer", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  await writeFile(path.join(f.dir, "late.py"), "import os\n\ndef target(value):\n    return value * 42\n");
+  await writeFile(path.join(f.dir, "caller.py"), "from late import target\n\ndef use():\n    return target(1)\n");
+  await f.git("add", ".");
+  await f.git("commit", "-m", "Add caller");
+  const head = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const ask = (question, anchor) =>
+    f.req("/api/ask", { base: f.sha, head, sha: head, anchor, question, history: [] });
+
+  const echoed = await ask("Echo the context.", { kind: "symbol", path: "late.py", symbol: "target" });
+  assert.equal(echoed.status, 200, JSON.stringify(echoed));
+  const related = JSON.parse(JSON.parse(echoed.answer.text).relationships);
+  assert.ok(
+    related.incoming.some((line) => line.startsWith("caller.py · use calls target")),
+    "The question carries who calls the selection: " + JSON.stringify(related),
+  );
+  assert.deepEqual(echoed.lookups, [], "No lookups unless the model asks");
+
+  const result = await ask("Use the lookup tools.", { kind: "symbol", path: "late.py", symbol: "target" });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  const used = JSON.parse(result.answer.text);
+  assert.deepEqual(used.tools, ["find_declarations", "read_declaration", "read_file", "relationships"]);
+  for (const name of used.tools) assert.ok(used.allowed.includes("mcp__strata__" + name));
+  assert.equal(used.notified, 202);
+  assert.match(used.found, /"path":"late.py","name":"target"/);
+  assert.match(used.read, /3  def target\(value\):/);
+  assert.match(used.file, /1  import os/);
+  assert.match(used.related, /caller\.py · use calls target/);
+  assert.equal(used.calls, 12, "Lookups stop at the per-answer limit");
+  assert.equal(result.lookups.length, 12);
+  assert.ok(result.lookups.includes("Read target in late.py"));
+
+  const after = await fetch(used.url, {
+    method: "POST",
+    headers: { Authorization: used.key, "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  assert.equal(after.status, 401, "The lookup key ends with the answer");
+  const owner = await fetch(used.url, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + f.server.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  assert.equal(owner.status, 401, "The owner token is not a lookup key");
+});
+
 test("branch inspection reads selected history without switching or changing the checkout", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

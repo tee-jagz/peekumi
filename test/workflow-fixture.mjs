@@ -16,9 +16,43 @@ if (values.includes("--tools")) {
   const input = JSON.parse(task);
   if (!input.repositoryContext || !input.question)
     throw Error("Missing grounded context");
+  // Exercises the read-only lookup endpoint the way Claude Code does (Streamable HTTP MCP).
+  async function lookups() {
+    const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
+      .mcpServers.strata;
+    const headers = {
+      ...config.headers,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    };
+    let id = 0;
+    const post = (message) =>
+      fetch(config.url, { method: "POST", headers, body: JSON.stringify(message) });
+    const rpc = async (method, params) =>
+      (await (await post({ jsonrpc: "2.0", id: ++id, method, params })).json()).result;
+    await rpc("initialize", { protocolVersion: "2025-06-18" });
+    const notified = (await post({ jsonrpc: "2.0", method: "notifications/initialized" })).status;
+    const tools = (await rpc("tools/list")).tools.map((t) => t.name);
+    const call = async (name, args) =>
+      (await rpc("tools/call", { name, arguments: args })) ;
+    const text = (r) => r.content[0].text;
+    const found = text(await call("find_declarations", { query: "targ" }));
+    const read = text(await call("read_declaration", { path: "late.py", name: "target" }));
+    const file = text(await call("read_file", { path: "late.py", start_line: 1, end_line: 2 }));
+    const related = text(await call("relationships", { path: "late.py", name: "target" }));
+    let calls = 4;
+    while (!(await call("find_declarations", { query: "x" })).isError) calls++;
+    return JSON.stringify({
+      allowed: values[values.indexOf("--allowedTools") + 1],
+      tools, notified, found, read, file, related, calls,
+      url: config.url, key: config.headers.Authorization,
+    });
+  }
   // Echoing lets tests inspect exactly what context the server supplied.
   const result =
-    input.question === "Echo the context."
+    input.question === "Use the lookup tools."
+      ? await lookups()
+      : input.question === "Echo the context."
       ? JSON.stringify(input.repositoryContext.source)
       : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
   console.log(JSON.stringify({ is_error: false, result }));

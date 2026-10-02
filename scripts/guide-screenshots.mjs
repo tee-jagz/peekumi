@@ -301,7 +301,7 @@ try {
       "time", "diff", "tasks", "branch", "before", "after", "home", "up",
       "filter", "zoomOut", "zoomIn", "fit", "reset", "key", "details", "source",
       "changes", "relations", "discussion", "ask", "comment", "send", "pin",
-      "check", "close", "refresh",
+      "check", "close", "copy", "refresh",
     ];
     const result = glyphs.map((name) => ["glyph-" + name, d(m.glyph(name)), ""]);
     for (const status of ["added", "changed", "removed", "unchanged"])

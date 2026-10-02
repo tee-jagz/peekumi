@@ -10,12 +10,23 @@ use wait_timeout::ChildExt;
 
 /// Runs an installed executable with explicit arguments and byte input, returning stdout.
 /// `cwd` optionally changes only the child's working directory. Input and output use separate threads
-/// to avoid pipe deadlocks. The direct child is killed if it exceeds the 30-second wait.
+/// to avoid pipe deadlocks. The direct child is killed if it exceeds the 30-second wait
+/// ([`run_for`] sets another limit).
 ///
 /// # Errors
 /// Reports startup, output-read, wait, timeout and nonzero-exit failures.
 /// Callers must select trusted tools; this helper is not a sandbox for arbitrary inspected code.
 pub fn run(program: &str, args: &[&str], cwd: Option<&Path>, input: Vec<u8>) -> Result<Vec<u8>> {
+    run_for(program, args, cwd, input, Duration::from_secs(30))
+}
+/// [`run`] with an explicit time limit, for Ask answers that may make lookup calls.
+pub fn run_for(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    input: Vec<u8>,
+    limit: Duration,
+) -> Result<Vec<u8>> {
     let mut command = Command::new(program);
     command
         .env_remove("STRATA_TOKEN")
@@ -44,7 +55,7 @@ pub fn run(program: &str, args: &[&str], cwd: Option<&Path>, input: Vec<u8>) -> 
         let mut bytes = Vec::new();
         stderr.read_to_end(&mut bytes).map(|_| bytes)
     });
-    let status = child.wait_timeout(Duration::from_secs(30))?;
+    let status = child.wait_timeout(limit)?;
     if status.is_none() {
         let _ = child.kill();
         let _ = child.wait();
