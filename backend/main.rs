@@ -31,6 +31,7 @@ use std::{
 };
 use subtle::ConstantTimeEq;
 use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio_stream::StreamExt as _;
 
 #[derive(Parser, Clone)]
 #[command(
@@ -73,6 +74,9 @@ struct Options {
     codex: String,
     #[arg(long, env = "STRATA_CLAUDE", default_value = "claude")]
     claude: String,
+    /// Model for Ask answers: a fast model by default; set `opus` for slower, deeper answers.
+    #[arg(long, env = "STRATA_ASK_MODEL", default_value = "sonnet")]
+    ask_model: String,
     #[arg(long, env = "STRATA_GH", default_value = "gh")]
     github: String,
     #[arg(long, hide = true)]
@@ -146,6 +150,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[3] == "overview",
         ),
         "directories" => repo.directories(argument(args, 0), argument(args, 1)),
+        "search" => repo.search(argument(args, 0), argument(args, 1), argument(args, 2)),
         "metrics" => Ok(repo.metrics()),
         _ => anyhow::bail!("Unknown repository operation"),
     }
@@ -154,7 +159,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
 struct App {
     engine: Engine,
     workflow: workflow::Workflow,
-    ask_lock: Mutex<()>,
+    ask_lock: Arc<Mutex<()>>,
     /// Read-only lookup permission for the Ask answer in progress; `None` between answers.
     ask_grant: std::sync::Mutex<Option<lookup::Grant>>,
     token: String,
@@ -607,7 +612,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             if method != "POST" {
                 return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST for Ask", gzip).await;
             }
-            let Ok(_ask_guard) = app.ask_lock.try_lock() else {
+            let Ok(ask_guard) = app.ask_lock.clone().try_lock_owned() else {
                 return error(
                     StatusCode::CONFLICT,
                     "An Ask answer is already in progress",
@@ -615,6 +620,27 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 )
                 .await;
             };
+            if body["stream"] == true {
+                // Newline-delimited JSON events while Claude writes; the guard lives with the task.
+                let (events, received) = mpsc::channel::<Value>(64);
+                let app = app.clone();
+                tokio::spawn(async move {
+                    let _guard = ask_guard;
+                    ask::answer_stream(app, body, events).await;
+                });
+                let lines = tokio_stream::wrappers::ReceiverStream::new(received).map(|event| {
+                    Ok::<_, std::convert::Infallible>(format!("{event}\n"))
+                });
+                return Response::builder()
+                    .header("content-type", "application/x-ndjson")
+                    .header("cache-control", "no-store")
+                    .header("x-content-type-options", "nosniff")
+                    .header("referrer-policy", "no-referrer")
+                    .header("x-frame-options", "DENY")
+                    .body(Body::from_stream(lines))
+                    .unwrap();
+            }
+            let _ask_guard = ask_guard;
             return match ask::answer(&app, body).await {
                 Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
@@ -859,7 +885,7 @@ async fn main() -> Result<()> {
         let app = Arc::new(App {
             cookie_name: cookie_name.clone(),
             workflow,
-            ask_lock: Mutex::new(()),
+            ask_lock: Arc::new(Mutex::new(())),
             ask_grant: std::sync::Mutex::new(None),
             engine: Engine::start(repository),
             token: access_token.clone(),

@@ -13,6 +13,10 @@ if (values.includes("--tools")) {
     throw Error("Ask must have no tools");
   if (process.env.STRATA_TOKEN || process.env.STRATA_REPORT_TOKEN)
     throw Error("Ask inherited a Strata credential");
+  if (values[values.indexOf("--effort") + 1] !== "low")
+    throw Error("Ask must run at low effort for fast answers");
+  if (values[values.indexOf("--model") + 1] !== "sonnet")
+    throw Error("Ask must default to the fast model");
   const input = JSON.parse(task);
   if (!input.repositoryContext || !input.question)
     throw Error("Missing grounded context");
@@ -40,11 +44,12 @@ if (values.includes("--tools")) {
     const read = text(await call("read_declaration", { path: "late.py", name: "target" }));
     const file = text(await call("read_file", { path: "late.py", start_line: 1, end_line: 2 }));
     const related = text(await call("relationships", { path: "late.py", name: "target" }));
-    let calls = 4;
+    const searched = text(await call("search_code", { text: "target(" }));
+    let calls = 5;
     while (!(await call("find_declarations", { query: "x" })).isError) calls++;
     return JSON.stringify({
       allowed: values[values.indexOf("--allowedTools") + 1],
-      tools, notified, found, read, file, related, calls,
+      tools, notified, found, read, file, related, searched, calls,
       url: config.url, key: config.headers.Authorization,
     });
   }
@@ -55,7 +60,18 @@ if (values.includes("--tools")) {
       : input.question === "Echo the context."
       ? JSON.stringify(input.repositoryContext.source)
       : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
-  console.log(JSON.stringify({ is_error: false, result }));
+  if (values.includes("stream-json")) {
+    // Claude Code's streaming shape: a working turn, then the answer in small pieces.
+    const say = (event) => console.log(JSON.stringify(event));
+    const delta = (text) =>
+      say({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } });
+    say({ type: "system", subtype: "init" });
+    say({ type: "stream_event", event: { type: "message_start" } });
+    delta("Let me check the callers. ");
+    say({ type: "stream_event", event: { type: "message_start" } });
+    for (const piece of result.match(/[\s\S]{1,16}/g)) delta(piece);
+    say({ type: "result", is_error: false, result });
+  } else console.log(JSON.stringify({ is_error: false, result }));
   process.exit(0);
 }
 let command, args;

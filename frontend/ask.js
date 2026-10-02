@@ -1,8 +1,9 @@
-/** @module Contextual, non-executing review conversations and explicit draft suggestions. */
+/** @module Contextual, non-executing review conversations and explicit draft suggestions.
+ * Answers stream in as Claude writes them; lookups show while they happen. */
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
-export function createAsk({ api, context, redraw, notice, makeDraft }) {
+export function createAsk({ stream, context, redraw, notice, makeDraft }) {
   const conversations = new Map();
   let selectedContext = null;
   const el = (tag, text) => {
@@ -26,6 +27,34 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
     };
     return b;
   };
+  /** The in-progress reply: text as it streams (without a half-written suggestion line), or
+   * Peek thinking until the first words arrive, plus any lookups made so far. */
+  function pendingBubble(chat) {
+    const waiting = el("article");
+    waiting.className = "ask-message from-assistant is-pending";
+    waiting.setAttribute("aria-live", "polite");
+    const text = chat.partial.replace(/\n?Suggested (instruction|comment):[^]*$/, "");
+    if (text.trim()) {
+      waiting.classList.add("is-streaming");
+      waiting.append(richText(text, "ask-text"));
+    } else waiting.append(peek("thinking"), el("span", "Reading the code"));
+    if (chat.live.length) {
+      const read = el("p", "Looking up: " + [...new Set(chat.live)].join(" · "));
+      read.className = "read-note ask-lookups";
+      waiting.append(read);
+    }
+    return waiting;
+  }
+  let painting = 0;
+  /** Repaints only the streaming bubble, once per frame, so typing elsewhere is undisturbed. */
+  function paint(chat) {
+    if (painting) return;
+    painting = requestAnimationFrame(() => {
+      painting = 0;
+      const shown = document.querySelector(".ask-message.is-pending");
+      if (shown && chat === current()) shown.replaceWith(pendingBubble(chat));
+    });
+  }
   function current() {
     const c = selectedContext || context(),
       key = JSON.stringify(c);
@@ -37,6 +66,8 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         messages: [],
         question: "",
         pending: false,
+        partial: "",
+        live: [],
       });
     }
     return conversations.get(key);
@@ -119,13 +150,7 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         }
         thread.append(bubble);
       }
-      if (chat.pending) {
-        const waiting = el("article");
-        waiting.className = "ask-message from-assistant is-pending";
-        waiting.setAttribute("aria-live", "polite");
-        waiting.append(peek("thinking"), el("span", "Reading the code"));
-        thread.append(waiting);
-      }
+      if (chat.pending) thread.append(pendingBubble(chat));
       body.append(thread);
       if (chat.reveal) {
         chat.reveal = false;
@@ -175,14 +200,22 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         chat.messages.push({ role: "user", text: question });
         chat.question = "";
         chat.pending = true;
+        chat.partial = "";
+        chat.live = [];
         chat.reveal = true;
         redraw();
         try {
-          const response = await api("/api/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...c, question, history }),
+          let response = null;
+          // The answer streams in; each new model turn replaces earlier working text.
+          await stream("/api/ask", { ...c, question, history, stream: true }, (event) => {
+            if (event.type === "text") chat.partial += event.text;
+            else if (event.type === "turn") chat.partial = "";
+            else if (event.type === "lookup") chat.live.push(event.text);
+            else if (event.type === "error") throw new Error(event.message);
+            else if (event.type === "done") response = event;
+            paint(chat);
           });
+          if (!response) throw new Error("The answer stopped before it finished.");
           chat.messages.push({
             role: "assistant",
             ...response.answer,
@@ -196,6 +229,8 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
           notice(e.message, true);
         } finally {
           chat.pending = false;
+          chat.partial = "";
+          chat.live = [];
           chat.reveal = true;
           redraw();
         }

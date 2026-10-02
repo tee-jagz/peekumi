@@ -395,17 +395,28 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
     "The question carries who calls the selection: " + JSON.stringify(related),
   );
   assert.deepEqual(echoed.lookups, [], "No lookups unless the model asks");
+  assert.deepEqual(
+    JSON.parse(echoed.answer.text).callers.map(({ path, symbol }) => [path, symbol]),
+    [["caller.py", "use"]],
+    "The calling declaration's code comes with the question",
+  );
+  assert.match(JSON.parse(echoed.answer.text).callers[0].code, /return target\(1\)/);
 
   const result = await ask("Use the lookup tools.", { kind: "symbol", path: "late.py", symbol: "target" });
   assert.equal(result.status, 200, JSON.stringify(result));
   const used = JSON.parse(result.answer.text);
-  assert.deepEqual(used.tools, ["find_declarations", "read_declaration", "read_file", "relationships"]);
+  assert.deepEqual(used.tools, ["find_declarations", "search_code", "read_declaration", "read_file", "relationships"]);
   for (const name of used.tools) assert.ok(used.allowed.includes("mcp__strata__" + name));
   assert.equal(used.notified, 202);
   assert.match(used.found, /"path":"late.py","name":"target"/);
   assert.match(used.read, /3  def target\(value\):/);
   assert.match(used.file, /1  import os/);
   assert.match(used.related, /caller\.py · use calls target/);
+  const searched = JSON.parse(used.searched);
+  assert.ok(
+    searched.matches.some((m) => m.path === "caller.py" && m.within === "use" && /return target\(1\)/.test(m.text)),
+    "Code search finds the call site and the declaration it sits in: " + used.searched,
+  );
   assert.equal(used.calls, 12, "Lookups stop at the per-answer limit");
   assert.equal(result.lookups.length, 12);
   assert.ok(result.lookups.includes("Read target in late.py"));
@@ -422,6 +433,41 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
   assert.equal(owner.status, 401, "The owner token is not a lookup key");
+});
+
+test("Ask streams its answer: working turns are replaced, lookups and the final answer arrive as events", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const response = await fetch(f.server.url + "/api/ask", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + f.server.token, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      base: f.sha,
+      head: f.sha,
+      sha: f.sha,
+      anchor: { kind: "symbol", path: "module.py", symbol: "run" },
+      question: "What does this do?",
+      history: [],
+      stream: true,
+    }),
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /application\/x-ndjson/);
+  const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+  const last = events.at(-1);
+  assert.equal(last.type, "done", JSON.stringify(last));
+  let shown = "";
+  for (const event of events) {
+    if (event.type === "turn") shown = "";
+    if (event.type === "text") shown += event.text;
+  }
+  assert.ok(events.filter((e) => e.type === "text").length > 2, "The answer arrives in pieces");
+  assert.doesNotMatch(shown, /Let me check/, "A new turn replaces the working text");
+  assert.match(shown, /I have not run tests/);
+  assert.match(last.answer.text, /I have not run tests/);
+  assert.equal(last.answer.suggestion, "Add a focused regression test for this behavior.");
+  const state = await f.req("/api/workflow");
+  assert.equal(state.comments.length, 0, "Streaming never creates drafts");
 });
 
 test("branch inspection reads selected history without switching or changing the checkout", async (t) => {
