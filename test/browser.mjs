@@ -354,7 +354,7 @@ try {
     }
     await page.locator('[data-tab="source"]').click();
     await page.locator('[data-tab="details"]').click();
-    await page.locator(".code-metadata .signature").waitFor();
+    await page.locator(".code-metadata .contract-lines").waitFor();
     assert.match(
       await page.locator(".adapter-note summary").textContent(),
       /adapter/,
