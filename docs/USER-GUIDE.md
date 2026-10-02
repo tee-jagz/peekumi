@@ -1,0 +1,282 @@
+# Using Strata
+
+This guide walks through every part of the Strata interface on a phone, then the desktop layout. Each screenshot has numbered orange markers, and the table under it explains what each numbered element is and how to use it. The screenshots show Strata inspecting its own repository.
+
+To install Strata, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Comments, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
+
+The screenshots and icon images are generated from the live interface by `node scripts/guide-screenshots.mjs`, so they can be refreshed whenever the interface changes.
+
+## Contents
+
+- [The map at a glance](#the-map-at-a-glance)
+- [Gestures and keys](#gestures-and-keys)
+- [Map key](#map-key)
+- [Choosing what to compare](#choosing-what-to-compare)
+- [Moving through history](#moving-through-history)
+- [Selecting something](#selecting-something)
+- [The review sheet](#the-review-sheet): Details, Source, Changes, Relations
+- [Comments and tasks](#comments-and-tasks)
+- [Typing on a phone](#typing-on-a-phone)
+- [Desktop layout](#desktop-layout)
+- [Icon reference](#icon-reference)
+- [Offline and updates](#offline-and-updates)
+
+## The map at a glance
+
+<img src="guide/01-map.jpg" width="340" alt="The phone layout: header, map with floating controls, and the review sheet at peek height">
+
+The screen has three parts. The header names the repository and the comparison. The map in the glass card shows the repository's real folders, files and declarations. The review sheet at the bottom describes what you're looking at and holds the Ask and Comment box.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Repository name | The repository being inspected. With several repositories registered, switch between them in the comparison popover (2). |
+| 2 | Comparison line | Shows the branch and the two commits being compared, as `base → head`. Tap it to change branch, head, base or pull request. |
+| 3 | Time / Diff | **Time** shows commit cards to step through history one commit at a time. **Diff** compares any head with any base you choose. |
+| 4 | Tasks | Opens your draft comments and agent runs. The icon turns blue when an agent has finished work that is ready for review. |
+| 5 | Before / After | Shown in Diff. Switches the map and source between the base (dot on the left) and the head (dot on the right). |
+| 6 | Card | A folder, file or declaration. Tap once to select it, tap again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, plain is unchanged. |
+| 7 | Card counts | How many files inside were added, modified or removed, followed by the total number of files. |
+| 8 | Home and Up | Home returns to the repository root. Up goes to the parent folder. Both are dimmed at the root. |
+| 9 | Changes only | Hides unchanged cards at every level, keeping changed folders so you can still drill in. |
+| 10 | Zoom out | Zooms the map out. Pinching works too. |
+| 11 | Zoom in | Zooms the map in. |
+| 12 | Fit | Fits the whole map on screen. |
+| 13 | Reset | Returns to actual size, aligned to the top. |
+| 14 | Key | Opens the map key, which also holds the colour lens. See [Map key](#map-key). |
+| 15 | Sheet handle | Drag up or down, or tap, to move the sheet between peek, half and full height. |
+| 16 | Summary | The description of the selection or the current folder, taken from committed documentation. Long text scrolls and fades its last line while more is available. |
+| 17 | Ask / Comment | Ask a question about the selection, or write a comment for an agent. |
+| 18 | Anchor | What your question or comment is about, and the commit it refers to. |
+| 19 | Text field | Type your question or comment here. |
+| 20 | Send | Sends the question. In Comment mode this is replaced by Cancel and Save draft. |
+
+Lines between cards are static dependencies: imports, calls, implementations and inheritance found in the code, not runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
+
+## Gestures and keys
+
+| Action | On a phone | With a mouse or keyboard |
+|---|---|---|
+| Select a card | Tap | Click, or Tab to it and press Enter |
+| Open a card | Tap it again | Click again, or press Enter again |
+| Pan the map | Drag; a flick keeps gliding | Drag, scroll, or arrow keys with the map focused |
+| Zoom | Pinch | Control or Command and scroll, or `+` and `-` |
+| Go up a level | Up button | Up button, or Escape with nothing selected |
+| Clear a selection | × in the sheet | Escape |
+| Close a popover | Tap outside it, or ✕ | Escape |
+| Change sheet height | Drag or tap the handle | Arrow keys, Home and End on the handle |
+
+## Map key
+
+<img src="guide/02-key.jpg" width="340" alt="The map key popover over the map">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Colour lens | **Changes** colours cards by Git status. **Structure** hides change colours to show the plain layout. |
+| 2 | Colours and types | What each change colour and shape means, and the icon for each kind of folder, declaration and file. |
+| 3 | Line styles | Solid lines are imports or calls, dotted are implementations, dashed are inheritance, red marks a removed relationship or a broken dependency rule. |
+
+## Choosing what to compare
+
+<img src="guide/03-comparison.jpg" width="340" alt="The comparison popover">
+
+Tap the comparison line in the header to open this popover.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Branch | Choose which branch to inspect. This only changes what you view; your checkout is never switched. |
+| 2 | Pull requests | Lists open pull requests when GitHub CLI is signed in on the host. Choosing one shows its full diff against its merge base, with its description, checks and discussion. |
+| 3 | Commit summary | The head commit's message, date, and what it is compared with. |
+| 4 | Head revision | The newer commit in the comparison. |
+| 5 | Compare with | The older commit. **Previous commit (automatic)** follows the head's first parent. Choosing a specific commit pins it until you pick the automatic option again or tap **Use previous commit**. |
+| 6 | Refresh | Checks for new commits. Uncommitted work is never shown. |
+| 7 | Close | Closes the popover. Tapping anywhere outside it also closes it. |
+
+When several repositories are registered, a **Repository** picker appears above Branch.
+
+<img src="guide/04-select-menu.jpg" width="340" alt="A frosted selection menu listing commits">
+
+Every picker opens a menu like this one. The current choice has a check mark (1). Tap an option to choose it, or use the arrow keys, Home, End and Enter. Escape closes the menu without changing anything.
+
+## Moving through history
+
+<img src="guide/05-time.jpg" width="340" alt="Time mode with commit cards above the map">
+
+In **Time**, a strip of commit cards appears above the map. The highlighted card (1) is the commit being shown, compared with its parent. Tap another card (2) to move to that commit. Swipe the strip sideways to reach older commits.
+
+## Selecting something
+
+<img src="guide/06-selection-peek.jpg" width="340" alt="A function selected, with its summary and inputs in the sheet">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Selected card | A blue outline marks the selection. Tap it again to open it: a folder or file opens on the map, a declaration opens in Source. |
+| 2 | Name and status | The selection's name, its change status icon, and what kind of thing it is. |
+| 3 | Summary | Its committed documentation. Scroll it to read more. |
+| 4 | Inputs, outputs and fields | One line each for parameters, the return type and class fields. Swipe sideways to see them all; a fade on the right means there is more. Only declared types appear here. The Details view labels any missing annotation. |
+| 5 | Up | Leaves the file and returns to its folder. |
+
+## The review sheet
+
+Drag the sheet up to half or full height to inspect the selection. The view buttons stay at the top of the sheet; choosing a view never lowers a sheet you have raised.
+
+### Details
+
+<img src="guide/07-details.jpg" width="340" alt="The Details view of a selected function">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Details | Facts, documentation and declaration metadata for the selection. |
+| 2 | Source | The code, as a diff or as the Before or After version. |
+| 3 | Changes | Changed files or declarations in the current scope, and file search. |
+| 4 | Relations | Dependencies, dependency rules and their evidence. |
+| 5 | Discussion | Returns to your Ask conversation or comments for the selection. |
+| 6 | Facts | What the selection is: kind, path, line range, declaration count or file counts, and how it was analysed. |
+| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. |
+| 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
+
+Below the facts, Details shows the declaration's signature, description, every argument with its annotation or **Unannotated**, and the return type. For a folder it shows its README or package docstring, with a **Read documentation** button. The **Analyzed by** section explains which language adapter read the file and its limits.
+
+The only labelled view button is the one that is open; the others show just their icons. All of them are listed in the [icon reference](#icon-reference).
+
+### Source
+
+<img src="guide/08-source.jpg" width="340" alt="The Source view with a highlighted declaration">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Diff / After / Before | **Diff** shows the changes with old and new line numbers. **After** and **Before** show the whole file at the head or base. |
+| 2 | Analysis | How the file was parsed, and whether the diff covers the whole file or only the selected declaration. |
+| 3 | Code | Scrolls inside its own box, which fills the sheet, so the controls above stay in place. |
+| 4 | Highlight | The selected declaration's lines are highlighted and scrolled into view. |
+
+### Changes
+
+<img src="guide/09-changes.jpg" width="340" alt="The Changes view with a list of changed files">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Overview | How many files changed in the current scope, with counts for each change type. |
+| 2 | Search | Finds any file in the repository by path, changed or not. |
+| 3 | Changed file | Tap to open the file on the map. Inside a file, the list shows changed declarations instead. |
+
+### Relations
+
+<img src="guide/10-relations.jpg" width="340" alt="The Relations view for a selected function">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Rule summary | Results of the dependency rules committed in `.strata.json`. Expand it for configuration details and analysis gaps. Without a rules file it says rules are not configured. |
+| 2 | Relationship kind | Show all relationships, or only imports, calls, implementations or inheritance. |
+| 3 | Violations only | Show only relationships that break a dependency rule. |
+| 4 | Relationship | `from → to`, with its kind, change status and how many sites exist before and after. Tap to select it and see buttons for each file involved. |
+| 5 | Resolved evidence | Each relationship found in the code, with a link that opens the exact source line. |
+| 6 | Unresolved targets | References Strata could not resolve with certainty, and why. These are listed rather than guessed. |
+
+## Comments and tasks
+
+<img src="guide/11-comment.jpg" width="340" alt="Writing a comment draft">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Comment | Switches the box from asking to commenting. |
+| 2 | Anchor | The selection and commit the comment is attached to. It stays attached even if you navigate elsewhere before saving. |
+| 3 | Comment text | Describe what should change and why. |
+| 4 | Cancel | Discards the unsent comment. |
+| 5 | Save draft | Saves the comment as a draft. Drafts are private until you send them to an agent. |
+
+<img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft comment">
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Review task | Turns your drafts into a task: choose which drafts, which agent (Codex or Claude Code) and optional extra instructions, then preview the exact task before starting it. |
+| 2 | Draft | A saved comment with its anchor and commit. Edit or delete it while it is a draft. |
+
+After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. **Review agent branch** opens the agent's work on the map, and **Verify** or **Reopen** records your decision. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
+
+## Typing on a phone
+
+<img src="guide/13-keyboard.jpg" width="340" alt="The layout with the phone keyboard open">
+
+When the keyboard opens, the header and the map controls step aside, the sheet keeps its size at peek height, and the text field (1) stays above the keyboard. The map stays visible so you can still see what you are asking about.
+
+## Desktop layout
+
+<img src="guide/14-desktop.jpg" width="720" alt="The desktop layout in dark mode">
+
+On a wide screen the header (1) spans the top, the map (2) fills the left, and the review sheet (3) sits on the right at full height. Everything else works the same way. Strata follows the system light or dark appearance.
+
+## Icon reference
+
+Every icon button has a name that appears as a tooltip and is read by screen readers.
+
+### Header and map
+
+| Icon | Name | What it does |
+|---|---|---|
+| <img src="guide/icons/glyph-branch.svg" width="20" alt=""> | Branch | Marks the comparison line; tap it to change branch or comparison. |
+| <img src="guide/icons/glyph-time.svg" width="20" alt=""> | Time | Step through history with commit cards. |
+| <img src="guide/icons/glyph-diff.svg" width="20" alt=""> | Diff | Compare any two commits. |
+| <img src="guide/icons/glyph-tasks.svg" width="20" alt=""> | Tasks | Drafts and agent runs. |
+| <img src="guide/icons/glyph-before.svg" width="20" alt=""> | Before | Show the base revision. |
+| <img src="guide/icons/glyph-after.svg" width="20" alt=""> | After | Show the head revision. |
+| <img src="guide/icons/glyph-home.svg" width="20" alt=""> | Home | Go to the repository root. |
+| <img src="guide/icons/glyph-up.svg" width="20" alt=""> | Up | Go up one level. |
+| <img src="guide/icons/glyph-filter.svg" width="20" alt=""> | Changes only | Hide unchanged cards. |
+| <img src="guide/icons/glyph-zoomOut.svg" width="20" alt=""> | Zoom out | Zoom the map out. |
+| <img src="guide/icons/glyph-zoomIn.svg" width="20" alt=""> | Zoom in | Zoom the map in. |
+| <img src="guide/icons/glyph-fit.svg" width="20" alt=""> | Fit | Fit the map on screen. |
+| <img src="guide/icons/glyph-reset.svg" width="20" alt=""> | Reset | Actual size. |
+| <img src="guide/icons/glyph-key.svg" width="20" alt=""> | Key | Map key and colour lens. |
+
+### Review sheet
+
+| Icon | Name | What it does |
+|---|---|---|
+| <img src="guide/icons/glyph-details.svg" width="20" alt=""> | Details | Facts and documentation. |
+| <img src="guide/icons/glyph-source.svg" width="20" alt=""> | Source | Code and diff. |
+| <img src="guide/icons/glyph-changes.svg" width="20" alt=""> | Changes | Changed files and search. |
+| <img src="guide/icons/glyph-relations.svg" width="20" alt=""> | Relations | Dependencies and rules. |
+| <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Discussion | Your conversation or comments. |
+| <img src="guide/icons/glyph-ask.svg" width="20" alt=""> | Ask | Ask a question about the selection. |
+| <img src="guide/icons/glyph-comment.svg" width="20" alt=""> | Comment | Write a comment for an agent. |
+| <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | What the question or comment refers to. |
+| <img src="guide/icons/glyph-send.svg" width="20" alt=""> | Send | Send the question. |
+| <img src="guide/icons/glyph-check.svg" width="20" alt=""> | Save draft | Save the comment. |
+| <img src="guide/icons/glyph-close.svg" width="20" alt=""> | Cancel or close | Discard, or close a popover. |
+| <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Check for new commits. |
+
+### Change status
+
+Each status has its own shape as well as its own colour.
+
+| Icon | Status |
+|---|---|
+| <img src="guide/icons/status-added.svg" width="20" alt=""> | Added |
+| <img src="guide/icons/status-changed.svg" width="20" alt=""> | Modified |
+| <img src="guide/icons/status-removed.svg" width="20" alt=""> | Removed |
+| <img src="guide/icons/status-unchanged.svg" width="20" alt=""> | Unchanged |
+
+### Folders, files and declarations
+
+Icons describe what a card is, never its change status. Source files are files a language adapter parsed; other files are recognised by their extension.
+
+| Icon | Kind | Icon | Kind |
+|---|---|---|---|
+| <img src="guide/icons/object-folder.svg" width="20" alt=""> | Folder | <img src="guide/icons/file-code.svg" width="20" alt=""> | Source file |
+| <img src="guide/icons/object-files.svg" width="20" alt=""> | Repository files (root files group) | <img src="guide/icons/file-document.svg" width="20" alt=""> | Documentation |
+| <img src="guide/icons/object-class.svg" width="20" alt=""> | Class or struct | <img src="guide/icons/file-data.svg" width="20" alt=""> | Data or configuration |
+| <img src="guide/icons/object-function.svg" width="20" alt=""> | Function or method | <img src="guide/icons/file-image.svg" width="20" alt=""> | Image |
+| <img src="guide/icons/object-interface.svg" width="20" alt=""> | Interface or trait | <img src="guide/icons/file-sealed.svg" width="20" alt=""> | Binary or restricted file (no preview) |
+| <img src="guide/icons/object-enum.svg" width="20" alt=""> | Enum | <img src="guide/icons/file-file.svg" width="20" alt=""> | Other file |
+
+### Inputs and outputs
+
+| Icon | Meaning |
+|---|---|
+| <img src="guide/icons/contract-in.svg" width="20" alt=""> | Inputs: parameters |
+| <img src="guide/icons/contract-out.svg" width="20" alt=""> | Outputs: return type or description |
+| <img src="guide/icons/contract-fields.svg" width="20" alt=""> | Fields declared on a class |
+
+## Offline and updates
+
+Strata runs on your own computer; the phone app is a window onto it. If the phone loses its connection, a banner says so, and no code is stored on the phone. When the server has a new version, the app shows **Update available · reload**. Save any unsent text, then tap it. Changes to the app's name, icon or full-screen mode take effect after removing the app from the home screen and adding it again.
