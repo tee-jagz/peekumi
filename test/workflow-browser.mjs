@@ -364,6 +364,27 @@ try {
           .getAttribute("aria-selected"),
         "true",
       );
+      // The conversation follows navigation: leave the declaration, and the thread is still there.
+      await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      assert.equal(
+        await page.locator(".ask-message.from-user").first().innerText(),
+        "What would improve this function?",
+      );
+      assert.equal(
+        await page.getByLabel("Your question").getAttribute("placeholder"),
+        "Ask about module.py",
+      );
+      await page.getByLabel("Your question").fill("What else is in this file?");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Send question", exact: true })
+        .click();
+      await waitFor(async () => (await page.locator(".ask-message.from-assistant:not(.is-pending)").count()) === 2);
+      assert.equal(await page.locator(".ask-about").count(), 2, "Each move is marked in the thread");
+      await page.locator(".ask-message").last().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `test-results/ask-thread-${viewport.width}.png` });
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));

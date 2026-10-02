@@ -1158,7 +1158,6 @@ function selectNode(node) {
   if (node.kind === "symbol") {
     sourceView = node.status === "removed" ? "before" : "diff";
   }
-  if (tab === "ask") ask.open();
   renderDeck();
   renderPanel();
   if (scope.kind === "file" && !sourceData) loadSource();
@@ -1210,7 +1209,6 @@ async function navigate(next, originKey) {
   ++sourceId;
   search = "";
   tab = "details";
-  ask.followSelection();
   render();
   const body = $(".sheet:not(.peek) .sheet-body");
   if (body) body.scrollTop = 0;
@@ -1234,8 +1232,6 @@ function goUp() {
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
-  ask.followSelection();
-
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(
     element(
@@ -1269,7 +1265,6 @@ function renderPanel() {
   if (selected) {
     const clear = button("x", "×", () => {
       selected = null;
-      if (tab === "ask") ask.open();
       render();
     });
     clear.setAttribute("aria-label", "Clear selection");
@@ -2509,7 +2504,6 @@ document.querySelectorAll("[data-compose]").forEach(
   (b) =>
     (b.onclick = () => {
       primaryTab = b.dataset.compose;
-      if (primaryTab === "ask") ask.open();
       // The conversation on screen follows the dock, so Ask never shows under a comment draft.
       if (discussing()) showDiscussion();
       if (comparison) renderPanel();

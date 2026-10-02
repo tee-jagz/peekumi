@@ -1,10 +1,17 @@
-/** @module Contextual, non-executing review conversations and explicit draft suggestions. */
+/**
+ * @module Contextual, non-executing review conversations and explicit draft suggestions. One
+ * conversation follows the owner through the repository: each question is asked about the current
+ * selection, and every turn keeps the selection it concerned (`about`), so earlier answers stay
+ * readable and a suggestion is saved against the code it was about. Held in memory only.
+ */
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
 export function createAsk({ api, context, redraw, notice, makeDraft }) {
-  const conversations = new Map();
-  let selectedContext = null;
+  const chat = { messages: [], question: "", pending: false };
+  /** Names a selection and its revisions, for the model and for the thread. */
+  const about = (c) =>
+    `${[c.anchor.symbol, c.anchor.path || "the repository"].filter(Boolean).join(" in ")} (${c.base.slice(0, 7)} → ${c.head.slice(0, 7)})`;
   const el = (tag, text) => {
     const n = document.createElement(tag);
     if (text !== undefined) n.textContent = text;
@@ -26,37 +33,9 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
     };
     return b;
   };
-  function current() {
-    const c = selectedContext || context(),
-      key = JSON.stringify(c);
-    if (!conversations.has(key)) {
-      if (conversations.size >= 20)
-        conversations.delete(conversations.keys().next().value);
-      conversations.set(key, {
-        context: c,
-        messages: [],
-        question: "",
-        pending: false,
-      });
-    }
-    return conversations.get(key);
-  }
   return {
-    open() {
-      if (selectedContext && (current().question || current().pending)) return;
-      selectedContext = context();
-    },
-    followSelection() {
-      if (selectedContext && (current().question || current().pending)) return;
-      const live = context();
-      const identity = (c) =>
-        JSON.stringify([c.anchor, c.base, c.head, c.side]);
-      if (!selectedContext || identity(live) !== identity(selectedContext))
-        selectedContext = live;
-    },
     render(body, composerHost) {
-      const chat = current(),
-        c = chat.context,
+      const c = context(),
         subject = c.anchor.symbol || c.anchor.path?.split("/").at(-1) || "this repository";
       const head = el("div");
       head.className = "ask-head";
@@ -85,9 +64,17 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
       }
       const thread = el("div");
       thread.className = "ask-thread";
+      let shown = null;
       for (const message of chat.messages) {
         const bubble = el("article");
         bubble.className = "ask-message from-" + message.role;
+        if (message.role === "user" && message.about !== shown) {
+          // Mark where the conversation moved to another selection.
+          const where = el("p", "About " + message.about);
+          where.className = "read-note ask-about";
+          thread.append(where);
+          shown = message.about;
+        }
         bubble.append(richText(message.text, "ask-text"));
         if (message.lookups?.length) {
           // Show what the answer read beyond the selection, so it can be judged.
@@ -109,8 +96,8 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
             words,
             btn("Save as draft instruction", async () => {
               await makeDraft({
-                anchor: c.anchor,
-                sha: c.sha,
+                anchor: message.context.anchor,
+                sha: message.context.sha,
                 text: message.suggestion,
               });
             }),
@@ -168,11 +155,11 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
         const question = chat.question;
         const history = chat.messages
           .slice(-12)
-          .map(({ role, text }) => ({ role, text }));
+          .map(({ role, text, about }) => ({ role, text, about }));
         // Bound prior dialogue separately from server-built source context.
         while (JSON.stringify(history).length > 11000) history.shift();
         // Show the question at once; the answer can take several seconds.
-        chat.messages.push({ role: "user", text: question });
+        chat.messages.push({ role: "user", text: question, about: about(c), context: c });
         chat.question = "";
         chat.pending = true;
         chat.reveal = true;
@@ -185,6 +172,8 @@ export function createAsk({ api, context, redraw, notice, makeDraft }) {
           });
           chat.messages.push({
             role: "assistant",
+            about: about(c),
+            context: c,
             ...response.answer,
             omitted: response.context.omitted,
             lookups: response.lookups || [],
