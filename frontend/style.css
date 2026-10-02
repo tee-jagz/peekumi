@@ -5215,3 +5215,19 @@ details.p-section[open] > summary::before {
   margin-top: 6px;
   font-size: 12px;
 }
+/* While an answer is pending: Peek and the label on one line, lookups on their own line below.
+   Once text streams in, the bubble is ordinary text again. */
+.ask-message.is-pending {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.ask-message.is-pending.is-streaming {
+  display: block;
+}
+.ask-message.is-pending .pending-text {
+  white-space: nowrap;
+}
+.ask-message.is-pending .ask-lookups {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+}
