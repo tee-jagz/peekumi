@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 /// Tool calls one answer may make before it must reply with what it has.
 pub const MAX_CALLS: usize = 12;
 /// Tool names as Claude Code sees them through the `strata` server.
-pub const TOOLS: [&str; 4] = [
+pub const TOOLS: [&str; 5] = [
     "mcp__strata__find_declarations",
+    "mcp__strata__search_code",
     "mcp__strata__read_declaration",
     "mcp__strata__read_file",
     "mcp__strata__relationships",
@@ -39,6 +40,7 @@ fn tool_list() -> Value {
     let side = json!({"type":"string","enum":["after","before"],"description":"after = the newer compared revision (default), before = the older one"});
     json!([
         {"name":"find_declarations","description":"Search declaration names (functions, methods, classes and types) in this repository at the compared revisions. Case-insensitive substring match; optionally limited to a path prefix. Returns path, name, kind, change status and line.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string","description":"Optional file or folder prefix"}},"required":["query"],"additionalProperties":false}},
+        {"name":"search_code","description":"Find lines containing exact text (case-sensitive) in the repository's readable files at one compared revision, optionally under a path prefix. Each match names the declaration it sits in. Use it to find where something is used, including references static analysis missed (inside macros, strings or dynamic code).","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"path":{"type":"string","description":"Optional file or folder prefix"},"side":side},"required":["text"],"additionalProperties":false}},
         {"name":"read_declaration","description":"Read one declaration's source with line numbers, from a file at the compared revisions.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"name":{"type":"string"},"side":side},"required":["path","name"],"additionalProperties":false}},
         {"name":"read_file","description":"Read up to 300 numbered lines of a file at the compared revisions.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"side":side},"required":["path"],"additionalProperties":false}},
         {"name":"relationships","description":"List static relationships for a file or one of its declarations: what it calls, imports, implements or inherits (outgoing) and what refers to it (incoming), with resolution and source lines. Static declarations, not runtime behaviour; unresolved and ambiguous targets stay uncertain.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"name":{"type":"string","description":"Optional declaration name in that file"}},"required":["path"],"additionalProperties":false}}
@@ -102,6 +104,7 @@ fn describe(name: &str, args: &Value) -> String {
     let file = |key: &str| s(key).rsplit('/').next().unwrap_or("").to_string();
     match name {
         "find_declarations" => format!("Searched for “{}”", s("query")),
+        "search_code" => format!("Searched the code for “{}”", s("text")),
         "read_declaration" => format!("Read {} in {}", s("name"), file("path")),
         "read_file" => format!("Read {}", file("path")),
         "relationships" if !s("name").is_empty() => format!("Relationships of {}", s("name")),
@@ -182,6 +185,15 @@ async fn run(app: &App, name: &str, args: &Value, base: &Value, head: &Value) ->
             matches.truncate(40);
             Ok(json!({"matches":matches,"more":more}))
         }
+        "search_code" => {
+            let wanted = argument(args, "text")?;
+            let revision = if side(args)? == "before" { base } else { head };
+            engine(
+                "search",
+                json!([revision, wanted, args["path"].as_str().unwrap_or("")]),
+            )
+            .await
+        }
         "read_declaration" => {
             let (path, wanted, side) = (
                 argument(args, "path")?,
@@ -252,7 +264,8 @@ async fn run(app: &App, name: &str, args: &Value, base: &Value, head: &Value) ->
 
 /// Summarizes static relationships around a file or declaration as compact lines: outgoing
 /// (what it calls, imports, implements or inherits) and incoming (what refers to it).
-/// Used both for Ask's initial context and by the `relationships` tool.
+/// Used both for Ask's initial context and by the `relationships` tool. `callerRefs` lists the
+/// distinct declarations that refer to it (`{path, symbol}`); Ask fetches their code.
 pub async fn relationship_summary(
     app: &App,
     base: &Value,
@@ -272,7 +285,7 @@ pub async fn relationship_summary(
             .flatten()
             .any(|t| t["path"] == path && name.is_none_or(|n| t["symbol"] == n))
     };
-    let (mut outgoing, mut incoming) = (vec![], vec![]);
+    let (mut outgoing, mut incoming, mut callers) = (vec![], vec![], vec![]);
     for edge in data["relationships"].as_array().into_iter().flatten() {
         let from_path = edge["source"]["path"].as_str().unwrap_or("");
         let from_symbol = edge["source"]["symbol"].as_str().unwrap_or("");
@@ -325,6 +338,10 @@ pub async fn relationship_summary(
                 edge["target"].as_str().unwrap_or(""),
             ));
         } else if targets_here(edge) {
+            let caller = json!({"path":from_path,"symbol":from_symbol});
+            if !from_symbol.is_empty() && !callers.contains(&caller) {
+                callers.push(caller);
+            }
             incoming.push(format!(
                 "{} · {} {} {} (line {sites}{change})",
                 from_path,
@@ -348,7 +365,8 @@ pub async fn relationship_summary(
         "subject": match name { Some(n) => format!("{path} · {n}"), None => path.to_string() },
         "outgoing": outgoing, "outgoingNotShown": more_out,
         "incoming": incoming, "incomingNotShown": more_in,
-        "note": "Static declarations, not runtime behaviour. Incoming links come only from references Strata resolved to this target."
+        "note": "Static declarations, not runtime behaviour. Incoming links come only from references Peekumi resolved to this target.",
+        "callerRefs": callers
     }))
 }
 

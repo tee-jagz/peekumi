@@ -412,6 +412,51 @@ impl Repository {
             checks,
         })
     }
+    /// Finds lines containing `query` (case-sensitive, literal) in readable files of one committed
+    /// revision, optionally under a path prefix. Each match names the innermost declaration it sits
+    /// in, so call sites the static analysis cannot resolve (inside macros, say) are still found.
+    /// Returns at most 40 matches and how many more there were.
+    pub fn search(&mut self, revision: &str, query: &str, prefix: &str) -> Result<Value> {
+        anyhow::ensure!(
+            !query.is_empty() && query.len() <= 200,
+            "Search text must be 1 to 200 characters"
+        );
+        let snapshot = self.snapshot(revision)?;
+        let (mut matches, mut total) = (vec![], 0usize);
+        for file in snapshot.files.values() {
+            if !file.path.starts_with(prefix) {
+                continue;
+            }
+            let Some(source) = file.source.as_deref() else {
+                continue;
+            };
+            for (index, line) in source.lines().enumerate() {
+                if !line.contains(query) {
+                    continue;
+                }
+                total += 1;
+                if matches.len() >= 40 {
+                    continue;
+                }
+                let number = index as u64 + 1;
+                let within = file
+                    .symbols
+                    .iter()
+                    .filter(|s| {
+                        s["start"].as_u64().is_some_and(|start| start <= number)
+                            && s["end"].as_u64().is_some_and(|end| end >= number)
+                    })
+                    .min_by_key(|s| {
+                        s["end"].as_u64().unwrap_or(0) - s["start"].as_u64().unwrap_or(0)
+                    })
+                    .map(|s| s["name"].clone())
+                    .unwrap_or(Value::Null);
+                let text: String = line.trim().chars().take(160).collect();
+                matches.push(json!({"path":file.path,"line":number,"within":within,"text":text}));
+            }
+        }
+        Ok(json!({"matches":matches,"more":total.saturating_sub(matches.len())}))
+    }
     /// Returns directory descriptions at both revisions plus available adapter capabilities.
     /// Descriptions come from committed READMEs or Python package docstrings; snapshot failures are propagated.
     pub fn directories(&mut self, base: &str, head: &str) -> Result<Value> {

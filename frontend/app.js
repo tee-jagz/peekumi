@@ -180,6 +180,7 @@ const workflow = createWorkflow({
 });
 const ask = createAsk({
   api,
+  stream: apiStream,
   context() {
     return {
       ...reviewContext(),
@@ -217,6 +218,8 @@ function showNotice(message, error = false) {
   $("#notice").hidden = !message;
 }
 /** Fetches an authenticated same-origin JSON API response. Rejects failed HTTP responses with the server error message. */
+const UNREACHABLE =
+  "Cannot reach Peekumi. Check that the server is running and your phone is connected to its network or Tailscale.";
 async function api(route, options = {}) {
   const headers = new Headers(options.headers);
   const repo = new URL(location.href).searchParams.get("repo");
@@ -225,9 +228,7 @@ async function api(route, options = {}) {
   try {
     response = await fetch(route, { ...options, headers });
   } catch {
-    throw new Error(
-      "Cannot reach Peekumi. Check that the server is running and your phone is connected to its network or Tailscale.",
-    );
+    throw new Error(UNREACHABLE);
   }
   const result = await response.json();
   if (response.status === 401) {
@@ -236,6 +237,46 @@ async function api(route, options = {}) {
   }
   if (!response.ok) throw new Error(result.error || "Request failed");
   return result;
+}
+/** Posts JSON and hands each newline-delimited JSON event to `onEvent` as it arrives, so an
+ * answer can appear while it is written. An exception from `onEvent` stops reading and rejects.
+ * Network failures and non-OK responses reject with the server's message, as `api` does. */
+async function apiStream(route, body, onEvent) {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const repo = new URL(location.href).searchParams.get("repo");
+  if (repo) headers.set("X-Strata-Repository", repo);
+  let response;
+  try {
+    response = await fetch(route, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(UNREACHABLE);
+  }
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      $("#connect").hidden = false;
+      $("#workspace").inert = true;
+    }
+    throw new Error(result.error || "Request failed");
+  }
+  const reader = response.body.getReader(),
+    decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    for (let end; (end = buffer.indexOf("\n")) >= 0; ) {
+      const line = buffer.slice(0, end).trim();
+      buffer = buffer.slice(end + 1);
+      if (line) onEvent(JSON.parse(line));
+    }
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer));
 }
 /** Exchanges a private access token for a session cookie and initializes the viewer on success. */
 async function pair(token) {
