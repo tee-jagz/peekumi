@@ -9,4 +9,6 @@ These scripts launch Strata, locate the Rust toolchain and measure backend perfo
 
 - `manage.mjs`: installation, registry, dependency diagnostics, OS background service, pairing, revocation and Tailscale HTTPS setup.
 - `package.mjs`: platform archive with bundled Node/TypeScript and SHA-256 checksum; excludes private state.
+
+`install.sh` at the repository root downloads a release archive, verifies its checksum and installs it with the archive's own `strata upgrade`.
 - `guide-screenshots.mjs`: regenerates the user guide's labelled screenshots, its icon images and the README screenshots from a private, temporary Strata instance on this repository. Run `npm run build:rust` first.
