@@ -407,7 +407,15 @@ try {
         await page.locator(".ask-message.from-user", { hasText: "Name references." }).isVisible(),
         "The conversation stays in view after following a link",
       );
-      await page.getByRole("button", { name: "Ask about run", exact: true }).waitFor();
+      assert.equal(
+        await page.getByLabel("Your question").getAttribute("placeholder"),
+        "Ask about run",
+        "The next question is about the new selection",
+      );
+      // Moving around the map keeps the one conversation in view.
+      if (await home.isEnabled()) await home.click();
+      await page.locator(".ask-message.from-user", { hasText: "Name references." }).waitFor();
+      assert.equal(await page.locator("#panel").getAttribute("data-view"), "ask");
       await page.screenshot({ path: `test-results/ask-link-followed-${viewport.width}.png` });
       await page.screenshot({
         path: `test-results/persistent-review-${viewport.width}.png`,

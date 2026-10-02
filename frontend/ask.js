@@ -1,5 +1,7 @@
 /** @module Contextual, non-executing review conversations and explicit draft suggestions.
- * Answers stream in as Claude writes them; lookups show while they happen. */
+ * One conversation runs for the session and stays in view as the map moves; each question is
+ * about whatever was selected when it was sent, and is marked when that changes. Answers
+ * stream in as Claude writes them; lookups show while they happen. */
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
@@ -10,11 +12,18 @@ export function createAsk({
   notice,
   makeDraft,
   openReference,
-  pinned,
-  unpin,
 }) {
-  const conversations = new Map();
-  let selectedContext = null;
+  const chat = {
+    messages: [],
+    question: "",
+    pending: false,
+    partial: "",
+    live: [],
+    reveal: false,
+  };
+  /** A short name for what a question was about. */
+  const subjectOf = (anchor) =>
+    anchor.symbol || anchor.path?.split("/").at(-1) || "the repository";
   const el = (tag, text) => {
     const n = document.createElement(tag);
     if (text !== undefined) n.textContent = text;
@@ -46,7 +55,11 @@ export function createAsk({
     if (text.trim()) {
       waiting.classList.add("is-streaming");
       waiting.append(richText(text, "ask-text"));
-    } else waiting.append(peek("thinking"), el("span", "Reading the code"));
+    } else {
+      const label = el("span", "Reading the code");
+      label.className = "pending-text";
+      waiting.append(peek("thinking"), label);
+    }
     if (chat.live.length) {
       const read = el("p", "Looking up: " + [...new Set(chat.live)].join(" · "));
       read.className = "read-note ask-lookups";
@@ -56,48 +69,20 @@ export function createAsk({
   }
   let painting = 0;
   /** Repaints only the streaming bubble, once per frame, so typing elsewhere is undisturbed. */
-  function paint(chat) {
+  function paint() {
     if (painting) return;
     painting = requestAnimationFrame(() => {
       painting = 0;
-      const shown = document.querySelector(".ask-message.is-pending");
-      if (shown && chat === current()) shown.replaceWith(pendingBubble(chat));
+      document
+        .querySelector(".ask-message.is-pending")
+        ?.replaceWith(pendingBubble(chat));
     });
   }
-  function current() {
-    const c = selectedContext || context(),
-      key = JSON.stringify(c);
-    if (!conversations.has(key)) {
-      if (conversations.size >= 20)
-        conversations.delete(conversations.keys().next().value);
-      conversations.set(key, {
-        context: c,
-        messages: [],
-        question: "",
-        pending: false,
-        partial: "",
-        live: [],
-      });
-    }
-    return conversations.get(key);
-  }
   return {
-    open() {
-      if (selectedContext && (current().question || current().pending)) return;
-      selectedContext = context();
-    },
-    followSelection() {
-      if (selectedContext && (current().question || current().pending)) return;
-      const live = context();
-      const identity = (c) =>
-        JSON.stringify([c.anchor, c.base, c.head, c.side]);
-      if (!selectedContext || identity(live) !== identity(selectedContext))
-        selectedContext = live;
-    },
     render(body, composerHost) {
-      const chat = current(),
-        c = chat.context,
-        subject = c.anchor.symbol || c.anchor.path?.split("/").at(-1) || "this repository";
+      // New questions are about the current selection; earlier ones keep their own subject.
+      const c = context(),
+        subject = subjectOf(c.anchor);
       const head = el("div");
       head.className = "ask-head";
       const note = el(
@@ -106,15 +91,6 @@ export function createAsk({
       );
       note.className = "read-note";
       head.append(note);
-      // After following a link the conversation stays put; this hands it to the new selection.
-      const live = context().anchor;
-      if (pinned() && JSON.stringify(live) !== JSON.stringify(c.anchor))
-        head.append(
-          btn(
-            `Ask about ${live.symbol || live.path?.split("/").at(-1) || "the repository"}`,
-            unpin,
-          ),
-        );
       if (chat.messages.length && !chat.pending)
         head.append(
           btn("New conversation", () => {
@@ -134,7 +110,15 @@ export function createAsk({
       }
       const thread = el("div");
       thread.className = "ask-thread";
+      let lastSubject = null;
       for (const message of chat.messages) {
+        // Mark the subject when it changes, so a moving conversation stays readable.
+        if (message.role === "user" && message.subject !== lastSubject) {
+          const about = el("p", "About " + message.subject);
+          about.className = "ask-about";
+          thread.append(about);
+          lastSubject = message.subject;
+        }
         const bubble = el("article");
         bubble.className = "ask-message from-" + message.role;
         const links = { links: message.references || {}, onLink: openReference };
@@ -159,8 +143,8 @@ export function createAsk({
             words,
             btn("Save as draft instruction", async () => {
               await makeDraft({
-                anchor: c.anchor,
-                sha: c.sha,
+                anchor: message.asked.anchor,
+                sha: message.asked.sha,
                 text: message.suggestion,
               });
             }),
@@ -185,7 +169,7 @@ export function createAsk({
       label.className = "workflow-field";
       form.className = "dock-form";
       input.rows = 1;
-      input.placeholder = `Ask about ${c.anchor.symbol || c.anchor.path?.split("/").at(-1) || "this repository"}`;
+      input.placeholder = `Ask about ${subject}`;
       input.setAttribute("aria-label", "Your question");
       label.classList.add("dock-input");
       label.firstChild.textContent = "";
@@ -209,14 +193,17 @@ export function createAsk({
       form.onsubmit = async (event) => {
         event.preventDefault();
         if (chat.pending || !chat.question.trim()) return;
-        const question = chat.question;
-        const history = chat.messages
-          .slice(-12)
-          .map(({ role, text }) => ({ role, text }));
+        const question = chat.question,
+          asked = context();
+        // Earlier questions carry their subject, so follow-ups across selections make sense.
+        const history = chat.messages.slice(-12).map(({ role, text, subject }) => ({
+          role,
+          text: (role === "user" ? `[About ${subject}] ${text}` : text).slice(0, 8000),
+        }));
         // Bound prior dialogue separately from server-built source context.
         while (JSON.stringify(history).length > 11000) history.shift();
         // Show the question at once; the answer can take several seconds.
-        chat.messages.push({ role: "user", text: question });
+        chat.messages.push({ role: "user", text: question, subject: subjectOf(asked.anchor) });
         chat.question = "";
         chat.pending = true;
         chat.partial = "";
@@ -226,17 +213,18 @@ export function createAsk({
         try {
           let response = null;
           // The answer streams in; each new model turn replaces earlier working text.
-          await stream("/api/ask", { ...c, question, history, stream: true }, (event) => {
+          await stream("/api/ask", { ...asked, question, history, stream: true }, (event) => {
             if (event.type === "text") chat.partial += event.text;
             else if (event.type === "turn") chat.partial = "";
             else if (event.type === "lookup") chat.live.push(event.text);
             else if (event.type === "error") throw new Error(event.message);
             else if (event.type === "done") response = event;
-            paint(chat);
+            paint();
           });
           if (!response) throw new Error("The answer stopped before it finished.");
           chat.messages.push({
             role: "assistant",
+            asked,
             ...response.answer,
             references: response.references || {},
             omitted: response.context.omitted,
