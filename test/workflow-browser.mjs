@@ -377,6 +377,38 @@ try {
         );
       }
       assert.equal(await page.locator('#tabs [role="tab"]').count(), 2);
+      // A name in an answer links to the map; following it keeps the conversation in view.
+      const home = page.locator(".crumbs .crumb-home");
+      if (await home.isEnabled()) await home.click();
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page.getByLabel("Your question").fill("Name references.");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Send question", exact: true })
+        .click();
+      const runLink = page.locator(".ask-message .code-link", { hasText: /^run$/ });
+      await runLink.waitFor();
+      assert.equal(
+        await page.locator(".ask-message .code-link", { hasText: "nowhere_at_all" }).count(),
+        0,
+        "Unknown names stay plain text",
+      );
+      await page.screenshot({ path: `test-results/ask-links-${viewport.width}.png` });
+      await runLink.click();
+      await page.waitForFunction(
+        () => document.querySelector("#reviewScope .review-name")?.textContent === "run",
+      );
+      assert.equal(
+        await page.locator('.sheet[data-front="true"] .node.sel').getAttribute("data-key"),
+        "symbol:run",
+        "The linked declaration is selected on the map",
+      );
+      assert.ok(
+        await page.locator(".ask-message.from-user", { hasText: "Name references." }).isVisible(),
+        "The conversation stays in view after following a link",
+      );
+      await page.getByRole("button", { name: "Ask about run", exact: true }).waitFor();
+      await page.screenshot({ path: `test-results/ask-link-followed-${viewport.width}.png` });
       await page.screenshot({
         path: `test-results/persistent-review-${viewport.width}.png`,
       });

@@ -3,7 +3,16 @@
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
-export function createAsk({ stream, context, redraw, notice, makeDraft }) {
+export function createAsk({
+  stream,
+  context,
+  redraw,
+  notice,
+  makeDraft,
+  openReference,
+  pinned,
+  unpin,
+}) {
   const conversations = new Map();
   let selectedContext = null;
   const el = (tag, text) => {
@@ -97,6 +106,15 @@ export function createAsk({ stream, context, redraw, notice, makeDraft }) {
       );
       note.className = "read-note";
       head.append(note);
+      // After following a link the conversation stays put; this hands it to the new selection.
+      const live = context().anchor;
+      if (pinned() && JSON.stringify(live) !== JSON.stringify(c.anchor))
+        head.append(
+          btn(
+            `Ask about ${live.symbol || live.path?.split("/").at(-1) || "the repository"}`,
+            unpin,
+          ),
+        );
       if (chat.messages.length && !chat.pending)
         head.append(
           btn("New conversation", () => {
@@ -119,7 +137,8 @@ export function createAsk({ stream, context, redraw, notice, makeDraft }) {
       for (const message of chat.messages) {
         const bubble = el("article");
         bubble.className = "ask-message from-" + message.role;
-        bubble.append(richText(message.text, "ask-text"));
+        const links = { links: message.references || {}, onLink: openReference };
+        bubble.append(richText(message.text, "ask-text", links));
         if (message.lookups?.length) {
           // Show what the answer read beyond the selection, so it can be judged.
           const read = el("p", "Looked up: " + [...new Set(message.lookups)].join(" · "));
@@ -134,7 +153,7 @@ export function createAsk({ stream, context, redraw, notice, makeDraft }) {
         if (message.suggestion) {
           const proposal = el("div");
           proposal.className = "ask-suggestion";
-          const words = richText(message.suggestion, "workflow-text");
+          const words = richText(message.suggestion, "workflow-text", links);
           proposal.append(
             el("span", "Suggested instruction"),
             words,
@@ -219,6 +238,7 @@ export function createAsk({ stream, context, redraw, notice, makeDraft }) {
           chat.messages.push({
             role: "assistant",
             ...response.answer,
+            references: response.references || {},
             omitted: response.context.omitted,
             lookups: response.lookups || [],
           });
