@@ -289,6 +289,19 @@ try {
       await page
         .getByText("Reviewed · not applied to main", { exact: true })
         .waitFor();
+      assert.match(
+        await page.locator(".apply-step code").innerText(),
+        /^git merge --ff-only strata\/run-[\w-]+$/,
+        "After approval the task names the branch and the command that applies it",
+      );
+      assert.ok(
+        await page.getByRole("button", { name: "Copy command" }).isVisible(),
+      );
+      await page.waitForFunction(() => {
+        const step = document.querySelector(".apply-step").getBoundingClientRect(),
+          view = document.querySelector("#reviewScroll").getBoundingClientRect();
+        return step.top >= view.top - 1 && step.top < view.bottom - 40;
+      }, null, { timeout: 3000 });
       await page.screenshot({
         path: `test-results/workflow-verified-${viewport.width}.png`,
       });

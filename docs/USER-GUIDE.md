@@ -176,7 +176,7 @@ The only labelled view button is the one that is open; the others show just thei
 
 ## Ask, instructions and tasks
 
-**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. Ask conversations live in the open page and are lost on reload.
+**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff, plus what the code calls, imports or inherits and what calls it. When that is not enough, it can look up more of the repository at the same revisions (search declarations, read a declaration or file, follow relationships), up to 12 lookups per answer. The answer lists what it looked up. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. Ask conversations live in the open page and are lost on reload.
 
 <img src="guide/11-comment.jpg" width="340" alt="Writing an instruction draft">
 
@@ -195,7 +195,9 @@ The only labelled view button is the one that is open; the others show just thei
 | 1 | Review task | Turns your drafts into a task: choose which drafts, which agent (Codex or Claude Code) and optional extra instructions, then preview the exact task before starting it. |
 | 2 | Draft | A saved instruction with its anchor and commit. Edit or delete it while it is a draft. |
 
-After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. **Review agent branch** opens the agent's work on the map, and **Verify** or **Reopen** records your decision. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
+After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. **Review agent branch** opens the agent's work on the map, and **Mark task reviewed** or **Request changes** records your decision.
+
+Approving a task does not change your code. Strata never merges: the agent's commits stay on their task branch. Once you approve, the task shows **Next: apply to main** with the exact command, such as `git merge --ff-only strata/run-…`, and a copy button. Run it in the repository with main checked out, or open a pull request from that branch. When the commits reach main, the task reads **Applied to main**. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
 ## Typing on a phone
 
@@ -247,6 +249,7 @@ Every icon button has a name that appears as a tooltip and is read by screen rea
 | <img src="guide/icons/glyph-send.svg" width="20" alt=""> | Send | Send the question. |
 | <img src="guide/icons/glyph-check.svg" width="20" alt=""> | Save draft | Save the instruction. |
 | <img src="guide/icons/glyph-close.svg" width="20" alt=""> | Cancel or close | Discard, or close a popover. |
+| <img src="guide/icons/glyph-copy.svg" width="20" alt=""> | Copy | Copy the command that applies a reviewed task. |
 | <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Check for new commits. |
 
 ### Change status

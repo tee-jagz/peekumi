@@ -672,6 +672,43 @@ export function createWorkflow({
       body.append(b);
     }
   }
+  /** The step after approval. Strata never merges, so it names the branch and the exact command. */
+  function applyStep(r) {
+    const target = r.targetBranch || "main",
+      command = `git merge --ff-only ${r.branch}`;
+    const step = el("section", "apply-step");
+    const line = el("div", "command-line"),
+      code = el("code", "", command),
+      copy = iconButton(el("button", "btn icon-action"), "copy", "Copy command");
+    copy.type = "button";
+    copy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        notice("Command copied");
+        setTimeout(() => notice(""), 1500);
+      } catch {
+        // Plain HTTP has no clipboard access; select the command for a manual copy.
+        getSelection().selectAllChildren(code);
+        notice("Clipboard unavailable here; the command is selected for copying");
+      }
+    };
+    line.append(code, copy);
+    step.append(
+      el("h3", "workflow-group", `Next: apply to ${target}`),
+      el(
+        "p",
+        "read-note",
+        `Strata never merges. In the repository, with ${target} checked out, run:`,
+      ),
+      line,
+      el(
+        "p",
+        "read-note",
+        `If ${target} has moved on, run it without --ff-only or open a pull request from ${r.branch}. This task changes to “Applied to ${target}” once its commits are on ${target}.`,
+      ),
+    );
+    return step;
+  }
   function taskTitle(r) {
     const paths = [
       ...new Set((r.comments || []).map((c) => c.anchor.path || "Repository")),
@@ -679,16 +716,22 @@ export function createWorkflow({
     const scope = paths.length === 1 ? paths[0] : `${paths.length} locations`;
     return `${r.comments?.length || 0} instruction${r.comments?.length === 1 ? "" : "s"} · ${scope}`;
   }
+  /** True once a finished task has no instruction left to review and at least one approved. */
+  function reviewed(r) {
+    if (r.status !== "completed") return false;
+    const comments = data.comments.filter((c) =>
+      r.comments.some((x) => x.id === c.id),
+    );
+    return (
+      comments.some((c) => c.status === "verified") &&
+      !comments.some((c) => c.status === "addressed")
+    );
+  }
   function runStatus(r) {
-    if (r.applied) return `Applied to ${r.targetBranch || "main"}`;
-    if (r.status === "completed") {
-      const comments = data.comments.filter((c) =>
-        r.comments.some((x) => x.id === c.id),
-      );
-      return comments.length && comments.every((c) => c.status === "verified")
-        ? "Reviewed · not applied to main"
-        : "Ready for review";
-    }
+    const target = r.targetBranch || "main";
+    if (r.applied) return `Applied to ${target}`;
+    if (r.status === "completed")
+      return reviewed(r) ? `Reviewed · not applied to ${target}` : "Ready for review";
     return (
       {
         running: "Working",
@@ -841,6 +884,7 @@ export function createWorkflow({
       return;
     }
     body.append(el("h2", "task-heading", taskTitle(r)), activityView(r));
+    if (reviewed(r) && !r.applied && r.results?.length) body.append(applyStep(r));
     if (active(r) && r.status !== "interrupted")
       body.append(
         action("Stop task", async () => {
@@ -897,6 +941,12 @@ export function createWorkflow({
               } finally {
                 await refresh();
               }
+              // The next step renders at the top of the task; bring it into view.
+              requestAnimationFrame(() =>
+                document
+                  .querySelector(".apply-step")
+                  ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+              );
             },
             true,
           ),

@@ -37,6 +37,7 @@ const glyphs = {
   pin: "M10 18s6-5.3 6-10a6 6 0 0 0-12 0c0 4.7 6 10 6 10Z" + ring(10, 8, 2),
   check: "M4 10.5l4 4 8-9",
   close: "M5 5l10 10M15 5L5 15",
+  copy: "M7 7h10v10H7ZM3 13V3h10",
   refresh: "M16 10a6 6 0 1 1-2-4.5M16 3v4h-4",
   back: "M12 4l-6 6 6 6",
   chevron: "M5 8l5 5 5-5",
