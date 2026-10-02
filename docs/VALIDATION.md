@@ -128,3 +128,27 @@ See [WORKFLOW.md](WORKFLOW.md) for current-status history semantics, polling, pr
 ### Comment and Ask navigation
 
 The review panel now uses Comments and Ask; run preparation and progress are nested under Comments. The additional Ask integration test checks committed context, disabled execution tools, credential-free provider environment and no automatic draft/run creation. Browser checks exercise question → answer → explicitly saved draft at phone and desktop sizes; screenshots were inspected. Validation uses a deterministic local provider rather than a live model request. Current suite: 25 Node-driven tests plus 10 native Rust tests. A native regression verifies that Ask includes a selected declaration near the end of a large file.
+
+## Clean Linux install (2026-10-02)
+
+Followed `docs/SETUP.md` from source in an empty `debian:bookworm-slim` container (x86_64) with only the committed tree (`git archive HEAD`), Git 2.39, Python 3.11, the official Node 22.23.3 build and Rust 1.99. `npm ci` and `npm run build:rust` succeeded; the release build took 1 minute 35 seconds on 4 CPUs. `strata install` and `strata doctor` passed every required check and labelled GitHub CLI, Claude Code, Codex and Tailscale as optional.
+
+With a two-commit repository registered, `strata serve` started, `strata pair` printed a link, unauthenticated API requests returned 401 and pairing returned a session. The comparison accounted for all 156 files (16 Rust, 41 TypeScript and 1 Python file parsed; the rest labelled file-level or binary), found the one changed file and classified its Python change as a signature change. Source, declaration details, relationships and every interface asset, including the manifest and service worker, were served.
+
+The container has no systemd user session, so `strata start` cannot install the background service. It previously failed with a raw `systemctl` error; it now explains the situation and recommends `strata serve`, exits non-zero without leaving a unit file, and `strata doctor` reports the missing service manager. The systemd service itself, ARM builds and a browser session against the container were not exercised.
+
+## Linux release archive (2026-10-02)
+
+Built `strata-0.2.0-linux-x64.tar.gz` (52 MB) with `scripts/package.mjs` in an `ubuntu:22.04` container, matching the release workflow. The bundled server needs glibc 2.34 and the bundled Node needs 2.28. Installed it with `install.sh` (using `STRATA_ARCHIVE`) in fresh `debian:bookworm-slim` and `ubuntu:22.04` containers that had only Git and curl, with no Node, Rust or Python.
+
+In both containers:
+
+- An archive with a wrong checksum was refused with "nothing was installed", and nothing was.
+- The real archive installed to `~/.local/lib/strata` with a link in `~/.local/bin`. The first build's launcher resolved its directory from the link and could not find Node; it now follows links first.
+- `strata doctor` passed Git, Server, Node and the TypeScript parser and marked Python, GitHub CLI, Claude Code, Codex, Tailscale and the background service as missing optional tools.
+- `strata start` explained that no systemd user session exists and exited non-zero; `strata serve` ran in the foreground.
+- Unauthenticated API requests returned 401 and pairing returned 200. The comparison found the changed files, and a JavaScript parameter change was classified as a signature change by the bundled TypeScript parser.
+- Without Python, the changed Python file was labelled "Python unavailable · file-level analysis". After installing Python 3.10 on Ubuntu, the same edit was classified as a signature change and doctor reported Python as available.
+- The page, `app.js`, manifest and service worker were served. After two more installs, one backup remained.
+
+The macOS and ARM archives, the GitHub download path in `install.sh` and the release job have not run yet; they need the workflow and a published release.

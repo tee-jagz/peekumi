@@ -10,7 +10,7 @@ import {
   copyFile,
   chmod,
 } from "node:fs/promises";
-import { resolve, dirname, join } from "node:path";
+import { resolve, dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, platform } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
@@ -50,6 +50,17 @@ function run(program, args, options = {}) {
   if (result.status !== 0)
     throw new Error(`${program}: ${result.stderr?.trim() || "command failed"}`);
   return result.stdout?.trim() || "";
+}
+const NO_SERVICE_MANAGER =
+  "No systemd user service manager is available here (common in containers, WSL without systemd and minimal systems). Run strata serve to keep Strata in the foreground, or run it under your own process manager.";
+/** Reports whether this Linux session can run a systemd user service; macOS always can. */
+function serviceManagerAvailable() {
+  if (system !== "linux") return true;
+  const probe = spawnSync("systemctl", ["--user", "show-environment"], {
+    timeout: 10000,
+    encoding: "utf8",
+  });
+  return !probe.error && probe.status === 0;
 }
 async function config() {
   try {
@@ -154,6 +165,7 @@ async function installService() {
       { mode: 0o600 },
     );
   } else if (system === "linux") {
+    if (!serviceManagerAvailable()) throw new Error(NO_SERVICE_MANAGER);
     await mkdir(dirname(unit), { recursive: true });
     await writeFile(
       unit,
@@ -210,6 +222,7 @@ async function start() {
   );
 }
 async function stop() {
+  if (!serviceManagerAvailable()) throw new Error(NO_SERVICE_MANAGER);
   await ensureIdle();
   if (system === "darwin") run("launchctl", ["bootout", `gui/${uid}`, plist]);
   else run("systemctl", ["--user", "disable", "--now", service]);
@@ -243,6 +256,15 @@ async function doctor() {
       });
     }
   }
+  if (system === "linux")
+    checks.push({
+      name: "Background service",
+      ok: serviceManagerAvailable(),
+      required: false,
+      detail: serviceManagerAvailable()
+        ? "systemd user services"
+        : "No systemd user session; use strata serve in the foreground",
+    });
   try {
     run(
       node,
@@ -482,7 +504,8 @@ async function main() {
       );
       await writeFile(
         join(staging, "bin/strata"),
-        '#!/bin/sh\nSTRATA_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexec "$STRATA_ROOT/libexec/node" "$STRATA_ROOT/scripts/manage.mjs" "$@"\n',
+        // Resolve symlinks first, so a link such as ~/.local/bin/strata finds the bundle.
+        '#!/bin/sh\nself=$0\nwhile [ -L "$self" ]; do\n  target=$(readlink "$self")\n  case $target in /*) self=$target ;; *) self=$(dirname -- "$self")/$target ;; esac\ndone\nSTRATA_ROOT=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)\nexec "$STRATA_ROOT/libexec/node" "$STRATA_ROOT/scripts/manage.mjs" "$@"\n',
         { mode: 0o755 },
       );
       await chmod(join(staging, "libexec/strata"), 0o755);
@@ -507,13 +530,26 @@ async function main() {
         if (backup) await rename(backup, dest);
         throw error;
       }
-      if (backup) console.log("Previous installation retained at " + backup);
+      if (backup) {
+        // Keep only the newest previous installation; each bundle carries its own Node runtime.
+        const { readdir } = await import("node:fs/promises");
+        const prefix = basename(dest) + ".previous-";
+        const older = (await readdir(dirname(dest)))
+          .filter((name) => name.startsWith(prefix))
+          .map((name) => join(dirname(dest), name))
+          .filter((path) => path !== backup);
+        for (const path of older) await rm(path, { recursive: true, force: true });
+        console.log("Previous installation retained at " + backup);
+      }
     } catch (error) {
       await rm(staging, { recursive: true, force: true });
       throw error;
     }
+    // install.sh prints its own next steps; a direct install explains them here.
     console.log(
-      `Installed ${join(dest, "bin/strata")}\nAdd ${join(dest, "bin")} to PATH. Run the installed strata doctor, then strata start.\nExisting state is retained. Stop the old service and start using the installed command to switch service paths.`,
+      process.env.STRATA_INSTALLER
+        ? `Installed ${dest}`
+        : `Installed ${join(dest, "bin/strata")}\nAdd ${join(dest, "bin")} to PATH. Run the installed strata doctor, then strata start.\nExisting state is retained. Stop the old service and start using the installed command to switch service paths.`,
     );
     return;
   }

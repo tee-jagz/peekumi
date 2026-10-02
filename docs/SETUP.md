@@ -6,7 +6,40 @@ Strata keeps its existing map and review workflow. One private server can inspec
 
 “Set up Strata for these local repositories and make it accessible from my phone.” Give the agent this repository/distribution and `skills/strata-setup/SKILL.md`.
 
-From source, Git, Rust and Node 22.13+ are needed to build:
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | sh
+```
+
+The installer picks the release archive for your system, verifies its SHA-256 checksum, installs it to `~/.local/lib/strata` and links `strata` into `~/.local/bin`. If the checksum does not match, nothing is installed. Each archive carries the server, the interface, its own Node runtime, TypeScript and the parser helpers, so you do not need Node, Rust or a compiler.
+
+You need Git. Python 3.9 or later is optional: with it, Strata reads Python declarations; without it, Python files appear as labelled file-level entries and `strata doctor` says why.
+
+Release archives exist for:
+
+| System | Archive |
+| --- | --- |
+| Linux x86_64 and ARM64 with glibc 2.34 or later (Ubuntu 22.04+, Debian 12+, RHEL 9+, Fedora 35+) | `linux-x64`, `linux-arm64` |
+| macOS on Apple silicon and Intel | `darwin-arm64`, `darwin-x64` |
+
+Alpine and other musl systems are not supported yet; build from source there. On macOS, installing with `curl` avoids the quarantine flag that a browser download would add to the unsigned binaries.
+
+The installer reads these optional variables:
+
+| Variable | Effect |
+| --- | --- |
+| `STRATA_VERSION` | Install a specific release tag, such as `v0.2.0`, instead of the latest |
+| `STRATA_PREFIX` | Installation directory (default `~/.local/lib/strata`) |
+| `STRATA_BIN` | Where to link `strata` (default `~/.local/bin`) |
+| `STRATA_ARCHIVE` | Install a local archive instead of downloading; its `.sha256` file must sit beside it |
+| `GITHUB_TOKEN` | Download from a private repository |
+
+For example: `curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | STRATA_VERSION=v0.2.0 sh`. If `~/.local/bin` is not on your PATH, the installer prints the line to add.
+
+### From source
+
+Contributors and unsupported systems can build instead. You need Git, a stable Rust toolchain and Node 22.13 or later:
 
 ```sh
 npm ci
@@ -14,7 +47,9 @@ npm run build:rust
 node scripts/manage.mjs install
 ```
 
-`install` and `upgrade` bundle the Node runtime that runs them, so use an official nodejs.org build of Node 22. Homebrew's Node depends on a shared library outside its binary; Strata refuses to bundle it and leaves the existing installation untouched. The default installation is `~/.local/lib/strata`. Add its `bin` directory to PATH, or invoke the full path. The bundle includes the server, UI, Node, TypeScript and parser helpers. Git remains a host dependency. Python 3.9+ enables Python extraction; `strata doctor` reports missing parsers and optional tools. We retain the proven adapters rather than introducing a parser rewrite during packaging.
+`install` and `upgrade` bundle the Node runtime that runs them, so use an official nodejs.org build of Node 22. Homebrew's Node depends on a shared library outside its binary; Strata refuses to bundle it and leaves the existing installation untouched. Add `~/.local/lib/strata/bin` to PATH, or invoke the full path. `node scripts/package.mjs` turns the same installation into a release archive with its checksum.
+
+## First run
 
 ```sh
 strata doctor
@@ -27,7 +62,7 @@ strata pair
 
 Registration is idempotent. Repositories must contain a commit. The Repository selector appears in the existing comparison menu when multiple repos are registered. Switching repos reloads the page to isolate cached source, tasks and conversations; save unsent drafts first. State uses stable repository IDs, independent of list order. Adding/removing repos requires `strata restart`; removing a repo retains its private state.
 
-`strata start` creates a per-user launchd service on macOS or a systemd user service on Linux. It starts at login. Linux users who need startup without logging in can explicitly enable lingering with their system administrator. The server binds to localhost. `strata stop` stops automatic startup until the next start. `strata logs` and `strata doctor` diagnose startup problems. Use `strata serve` for foreground operation.
+`strata start` creates a per-user launchd service on macOS or a systemd user service on Linux. It starts at login. Linux users who need startup without logging in can explicitly enable lingering with their system administrator. The server binds to localhost. `strata stop` stops automatic startup until the next start. `strata logs` and `strata doctor` diagnose startup problems. Use `strata serve` for foreground operation. Containers and systems without a systemd user session (including WSL without systemd) cannot run the background service; `strata doctor` reports this, and `strata start` explains it. Run `strata serve` there, or under your own process manager.
 
 ## Phone access and PWA
 
@@ -62,10 +97,10 @@ GitHub credentials are managed by `gh`, not stored in Strata. This first integra
 
 ## Updates and recovery
 
-Build/download the next bundle, then stop Strata and run its `install` command to the same installation directory. Start with the installed command afterward. `upgrade` is an alias for installation from the current bundle, not an automatic internet downloader. Installation is staged before an atomic directory switch; the previous installation is retained beside it for rollback. State is retained; never replace the state directory with bundle files. Active runs prevent managed stops/upgrades.
+Run the install command again to upgrade. It installs the latest release over the existing one and restarts the background service if it was running. `strata upgrade` is not an internet downloader: it installs the bundle it belongs to, which is how the installer and from-source builds use it. Installation is staged before an atomic directory switch; the previous installation is kept beside it (`strata.previous-<time>`) for rollback, and older backups are removed. State is retained; never replace the state directory with bundle files. Active runs prevent managed stops/upgrades.
 
 Configuration and SQLite schemas are versioned. Existing unversioned workflow/cache schemas are upgraded without deleting records. Newer workflow schemas are refused rather than overwritten. Future migrations must preserve this rule and include fixtures for earlier versions. Keep a stopped-state backup before upgrading; older binaries may not understand a newer database.
 
 ## Release verification
 
-The release workflow builds Linux and macOS bundles and runs tests. A generated artifact is not evidence of validation until that workflow passes. macOS background service and Linux systemd integration require their respective host environments. A second-person phone setup and one-week review trial remain release acceptance checks, not claims made by automated tests.
+The Distribution workflow builds, tests and packages each platform on every pull request. Each archive is then installed with `install.sh` and checked with `strata doctor`. Pushing a `v*` tag that matches `package.json` attaches the four archives and their checksums to a draft GitHub release, which a maintainer reviews and publishes. The Linux archives are built on Ubuntu 22.04 so they run on older glibc versions. A generated artifact is not evidence of validation until that workflow passes. macOS background service and Linux systemd integration require their respective host environments. A second-person phone setup and one-week review trial remain release acceptance checks, not claims made by automated tests.

@@ -1,17 +1,29 @@
-name: Distribution checks
+name: Distribution
+# Builds, tests and packages Strata for each platform. A v* tag also attaches the archives
+# and checksums to a draft GitHub release, which a maintainer reviews and publishes.
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags: ['v*']
-  pull_request:
+permissions:
+  contents: read
 jobs:
   bundle:
+    name: ${{ matrix.target }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          # Ubuntu 22.04 (glibc 2.35) keeps the Linux binaries compatible with older systems.
+          - { target: linux-x64, os: ubuntu-22.04, browser: true }
+          - { target: linux-arm64, os: ubuntu-22.04-arm, browser: false }
+          - { target: darwin-arm64, os: macos-14, browser: true }
+          - { target: darwin-x64, os: macos-15-intel, browser: false }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # Official Node builds are self-contained, so they can be bundled into the archive.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -23,10 +35,41 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: cargo test --locked
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      - if: matrix.browser
+        run: npx playwright install --with-deps chromium
+      - if: matrix.browser
+        run: npm run test:browser
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - run: node scripts/package.mjs
+      - name: Install the archive with install.sh and run doctor
+        shell: bash
+        run: |
+          export STRATA_ARCHIVE=$(ls dist/*.tar.gz) STRATA_PREFIX=$RUNNER_TEMP/strata \
+            STRATA_BIN=$RUNNER_TEMP/bin STRATA_HOME=$RUNNER_TEMP/state
+          sh install.sh
+          "$RUNNER_TEMP/bin/strata" doctor
       - uses: actions/upload-artifact@v4
         with:
-          name: strata-${{ runner.os }}-${{ runner.arch }}
+          name: strata-${{ matrix.target }}
           path: dist/
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --draft --generate-notes --title "Strata $GITHUB_REF_NAME"

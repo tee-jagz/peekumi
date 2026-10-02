@@ -19,14 +19,14 @@ Explore the map, move through commits, and steer agents while keeping Ask and Co
 See [setup and distribution](docs/SETUP.md), or give your agent the [Strata setup skill](skills/strata-setup/SKILL.md).
 
 ```sh
-npm ci
-npm run build:rust
-node scripts/manage.mjs install
-# Use ~/.local/lib/strata/bin/strata (or add its bin directory to PATH):
+curl -fsSL https://raw.githubusercontent.com/tee-jagz/repo-strata/main/install.sh | sh
+strata doctor
 strata repo add /path/to/repo
 strata start
 strata pair
 ```
+
+The installer downloads a prebuilt release for Linux (x86_64 or ARM64, glibc 2.34+) or macOS and verifies its checksum. Only Git is required; Python enables Python declarations. [Building from source](docs/SETUP.md#from-source) works too.
 
 Register multiple local checkouts under one server. Use `strata share` for private Tailscale HTTPS, then install the PWA from your phone browser. The comparison menu includes repository selection and GitHub PR comparisons; agent work stays in isolated local worktrees. `strata doctor`, read-only pairing and device revocation help with setup and access. GitHub-only repository onboarding and PR publishing remain deferred.
 
@@ -76,7 +76,7 @@ npm start -- /path/to/repository --host 192.168.1.20 --port 4317
 
 Open the printed access link on a phone on the same trusted Wi-Fi network. For access away from home, bind Strata to localhost and use Tailscale Serve, or put the service behind an authenticated HTTPS reverse proxy. For example: `tailscale serve --bg --http=4317 http://127.0.0.1:4317`. Your phone must be connected to the same Tailscale network. Userspace Tailscale installations may require `--socket=/path/to/tailscaled.sock` before `serve`. With HTTPS, add `--secure-cookie`. Plain HTTP does not encrypt source or session cookies: use it only on a trusted local network. Do not expose this port directly to the public internet.
 
-The Rust service uses Git subprocesses and has been built and tested on this Intel Mac mini. Linux and other architectures have not yet been exercised here.
+The Rust service uses Git subprocesses and has been built and tested on an Intel Mac mini. A from-source install and the Linux x86_64 release archive have been verified in clean Debian 12 and Ubuntu 22.04 containers, running in the foreground with `strata serve`. The Linux systemd service and ARM builds have not yet been exercised.
 
 ## Explore
 
