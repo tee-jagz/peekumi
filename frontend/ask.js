@@ -83,14 +83,9 @@ export function createAsk({
       // New questions are about the current selection; earlier ones keep their own subject.
       const c = context(),
         subject = subjectOf(c.anchor);
+      // The header already shows the comparison; only the conversation's controls sit here.
       const head = el("div");
       head.className = "ask-head";
-      const note = el(
-        "p",
-        `Claude Code · ${c.base.slice(0, 7)} → ${c.head.slice(0, 7)} · reads committed code, runs nothing`,
-      );
-      note.className = "read-note";
-      head.append(note);
       if (chat.messages.length && !chat.pending)
         head.append(
           btn("New conversation", () => {
@@ -130,8 +125,9 @@ export function createAsk({
           bubble.append(read);
         }
         if (message.omitted?.length) {
-          const limited = el("p", "Context limited: " + message.omitted.join("; "));
+          const limited = el("p", "Some context was trimmed");
           limited.className = "read-note";
+          limited.title = message.omitted.join("; ");
           bubble.append(limited);
         }
         if (message.suggestion) {

@@ -356,14 +356,14 @@ try {
     await page.locator('[data-tab="details"]').click();
     await page.locator(".code-metadata .signature").waitFor();
     assert.match(
-      await page.locator(".adapter-details summary").textContent(),
+      await page.locator(".adapter-note summary").textContent(),
       /adapter/,
     );
-    assert.ok(
-      (await page.locator(".metadata-return").textContent()).includes(
-        "Returns:",
-      ),
-    );
+    // Return types appear only when declared; missing annotations are not listed.
+    const returns = page.locator(".metadata-return");
+    if (await returns.count())
+      assert.match(await returns.textContent(), /^Returns /);
+    assert.doesNotMatch(await page.locator("#selStrip").innerText(), /Unannotated/);
     await page.locator("#selStrip").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: "test-results/" + viewport.width + "-metadata.png",
@@ -394,8 +394,8 @@ try {
     );
     if (target.status !== "added")
       assert.match(
-        await page.locator(".code-metadata > h3").textContent(),
-        /Before/,
+        await page.locator(".code-metadata .metadata-source").textContent(),
+        /before/,
       );
     await page.locator('[data-tab="dependencies"]').click();
     assert.ok(await page.locator("#tabBody .list").isVisible());

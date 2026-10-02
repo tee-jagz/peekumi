@@ -219,9 +219,8 @@ try {
   await page.locator('[data-source-view="after"]').click();
   await shot(page, "08-source", [
     [".source-tools .seg", "1", "tr"],
-    [".source-tools .read-note", "2", "tr"],
-    ["#source-code", "3", "tr"],
-    [".code-line.highlight", "4"],
+    ["#source-code", "2", "tr"],
+    [".code-line.highlight", "3"],
   ]);
   await height(page, "End");
   await page.locator('#helperTools [data-tab="dependencies"]').click();

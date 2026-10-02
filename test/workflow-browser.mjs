@@ -412,10 +412,27 @@ try {
         "Ask about run",
         "The next question is about the new selection",
       );
-      // Moving around the map keeps the one conversation in view.
+      // Moving around the map keeps the one conversation in view, at the same reading position.
+      const review = page.locator("#reviewScroll");
+      await review.evaluate((el) => (el.scrollTop = el.scrollHeight));
+      const reading = await review.evaluate((el) => el.scrollTop);
       if (await home.isEnabled()) await home.click();
       await page.locator(".ask-message.from-user", { hasText: "Name references." }).waitFor();
       assert.equal(await page.locator("#panel").getAttribute("data-view"), "ask");
+      assert.ok(
+        await review.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2),
+        "A reader at the end of the chat stays at the end after navigating",
+      );
+      assert.ok(reading > 0);
+      // Coming back to Discussion resumes at the end of the latest message.
+      await review.evaluate((el) => (el.scrollTop = 0));
+      if (!(await page.locator("#helperTools").isVisible())) await page.locator("#sheetHandle").click();
+      await page.locator('#helperTools [data-tab="details"]').click();
+      await page.locator("#showDiscussion").click();
+      await page.waitForFunction(() => {
+        const el = document.querySelector("#reviewScroll");
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      });
       await page.screenshot({ path: `test-results/ask-link-followed-${viewport.width}.png` });
       await page.screenshot({
         path: `test-results/persistent-review-${viewport.width}.png`,
