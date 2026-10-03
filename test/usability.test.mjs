@@ -442,6 +442,30 @@ test("each repository keeps its Ask conversation for the owner across restarts",
     [],
     "Another repository has its own conversation",
   );
+  // Each branch has its own conversation; the watched branch is the default.
+  const other = (method, body) =>
+    owner("/api/ask/history?branch=" + encodeURIComponent("refs/heads/peekumi/run-1"), {
+      method,
+      headers: { ...two, "Content-Type": "application/json" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  assert.deepEqual((await (await other("GET")).json()).messages, []);
+  assert.equal((await other("PUT", { messages: [messages[0]] })).status, 200);
+  assert.deepEqual((await (await other("GET")).json()).messages, [messages[0]]);
+  assert.deepEqual(
+    (await (await owner("/api/ask/history?branch=refs%2Fheads%2Fmain", { headers: two })).json()).messages,
+    messages,
+    "The watched branch keeps its own conversation",
+  );
+  // A conversation saved before conversations were kept per branch belongs to the watched branch.
+  const one = repositories.find((r) => r.name === "one").id;
+  await writeFile(
+    join(state, "repositories", one, "ask-history.json"),
+    JSON.stringify({ messages: [{ role: "user", text: "Saved before branches" }] }),
+  );
+  assert.deepEqual((await (await owner("/api/ask/history")).json()).messages, [
+    { role: "user", text: "Saved before branches" },
+  ]);
   const reader = (await readFile(join(state, "read-only/access-token"), "utf8")).trim();
   const r = await fetch(server.url + "/api/session", {
     method: "POST",

@@ -183,9 +183,9 @@ Some names of files and declarations in an answer point to exactly one location.
 
 If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. When you explore the changes of a task, this button shows **Add to requested changes**. The save button of the Instruction box also shows this label. Each of these buttons adds the change, at the location that it is about, to the next round of that task. Then you can continue to explore. Peekumi does this because a new draft starts from main and does not contain the work of the agent.
 
-The **Back to task** chip shows the number of changes that wait ("2 to send"). The task lists those changes, and you can edit them. **Request changes** sends them together, with an optional extra note.
+The **Back to task** chip shows the number of changes that wait ("2 to send"). The task lists those changes, and you can edit them. The button below the list sends them together, for example **Send 2 changes to Codex**.
 
-One conversation continues for the session. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. **New conversation** clears the conversation. When you reload, the conversation is lost.
+One conversation continues for the session. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. Each branch has its own conversation. When you explore the branch of an agent, Ask shows the conversation for that branch. When you go back, Ask shows the conversation for your branch again. Peekumi keeps each conversation, so a reload or an app update does not remove it. **New conversation** clears the conversation for the branch that you see.
 
 <img src="guide/11-comment.jpg" width="340" alt="The Instruction box while you write a draft instruction">
 
@@ -206,7 +206,7 @@ One conversation continues for the session. It stays on the screen while you mov
 
 After a task starts, the same view shows the progress of the agent, the checks that the agent reports and the commits that it made. The task first shows its state, then each instruction and the result from the agent. **Explore changes** shows all the work of the agent on the map, compared with the commit that the task started from. **Back to task** takes you back to the task and your previous view. **Agent log** contains the messages of the agent, the raw events and the generated task.
 
-**Approve** records your review. To add a note, tap **Add note** first. **Request changes** asks you what to correct, then sends it to the same agent as the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. The task shows your feedback above the instructions. To open an earlier round, use **Open round N** in the latest round.
+**Approve** records your review. To add a note, tap **Add note** first. To ask for changes, write each change in the box at the bottom of the task and tap ✓. Peekumi adds the change to the list of the task. **Request changes** puts the cursor in that box. Then tap the button below the list, for example **Send 1 change to Codex**. The same agent starts the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. To open an earlier round, use **Open round N** in the latest round.
 
 The Tasks button is a toggle. To go back to the map selection, tap it again or tap an empty area of the map. While an agent works, Peek works inside the Tasks button in all parts of the app. Tap the button to open that task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
 

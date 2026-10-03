@@ -24,14 +24,18 @@ export function createAsk({
     live: [],
     reveal: false,
   };
-  // The conversation is kept on the server with the repository's private state, so a
-  // reload, an app update or another device picks it up where it left off.
-  let restored = false;
-  function save() {
-    let messages = chat.messages.slice(-60);
+  // Each branch has its own conversation, kept on the server with the repository's private
+  // state, so a reload, an app update or another device picks it up where it left off.
+  let branch = null;
+  const threads = new Map();
+  const historyRoute = (key) => "/api/ask/history?branch=" + encodeURIComponent(key);
+  /** Saves branch `key`'s conversation (the one shown, unless an answer finished elsewhere). */
+  function save(key = branch, thread = chat.messages) {
+    if (!key) return;
+    let messages = thread.slice(-60);
     while (messages.length && JSON.stringify(messages).length > 120000)
       messages = messages.slice(1);
-    api("/api/ask/history", {
+    api(historyRoute(key), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages }),
@@ -101,14 +105,21 @@ export function createAsk({
     });
   }
   return {
-    /** Restores the saved conversation once, unless this page already has one. Returns
-     * whether anything was restored. */
-    async load() {
-      if (restored) return false;
-      restored = true;
-      const saved = await api("/api/ask/history");
-      if (chat.messages.length || !saved.messages?.length) return false;
-      chat.messages = saved.messages;
+    /** Shows branch `key`'s conversation, loading its saved one the first time this page
+     * opens that branch. Resolves true once a different conversation is in place. */
+    async switchTo(key) {
+      if (!key || key === branch) return false;
+      branch = key;
+      let thread = threads.get(key);
+      if (!thread) {
+        thread = [];
+        threads.set(key, thread);
+        chat.messages = thread;
+        const saved = await api(historyRoute(key)).catch(() => ({ messages: [] }));
+        // Keep anything asked while it loaded after what was saved before.
+        thread.unshift(...(saved.messages || []));
+      }
+      if (branch === key) chat.messages = thread;
       return true;
     },
     render(body, composerHost) {
@@ -122,7 +133,9 @@ export function createAsk({
         head.append(
           btn("New conversation", () => {
             chat.messages = [];
+            threads.set(branch, chat.messages);
             chat.question = "";
+            save();
             redraw();
           }),
         );
@@ -191,7 +204,8 @@ export function createAsk({
         }
         thread.append(bubble);
       }
-      if (chat.pending) thread.append(pendingBubble(chat));
+      // An answer still running for another branch's conversation shows there, not here.
+      if (chat.pending && chat.pendingFor === branch) thread.append(pendingBubble(chat));
       body.append(thread);
       if (chat.reveal) {
         chat.reveal = false;
@@ -241,8 +255,12 @@ export function createAsk({
         }));
         // Bound prior dialogue separately from server-built source context.
         while (JSON.stringify(history).length > 11000) history.shift();
-        // Show the question at once; the answer can take several seconds.
-        chat.messages.push({ role: "user", text: question, subject: subjectOf(asked.anchor) });
+        // Show the question at once; the answer can take several seconds. The answer joins
+        // this branch's conversation even if the view moves to another branch meanwhile.
+        const thread = chat.messages,
+          key = branch;
+        chat.pendingFor = key;
+        thread.push({ role: "user", text: question, subject: subjectOf(asked.anchor) });
         chat.question = "";
         chat.pending = true;
         chat.partial = "";
@@ -261,7 +279,7 @@ export function createAsk({
             paint();
           });
           if (!response) throw new Error("The answer stopped before it finished.");
-          chat.messages.push({
+          thread.push({
             role: "assistant",
             asked,
             ...response.answer,
@@ -269,10 +287,10 @@ export function createAsk({
             omitted: response.context.omitted,
             lookups: response.lookups || [],
           });
-          save();
+          save(key, thread);
         } catch (e) {
           // Put the question back so it can be retried or edited.
-          chat.messages.pop();
+          thread.pop();
           if (!chat.question) chat.question = question;
           notice(e.message, true);
         } finally {

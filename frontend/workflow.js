@@ -170,9 +170,8 @@ export function createWorkflow({
     picks = new Set(),
     runId = null,
     runDetail = null,
-    // Below a finished task's actions: null, "note" (for Approve) or "changes" (Request changes).
-    reply = null,
-    feedback = "";
+    // Below a finished task's actions: null, or "note" while the Approve note is open.
+    reply = null;
   // "here" lists comments on the current selection; "all" is the Tasks overview.
   let filter = "all",
     verificationNote = "";
@@ -208,6 +207,13 @@ export function createWorkflow({
     l.append(t);
     return l;
   };
+  /** The finished task on screen, when it can still collect changes for a next round. */
+  function viewedTask() {
+    const r = runDetail;
+    if (document.querySelector("#panel")?.dataset.view !== "runs" || !r || r.id !== runId)
+      return null;
+    return !active(r) && r.status !== "preview" && !r.revisedBy ? r.id : null;
+  }
   /** Drafts waiting for a new task; those collected for a finished task go back with it. */
   const sendable = (c) => c.status === "draft" && !c.forRun;
   /** Instructions collected for task `id`'s next round while exploring its changes. */
@@ -411,7 +417,7 @@ export function createWorkflow({
         field("What should change, and why", draft, (v) => (draft = v), 1),
       );
       const buttons = el("div", "sel-acts");
-      const target = editing ? null : exploring();
+      const target = editing ? null : exploring() || viewedTask();
       const save = action(
         target ? "Add to requested changes" : "Save draft",
         async () => {
@@ -423,6 +429,10 @@ export function createWorkflow({
             notice("Added to this task's requested changes");
             setTimeout(() => notice(""), 2000);
             await refresh();
+            // On the task itself, bring the button that sends the list into view.
+            document
+              .querySelector("#sendChanges")
+              ?.scrollIntoView({ block: "center", behavior: "smooth" });
             return;
           }
           if (editing)
@@ -909,7 +919,11 @@ export function createWorkflow({
       );
     if (resultCommit(r) && !active(r))
       actions.append(
-        action("Explore changes", () => explore(r.base, r.branch, r.id), true),
+        action(
+          "Explore changes",
+          () => explore(r.base, r.branch, r.id),
+          !(collected(r.id).length && !r.revisedBy),
+        ),
       );
     // A later round carries this one's work forward; decisions happen there.
     if (r.revisedBy)
@@ -921,8 +935,26 @@ export function createWorkflow({
     );
     const decide = !active(r) && !r.revisedBy,
       batch = decide ? collected(r.id) : [];
+    const agentName = r.agent === "claude" ? "Claude Code" : "Codex";
     if (batch.length) {
-      body.append(el("h3", "workflow-group", `Requested changes · ${batch.length}`));
+      // The list and the button that sends it to the agent, as the next round, sit together.
+      body.append(
+        el("h3", "workflow-group", `Requested changes · ${batch.length}`),
+        Object.assign(action(
+          `Send ${batch.length} change${batch.length === 1 ? "" : "s"} to ${agentName}`,
+          async () => {
+            const next = await write(`/api/runs/${r.id}/revise`, {});
+            reply = null;
+            await openTask(next.id);
+          },
+          true,
+        ), { id: "sendChanges" }),
+        el(
+          "p",
+          "read-note",
+          `${agentName} continues from its last commit on a new round. Nothing reaches ${r.targetBranch || "main"} until you apply it.`,
+        ),
+      );
       for (const c of batch) {
         const card = el("article", "workflow-card");
         card.dataset.commentId = c.id;
@@ -967,12 +999,15 @@ export function createWorkflow({
           );
         }),
       );
-    if (decide && (open(r).length || batch.length) && reply !== "changes")
+    // What should change is written in the box at the bottom, which adds it to this task's
+    // list; the list's own button sends it to the agent as the next round.
+    if (decide && !batch.length && open(r).length)
       actions.append(
         action("Request changes", () => {
-          reply = "changes";
-          redraw();
-          document.querySelector(".reply-box textarea")?.focus();
+          const box = document.querySelector("#composerHost textarea");
+          box?.focus();
+          notice("Write what should change below, then tap ✓");
+          setTimeout(() => notice(""), 4000);
         }),
       );
     if (decide && ready.length && !reply) {
@@ -994,48 +1029,6 @@ export function createWorkflow({
       );
       note.classList.add("review-note", "reply-box");
       body.append(note);
-    }
-    if (decide && reply === "changes" && (open(r).length || batch.length)) {
-      // The agent continues from its own commits with this feedback, as the next round.
-      const box = el("section", "reply-box");
-      const ask = field(
-        batch.length ? "Anything else? (optional)" : "What needs fixing?",
-        feedback,
-        (value) => {
-          feedback = value;
-          send.disabled = !value.trim() && !batch.length;
-        },
-        3,
-      );
-      const send = action(
-        "Send to agent",
-        async () => {
-          const next = await write(`/api/runs/${r.id}/revise`, { feedback });
-          feedback = "";
-          reply = null;
-          await openTask(next.id);
-        },
-        true,
-      );
-      send.disabled = !feedback.trim() && !batch.length;
-      const row = el("div", "sel-acts task-actions");
-      row.append(
-        send,
-        action("Cancel", () => {
-          reply = null;
-          redraw();
-        }),
-      );
-      box.append(
-        ask,
-        el(
-          "p",
-          "read-note",
-          `${r.agent === "claude" ? "Claude Code" : "Codex"} continues from its last commit on a new round. Nothing reaches ${r.targetBranch || "main"} until you apply it.`,
-        ),
-        row,
-      );
-      body.append(box);
     }
     // One quiet log for everything about how the agent got there.
     const progress = agentActivity(r.output);

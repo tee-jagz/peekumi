@@ -370,18 +370,18 @@ async function boot(refresh = false, branch = viewingBranch) {
   showNotice("Loading branch…");
   try {
     await setupRepositories();
-    // The saved Ask conversation comes back after a reload; owner devices only.
-    if (document.documentElement.dataset.access !== "reader")
-      ask
-        .load()
-        .then((restored) => restored && tab === "ask" && renderTab())
-        .catch(() => {});
     const next = await api(
       "/api/repo" + (branch ? "?" + new URLSearchParams({ head: branch }) : ""),
     );
     if (id !== bootId) return;
     metadata = next;
     viewingBranch = metadata.selectedBranch?.ref || branch;
+    // Each branch has its own saved Ask conversation; owner devices only.
+    if (document.documentElement.dataset.access !== "reader")
+      ask
+        .switchTo(viewingBranch || metadata.initialHead)
+        .then((changed) => changed && tab === "ask" && renderTab())
+        .catch(() => {});
     const picker = $("#branchPicker");
     picker.replaceChildren();
     for (const b of metadata.branches) {
