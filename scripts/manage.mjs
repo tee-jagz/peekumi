@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 import { homedir, platform } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createTailscaleProvider } from "./tunnel/tailscale.mjs";
+import { createCloudflareProvider } from "./tunnel/cloudflare.mjs";
+import { tunnelName } from "./tunnel/select.mjs";
+const tunnel = createTailscaleProvider(run);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** Reads a PEEKUMI_* setting, or its STRATA_* name from before the rename. */
 const setting = (name) =>
@@ -306,7 +310,6 @@ async function doctor() {
     ["GitHub CLI", "gh", ["--version"], false],
     ["Claude Code", "claude", ["--version"], false],
     ["Codex", "codex", ["--version"], false],
-    ["Tailscale", "tailscale", ["version"], false],
   ]) {
     try {
       checks.push({
@@ -324,6 +327,7 @@ async function doctor() {
       });
     }
   }
+  checks.push({ name: "Tailscale", ...tunnel.available(), required: false });
   if (system === "linux")
     checks.push({
       name: "Background service",
@@ -361,8 +365,44 @@ async function doctor() {
   );
   if (checks.some((c) => c.required && !c.ok)) process.exitCode = 1;
 }
+/**
+ * Keeps an explicitly requested public tunnel in the foreground. Management owns
+ * secure-cookie persistence/restarts; the temporary hostname is never persisted.
+ * Signals cancel download/startup and close the child before returning.
+ */
+async function shareCloudflare(c) {
+  console.error("Warning: the Cloudflare URL is PUBLIC and reachable from the internet. Peekumi still requires pairing; keep pairing links private. Traffic passes through Cloudflare.");
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  const provider = createCloudflareProvider({ state });
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, cancel);
+  try {
+    const token = (await readFile(join(state, "access-token"), "utf8")).trim();
+    if (!c.secureCookie) {
+      c.secureCookie = true;
+      await save(c);
+      await stop();
+      await start();
+    }
+    controller.signal.throwIfAborted();
+    const status = provider.status();
+    await provider.expose(c.port, status, { signal: controller.signal });
+    const url = provider.url(status);
+    console.log(`Public phone URL: ${url}/\nPrivate pairing link: ${url}/#token=${token}\nKeep this command running. Ctrl+C closes the tunnel; the next run gets a new URL.`);
+    const result = await status.done;
+    if (!controller.signal.aborted)
+      throw result.error || new Error(`cloudflared exited (${result.code ?? result.signal}); run peekumi share --tunnel cloudflare again`);
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+  } finally {
+    await provider.close();
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.off(signal, cancel);
+  }
+}
 async function main() {
   const [command = "help", sub, ...args] = process.argv.slice(2);
+  if (command !== "share" && process.argv.slice(3).some((arg) => arg === "--tunnel" || arg.startsWith("--tunnel=")))
+    throw new Error("--tunnel is supported only by peekumi share");
   if (command === "doctor") return doctor();
   if (command === "repo") {
     const c = await config();
@@ -521,25 +561,30 @@ async function main() {
     return;
   }
   if (command === "share") {
+    const name = tunnelName(process.argv.slice(3));
     const c = await config();
     if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
-    const ts = JSON.parse(run("tailscale", ["status", "--json"]));
-    const host = ts.Self?.DNSName?.replace(/\.$/, "");
-    if (!host) throw new Error("Sign into Tailscale first");
-    const existing = JSON.parse(
-      run("tailscale", ["serve", "status", "--json"]),
-    );
-    if (
-      Object.keys(existing).length &&
-      !JSON.stringify(existing).includes(`http://127.0.0.1:${c.port}`)
-    )
+    if (name === "cloudflare") return shareCloudflare(c);
+    let tunnelStatus;
+    try {
+      tunnelStatus = tunnel.status();
+      tunnel.expose(c.port, tunnelStatus);
+    } catch (cause) {
       throw new Error(
-        "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Peekumi.",
+        `Tailscale sharing is not ready: ${cause.message}\n\n` +
+          "To use private Tailscale sharing:\n" +
+          "1. Install Tailscale on this host and your phone, and make sure the tailscale CLI is on PATH.\n" +
+          "2. Start Tailscale and sign into the same tailnet on both devices. Run tailscale status on the host to check the connection.\n" +
+          "3. Enable tailnet HTTPS if prompted. Review tailscale serve status and preserve any existing Serve configuration.\n" +
+          "4. Retry peekumi share, then run peekumi pair for your private pairing link.\n\n" +
+          "For an explicitly opted-in PUBLIC temporary URL instead, run:\n" +
+          "  peekumi share --tunnel cloudflare\n" +
+          "The Cloudflare URL is reachable from the internet; keep pairing links private.",
+        { cause },
       );
-    // No Funnel/public exposure: Serve is restricted to devices on the tailnet.
-    run("tailscale", ["serve", "--bg", `http://127.0.0.1:${c.port}`]);
-    c.publicUrl = "https://" + host;
+    }
+    c.publicUrl = tunnel.url(tunnelStatus);
     c.secureCookie = true;
     await save(c);
     await stop();
@@ -666,7 +711,7 @@ async function main() {
     return;
   }
   console.log(
-    "Peekumi setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share                 Private Tailscale HTTPS access\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nPEEKUMI_HOME (or the former STRATA_HOME) selects the private registry/state directory. Agents: read docs/SETUP.md.",
+    "Peekumi setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share [--tunnel tailscale]  Private Tailscale HTTPS access (default)\n  share --tunnel cloudflare  PUBLIC temporary HTTPS URL; downloads verified cloudflared, stays in foreground\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nPEEKUMI_HOME (or the former STRATA_HOME) selects the private registry/state directory. Agents: read docs/SETUP.md.",
   );
 }
 main().catch((e) => {
