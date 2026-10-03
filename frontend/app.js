@@ -826,16 +826,17 @@ function renderGraph(body) {
     y += 22;
     const cols = Math.min(list.length, graphWidth < 430 ? 2 : 4),
       w = (graphWidth - 32 - (cols - 1) * 9) / cols;
+    // Rows leave room for a line to turn between them and run straight into its arrowhead.
     list.forEach((node, index) =>
       positions.set(node.key, {
         node,
         x: 16 + (index % cols) * (w + 9),
-        y: y + Math.floor(index / cols) * 46,
+        y: y + Math.floor(index / cols) * 62,
         w,
         h: 36,
       }),
     );
-    y += Math.ceil(list.length / cols) * 46 + 20;
+    y += Math.ceil(list.length / cols) * 62 + 4;
   }
   /** Lays `list` out in a compact grid at `top` and returns its bottom edge. Space opens
    * only where a drawn line needs it, and only in that card's column: a gap a line turns
@@ -876,20 +877,18 @@ function renderGraph(body) {
           // Leaving downwards or arriving from below uses the gap under the card.
           room(key, (leaving ? down : !down) ? rowOf.get(key) : rowOf.get(key) - 1);
     }
-    const colGap = across ? ROOM : GAP,
+    // Connected neighbours need room for an S between their middles plus a straight tail.
+    const colGap = across ? 32 : GAP,
       w = (span - (cols - 1) * colGap) / cols;
-    let bottom = top;
-    for (let c = 0; c < cols; c++) {
-      let next = top;
-      list.forEach((node, i) => {
-        if (i % cols !== c) return;
-        const row = Math.floor(i / cols);
-        positions.set(node.key, { node, x: left + c * (w + colGap), y: next, w, h });
-        next += h + (roomy.has(c + ":" + row) ? ROOM : GAP);
+    // Each column moves down on its own; an arrow between neighbours curves to fit.
+    const next = Array(cols).fill(top),
+      rows = Math.ceil(list.length / cols);
+    for (let row = 0; row < rows; row++)
+      list.slice(row * cols, row * cols + cols).forEach((node, c) => {
+        positions.set(node.key, { node, x: left + c * (w + colGap), y: next[c], w, h });
+        next[c] += h + (roomy.has(c + ":" + row) ? ROOM : GAP);
       });
-      bottom = Math.max(bottom, next - GAP);
-    }
-    return bottom;
+    return Math.max(top, ...next.map((y) => y - GAP));
   }
   if (!root) stubRow(incoming, "Depended on by");
   let emptyTop = null;
@@ -1225,108 +1224,6 @@ function routeEdges(list, positions, width) {
           ([x, y]) => x > r.x + 2 && x < r.x + r.w - 2 && y > r.y + 2 && y < r.y + r.h - 2,
         ),
     );
-  // Plan each line's shape and which card edges it uses; ports are placed afterwards.
-  const plans = list.map((edge) => {
-    const a = positions.get(edge.from.key),
-      b = positions.get(edge.to.key);
-    const end = (key, r, side, toward) => ({ key, r, side, toward });
-    // Columns are spaced independently, so cards in one row may sit slightly apart.
-    const shared = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y),
-      level = shared > Math.min(a.h, b.h) / 2;
-    // Neighbours in a row, with room between them: a straight arrow across.
-    if (level) {
-      const right = b.x > a.x,
-        from = right ? a.x + a.w : a.x,
-        to = right ? b.x : b.x + b.w,
-        y = Math.max(a.y, b.y) + shared / 2 + (right ? -4 : 4),
-        between = cards.some(
-          (c) =>
-            c.y < y &&
-            c.y + c.h > y &&
-            c.x < Math.max(from, to) &&
-            c.x + c.w > Math.min(from, to),
-        );
-      if (!between && Math.abs(to - from) >= 20)
-        return { kind: "across", from, to: to + (right ? -CLEAR : CLEAR), y, ends: [] };
-    }
-    // Otherwise side by side in a row: a short dip through the gap below both cards.
-    if (level)
-      return {
-        kind: "row",
-        ends: [end(edge.from.key, a, "bottom", mid(b)), end(edge.to.key, b, "bottom", mid(a))],
-      };
-    const down = b.y > a.y;
-    const y0 = down ? a.y + a.h : a.y,
-      y3 = down ? b.y : b.y + b.h,
-      half = (y0 + y3) / 2;
-    const straight = [[mid(a), y0], [mid(a), half], [mid(b), half], [mid(b), y3]];
-    const sample = Array.from({ length: 23 }, (_, i) => bezier(straight, (i + 1) / 24));
-    if (!crosses(edge.from.key, edge.to.key, sample) || !channels.length)
-      return {
-        kind: "direct",
-        down,
-        ends: [
-          end(edge.from.key, a, down ? "bottom" : "top", mid(b)),
-          end(edge.to.key, b, down ? "top" : "bottom", mid(a)),
-        ],
-      };
-    // Around the cards in between, along the channel closest to both ends.
-    const lane = channels.reduce((best, c) =>
-      Math.abs(c.x - mid(a)) + Math.abs(c.x - mid(b)) <
-      Math.abs(best.x - mid(a)) + Math.abs(best.x - mid(b))
-        ? c
-        : best,
-    );
-    return {
-      kind: "lane",
-      lane,
-      down,
-      ends: [
-        end(edge.from.key, a, down ? "bottom" : "top", lane.x),
-        end(edge.to.key, b, down ? "top" : "bottom", lane.x),
-      ],
-    };
-  });
-  // Lines going around to the same card share one trunk in the channel and one arrowhead;
-  // trunks to different cards sit side by side.
-  const lanesUsed = new Map(),
-    trunks = new Map();
-  for (const plan of plans)
-    if (plan.kind === "lane") {
-      const trunk = plan.lane.x + ">" + plan.ends[1].key;
-      if (!trunks.has(trunk)) {
-        const n = lanesUsed.get(plan.lane) || 0;
-        lanesUsed.set(plan.lane, n + 1);
-        const step = Math.min(5, Math.max(2, (plan.lane.room - 4) / 4));
-        trunks.set(trunk, (n % 2 ? 1 : -1) * Math.ceil(n / 2) * step);
-      }
-      plan.offset = trunks.get(trunk);
-    }
-  // Spread the ports on each card edge, ordered by where each line heads.
-  const sides = new Map(),
-    ports = new Map();
-  for (const plan of plans)
-    for (const e of plan.ends) {
-      // Ends that reach the same card side through the same channel share a port.
-      if (plan.kind === "lane") {
-        const port = `${e.key}:${e.side}:${plan.lane.x}`;
-        if (ports.has(port)) {
-          e.port = ports.get(port);
-          continue;
-        }
-        ports.set(port, e);
-      }
-      const id = e.key + ":" + e.side;
-      if (!sides.has(id)) sides.set(id, []);
-      sides.get(id).push(e);
-    }
-  for (const group of sides.values()) {
-    group.sort((p, q) => p.toward - q.toward);
-    const n = group.length,
-      step = n > 1 ? Math.min(0.16, 0.64 / (n - 1)) : 0;
-    group.forEach((e, i) => (e.at = e.r.x + e.r.w * (0.5 + (i - (n - 1) / 2) * step)));
-  }
-  for (const plan of plans) for (const e of plan.ends) if (e.port) e.at = e.port.at;
   const edgeY = (e, arriving) => {
     const top = e.side === "top";
     const y = top ? e.r.y : e.r.y + e.r.h;
@@ -1348,8 +1245,173 @@ function routeEdges(list, positions, width) {
     }
     return d + ` L${pts.at(-1)}`;
   };
+  /** Points every few pixels along a polyline, for checking what it passes through. */
+  const along = (points) =>
+    points.slice(1).flatMap((q, i) => {
+      const p = points[i],
+        n = Math.max(2, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 6));
+      return Array.from({ length: n - 1 }, (_, k) => [
+        p[0] + ((q[0] - p[0]) * (k + 1)) / n,
+        p[1] + ((q[1] - p[1]) * (k + 1)) / n,
+      ]);
+    });
+  /** The corners of a route around cards: into the gap beside the source, along the channel
+   * at `gx`, and into the gap beside the target, then straight into its arrowhead. The turn
+   * by the source stays inside its gap, whatever the line's place in the channel. */
+  const lanePoints = (plan, gx, offset = 0) => {
+    const [from, to] = plan.ends,
+      dir = plan.down ? 1 : -1;
+    const x = from.at,
+      y = edgeY(from, false),
+      x2 = to.at,
+      y2 = edgeY(to, true);
+    const g = gap(from.r, plan.down),
+      ys = y + dir * Math.min(g - 3, g * 0.3 + Math.abs(offset) * 0.4);
+    const room = gap(to.r, !plan.down),
+      yt = y2 - dir * Math.min(room - 3, Math.max(room * 0.6, TAIL + 5));
+    return [[x, y], [x, ys], [gx, ys], [gx, yt], [x2, yt], [x2, y2]];
+  };
+  const end = (key, r, side, toward) => ({ key, r, side, toward });
+  // Plan each line's shape and which card edges it uses; ports are placed afterwards.
+  const plans = list.map((edge) => {
+    const a = positions.get(edge.from.key),
+      b = positions.get(edge.to.key);
+    // Columns are spaced independently, so cards in one row may sit slightly apart. Any
+    // vertical overlap makes them side by side: a vertical route would have to double back.
+    const shared = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y),
+      level = shared > 0;
+    // Neighbours in a row, with room between them: an arrow across, from the middle of the
+    // source's side to the middle of the target's side. Level cards get a straight line; a
+    // card set lower gets an S that stays in the gap between them, so it touches no card.
+    if (level) {
+      const right = b.x > a.x,
+        from = right ? a.x + a.w : a.x,
+        to = right ? b.x : b.x + b.w,
+        // Opposite arrows between the same two cards sit just apart; a lone one is centred.
+        apart = list.some((o) => o.from.key === edge.to.key && o.to.key === edge.from.key)
+          ? (right ? -4 : 4)
+          : 0,
+        y1 = a.y + a.h / 2 + apart,
+        y2 = b.y + b.h / 2 + apart,
+        between = cards.some(
+          (c) =>
+            c.y < Math.max(y1, y2) &&
+            c.y + c.h > Math.min(y1, y2) &&
+            c.x < Math.max(from, to) &&
+            c.x + c.w > Math.min(from, to),
+        );
+      if (!between && Math.abs(to - from) >= 20)
+        return { kind: "across", from, to: to + (right ? -CLEAR : CLEAR), y1, y2, ends: [] };
+      // Otherwise a short dip through the gap below both cards.
+      return {
+        kind: "row",
+        ends: [end(edge.from.key, a, "bottom", mid(b)), end(edge.to.key, b, "bottom", mid(a))],
+      };
+    }
+    const down = b.y > a.y;
+    return {
+      kind: "direct",
+      down,
+      a,
+      b,
+      ends: [
+        end(edge.from.key, a, down ? "bottom" : "top", mid(b)),
+        end(edge.to.key, b, down ? "top" : "bottom", mid(a)),
+      ],
+    };
+  });
+  /** Spreads the ports on each card edge, ordered by where each line heads. Ends that reach
+   * the same card side through the same channel share a port, so they share an arrowhead. */
+  function placePorts() {
+    const sides = new Map(),
+      ports = new Map();
+    for (const plan of plans)
+      for (const e of plan.ends) {
+        e.port = null;
+        if (plan.kind === "lane") {
+          const port = `${e.key}:${e.side}:${plan.lane.x}`;
+          if (ports.has(port)) {
+            e.port = ports.get(port);
+            continue;
+          }
+          ports.set(port, e);
+        }
+        const id = e.key + ":" + e.side;
+        if (!sides.has(id)) sides.set(id, []);
+        sides.get(id).push(e);
+      }
+    for (const group of sides.values()) {
+      group.sort((p, q) => p.toward - q.toward);
+      const n = group.length,
+        step = n > 1 ? Math.min(0.16, 0.64 / (n - 1)) : 0;
+      group.forEach((e, i) => (e.at = e.r.x + e.r.w * (0.5 + (i - (n - 1) / 2) * step)));
+    }
+    for (const plan of plans) for (const e of plan.ends) if (e.port) e.at = e.port.at;
+  }
+  /** Sends a line around the cards between its ends, through the cheapest channel whose
+   * route crosses no card; the cheapest overall when none is clear. */
+  function goAround(plan) {
+    const [ax, bx] = [mid(plan.a), mid(plan.b)];
+    const ranked = [...channels].sort(
+      (p, q) =>
+        Math.abs(p.x - ax) + Math.abs(p.x - bx) - (Math.abs(q.x - ax) + Math.abs(q.x - bx)),
+    );
+    const [from, to] = plan.ends;
+    plan.kind = "lane";
+    plan.lane =
+      ranked.find((c) => !crosses(from.key, to.key, along(lanePoints(plan, c.x)))) || ranked[0];
+    for (const e of plan.ends) e.toward = plan.lane.x;
+  }
+  // Check each straight route with its real ports (a wide card spreads them far apart); a
+  // route that crosses a card goes around instead, and ports are placed again.
+  for (let pass = 0; pass < 3 && channels.length; pass++) {
+    placePorts();
+    let moved = false;
+    for (const plan of plans) {
+      if (plan.kind !== "direct") continue;
+      const [from, to] = plan.ends,
+        y = edgeY(from, false),
+        y2 = edgeY(to, true),
+        half = (y + y2) / 2;
+      const curve = [[from.at, y], [from.at, half], [to.at, half], [to.at, y2]];
+      const sample = Array.from({ length: 31 }, (_, i) => bezier(curve, (i + 1) / 32));
+      if (crosses(from.key, to.key, sample)) {
+        goAround(plan);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  placePorts();
+  // Lines going around to the same card share one trunk in the channel and one arrowhead;
+  // trunks to different cards sit side by side.
+  const lanesUsed = new Map(),
+    trunks = new Map();
+  for (const plan of plans)
+    if (plan.kind === "lane") {
+      const trunk = plan.lane.x + ">" + plan.ends[1].key;
+      if (!trunks.has(trunk)) {
+        const n = lanesUsed.get(plan.lane) || 0;
+        lanesUsed.set(plan.lane, n + 1);
+        // Side by side while the channel has room; past its edges they share the middle.
+        const step = Math.min(5, Math.max(2, (plan.lane.room - 4) / 4)),
+          limit = Math.max(0, plan.lane.room / 2 - 3),
+          spread = Math.ceil(n / 2) * step;
+        trunks.set(trunk, spread > limit ? 0 : (n % 2 ? 1 : -1) * spread);
+      }
+      plan.offset = trunks.get(trunk);
+    }
   return plans.map((plan) => {
-    if (plan.kind === "across") return `M${plan.from},${plan.y} L${plan.to},${plan.y}`;
+    if (plan.kind === "across") {
+      const { from, to, y1, y2 } = plan;
+      if (Math.abs(y1 - y2) < 1) return `M${from},${y1} L${to},${y1}`;
+      // A gentle S between the two middles, then straight into the arrowhead.
+      const dir = Math.sign(to - from),
+        tail = Math.min(TAIL, Math.abs(to - from) / 2),
+        bend = to - dir * tail,
+        middle = (from + bend) / 2;
+      return `M${from},${y1} C${middle},${y1} ${middle},${y2} ${bend},${y2} L${to},${y2}`;
+    }
     const [from, to] = plan.ends;
     const x = from.at,
       y = edgeY(from, false),
@@ -1370,14 +1432,7 @@ function routeEdges(list, positions, width) {
       return `M${x},${y} C${x},${half} ${x2},${half} ${x2},${end} L${x2},${y2}`;
     }
     // Into the row gap beside each end, then along the channel between them.
-    const dir = plan.down ? 1 : -1,
-      gx = plan.lane.x + plan.offset;
-    // In a shared row gap, a line leaving runs nearer its source and a line arriving leaves
-    // room for a straight run into the arrowhead.
-    const ys = y + dir * gap(from.r, plan.down) * 0.3 + plan.offset,
-      room = gap(to.r, !plan.down),
-      yt = y2 - dir * Math.min(room - 3, Math.max(room * 0.6, TAIL + 5));
-    return rounded([[x, y], [x, ys], [gx, ys], [gx, yt], [x2, yt], [x2, y2]], 5);
+    return rounded(lanePoints(plan, plan.lane.x + plan.offset, plan.offset), 5);
   });
 }
 /** Draws selectable static import connections between positioned cards; these are not runtime call edges. */
