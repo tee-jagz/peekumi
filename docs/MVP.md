@@ -1,44 +1,75 @@
 # Peekumi MVP
 
-The owner wants to stay connected to the engineering behind agent implementations from a phone, moving between the whole repository and exact code details as needed.
+The owner wants to keep in contact with the engineering of agent implementations from a phone. From the phone, the owner moves between the complete repository and the exact code details as necessary.
 
 ## Visual and interaction contract
 
-Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the visual reference. Preserve its pastel background (sky, peach, mint and sand in light mode; ocean, ember, pine and slate in dark mode, with no purple), frosted surfaces, rounded hierarchy cards and curved dependency arrows. The approved update replaces stacked commit sheets with one graph canvas and an expandable review sheet. On a phone the map occupies the upper portion of a fixed viewport and the review panel scrolls below; at desktop widths the panel sits to the right.
+Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the visual reference. Keep the pastel background of the mockup. In light mode, the background colours are sky, peach, mint and sand. In dark mode, they are ocean, ember, pine and slate. Do not use purple. Also keep the frosted surfaces, the rounded hierarchy cards and the curved dependency arrows.
 
-Tap selects a card or dependency. A second tap or the selection's main action zooms into a card; the map's Home and Up controls zoom out. Time shows a horizontally scrollable commit strip above the single graph canvas and defaults to comparing each commit with its first parent, as does Diff. A manually selected base stays pinned across commit changes and view switches until “Use previous commit” restores automatic selection. The root commit compares with itself. Diff provides base/head revision selectors and Before/After; it does not stack canvases or show a folder strip. Use real packages and symbols; do not invent layers or health measurements. Large real-world maps use an SVG pan/zoom viewport, with readable labels at 1:1 and an optional Fit control. Changes only hides unchanged cards at each hierarchy level.
+The approved update replaces the stacked commit sheets with one graph canvas and a review sheet that expands. On a phone, the map occupies the upper part of a fixed viewport, and the review panel scrolls below the map. At desktop widths, the panel is on the right side.
 
-The phone review sheet has peek, half and full heights, controlled by dragging its handle, clicking it, or using arrow/Home/End keys. Peek shows the selection, its documentation summary and compact inputs/outputs where available, without inspection controls; expanded views offer Details, Source, Changes, Relations and Discussion directly. Ask/Comment is an independent, persistent composer in every inspection view and sheet height. Unsent text retains its original anchor and revision while navigating. The review sheet and the controls inside it are frosted glass, with readable, more opaque text areas. Controls are icons with accessible names and tooltips; words remain in the map key. Comments become frozen task previews, isolated agent runs, reports and owner verification; preparation, progress and results live under the persistent Tasks action in the header. Ask discusses committed context with tools disabled. Structure replaces the unmeasured Health lens.
+A tap selects a card or a dependency. A second tap, or the main action of the selection, zooms into a card. The Home and Up controls of the map zoom out.
+
+Time shows a commit strip above the single graph canvas, and the strip scrolls horizontally. By default, Time and Diff compare each commit with its first parent. If you select a base manually, the base stays pinned when you change the commit or the view. The base stays pinned until “Use previous commit” restores automatic selection. The root commit compares with itself. Diff gives base/head revision selectors and Before/After, but it does not stack canvases or show a folder strip.
+
+Use real packages and symbols. Do not invent layers or health measurements. Large real maps use an SVG pan/zoom viewport. The labels are readable at 1:1, and an optional Fit control is available. Changes only hides the unchanged cards at each hierarchy level.
+
+The review sheet on the phone has three heights: peek, half and full. To change the height, drag or click the handle of the sheet, or use the arrow/Home/End keys. Peek shows the selection, its documentation summary and, where available, compact inputs/outputs. Peek does not show inspection controls. The expanded views give direct access to Details, Source, Changes, Relations and Discussion.
+
+Ask/Comment is an independent composer. It stays available in every inspection view and at every sheet height. When you navigate, the unsent text keeps its original anchor and revision.
+
+The review sheet and its controls are frosted glass. The text areas are more opaque and are readable. Controls are icons with accessible names and tooltips. The map key continues to use words.
+
+Comments become frozen task previews, isolated agent runs, reports and owner verification. The preparation, progress and results are under the Tasks action, which is always in the header. Ask discusses the committed context, and its tools are disabled. Structure replaces the Health lens, which Peekumi does not measure.
 
 ## First usable slice
 
-- Run a service beside a Git repository on macOS or Linux and access its web UI by URL.
-- Browse the real directory hierarchy, with static import, call, implementation and inheritance relationships. Show source evidence and unresolved targets.
-- Evaluate versioned .peekumi.json dependency rules against committed snapshots and show violations and configuration errors.
-- Compare two explicit commits. Roll added, changed, and removed files up into their directories.
-- Drill into Rust, Python and JavaScript/TypeScript symbols, then source and complete file diffs. Svelte script symbols are extracted; template changes remain visible at file level.
-- Show directory README summaries (or Python package docstrings) with revision provenance and links to the complete documentation. Expose adapter capabilities and limitations.
-- Load code-authored module/class/function documentation and declaration metadata on file drill-down, without inferred types or generated descriptions.
-- Keep every tracked file accounted for (and visible with Changes only disabled), including tests, configuration, assets, and unsupported languages.
-- Support a phone viewport of 390 × 844, touch targets, Home and Up navigation, search, and stable alphabetical positioning.
-- Protect source/API access with a local token and authenticated session. Use a private network or authenticated HTTPS reverse proxy for remote access.
+- Run a service next to a Git repository on macOS or Linux. Open its web UI with a URL.
+- Browse the real directory hierarchy. Show the static import, call, implementation and inheritance relationships. Show the source evidence and the unresolved targets.
+- Evaluate the versioned .peekumi.json dependency rules against the committed snapshots. Show the violations and the configuration errors.
+- Compare two explicit commits. Show the added, changed and removed files in the rollup of their directories.
+- Drill into Rust, Python and JavaScript/TypeScript symbols. Then drill into the source and the complete file diffs. Peekumi extracts the symbols from Svelte scripts. Svelte template changes stay visible at the file level.
+- Show the README summaries of directories (or Python package docstrings) with revision provenance. Include links to the complete documentation. Show the adapter capabilities and limitations.
+- When the user drills down into a file, load the module/class/function documentation from the code and the declaration metadata. Do not infer types or generate descriptions.
+- Account for every tracked file, including tests, configuration, assets and unsupported languages. When Changes only is disabled, keep every tracked file visible.
+- Support a phone viewport of 390 × 844, touch targets, Home and Up navigation, search and stable alphabetical positions.
+- Protect source/API access with a local token and an authenticated session. For remote access, use a private network or an authenticated HTTPS reverse proxy.
 
-Visalytics is the first integration target: a mixed Python and Svelte/TypeScript repository. Its working directory must remain untouched.
+Visalytics is the first integration target. It is a repository that contains both Python and Svelte/TypeScript code. Peekumi must not change its working directory.
 
 ## Deferred
 
-Automatic Ask brief generation, health scores, coverage, mutation testing, inferred architecture, compiler-backed call resolution and runtime dispatch, uncommitted work, persistent history indexing, and rename-aware symbol continuity.
+These items are deferred:
+
+- Automatic Ask brief generation
+- Health scores
+- Coverage
+- Mutation testing
+- Inferred architecture
+- Compiler-backed call resolution and runtime dispatch
+- Uncommitted work
+- Persistent history indexing
+- Rename-aware symbol continuity
 
 ## Acceptance
 
-From a phone, identify changed areas in a real agent session, follow their dependencies, drill to exact source and diffs, and decide whether implementation needs steering. Test map accuracy against Git, not just rendered examples.
+From a phone, do these steps in a real agent session:
+
+1. Identify the changed areas.
+2. Follow their dependencies.
+3. Drill down to the exact source and diffs.
+4. Decide if you must steer the implementation.
+
+Test the accuracy of the map against Git. Do not test only against rendered examples.
 
 ## Review workflow
 
-The authorized next slice is implemented in [WORKFLOW.md](WORKFLOW.md): anchored drafts, exact task preview, Codex/Claude dispatch, scoped MCP reporting, and owner verification. Inspection stays read-only; dispatch creates a separate worktree.
+The authorized next slice is implemented as [WORKFLOW.md](WORKFLOW.md) describes. The slice contains anchored drafts, the exact task preview, Codex/Claude dispatch, scoped MCP reporting and owner verification. Inspection stays read-only. Dispatch creates a separate worktree.
 
-The map key belongs with the floating canvas zoom/fit controls, opening as an overlay without a permanent content row, and holds the colour lens. Before/After floats over the map in Diff. Inspection navigation becomes available around half height during a drag.
+The map key is with the floating zoom/fit controls on the canvas. The map key opens as an overlay and does not use a permanent content row. It contains the colour lens. Before/After floats over the map in Diff. When you drag the sheet, the inspection navigation becomes available at approximately half height.
 
-The task UI presents human-readable updates, reported checks and changed-file review together. Task review can verify all addressed comments with one review note; it does not merge or deploy the run branch. Agent JSON and generated prompts are optional diagnostics.
+The task UI shows human-readable updates, the reported checks and the review of changed files together. With one review note, task review can verify all the addressed comments. Task review does not merge or deploy the run branch. Agent JSON and generated prompts are optional diagnostics.
 
-Owners can switch the viewed branch from the comparison line in the header. This is read-only Git inspection: local edits and the checkout stay untouched. A completed task offers Explore changes, which shows everything the agent did on the map (its branch against the commit the task started from), with a ready cue on Tasks and a Back to task chip that restores the previous view. Comparison defaults remain the selected commit’s first parent unless a manual base is pinned.
+Owners can change the viewed branch from the comparison line in the header. This is a read-only Git inspection. It does not change local edits or the checkout. A completed task offers Explore changes. Explore changes shows on the map all the work of the agent: it compares the agent branch with the commit where the task started. A ready cue shows on Tasks, and a Back to task chip restores the previous view.
+
+By default, the comparison base stays the first parent of the selected commit, unless you pin a manual base.

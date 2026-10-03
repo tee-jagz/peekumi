@@ -1,10 +1,10 @@
 # Using Peekumi
 
-This guide walks through every part of the Peekumi interface on a phone, then the desktop layout. Each screenshot has numbered orange markers, and the table under it explains what each numbered element is and how to use it. The screenshots show Peekumi inspecting its own repository.
+This guide shows each part of the Peekumi interface on a phone, and then the desktop layout. Each screenshot has numbered orange markers. The table below each screenshot tells what each numbered element is and how to use it. The screenshots show Peekumi when it inspects its own repository.
 
-To install Peekumi, pair a phone and keep it updated, see [SETUP.md](SETUP.md). Instructions, agent runs and verification are covered in more depth in [WORKFLOW.md](WORKFLOW.md).
+For the procedures to install Peekumi, pair a phone and keep Peekumi up to date, refer to [SETUP.md](SETUP.md). [WORKFLOW.md](WORKFLOW.md) gives more information about instructions, agent runs and verification.
 
-The screenshots and icon images are generated from the live interface by `node scripts/guide-screenshots.mjs`, so they can be refreshed whenever the interface changes.
+The command `node scripts/guide-screenshots.mjs` makes the screenshots and icon images from the live interface. Thus, you can make them again each time the interface changes.
 
 ## Contents
 
@@ -23,59 +23,59 @@ The screenshots and icon images are generated from the live interface by `node s
 
 ## The map at a glance
 
-<img src="guide/01-map.jpg" width="340" alt="The phone layout: header, map with floating controls, and the review sheet at peek height">
+<img src="guide/01-map.jpg" width="340" alt="The phone layout: the header, the map with its controls on top, and the review sheet at peek height">
 
-The screen has three parts. The header names the repository and the comparison. The map in the glass card shows the repository's real folders, files and declarations. The review sheet at the bottom describes what you're looking at and holds the Ask and Instruction box.
+The screen has three parts. The header shows the name of the repository and the comparison. The map in the glass card shows the real folders, files and declarations of the repository. The review sheet at the bottom tells you about the item that you look at. The review sheet also contains the Ask and Instruction box.
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Repository name | The repository being inspected. With several repositories registered, switch between them in the comparison popover (2). |
-| 2 | Comparison line | Shows the branch and the two commits being compared, as `base → head`. Tap it to change branch, head, base or pull request. |
-| 3 | Time / Diff | **Time** shows commit cards to step through history one commit at a time. **Diff** compares any head with any base you choose. |
-| 4 | Tasks | Opens your draft instructions and agent runs. The icon turns blue when an agent has finished work that is ready for review. |
-| 5 | Before / After | Shown in Diff. Switches the map and source between the base (dot on the left) and the head (dot on the right). |
-| 6 | Card | A folder, file or declaration. Tap once to select it, tap again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
-| 7 | Card counts | How many files inside were added, modified or removed, followed by the total number of files. |
-| 8 | Home and Up | Home returns to the repository root. Up goes to the parent folder. Both are dimmed at the root. |
-| 9 | Changes only | Hides unchanged cards at every level, keeping changed folders so you can still drill in. |
-| 10 | Zoom out | Zooms the map out. Pinching works too. |
+| 1 | Repository name | The repository that Peekumi inspects. If you register more than one repository, use the comparison popover (2) to change between them. |
+| 2 | Comparison line | Shows the branch and the two commits that Peekumi compares, as `base → head`. Tap it to change the branch, head, base or pull request. |
+| 3 | Time / Diff | **Time** shows commit cards. Use them to go through the history one commit at a time. **Diff** compares any head with any base that you select. |
+| 4 | Tasks | Opens your draft instructions and agent runs. The icon becomes blue when an agent completes work that is ready for review. |
+| 5 | Before / After | Shows in Diff. It changes the map and the source between the base (dot on the left) and the head (dot on the right). |
+| 6 | Card | A folder, file or declaration. Tap it one time to select it. Tap it again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, and plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
+| 7 | Card counts | The number of files in the card that are added, modified or removed, and then the total number of files. |
+| 8 | Home and Up | Home goes back to the repository root. Up goes to the parent folder. At the root, the two buttons are dim. |
+| 9 | Changes only | Hides unchanged cards at all levels. Changed folders stay on the map, so you can still go down into them. |
+| 10 | Zoom out | Zooms the map out. You can also pinch the map. |
 | 11 | Zoom in | Zooms the map in. |
-| 12 | Fit | Fits the whole map on screen. |
-| 13 | Reset | Returns to actual size, aligned to the top. |
-| 14 | Key | Opens the map key, which also holds the colour lens. See [Map key](#map-key). |
-| 15 | Sheet handle | Drag up or down, or tap, to move the sheet between peek, half and full height. |
-| 16 | Summary | The description of the selection or the current folder, taken from committed documentation. Long text scrolls and fades its last line while more is available. |
+| 12 | Fit | Makes the full map fit on the screen. |
+| 13 | Reset | Goes back to actual size, with the map aligned to the top. |
+| 14 | Key | Opens the map key. The map key also contains the colour lens. Refer to [Map key](#map-key). |
+| 15 | Sheet handle | Drag it up or down, or tap it, to move the sheet between peek, half and full height. |
+| 16 | Summary | The description of the selection or the current folder. This text comes from committed documentation. You can scroll long text. While more text is available, its last line fades. |
 | 17 | Ask / Instruction | Ask a question about the selection, or write an instruction for an agent. |
-| 18 | Anchor | What your question or instruction is about, and the commit it refers to. |
+| 18 | Anchor | The subject of your question or instruction, and the commit that it refers to. |
 | 19 | Text field | Type your question or instruction here. |
-| 20 | Send | Sends the question. In Instruction mode this is replaced by Cancel and Save draft. |
+| 20 | Send | Sends the question. In Instruction mode, Cancel and Save draft replace this button. |
 
-Lines between cards are static dependencies: imports, calls, implementations and inheritance found in the code, not runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
+The lines between cards are static dependencies: imports, calls, implementations and inheritance that Peekumi finds in the code. They do not show runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
 
-Selecting a card highlights its own connections and fades everything unrelated. Blue lines are what the selection uses; teal lines are what uses the selection. If the selection has no connections, nothing fades.
+When you select a card, Peekumi highlights the connections of that card and fades all unrelated items. Blue lines show what the selection uses. Teal lines show what uses the selection. If the selection has no connections, no items fade.
 
 ## Gestures and keys
 
 | Action | On a phone | With a mouse or keyboard |
 |---|---|---|
-| Select a card | Tap | Click, or Tab to it and press Enter |
-| Open a card | Tap it again | Click again, or press Enter again |
-| Pan the map | Drag; a flick keeps gliding | Drag, scroll, or arrow keys with the map focused |
+| Select a card | Tap | Click, or Tab to it and push Enter |
+| Open a card | Tap it again | Click again, or push Enter again |
+| Pan the map | Drag. After a flick, the map continues to move | Drag, scroll, or use the arrow keys when the map has the focus |
 | Zoom | Pinch | Control or Command and scroll, or `+` and `-` |
-| Go up a level | Up button | Up button, or Escape with nothing selected |
+| Go up a level | Up button | Up button, or Escape when no item is selected |
 | Clear a selection | × in the sheet | Escape |
 | Close a popover | Tap outside it, or ✕ | Escape |
 | Change sheet height | Drag or tap the handle | Arrow keys, Home and End on the handle |
 
 ## Map key
 
-<img src="guide/02-key.jpg" width="340" alt="The map key popover over the map">
+<img src="guide/02-key.jpg" width="340" alt="The map key popover above the map">
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Colour lens | **Changes** colours cards by Git status. **Structure** hides change colours to show the plain layout. |
-| 2 | Colours and types | What each change colour and shape means, the icon for each kind of folder, declaration and file, and the icons for what changed inside a declaration. |
-| 3 | Line styles | Blue lines are what a selection uses and teal lines use the selection. Solid lines are imports or calls, dotted are implementations, dashed are inheritance, red marks a removed relationship or a broken dependency rule. |
+| 1 | Colour lens | **Changes** colours the cards by Git status. **Structure** hides the change colours and shows the plain layout. |
+| 2 | Colours and types | The meaning of each change colour and shape. The icon for each type of folder, declaration and file. The icons for the parts that changed in a declaration. |
+| 3 | Line styles | Blue lines show what a selection uses. Teal lines show what uses the selection. Solid lines are imports or calls, dotted lines are implementations, and dashed lines are inheritance. Red shows a removed relationship or a broken dependency rule. |
 
 ## Choosing what to compare
 
@@ -85,41 +85,41 @@ Tap the comparison line in the header to open this popover.
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Branch | Choose which branch to inspect. This only changes what you view; your checkout is never switched. |
-| 2 | Pull requests | Lists open pull requests when GitHub CLI is signed in on the host. Choosing one shows its full diff against its merge base, with its description, checks and discussion. |
-| 3 | Commit summary | The head commit's message, date, and what it is compared with. |
+| 1 | Branch | Select the branch to inspect. This changes only what you see. Peekumi never switches your checkout. |
+| 2 | Pull requests | Shows a list of open pull requests when GitHub CLI is signed in on the host. When you select one, Peekumi shows its full diff against its merge base, with its description, checks and discussion. |
+| 3 | Commit summary | The message and date of the head commit, and the commit that Peekumi compares it with. |
 | 4 | Head revision | The newer commit in the comparison. |
-| 5 | Compare with | The older commit. **Previous commit (automatic)** follows the head's first parent. Choosing a specific commit pins it until you pick the automatic option again or tap **Use previous commit**. |
-| 6 | Refresh | Checks for new commits. Uncommitted work is never shown. |
-| 7 | Close | Closes the popover. Tapping anywhere outside it also closes it. |
+| 5 | Compare with | The older commit. **Previous commit (automatic)** follows the first parent of the head. If you select a specific commit, Peekumi pins it until you select the automatic option again or tap **Use previous commit**. |
+| 6 | Refresh | Looks for new commits. Peekumi never shows uncommitted work. |
+| 7 | Close | Closes the popover. You can also tap anywhere outside the popover to close it. |
 
-When several repositories are registered, a **Repository** picker appears above Branch.
+When you register more than one repository, a **Repository** picker shows above Branch.
 
-<img src="guide/04-select-menu.jpg" width="340" alt="A frosted selection menu listing commits">
+<img src="guide/04-select-menu.jpg" width="340" alt="A frosted selection menu with a list of commits">
 
-Every picker opens a menu like this one. The current choice has a check mark (1). Tap an option to choose it, or use the arrow keys, Home, End and Enter. Escape closes the menu without changing anything.
+Each picker opens a menu like this one. A check mark (1) shows the current choice. Tap an option to select it. You can also use the arrow keys, Home, End and Enter. Escape closes the menu and makes no changes.
 
 ## Moving through history
 
 <img src="guide/05-time.jpg" width="340" alt="Time mode with commit cards above the map">
 
-In **Time**, a strip of commit cards appears above the map. The highlighted card (1) is the commit being shown, compared with its parent. Tap another card (2) to move to that commit. Swipe the strip sideways to reach older commits.
+In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows, compared with its parent. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits.
 
 ## Selecting something
 
-<img src="guide/06-selection-peek.jpg" width="340" alt="A function selected, with its summary and inputs in the sheet">
+<img src="guide/06-selection-peek.jpg" width="340" alt="A selected function, with its summary and inputs in the sheet">
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Selected card | A blue outline marks the selection. Tap it again to open it: a folder or file opens on the map, a declaration opens in Source. |
-| 2 | Name and status | The selection's name, its change status icon, and what kind of thing it is. For a modified declaration, a line such as **Signature and implementation changed** says which parts to inspect. |
+| 1 | Selected card | A blue outline shows the selection. Tap it again to open it. A folder or file opens on the map, and a declaration opens in Source. |
+| 2 | Name and status | The name of the selection, its change status icon, and its type. For a modified declaration, a line such as **Signature and implementation changed** tells which parts to inspect. |
 | 3 | Summary | Its committed documentation. Scroll it to read more. |
-| 4 | Inputs, outputs and fields | One line each for parameters, the return type and class fields. Swipe sideways to see them all; a fade on the right means there is more. Only declared types appear here. The Details view labels any missing annotation. |
-| 5 | Up | Leaves the file and returns to its folder. |
+| 4 | Inputs, outputs and fields | One line each for the parameters, the return type and the class fields. Swipe to the side to see all of them. A fade on the right shows that there is more. Only declared types show here. The Details view puts a label on each missing annotation. |
+| 5 | Up | Closes the file and goes back to its folder. |
 
 ## The review sheet
 
-Drag the sheet up to half or full height to inspect the selection. The view buttons stay at the top of the sheet; choosing a view never lowers a sheet you have raised.
+Drag the sheet up to half or full height to inspect the selection. The view buttons stay at the top of the sheet. If you move the sheet up, a different view never moves it down.
 
 ### Details
 
@@ -131,14 +131,14 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 2 | Source | The code, as a diff or as the Before or After version. |
 | 3 | Changes | Changed files or declarations in the current scope, and file search. |
 | 4 | Relations | Dependencies, dependency rules and their evidence. |
-| 5 | Discussion | Shows the conversation for the selection that matches the box below: your Ask questions and answers, or the instructions left on it. |
-| 6 | Facts | One quiet line after the content: the line range, or file and change counts for a folder. |
-| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**, beside the facts. |
-| 8 | Clear selection | Deselects and returns the sheet to the current folder or file. |
+| 5 | Discussion | Shows the conversation for the selection that agrees with the box below: your Ask questions and answers, or the instructions on the selection. |
+| 6 | Facts | One quiet line after the content: the line range, or the file and change counts for a folder. |
+| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. It is next to the facts. |
+| 8 | Clear selection | Removes the selection and sets the sheet back to the current folder or file. |
 
-Expanded Details is the peek view in full: the whole description and the same **In** and **Out** lines, with parameter defaults, plus notes on parameters where the code documents them. For a folder it shows its README or package docstring as plain text, with a link to read the whole file. A small **adapter** note at the end names the language adapter that read the file; tap it for what the adapter extracts and its limits.
+Expanded Details is the peek view in full. It shows the full description and the same **In** and **Out** lines, with parameter defaults. It also shows notes on parameters where the code documents them. For a folder, it shows the README or package docstring of the folder as plain text, with a link to the full file. At the end, a small **adapter** note gives the name of the language adapter that read the file. Tap the note to see what the adapter extracts and its limits.
 
-The only labelled view button is the one that is open; the others show just their icons. All of them are listed in the [icon reference](#icon-reference).
+Only the open view button has a label. The other view buttons show only their icons. The [icon reference](#icon-reference) lists all of them.
 
 ### Source
 
@@ -146,9 +146,9 @@ The only labelled view button is the one that is open; the others show just thei
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Diff / After / Before | **Diff** shows the changes with old and new line numbers. **After** and **Before** show the whole file at the head or base. |
-| 2 | Code | Scrolls inside its own box, which fills the sheet, so the controls above stay in place. With a declaration selected, **Diff** shows only that declaration's changes. |
-| 3 | Highlight | The selected declaration's lines are highlighted and scrolled into view. |
+| 1 | Diff / After / Before | **Diff** shows the changes with old and new line numbers. **After** and **Before** show the full file at the head or base. |
+| 2 | Code | Scrolls in its own box. This box fills the sheet, so the controls above it stay in position. When you select a declaration, **Diff** shows only the changes to that declaration. |
+| 3 | Highlight | Peekumi highlights the lines of the selected declaration and scrolls them into view. |
 
 ### Changes
 
@@ -156,9 +156,9 @@ The only labelled view button is the one that is open; the others show just thei
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Overview | How many files changed in the current scope, with counts for each change type. |
-| 2 | Search | Finds any file in the repository by path, changed or not. |
-| 3 | Changed file | Tap to open the file on the map. Inside a file, the list shows changed declarations instead. |
+| 1 | Overview | The number of files that changed in the current scope, with counts for each change type. |
+| 2 | Search | Finds any file in the repository by its path, changed or unchanged. |
+| 3 | Changed file | Tap to open the file on the map. In a file, the list shows changed declarations, not files. |
 
 ### Relations
 
@@ -166,60 +166,74 @@ The only labelled view button is the one that is open; the others show just thei
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Rule summary | Results of the dependency rules committed in `.peekumi.json`. Expand it for configuration details and analysis gaps. Without a rules file it says rules are not configured. |
+| 1 | Rule summary | Results of the dependency rules committed in `.peekumi.json`. Expand it to see configuration details and analysis gaps. If there is no rules file, it says that rules are not configured. |
 | 2 | Relationship kind | Show all relationships, or only imports, calls, implementations or inheritance. |
 | 3 | Violations only | Show only relationships that break a dependency rule. |
-| 4 | Relationship | `from → to`, with its kind, change status and how many sites exist before and after. Tap to select it and see buttons for each file involved. |
-| 5 | Resolved evidence | Each relationship found in the code, with a link that opens the exact source line. |
-| 6 | Unresolved targets | References Peekumi could not resolve with certainty, and why. These are listed rather than guessed. |
+| 4 | Relationship | `from → to`, with its kind, its change status, and the number of sites before and after. Tap it to select it and to see a button for each file that it involves. |
+| 5 | Resolved evidence | Each relationship that Peekumi found in the code, with a link that opens the exact source line. |
+| 6 | Unresolved targets | References that Peekumi cannot resolve with certainty, and the reason. Peekumi lists these references and does not guess. |
 
 ## Ask, instructions and tasks
 
-**Ask** answers questions about the selection using Claude Code on this computer. It reads committed code only and cannot run, change or send anything. For a file or declaration it reads the source and its diff, plus what the code calls, imports or inherits and what calls it. When that is not enough, it can look up more of the repository at the same revisions (search declarations or the code itself, read a declaration or file, follow relationships), up to 12 lookups per answer. The answer appears as it is written, shows each lookup while it happens, and lists what it looked up. Names of files and declarations in an answer are underlined with dots when they point to exactly one place: tap one and the map moves there and selects it. For a folder or the whole repository it reads that folder's README, the declarations inside it and the diffs of its changed files. Your question appears as soon as you send it, and you can type the next one while the answer loads. Answers are written in ASD-STE100 Simplified Technical English: short sentences, one meaning per word, and steps as numbered instructions. If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. While you are exploring a task's changes, the button reads **Add to requested changes** instead, and so does the Instruction box's save button: each adds the change, at the place it is about, to that task's next round and lets you keep exploring, because a new draft would start from main without the agent's work. The **Back to task** chip counts what is waiting ("2 to send"); the task lists those changes for editing, and **Request changes** sends them together, with an optional extra note. One conversation runs for the session: it stays on screen as you move around the map, each question is about whatever is selected when you send it, and "About …" marks where the subject changes. **New conversation** clears it, and it is lost on reload.
+**Ask** uses Claude Code on this computer to answer questions about the selection. It reads only committed code. It cannot run, change or send anything. For a file or declaration, it reads the source and its diff. It also reads what the code calls, imports or inherits, and what calls the code. For a folder or the whole repository, it reads the README of that folder, the declarations in it and the diffs of its changed files.
 
-<img src="guide/11-comment.jpg" width="340" alt="Writing an instruction draft">
+When that is not sufficient, Ask can look up more of the repository at the same revisions. It can search declarations or the code, read a declaration or file, and follow relationships. It can do up to 12 lookups for each answer. The answer shows while Ask writes it. Ask shows each lookup while it occurs, and lists what it looked up.
+
+Some names of files and declarations in an answer point to exactly one location. These names have a dotted underline. Tap one, and the map moves to that location and selects it. Your question shows immediately when you send it. You can type the next question while the answer loads. Answers are in ASD-STE100 Simplified Technical English: short sentences, one meaning for each word, and steps as numbered instructions.
+
+If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. When you explore the changes of a task, this button shows **Add to requested changes**. The save button of the Instruction box also shows this label. Each of these buttons adds the change, at the location that it is about, to the next round of that task. Then you can continue to explore. Peekumi does this because a new draft starts from main and does not contain the work of the agent.
+
+The **Back to task** chip shows the number of changes that wait ("2 to send"). The task lists those changes, and you can edit them. **Request changes** sends them together, with an optional extra note.
+
+One conversation continues for the session. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. **New conversation** clears the conversation. When you reload, the conversation is lost.
+
+<img src="guide/11-comment.jpg" width="340" alt="The Instruction box while you write a draft instruction">
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Instruction | Switches the box from asking to writing an instruction for an agent. |
-| 2 | Anchor | The selection and commit the instruction is attached to. It stays attached even if you navigate elsewhere before saving. |
-| 3 | Instruction text | Describe what should change and why. |
+| 1 | Instruction | Changes the box from a question to an instruction for an agent. |
+| 2 | Anchor | The selection and commit that the instruction is attached to. It stays attached if you go to a different location before you save. |
+| 3 | Instruction text | Describe the change that you want and the reason for it. |
 | 4 | Cancel | Discards the unsent instruction. |
-| 5 | Save draft | Saves the instruction as a draft and lists it under Discussion for that selection. Drafts are private until you send them to an agent. |
+| 5 | Save draft | Saves the instruction as a draft. Discussion shows the draft for that selection. Drafts are private until you send them to an agent. |
 
 <img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft instruction">
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Review task | Turns your drafts into a task: choose which drafts, which agent (Codex or Claude Code) and optional extra instructions, then preview the exact task before starting it. |
-| 2 | Draft | A saved instruction with its anchor and commit. Edit or delete it while it is a draft. |
+| 1 | Review task | Makes a task from your drafts. Select the drafts, the agent (Codex or Claude Code) and optional extra instructions. Then look at a preview of the exact task before you start it. |
+| 2 | Draft | A saved instruction with its anchor and commit. You can edit or delete it while it is a draft. |
 
-After a task starts, the same view follows the agent's progress, its reported checks and the commits it made. The task leads with its state, then each instruction and the agent's result. **Explore changes** shows everything the agent did on the map, compared with the commit the task started from; **Back to task** returns you to the task and your previous view. **Approve** records your review (tap **Add note** first to leave one), and **Request changes** asks what needs fixing, then sends it to the same agent as the next round. That round starts from the agent's last commit, so earlier work is kept, and the task shows your feedback above the instructions. Earlier rounds open from the latest one with **Open round N**. The agent's messages, raw events and the generated task sit in **Agent log**. The Tasks button toggles: tap it again, or tap empty map space, to return to the map selection. While an agent is working, Peek works inside the Tasks button wherever you are, and tapping it opens that task; when the agent finishes Peek hops once and the icon turns blue for review. A drooping Peek on an orange tint means a task stopped partway and needs you.
+After a task starts, the same view shows the progress of the agent, the checks that the agent reports and the commits that it made. The task first shows its state, then each instruction and the result from the agent. **Explore changes** shows all the work of the agent on the map, compared with the commit that the task started from. **Back to task** takes you back to the task and your previous view. **Agent log** contains the messages of the agent, the raw events and the generated task.
 
-Approving a task does not change your code. Peekumi never merges: the agent's commits stay on their task branch. Once you approve, the task shows **Next: apply to main** with the exact command, such as `git merge --ff-only peekumi/run-…`, and a copy button. Run it in the repository with main checked out, or open a pull request from that branch. When the commits reach main, the task reads **Applied to main**. See [WORKFLOW.md](WORKFLOW.md) for the full loop.
+**Approve** records your review. To add a note, tap **Add note** first. **Request changes** asks you what to correct, then sends it to the same agent as the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. The task shows your feedback above the instructions. To open an earlier round, use **Open round N** in the latest round.
+
+The Tasks button is a toggle. To go back to the map selection, tap it again or tap an empty area of the map. While an agent works, Peek works inside the Tasks button in all parts of the app. Tap the button to open that task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
+
+Approval of a task does not change your code. Peekumi never merges: the commits of the agent stay on their task branch. After you approve, the task shows **Next: apply to main** with the exact command (for example, `git merge --ff-only peekumi/run-…`) and a copy button. Run the command in the repository while main is checked out, or open a pull request from that branch. When the commits are in main, the task shows **Applied to main**. Refer to [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
 ## Typing on a phone
 
 <img src="guide/13-keyboard.jpg" width="340" alt="The layout with the phone keyboard open">
 
-When the keyboard opens, the header and the map controls step aside, the sheet keeps its size at peek height, and the text field (1) stays above the keyboard. The map stays visible so you can still see what you are asking about.
+When the keyboard opens, the header and the map controls move away. The sheet keeps its size at peek height, and the text field (1) stays above the keyboard. The map stays on the screen, so you can still see the subject of your question.
 
 ## Desktop layout
 
 <img src="guide/14-desktop.jpg" width="720" alt="The desktop layout in dark mode">
 
-On a wide screen the header (1) spans the top, the map (2) fills the left, and the review sheet (3) sits on the right at full height. Everything else works the same way. Peekumi follows the system light or dark appearance.
+On a wide screen, the header (1) is across the top and the map (2) fills the left side. The review sheet (3) is on the right at full height. All other functions operate the same way. Peekumi uses the light or dark appearance of the system.
 
 ## Icon reference
 
-Every icon button has a name that appears as a tooltip and is read by screen readers.
+Each icon button has a name. The name shows as a tooltip, and screen readers read it.
 
 ### Header and map
 
 | Icon | Name | What it does |
 |---|---|---|
-| <img src="guide/icons/glyph-branch.svg" width="20" alt=""> | Branch | Marks the comparison line; tap it to change branch or comparison. |
-| <img src="guide/icons/glyph-time.svg" width="20" alt=""> | Time | Step through history with commit cards. |
+| <img src="guide/icons/glyph-branch.svg" width="20" alt=""> | Branch | Marks the comparison line. Tap it to change the branch or the comparison. |
+| <img src="guide/icons/glyph-time.svg" width="20" alt=""> | Time | Go through the history with commit cards. |
 | <img src="guide/icons/glyph-diff.svg" width="20" alt=""> | Diff | Compare any two commits. |
 | <img src="guide/icons/glyph-tasks.svg" width="20" alt=""> | Tasks | Drafts and agent runs. |
 | <img src="guide/icons/glyph-before.svg" width="20" alt=""> | Before | Show the base revision. |
@@ -229,7 +243,7 @@ Every icon button has a name that appears as a tooltip and is read by screen rea
 | <img src="guide/icons/glyph-filter.svg" width="20" alt=""> | Changes only | Hide unchanged cards. |
 | <img src="guide/icons/glyph-zoomOut.svg" width="20" alt=""> | Zoom out | Zoom the map out. |
 | <img src="guide/icons/glyph-zoomIn.svg" width="20" alt=""> | Zoom in | Zoom the map in. |
-| <img src="guide/icons/glyph-fit.svg" width="20" alt=""> | Fit | Fit the map on screen. |
+| <img src="guide/icons/glyph-fit.svg" width="20" alt=""> | Fit | Fit the map on the screen. |
 | <img src="guide/icons/glyph-reset.svg" width="20" alt=""> | Reset | Actual size. |
 | <img src="guide/icons/glyph-key.svg" width="20" alt=""> | Key | Map key and colour lens. |
 
@@ -244,16 +258,16 @@ Every icon button has a name that appears as a tooltip and is read by screen rea
 | <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Discussion | Your Ask conversation, or the instructions on the selection. |
 | <img src="guide/icons/glyph-ask.svg" width="20" alt=""> | Ask | Ask a question about the selection. |
 | <img src="guide/icons/glyph-comment.svg" width="20" alt=""> | Instruction | Write an instruction for an agent. |
-| <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | What the question or instruction refers to. |
+| <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | The subject of the question or instruction. |
 | <img src="guide/icons/glyph-send.svg" width="20" alt=""> | Send | Send the question. |
 | <img src="guide/icons/glyph-check.svg" width="20" alt=""> | Save draft | Save the instruction. |
 | <img src="guide/icons/glyph-close.svg" width="20" alt=""> | Cancel or close | Discard, or close a popover. |
 | <img src="guide/icons/glyph-copy.svg" width="20" alt=""> | Copy | Copy the command that applies a reviewed task. |
-| <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Check for new commits. |
+| <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Look for new commits. |
 
 ### Change status
 
-Each status has its own shape as well as its own colour.
+Each status has its own shape and its own colour.
 
 | Icon | Status |
 |---|---|
@@ -264,7 +278,7 @@ Each status has its own shape as well as its own colour.
 
 ### Folders, files and declarations
 
-Icons describe what a card is, never its change status. Source files are files a language adapter parsed; other files are recognised by their extension.
+Icons show what a card is. They never show its change status. Source files are files that a language adapter parsed. Peekumi identifies other files by their extension.
 
 | Icon | Kind | Icon | Kind |
 |---|---|---|---|
@@ -277,13 +291,13 @@ Icons describe what a card is, never its change status. Source files are files a
 
 ### Changed parts of a declaration
 
-A modified declaration says which parts changed, on its card and in the sheet. The comparison is of the code's structure, not its behaviour: whitespace-only edits do not count as changes, and "implementation" means the body's code changed, not that it behaves differently. A change outside these parts, such as a Python decorator, shows as plain **Modified**.
+A modified declaration shows which parts changed, on its card and in the sheet. Peekumi compares the structure of the code, not its behaviour. Peekumi does not count changes to whitespace only. "Implementation" means that the code in the body changed, not that the behaviour is different. A change outside these parts, for example a Python decorator, shows as plain **Modified**.
 
 | Icon | Part | What changed |
 |---|---|---|
-| <img src="guide/icons/part-signature.svg" width="20" alt=""> | Signature | Parameters, return type, generics, base classes, or a struct's or class's declared fields |
+| <img src="guide/icons/part-signature.svg" width="20" alt=""> | Signature | Parameters, return type, generics, base classes, or the declared fields of a struct or class |
 | <img src="guide/icons/part-documentation.svg" width="20" alt=""> | Documentation | Doc comments or docstrings |
-| <img src="guide/icons/part-implementation.svg" width="20" alt=""> | Implementation | The body's code, excluding documentation |
+| <img src="guide/icons/part-implementation.svg" width="20" alt=""> | Implementation | The code of the body, without documentation |
 
 ### Inputs and outputs
 
@@ -295,4 +309,4 @@ A modified declaration says which parts changed, on its card and in the sheet. T
 
 ## Offline and updates
 
-Peekumi runs on your own computer; the phone app is a window onto it. If the phone loses its connection, a banner says so, and no code is stored on the phone. When the server has a new version, the app shows **Update available · reload**. Save any unsent text, then tap it. Changes to the app's name, icon or full-screen mode take effect after removing the app from the home screen and adding it again.
+Peekumi runs on your own computer, and the phone app is a window into it. If the phone loses its connection, a banner tells you. Peekumi stores no code on the phone. When the server has a new version, the app shows **Update available · reload**. Save all unsent text, and then tap the message. Changes to the name, icon or full-screen mode of the app occur after you remove the app from the home screen and add it again.

@@ -1,8 +1,8 @@
 # Original project context
 
-These are the original attachments supplied by the owner, preserved without modification:
+This directory contains the original attachments from the owner. Nobody changed these files:
 
-- [Repo Strata specification](Repo-Strata-specification.md): the original broader product specification.
-- [Prototype context archive](repo-strata-context.zip): the supplied mockups, generator, sample snapshots, and supporting documents.
+- [Repo Strata specification](Repo-Strata-specification.md): the original product specification, which has a larger scope.
+- [Prototype context archive](repo-strata-context.zip): the mockups, the generator, the sample snapshots and the related documents that the owner supplied.
 
-The archive’s HTML mockup is the authoritative visual and interaction reference. The owner's clarified intention and [current MVP scope](../MVP.md) govern implementation where they differ from these originals.
+The HTML mockup in the archive is the authoritative reference for the visual design and the interaction. The owner's clarified intention and the [current MVP scope](../MVP.md) can be different from these original files. Where they are different, the intention and the scope control the implementation.

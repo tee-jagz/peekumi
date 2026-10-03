@@ -1,25 +1,33 @@
 # Backend
 
-The Rust backend serves the authenticated API, reads committed Git objects, compares revisions, and caches syntax analysis. It coordinates language adapters and supplies directory documentation to the frontend without executing inspected code.
+The Rust backend serves the authenticated API. It reads committed Git objects, compares revisions and keeps a cache of syntax analysis. It controls the language adapters and supplies directory documentation to the frontend. It does not execute the inspected code.
 
-- `main.rs`: Axum HTTP server, authentication, embedded frontend and repository worker.
-- `engine.rs`: Git snapshots, comparisons, directory descriptions and adapter coordination.
-- `relationships.rs`: shared relationship evidence, resolution and revision comparisons.
-- `rules.rs`: committed dependency configuration validation and violation checks.
-- `ask.rs`: bounded committed context (source, diff, static relationships and calling code for files and declarations; README, declarations and changed-file diffs for folders) and Claude conversations with every built-in tool disabled, at low effort on a fast model, answered whole or streamed as events. Answers follow ASD-STE100 Simplified Technical English.
-- `lookup.rs`: Ask's read-only lookup tools (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`) over Streamable HTTP MCP at `/mcp/ask`, open only while one answer runs and limited to 12 calls.
-- `workflow.rs`: durable draft instructions (stored as comments), frozen task previews, agent reports and owner verification.
-- `runner.rs`: isolated agent worktrees, process supervision and scoped stdio MCP reporting.
-- `index.rs`: persistent SQLite syntax cache.
-- `process.rs`: bounded Git and parser subprocess execution.
-- `adapters/`: the common language interface and its implementations.
+- `main.rs`: The Axum HTTP server, authentication, the embedded frontend and the repository worker.
+- `engine.rs`: Git snapshots, comparisons, directory descriptions and the control of the adapters.
+- `relationships.rs`: Shared relationship evidence, relationship resolution and comparisons of revisions.
+- `rules.rs`: Validation of the committed dependency configuration, and checks for violations.
+- `ask.rs`: Limited committed context and Claude conversations. For files and declarations, the context is the source, the diff, the static relationships and the code that calls them. For folders, the context is the README, the declarations and the diffs of changed files. Each conversation has all built-in tools disabled and uses low effort on a fast model. The answer comes as one whole reply or as a stream of events. Answers follow ASD-STE100 Simplified Technical English.
+- `lookup.rs`: The read-only lookup tools for Ask (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`). They use Streamable HTTP MCP at `/mcp/ask`. The tools are open only while one answer runs, and they accept a maximum of 12 calls.
+- `workflow.rs`: Durable draft instructions (the backend keeps them as comments), frozen task previews, agent reports and owner verification.
+- `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP.
+- `index.rs`: The persistent SQLite syntax cache.
+- `process.rs`: Limited execution of Git and parser subprocesses.
+- `adapters/`: The common language interface and its implementations.
 
-Build from the repository root with `cargo build --release --locked`. Browser assets and the Python helper are embedded; the TypeScript helper remains beside the deployed parser root.
+Run `cargo build --release --locked` from the repository root to build the backend. The build embeds the browser assets and the Python helper. The TypeScript helper stays next to the deployed parser root.
 
-`sessions.rs` persists hashed browser sessions in private state so bookmarked viewer URLs remain signed in across restarts. Sessions expire after 30 days and are bound to the repository and current access token.
+`sessions.rs` keeps hashed browser sessions in private state. Thus, bookmarked viewer URLs stay signed in after a restart. Sessions expire after 30 days. A session is valid only for its repository and the current access token.
 
-Codex runs use `exec --approve-for-me`, which selects the workspace-write sandbox with automatic approval review. Do not combine that preset with `--sandbox`: the CLI rejects the combination before executing the task.
+Codex runs use `exec --approve-for-me`. This preset selects the workspace-write sandbox with automatic approval review. Do not use this preset together with `--sandbox`. The CLI rejects that combination before it executes the task.
 
-A listener may register additional local repositories, each with an independent worker and workflow directory. The owner access token (never a device session) can add one while the server runs (`POST /api/repositories` with `{path}`) or remove one that is not the first and has no active run (`DELETE /api/repositories/<id>`); removal stops its worker and releases its state folder lock. Browser device sessions are shared at the server level with owner/read-only roles and explicit revocation. `pull_requests.rs` obtains PR context through the installed GitHub CLI and fetches private refs without changing the checkout. Configuration, workflow and analysis storage carry schema versions; newer workflow schemas are rejected.
+A listener can register more local repositories. Each repository has an independent worker and an independent workflow directory. The owner access token can add or remove a repository, but a device session can never do this. To add a repository while the server runs, send `POST /api/repositories` with `{path}`. To remove a repository, send `DELETE /api/repositories/<id>`. You cannot remove the first repository or a repository with an active run.
 
-Each adapter records a declaration's whole-syntax fingerprint plus a body fingerprint that excludes its signature and documentation. When a declaration changes, comparisons report `changes`: `signature` (parameters, return type, generics, bases or declared fields, from the declaration metadata), `documentation` (doc comments or docstrings) and `implementation` (the body). Fingerprints are structural, so whitespace-only edits leave a declaration unchanged; a change outside these parts reports an empty list. The compact overview preview carries the same labels.
+When you remove a repository, its worker stops and the server releases the lock on its state folder. All repositories on the server share the browser device sessions. Each device session has an owner role or a read-only role, and you can revoke it explicitly. `pull_requests.rs` gets PR context through the installed GitHub CLI. It fetches private refs and does not change the checkout. The configuration, workflow and analysis storage have schema versions, and the server rejects newer workflow schemas.
+
+Each adapter records a whole-syntax fingerprint and a body fingerprint for each declaration. The body fingerprint does not include the signature and the documentation. When a declaration changes, comparisons report `changes`. This list can contain these values:
+
+- `signature`: The parameters, return type, generics, bases or declared fields, from the declaration metadata.
+- `documentation`: The doc comments or docstrings.
+- `implementation`: The body.
+
+The fingerprints are structural. Thus, an edit that changes only whitespace does not change the declaration. If a change is outside these parts, the comparison reports an empty list. The compact overview preview shows the same labels.

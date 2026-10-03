@@ -1,16 +1,16 @@
 # Relationships and dependency rules
 
-Peekumi shows static declaration relationships and the evidence behind them. A call edge identifies a declaration that syntax refers to; it does not prove which implementation executes at runtime.
+Peekumi shows static declaration relationships and the evidence for them. A call edge identifies a declaration that the syntax refers to. It does not prove which implementation executes at runtime.
 
 ## Adapter contract
 
-Rust, Python and TypeScript adapters emit `calls`, `implements` and `inherits` candidates with source symbol, target expression and source line. Import relationships reuse the adapter's existing import resolution. The common `resolve_relationship` contract uses the committed path/symbol index and the adapter's language-specific import resolver. The engine records resolved, ambiguous or unresolved outcomes and retains candidate targets for ambiguity.
+The Rust, Python and TypeScript adapters emit `calls`, `implements` and `inherits` candidates. Each candidate has a source symbol, a target expression and a source line. Import relationships use the import resolution that the adapter already has. The common `resolve_relationship` contract uses the committed path/symbol index and the language-specific import resolver of the adapter. The engine records resolved, ambiguous or unresolved outcomes. For an ambiguous outcome, it keeps the candidate targets.
 
-- Rust extracts calls in named functions and impl methods, explicit trait implementations and supertraits. Direct local and qualified/imported names resolve when the declaration matches uniquely. Receiver dispatch requires type information and remains unresolved. Closure bodies, macros and inline-module import resolution are not analyzed. Conditional compilation is not evaluated.
-- Python extracts calls in top-level functions and class methods, plus explicit base classes. Named local functions and imported aliases can resolve. Dynamic receiver calls stay unresolved; nested function/lambda bodies are omitted rather than attributed to their enclosing function. Python structural protocols are not inferred as implementations.
-- TypeScript/JavaScript extract named functions, top-level function-valued variables and class methods, plus `extends`/`implements` clauses. Named imports and namespace imports can resolve. This is not compiler type checking: dynamic receivers, overload dispatch, default-export alias following and re-export chains are not resolved. Nested function bodies are omitted. Svelte extraction is limited to script blocks.
+- Rust extracts calls in named functions and impl methods. It also extracts explicit trait implementations and supertraits. Direct local names and qualified/imported names resolve when the declaration matches uniquely. Receiver dispatch needs type information and stays unresolved. Peekumi does not analyze closure bodies, macros or import resolution in inline modules. It does not evaluate conditional compilation.
+- Python extracts calls in top-level functions and class methods. It also extracts explicit base classes. Named local functions and imported aliases can resolve. Dynamic receiver calls stay unresolved. Peekumi omits the bodies of nested functions and lambdas, and it does not attribute them to the function that contains them. Peekumi does not infer Python structural protocols as implementations.
+- TypeScript/JavaScript extract named functions, top-level variables with function values and class methods. They also extract `extends`/`implements` clauses. Named imports and namespace imports can resolve. This is not compiler type checking. Peekumi does not resolve dynamic receivers, overload dispatch or re-export chains, and it does not follow default-export aliases. Peekumi omits nested function bodies, and Svelte extraction uses only script blocks.
 
-A matching name must have a compatible declaration kind. Shadowed names are conservatively unresolved; multiple matching declarations remain ambiguous. Unknown targets never become guessed edges. Installed helper failures and parse errors remain visible as analysis gaps.
+A name that matches must have a compatible declaration kind. Peekumi conservatively keeps shadowed names unresolved. If more than one declaration matches, the result stays ambiguous. Peekumi never changes unknown targets into guessed edges. Failures of installed helpers and parse errors stay visible as analysis gaps.
 
 ## Rules
 
@@ -35,16 +35,22 @@ Commit a `.peekumi.json` at the repository root. The viewer never executes the f
 }
 ```
 
-Rules prohibit the specified directed relationship from any file in the source group to any file in the destination groups. Groups can overlap and do not change the real directory hierarchy. An implementation edge points from the implementing type to its interface/trait; inheritance points from child to parent. Frontend HTTP calls are not source imports or inferred backend calls.
+A rule prohibits the specified directed relationship from a file in the source group to a file in the destination groups. Groups can overlap, and they do not change the real directory hierarchy. An implementation edge points from the type that implements to its interface/trait. Inheritance points from child to parent. Frontend HTTP calls are not source imports or inferred backend calls.
 
-Paths are repository-relative. `*` matches within one segment; `**` crosses directories; `**/` also matches zero directories; `?` matches one byte within a segment. No regexes, negation, absolute paths or parent traversal. Configuration is limited to 64 KiB, 100 groups/rules, 100 patterns per group and 256 bytes per pattern. Unknown fields, groups, kinds and duplicate rule IDs produce configuration errors rather than an apparently clean result.
+Paths are relative to the repository. `*` matches in one segment, and `**` crosses directories. `**/` also matches zero directories. `?` matches one byte in a segment. Patterns do not support regexes, negation, absolute paths or parent traversal.
 
-Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance: the panel reports external/unresolved/ambiguous relationships and files with analysis gaps. Missing configuration says “not configured.” Invalid configuration is shown as an error. A rule edit alone can change a relationship's comparison status.
+The configuration has these limits: 64 KiB, 100 groups/rules, 100 patterns for each group and 256 bytes for each pattern. Unknown fields, groups, kinds and duplicate rule IDs cause configuration errors, not a result that looks clean.
+
+Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps. If there is no configuration, the panel shows “not configured.” Peekumi shows an invalid configuration as an error. A change to a rule alone can change the comparison status of a relationship.
 
 ## Inspecting evidence
 
-Open Dependencies to filter imports, calls, implementations or inheritance, or show violations only. Select a symbol to focus incoming/outgoing relationships. Resolved edges appear on the map; uncertainty stays in an expandable list. Selecting a card emphasises its own edges by direction, accent for what it uses and teal for what uses it, and fades unrelated edges and cards. Implementations are dotted, inheritance dashed and violations red with a badge on the source card. Before/After switches both the graph and rule outcomes.
+Open Dependencies to filter imports, calls, implementations or inheritance, or to show only violations. Select a symbol to focus on its incoming/outgoing relationships. Resolved edges show on the map, and uncertain relationships stay in a list that you can expand.
 
-Open a file to see source evidence and unresolved reasons; evidence buttons open the source declaration in the appropriate revision. Imports currently provide file-level evidence, while calls and heritage include line numbers. Dense function maps draw calls for the selected symbol; other edges are capped at 40 and the evidence list shows the first 200 records, with an explicit count. Select a symbol or relationship kind to narrow larger lists.
+When you select a card, Peekumi highlights the edges of that card by direction: accent for what it uses, teal for what uses it. It also fades unrelated edges and cards. Implementations are dotted, inheritance is dashed and violations are red, with a badge on the source card. Before/After changes both the graph and the rule outcomes.
 
-The initial map transfers compact file-pair tuples (paths, kind, before/after counts and rule evidence). Ordinary import pairs already arrive with file metadata and are not duplicated. Same-file pairs are sent in this overview only when they carry rule evidence. Full symbol relationships are fetched when opening a file. Repeated call sites share a stable relation identity with a list of source lines, so adding blank lines does not create relationship churn. Renames still appear as removal/addition; no runtime tracing or cross-language call inference is performed.
+Open a file to see the source evidence and the reasons for unresolved relationships. Evidence buttons open the source declaration in the applicable revision. Imports currently give file-level evidence, but calls and heritage include line numbers. Dense function maps draw the calls for the selected symbol. Other edges have a limit of 40, and the evidence list shows the first 200 records with an explicit count. To make larger lists shorter, select a symbol or a relationship kind.
+
+The initial map transfers compact file-pair tuples (paths, kind, before/after counts and rule evidence). Ordinary import pairs already arrive with file metadata, and Peekumi does not send them two times. This overview contains same-file pairs only when they carry rule evidence. Peekumi fetches the full symbol relationships when you open a file.
+
+Repeated call sites share a stable relation identity with a list of source lines. Thus, added blank lines do not cause relationship churn. Renames still show as a removal and an addition. Peekumi does no runtime tracing or cross-language call inference.
