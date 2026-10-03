@@ -1,32 +1,38 @@
 # Architecture
 
-The production backend is Rust. The browser remains plain JavaScript, HTML/CSS and SVG.
+The production backend is Rust. The browser part stays plain JavaScript, HTML/CSS and SVG.
 
-1. `backend/main.rs` serves embedded assets and the token-protected API with Axum/Tokio. Constant-time token checking, same-origin pairing, expiring HttpOnly sessions, security headers, authenticated owner writes and negotiated gzip preserve the existing contract. A bounded queue sends repository operations to a dedicated thread; compression uses Tokio's blocking-work pool.
-2. `backend/engine.rs` reads Git trees/blobs, resolves imports, compares file and symbol identities, and supplies source/diffs. It retains six immutable snapshots and six comparison results keyed by resolved commit pair and view. Symbolic references are resolved on each request; only already-cached commit SHAs skip repeat resolution. `backend/process.rs` runs fixed Git/parser subprocess commands with piped input, output draining, and a 30-second timeout. It never executes inspected code.
-3. `backend/index.rs` owns a per-repository SQLite syntax index under the private state directory. Its content keys include Git blob identity, language and parser version. It retains up to 128 MiB of analysis payload, falls back to memory if persistence fails, and resolves imports afresh for every tree. Rust uses `index-rust/` so the former Node index remains available for rollback.
-4. `backend/adapters/mod.rs` defines the common `LanguageAdapter` interface (extensions, identity, capabilities, batch analysis and import resolution). Rust, Python and TypeScript implement it; the engine dispatches through the registry. `backend/adapters/python_ast.py` and `backend/adapters/typescript_ast.mjs` are syntax helpers. Rust sends only cache misses through JSON stdin; Python and TypeScript batches run concurrently. Python uses the standard AST; the Node helper uses the TypeScript compiler to preserve JavaScript, TypeScript and Svelte metadata accuracy. They expose no HTTP service. Python is embedded; the TypeScript helper and its package are found through the configured parser root. Missing helpers produce explicit file-level fallbacks.
-5. `frontend/` retains the reference glass deck. `model.js` aggregates hierarchy and dependency edges; `canvas.js` provides SVG pan/pinch/zoom with HTML card contents. The frontend initially fetches a compact overview, then full symbols, imports, source and descriptions when opening a file. It caches six comparisons and twelve files.
+1. `backend/main.rs` uses Axum/Tokio to serve embedded assets and the token-protected API. These features keep the current contract: constant-time token checks, same-origin pairing, HttpOnly sessions that expire, security headers, authenticated owner writes and negotiated gzip. A bounded queue sends repository operations to a dedicated thread. Compression uses the blocking-work pool of Tokio.
+2. `backend/engine.rs` reads Git trees/blobs, resolves imports, compares file and symbol identities, and supplies source/diffs. It keeps six immutable snapshots and six comparison results keyed by resolved commit pair and view. It resolves symbolic references on each request. Only commit SHAs that are already in the cache skip repeat resolution.
 
-The old Node backend is under `test/reference/`. It is an equivalence oracle and benchmark baseline, not a production service. `npm start` builds and runs the Rust executable. `Cargo.lock` pins the Rust dependencies.
+   `backend/process.rs` runs fixed Git/parser subprocess commands. It pipes the input, drains the output and applies a 30-second timeout. It never executes inspected code.
+3. `backend/index.rs` owns a SQLite syntax index for each repository in the private state directory. Its content keys include the Git blob identity, the language and the parser version. It keeps up to 128 MiB of analysis payload. If persistence fails, it uses memory instead. It resolves imports again for each tree. Rust uses `index-rust/`, so the former Node index stays available for rollback.
+4. `backend/adapters/mod.rs` defines the common `LanguageAdapter` interface (extensions, identity, capabilities, batch analysis and import resolution). Rust, Python and TypeScript implement it, and the engine dispatches through the registry. `backend/adapters/python_ast.py` and `backend/adapters/typescript_ast.mjs` are syntax helpers. Rust sends only cache misses through JSON stdin. Python batches and TypeScript batches run concurrently.
+
+   Python uses the standard AST. The Node helper uses the TypeScript compiler to keep the JavaScript, TypeScript and Svelte metadata accurate. The helpers have no HTTP service. Python is embedded, and the configured parser root gives the location of the TypeScript helper and its package. If a helper is not available, Peekumi gives an explicit file-level fallback.
+5. `frontend/` keeps the reference glass deck. `model.js` aggregates the hierarchy and the dependency edges. `canvas.js` gives SVG pan/pinch/zoom with HTML card contents. First, the frontend fetches a compact overview. When you open a file, it fetches the full symbols, imports, source and descriptions. It caches six comparisons and twelve files.
+
+The old Node backend is in `test/reference/`. It is an equivalence oracle and a benchmark baseline, not a production service. `npm start` builds and runs the Rust executable. `Cargo.lock` pins the Rust dependencies.
 
 ## API
 
-- `POST /api/session`: exchange the access token for a session cookie.
-- `GET /api/repo`: name, branch, first-parent commit history and initial revisions.
-- `GET /api/compare?base=&head=`: complete comparison for compatibility; add `view=overview` for file statuses, dependency edges, counts and compact symbol colour previews.
-- `GET /api/directories?base=&head=`: revision-specific directory README summaries or Python package docstrings, with provenance and adapter capabilities.
-- `GET /api/relationships?base=&head=&path=`: typed relationships, source sites, resolution evidence and before/after rule outcomes. Optional `view=overview` aggregates resolved file pairs for the initial map; a path includes incoming and outgoing evidence.
-- `GET /api/source?base=&head=&path=`: before/after source, direct Git diff, symbol comparison, imports and revision-specific metadata.
+- `POST /api/session`: exchanges the access token for a session cookie.
+- `GET /api/repo`: the name, the branch, the first-parent commit history and the initial revisions.
+- `GET /api/compare?base=&head=`: the complete comparison, for compatibility. Add `view=overview` to get file statuses, dependency edges, counts and compact colour previews of symbols.
+- `GET /api/directories?base=&head=`: directory README summaries or Python package docstrings for a specific revision, with provenance and adapter capabilities.
+- `GET /api/relationships?base=&head=&path=`: typed relationships, source sites, resolution evidence and before/after rule outcomes. The optional `view=overview` aggregates resolved file pairs for the initial map. With a path, the response includes incoming and outgoing evidence.
+- `GET /api/source?base=&head=&path=`: before/after source, the direct Git diff, the symbol comparison, imports and metadata for a specific revision.
 
-API requests require a session or bearer token except pairing. Repository strings are rendered using browser `textContent`. The internal `--stdio` protocol exists for local tests and benchmarks; it is not an HTTP endpoint.
+All API requests, except pairing, need a session or a bearer token. Peekumi uses the browser `textContent` to render repository strings. The internal `--stdio` protocol is for local tests and benchmarks. It is not an HTTP endpoint.
 
 ## Boundaries
 
-Repository inspection is read-only; an explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects, not working-tree traversal. Symlinks are not followed; restricted filenames, binary content, large files and submodules remain labelled. Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. No architecture or health scores are invented.
+Repository inspection is read-only. An explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects, not from a traversal of the working tree. Peekumi does not follow symlinks. Restricted filenames, binary content, large files and submodules keep their labels.
 
-`backend/relationships.rs` normalizes adapter evidence, resolves candidate declarations through the shared index and compares relationship/rule outcomes. `backend/rules.rs` validates committed `.peekumi.json` files and checks directional constraints. Rule evaluation is separate from syntax caching, so configuration-only commits can change violations.
+Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. Peekumi does not invent architecture scores or health scores.
+
+`backend/relationships.rs` normalizes adapter evidence, resolves candidate declarations through the shared index and compares relationship/rule outcomes. `backend/rules.rs` validates committed `.peekumi.json` files and checks directional constraints. Rule evaluation is separate from the syntax cache, so commits that change only the configuration can change violations.
 
 ## Review workflow
 
-`workflow.rs` owns a separate persistent SQLite store for comments, audit events and frozen run tasks. `runner.rs` creates explicitly dispatched agent worktrees, supervises processes, and exposes run-scoped reporting through stdio MCP. The owner HTTP session alone can verify a report. `frontend/workflow.js` extends the existing review panel with Comments and Runs and polls active progress. Inspection remains read-only; dispatch is the explicit write/execution boundary. See [WORKFLOW.md](WORKFLOW.md).
+`workflow.rs` owns a separate persistent SQLite store for comments, audit events and frozen run tasks. `runner.rs` creates agent worktrees for explicit dispatches, supervises processes and gives run-scoped reports through stdio MCP. Only the owner HTTP session can verify a report. `frontend/workflow.js` adds Comments and Runs to the current review panel and polls active progress. Inspection stays read-only, and dispatch is the explicit write/execution boundary. See [WORKFLOW.md](WORKFLOW.md).

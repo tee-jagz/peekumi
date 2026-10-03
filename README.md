@@ -2,9 +2,9 @@
 
 # Peekumi
 
-Explore a repository and its changes from your phone, from the folder structure down to a single function, then ask about it or hand work to an agent.
+Use your phone to examine a repository and its changes, from the folder structure to one function. Then ask about it or give work to an agent.
 
-Peekumi maps your repository's real folders, files and declarations, colours what changed between two commits, and shows the code and its static relationships. **Ask** answers questions about the selection with Claude Code, and **Instructions** become tasks that Codex or Claude Code carry out in a separate worktree for you to review. It reads committed code only and never changes your checkout.
+Peekumi makes a map of the real folders, files and declarations in your repository. It colours the changes between two commits and shows the code and its static relationships. **Ask** uses Claude Code to answer questions about the selection. **Instructions** become tasks that Codex or Claude Code does in a separate worktree, and then you review the result. Peekumi reads only committed code. It never changes your checkout.
 
 | Repository map | Time travel | Tasks |
 | --- | --- | --- |
@@ -20,14 +20,14 @@ peekumi share   # private HTTPS for your phone over Tailscale
 peekumi pair    # prints the link to open on your phone
 ```
 
-Prebuilt for macOS and Linux (glibc 2.34+); only Git is required. See [setup](docs/SETUP.md) for details, phone pairing and building from source, or give your agent the [setup skill](skills/peekumi-setup/SKILL.md).
+Prebuilt releases are available for macOS and Linux (glibc 2.34+). Git is the only necessary software. For more details, phone pairing and how to build from source, see [setup](docs/SETUP.md). You can also give your agent the [setup skill](skills/peekumi-setup/SKILL.md).
 
 ## Learn more
 
-- [User guide](docs/USER-GUIDE.md): every control, view and icon, with screenshots.
+- [User guide](docs/USER-GUIDE.md): all controls, views and icons, with screenshots.
 - [Ask, instructions and agent runs](docs/WORKFLOW.md).
-- [Relationships and dependency rules](docs/RELATIONSHIPS.md), including `.peekumi.json`.
-- [Development](docs/DEVELOPMENT.md): building, testing, benchmarks and analysis limits.
+- [Relationships and dependency rules](docs/RELATIONSHIPS.md), with `.peekumi.json`.
+- [Development](docs/DEVELOPMENT.md): how to build and test, benchmarks and analysis limits.
 - [Architecture](docs/ARCHITECTURE.md), [scope](docs/MVP.md), [validation](docs/VALIDATION.md) and [brand](docs/brand/README.md).
 
-Peekumi was called Repo Strata until October 2026; the `strata` command and settings still work ([details](docs/SETUP.md#renamed-from-strata)).
+The name of Peekumi was Repo Strata until October 2026. The `strata` command and its settings continue to operate ([details](docs/SETUP.md#renamed-from-strata)).

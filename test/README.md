@@ -1,7 +1,13 @@
 # Tests
 
-Automated tests check Git comparison accuracy, read-only access, authentication, language extraction and mobile interactions. Temporary fixture repositories exercise the engine; browser tests exercise the production Rust server at phone and desktop sizes.
+Automated tests check the accuracy of Git comparisons, read-only access, authentication, language extraction and mobile interactions. Temporary fixture repositories are the test data for the engine. Browser tests check the production Rust server at phone and desktop sizes.
 
-Run `npm test`, `npm run test:rust` and `npm run test:browser` from the repository root. The `reference/` directory retains the previous Node implementation for equivalence checks. It is not the production backend.
+Run these commands from the repository root:
 
-Workflow integration tests use temporary Git repositories and a deterministic local agent that speaks the production stdio MCP protocol. `workflow-browser.mjs` completes draft → preview → dispatch → report → inspect → verify on phone and desktop. No real paid agent session runs in these tests.
+1. Run `npm test`.
+2. Run `npm run test:rust`.
+3. Run `npm run test:browser`.
+
+The `reference/` directory keeps the previous Node implementation for equivalence checks. It is not the production backend.
+
+Workflow integration tests use temporary Git repositories and a deterministic local agent. This agent uses the production stdio MCP protocol. `workflow-browser.mjs` completes draft → preview → dispatch → report → inspect → verify on phone and desktop. These tests do not run a real paid agent session.

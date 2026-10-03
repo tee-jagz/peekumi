@@ -1,13 +1,15 @@
 # Language adapters
 
-Language adapters translate source syntax into a shared model of symbols, documentation, explicit types and imports. Rust, Python and TypeScript implement the same LanguageAdapter contract; the repository engine handles Git access, caching and comparisons independently of language.
+Language adapters change source syntax into a shared model. This model contains symbols, documentation, explicit types and imports. The Rust, Python and TypeScript adapters implement the same LanguageAdapter contract. The repository engine controls Git access, the cache and comparisons. These functions do not depend on the language.
 
-- `mod.rs`: interface, registry, capabilities and shared resolution context.
-- `rust_relationships.rs`: syntax call sites, trait implementations and supertrait edges.
-- `rust.rs`: native syn parsing and conventional Rust module resolution.
-- `python.rs` and `python_ast.py`: Python AST parsing and package import resolution.
-- `typescript.rs` and `typescript_ast.mjs`: JavaScript, TypeScript and Svelte script parsing and import resolution.
+- `mod.rs`: The interface, the registry, the capabilities and the shared resolution context.
+- `rust_relationships.rs`: Call sites from the syntax, trait implementations and supertrait edges.
+- `rust.rs`: Native syn parsing and resolution of conventional Rust modules.
+- `python.rs` and `python_ast.py`: Python AST parsing and resolution of package imports.
+- `typescript.rs` and `typescript_ast.mjs`: Parsing of JavaScript, TypeScript and Svelte scripts, and import resolution.
 
-Each implementation declares supported extensions, limitations, parser identity, batch analysis, import resolution and declaration-target resolution. Adapter batches include typed relationship candidates, source lines and either lookup evidence or an unresolved reason. Register new implementations in `all()`. Adapters never expand or execute inspected code. Missing interpreters and parse failures remain explicit file-level results.
+Each implementation declares its supported extensions, limitations and parser identity. It also declares batch analysis, import resolution and declaration-target resolution. Adapter batches contain typed relationship candidates, source lines, and lookup evidence or an unresolved reason.
 
-The frontend exposes the selected adapter and its capabilities under Details. Documentation is extracted, not generated, and types are not inferred.
+Register each new implementation in `all()`. Adapters never expand or execute the inspected code. Missing interpreters and parse failures stay as explicit results for each file.
+
+The frontend shows the selected adapter and its capabilities under Details. The adapters extract documentation; they do not generate it. They do not infer types.
