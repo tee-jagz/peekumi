@@ -6,7 +6,7 @@ The Rust backend serves the authenticated API, reads committed Git objects, comp
 - `engine.rs`: Git snapshots, comparisons, directory descriptions and adapter coordination.
 - `relationships.rs`: shared relationship evidence, resolution and revision comparisons.
 - `rules.rs`: committed dependency configuration validation and violation checks.
-- `ask.rs`: bounded committed context (source, diff, static relationships and calling code for files and declarations; README, declarations and changed-file diffs for folders) and Claude conversations with every built-in tool disabled, at low effort on a fast model, answered whole or streamed as events.
+- `ask.rs`: bounded committed context (source, diff, static relationships and calling code for files and declarations; README, declarations and changed-file diffs for folders) and Claude conversations with every built-in tool disabled, at low effort on a fast model, answered whole or streamed as events. Answers follow ASD-STE100 Simplified Technical English.
 - `lookup.rs`: Ask's read-only lookup tools (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`) over Streamable HTTP MCP at `/mcp/ask`, open only while one answer runs and limited to 12 calls.
 - `workflow.rs`: durable draft instructions (stored as comments), frozen task previews, agent reports and owner verification.
 - `runner.rs`: isolated agent worktrees, process supervision and scoped stdio MCP reporting.

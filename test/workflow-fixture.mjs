@@ -13,6 +13,8 @@ if (values.includes("--tools")) {
     throw Error("Ask must have no tools");
   if (process.env.PEEKUMI_TOKEN || process.env.PEEKUMI_REPORT_TOKEN)
     throw Error("Ask inherited a Peekumi credential");
+  if (!values[values.indexOf("--system-prompt") + 1]?.includes("ASD-STE100"))
+    throw Error("Ask must answer in ASD-STE100 Simplified Technical English");
   if (values[values.indexOf("--effort") + 1] !== "low")
     throw Error("Ask must run at low effort for fast answers");
   if (values[values.indexOf("--model") + 1] !== "sonnet")
