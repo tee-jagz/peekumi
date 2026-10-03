@@ -8,6 +8,7 @@ These scripts launch Peekumi, locate the Rust toolchain and measure backend perf
 - `benchmark.mjs`: measures the earlier Node analysis pipeline.
 
 - `manage.mjs`: installation, registry, dependency diagnostics, OS background service, pairing, revocation and Tailscale HTTPS setup.
+- `tunnel/tailscale.mjs`: tunnel provider with `available`, `status`, `expose` and `url` operations; owns Tailscale commands and protects existing Serve configuration. Management retains configuration persistence and service restarts.
 - `package.mjs`: platform archive with bundled Node/TypeScript and SHA-256 checksum; excludes private state.
 
 `install.sh` at the repository root downloads a release archive, verifies its checksum and installs it with the archive's own `peekumi upgrade`.
