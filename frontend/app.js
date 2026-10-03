@@ -200,6 +200,9 @@ const workflow = createWorkflow({
     renderPanel();
   },
   inspect: inspectRevision,
+  /** The task being explored, when it can still collect changes for a next round. */
+  exploring: () =>
+    taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
 });
 const ask = createAsk({
   api,
@@ -249,9 +252,17 @@ const ask = createAsk({
   /** The task being explored, when it can still take requested changes. */
   changeTarget: () =>
     taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
-  /** Returns to the explored task with its Request changes box holding `text`. */
-  async addToChanges(text) {
-    workflow.requestChanges(await returnToTask(), text);
+  /** Collects an answer's suggestion, at the place it was asked about, for the explored
+   * task's next round; exploring carries on. */
+  async addToChanges(message) {
+    await workflow.collect(
+      taskReturn.id,
+      message.asked.anchor,
+      message.asked.sha,
+      message.suggestion,
+    );
+    showNotice("Added to this task's requested changes");
+    setTimeout(() => showNotice(""), 2000);
   },
 });
 let noticeTimer = 0,
@@ -265,7 +276,8 @@ function showNotice(message, error = false) {
     noticeTimer = setTimeout(() => showNotice(""), 6000);
   // Errors get Peek's sunken face; progress notices stay plain text.
   $("#notice").replaceChildren(
-    ...(error && message ? [peek("error")] : []),
+    // An unreachable server sends Peek to sleep; other errors get its sunken face.
+    ...(error && message ? [peek(message === UNREACHABLE ? "asleep" : "error")] : []),
     document.createTextNode(message),
   );
   $("#notice").classList.toggle("error", error);
@@ -1597,7 +1609,7 @@ function goUp() {
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
   $("#openTasks").setAttribute("aria-pressed", String(inTasks()));
-  $("#taskReturn").hidden = !taskReturn || ["comments", "runs"].includes(tab);
+  $("#taskReturn").hidden = !taskReturn || inTasks();
   const view = [tab, scope.path, selected?.id || selected?.name || ""].join("|");
   if (view !== noticeView && $("#notice").classList.contains("error"))
     showNotice("");
@@ -2241,6 +2253,11 @@ function showLatestMessage() {
   });
 }
 function renderTab() {
+  // The way back to an explored task says how many changes are waiting to go with it.
+  const waiting = taskReturn ? workflow.collected(taskReturn.id) : 0;
+  $("#taskReturn").textContent = waiting
+    ? `Back to task · ${waiting} to send`
+    : "Back to task";
   // Redrawing the conversation (a new selection, a streamed reply) must not move the reader.
   const reading = $("#panel").dataset.view === "ask" && tab === "ask";
   const scroller = $("#reviewScroll");
@@ -2855,6 +2872,9 @@ function closeTasks() {
 $("#openTasks").onclick = () => {
   // The Tasks button toggles: pressed again, it returns to the map selection.
   if (inTasks()) return closeTasks();
+  // While an agent runs (or a task stopped partway), it opens that task directly.
+  const focus = workflow.focusRun();
+  if (focus) return workflow.openTask(focus);
   tab = "comments";
   primaryTab = "comments";
   workflow.scope("all");

@@ -218,9 +218,19 @@ impl Workflow {
                 text(anchor, "target", 2048)?;
                 text(anchor, "relationship", 32)?;
             }
+            // An instruction written while exploring a finished task joins that task's next round.
+            let for_run = body["forRun"].as_str().map(str::to_string);
             return self.update(|v| {
                 ensure!(v["comments"].as_array().unwrap().len()<10000,"Comment limit reached");
+                if let Some(run) = &for_run {
+                    let r = find(v, "runs", run)?;
+                    ensure!(!active(r) && r["status"] != "preview", "Wait for this task to finish");
+                    ensure!(r["revisedBy"].is_null(), "Changes were already requested; continue from the latest round");
+                }
                 let mut c = json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]});
+                if let Some(run) = &for_run {
+                    c["forRun"] = json!(run);
+                }
                 event(&mut c,"owner");
                 list(v,"comments").push(c.clone());
                 Ok(c)
@@ -377,6 +387,7 @@ impl Workflow {
             let mut comments=vec![];
             for id in ids { let c = find(v,"comments",id.as_str().unwrap())?;
                 ensure!(c["status"]=="draft","Only drafts can be sent");
+                ensure!(c["forRun"].is_null(),"This instruction is waiting to go back to its task");
                 let mut c=c.clone();
                 c.as_object_mut().unwrap().remove("history");
                 comments.push(c);
@@ -437,7 +448,11 @@ impl Workflow {
     /// move to the new round; the previous round is marked as revised and cannot be revised again.
     /// Returns the new run, already starting.
     fn revise(&self, previous: &str, body: &Value) -> Result<(Value, String)> {
-        let requested = text(body, "feedback", 12000)?;
+        // The overall note is optional once instructions were collected for this task.
+        let requested = match body["feedback"].as_str().map(str::trim) {
+            None | Some("") => "",
+            Some(_) => text(body, "feedback", 12000)?,
+        };
         let earlier = self.run(previous)?;
         ensure!(!active(&earlier), "Wait for this task to finish");
         let branch_tip = self.resolve(&format!(
@@ -467,15 +482,20 @@ impl Workflow {
             );
             let mut comments = vec![];
             for c in v["comments"].as_array().unwrap() {
-                if c["runId"] == previous
-                    && ["addressed", "flagged", "unreported"].contains(&c["status"].as_str().unwrap_or(""))
-                {
+                let open = c["runId"] == previous
+                    && ["addressed", "flagged", "unreported"].contains(&c["status"].as_str().unwrap_or(""));
+                let collected = c["forRun"] == previous && c["status"] == "draft";
+                if open || collected {
                     let mut c = c.clone();
                     c.as_object_mut().unwrap().remove("history");
                     comments.push(c);
                 }
             }
             ensure!(!comments.is_empty(), "Nothing in this task is left to change");
+            ensure!(
+                !requested.is_empty() || comments.iter().any(|c| c["forRun"] == previous),
+                "Say what needs fixing"
+            );
             let agent = r["agent"].as_str().context("Missing agent")?;
             let round = r["round"].as_u64().unwrap_or(1) + 1;
             let id = crate::random_token()[..16].to_string();
@@ -491,6 +511,7 @@ impl Workflow {
                 c["status"] = json!("with_agent");
                 c["runId"] = json!(id);
                 c["report"] = Value::Null;
+                c.as_object_mut().unwrap().remove("forRun");
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);

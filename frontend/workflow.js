@@ -154,6 +154,7 @@ export function createWorkflow({
   notice,
   inspect,
   explore,
+  exploring,
 }) {
   let data = { comments: [], runs: [] },
     loaded = false,
@@ -207,6 +208,11 @@ export function createWorkflow({
     l.append(t);
     return l;
   };
+  /** Drafts waiting for a new task; those collected for a finished task go back with it. */
+  const sendable = (c) => c.status === "draft" && !c.forRun;
+  /** Instructions collected for task `id`'s next round while exploring its changes. */
+  const collected = (id) =>
+    data.comments.filter((c) => c.forRun === id && c.status === "draft");
   /** Reloads workflow state. `render` redraws the open view; "poll" redraws only when the
    * data changed and a task view is open, so polling never rebuilds Source or Details. */
   function refresh(render = true) {
@@ -242,7 +248,12 @@ export function createWorkflow({
           ]
             .map((d) => d.dataset.key)
             .filter(Boolean);
+          const kept = document.querySelector("#tabBody .task-peek");
           redraw();
+          // The same Peek carries on across a redraw rather than restarting its loop.
+          const fresh = document.querySelector("#tabBody .task-peek");
+          if (kept && fresh && kept.dataset.state === fresh.dataset.state)
+            fresh.replaceWith(kept);
           for (const d of document.querySelectorAll("#tabBody details"))
             if (opened.includes(d.dataset.key)) d.open = true;
           if (focusLabel) {
@@ -258,6 +269,54 @@ export function createWorkflow({
     refreshQueue = pending;
     return pending;
   }
+  // The Tasks button's look: "working", "attention", "ready" or "" (its usual icon).
+  let cue = "",
+    tasksIcon = null,
+    settle = 0;
+  /** A task stopped partway with instructions still open: it waits for the owner. */
+  const stalled = (r) =>
+    ["failed", "interrupted"].includes(r.status) && !r.revisedBy && open(r).length > 0;
+  /** The task the Tasks button opens directly: one running, else one that stopped. */
+  function focusRun() {
+    return (data.runs.find(active) || data.runs.find(stalled))?.id || null;
+  }
+  /** Shows a running or stalled task on the Tasks button, visible from every view: Peek
+   * works in place of the icon while an agent runs, hops once when it finishes, and droops
+   * on a warm tint when a task stopped partway. Rebuilt only when the state changes, so
+   * polling never restarts the animation. */
+  function cueTasks(button, ready) {
+    tasksIcon ||= button.querySelector("svg");
+    const running = data.runs.find(active),
+      stuck = !running && data.runs.find(stalled);
+    const next = running ? "working" : stuck ? "attention" : ready.length ? "ready" : "";
+    const agent = (r) => (r.agent === "claude" ? "Claude Code" : "Codex");
+    const label = running
+      ? `${agent(running)} is working on a task`
+      : stuck
+        ? "A task stopped and needs your attention"
+        : ready.length
+          ? `Tasks, ${ready.length} ready to review`
+          : "Tasks";
+    button.setAttribute("aria-label", label);
+    button.title = running || stuck
+      ? label
+      : ready.length
+        ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
+        : "Open tasks";
+    if (next === cue) return;
+    const finished = cue === "working" && next !== "working";
+    cue = next;
+    clearTimeout(settle);
+    button.dataset.cue = next;
+    button.dataset.ready = String(next === "ready");
+    if (next === "working") button.replaceChildren(peek("working"));
+    else if (next === "attention") button.replaceChildren(peek("stopped"));
+    else if (finished && next === "ready") {
+      // One short hop as the agent finishes, then the usual accent icon.
+      button.replaceChildren(peek("ready"));
+      settle = setTimeout(() => cue === "ready" && button.replaceChildren(tasksIcon), 2600);
+    } else button.replaceChildren(tasksIcon);
+  }
   function bar() {
     const host = document.querySelector("#runBar");
     host.replaceChildren();
@@ -268,24 +327,15 @@ export function createWorkflow({
         data.comments.some((c) => c.runId === r.id && c.status === "addressed"),
     );
     const tasksButton = document.querySelector("#openTasks");
-    if (tasksButton) {
-      // The cue is the icon colour plus the accessible name, never a count badge.
-      tasksButton.dataset.ready = String(ready.length > 0);
-      tasksButton.setAttribute(
-        "aria-label",
-        ready.length ? `Tasks, ${ready.length} ready to review` : "Tasks",
-      );
-      tasksButton.title = ready.length
-        ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
-        : "Open tasks";
-    }
+    // The cue is Peek or the icon colour plus the accessible name, never a count badge.
+    if (tasksButton) cueTasks(tasksButton, ready);
     if (
       ["comments", "runs"].includes(
         document.querySelector("#panel")?.dataset.view,
       )
     )
       return;
-    const drafts = data.comments.filter((c) => c.status === "draft"),
+    const drafts = data.comments.filter(sendable),
       running = data.runs.find(active);
     const waiting = data.comments.filter((c) => c.status === "addressed");
     if (!drafts.length && !running && !waiting.length) return;
@@ -361,9 +411,20 @@ export function createWorkflow({
         field("What should change, and why", draft, (v) => (draft = v), 1),
       );
       const buttons = el("div", "sel-acts");
+      const target = editing ? null : exploring();
       const save = action(
-        "Save draft",
+        target ? "Add to requested changes" : "Save draft",
         async () => {
+          if (target) {
+            // Collected for the explored task's next round; exploring carries on.
+            await write("/api/comments", { ...composer, text: draft, forRun: target });
+            composer = null;
+            draft = "";
+            notice("Added to this task's requested changes");
+            setTimeout(() => notice(""), 2000);
+            await refresh();
+            return;
+          }
           if (editing)
             await write(
               "/api/comments/" + editing.id,
@@ -388,14 +449,16 @@ export function createWorkflow({
         redraw();
       });
       iconButton(cancel, "close", "Cancel");
-      iconButton(save, "check", "Save draft");
+      iconButton(save, "check", target ? "Add to requested changes" : "Save draft");
       for (const b of [cancel, save]) b.classList.add("icon-action");
       buttons.append(cancel, save);
       const input = box.querySelector("textarea");
       // Nothing to save until something is written.
       save.disabled = !draft.trim();
       input.addEventListener("input", () => (save.disabled = !input.value.trim()));
-      input.placeholder = "What should change, and why?";
+      input.placeholder = target
+        ? "What should change in this work?"
+        : "What should change, and why?";
       input.setAttribute("aria-label", "What should change, and why");
       input.parentElement.firstChild.textContent = "";
       input.parentElement.classList.add("dock-input");
@@ -419,7 +482,7 @@ export function createWorkflow({
     }
     if (!task && !here) {
       body.append(el("h2", "task-heading", "Tasks"));
-      const drafts = data.comments.filter((c) => c.status === "draft");
+      const drafts = data.comments.filter(sendable);
       if (drafts.length)
         body.append(
           action(
@@ -458,7 +521,7 @@ export function createWorkflow({
         )
       : here
         ? data.comments.filter(visible)
-        : data.comments.filter((c) => c.status === "draft");
+        : data.comments.filter(sendable);
     if (here && !items.length) {
       const empty = el(
         "p",
@@ -496,7 +559,11 @@ export function createWorkflow({
         foot.append(anchor);
         // Inside a task its status line already says this, so only exceptions are labelled.
         if (!task || !["with_agent", "addressed"].includes(c.status)) {
-          const state = el("span", "card-state", states[c.status]);
+          const state = el(
+            "span",
+            "card-state",
+            c.forRun ? "To send with its task" : states[c.status],
+          );
           state.dataset.state = c.status;
           foot.append(state);
         }
@@ -568,7 +635,7 @@ export function createWorkflow({
     };
     l.append(select);
     body.append(l);
-    for (const c of data.comments.filter((c) => c.status === "draft")) {
+    for (const c of data.comments.filter(sendable)) {
       const l = el("label", "workflow-pick"),
         check = el("input");
       check.type = "checkbox";
@@ -752,7 +819,7 @@ export function createWorkflow({
     );
   }
   /** A small back arrow beside the view's heading, in place of a full-width button. */
-  function header(body, title, status = "") {
+  function header(body, title, status = "", mood = "") {
     const row = el("div", "task-head"),
       back = iconButton(el("button", "btn icon-action"), "back", "Back to tasks"),
       text = el("div");
@@ -764,7 +831,17 @@ export function createWorkflow({
     text.append(el("h2", "task-heading", title));
     if (status) text.append(el("p", "task-meta", status));
     row.append(back, text);
+    if (mood) row.append(peek(mood, { className: "task-peek" }));
     body.append(row);
+  }
+  /** Peek's state for a task: working while it runs, ready to review, merged once applied,
+   * stopped when it ended early; none otherwise. */
+  function moodOf(r) {
+    if (active(r) && r.status !== "interrupted") return "working";
+    if (r.applied) return "merged";
+    if (r.revisedBy) return "";
+    if (["failed", "interrupted", "cancelled"].includes(r.status)) return "stopped";
+    return runStatus(r) === "Ready for review" ? "ready" : "";
   }
   function activityView(r) {
     const live = el("section", "task-live");
@@ -802,7 +879,7 @@ export function createWorkflow({
     }
     const r = runDetail;
     // What state the task is in leads; how many instructions and where is the quiet line.
-    header(body, runStatus(r), taskTitle(r));
+    header(body, runStatus(r), taskTitle(r), moodOf(r));
     body.append(activityView(r));
     if (runStatus(r) === "Nothing left to review")
       body.append(
@@ -842,7 +919,31 @@ export function createWorkflow({
     const ready = data.comments.filter(
       (c) => c.runId === r.id && c.status === "addressed",
     );
-    const decide = !active(r) && !r.revisedBy;
+    const decide = !active(r) && !r.revisedBy,
+      batch = decide ? collected(r.id) : [];
+    if (batch.length) {
+      body.append(el("h3", "workflow-group", `Requested changes · ${batch.length}`));
+      for (const c of batch) {
+        const card = el("article", "workflow-card");
+        card.dataset.commentId = c.id;
+        const foot = el("div", "cm-top");
+        const place = action(label(c.anchor), () => inspect(c.sha, c.sha, c.anchor));
+        place.classList.add("link-button");
+        foot.append(place);
+        const controls = el("div", "sel-acts");
+        controls.append(
+          action("Edit", () => {
+            editing = c;
+            composer = { anchor: c.anchor, sha: c.sha };
+            draft = c.text;
+            redraw();
+          }),
+          action("Delete", () => transition(c, "delete")),
+        );
+        card.append(richText(c.text, "workflow-text"), foot, controls);
+        body.append(card);
+      }
+    }
     if (decide && ready.length)
       actions.append(
         action("Approve", async () => {
@@ -866,7 +967,7 @@ export function createWorkflow({
           );
         }),
       );
-    if (decide && open(r).length && reply !== "changes")
+    if (decide && (open(r).length || batch.length) && reply !== "changes")
       actions.append(
         action("Request changes", () => {
           reply = "changes";
@@ -894,13 +995,18 @@ export function createWorkflow({
       note.classList.add("review-note", "reply-box");
       body.append(note);
     }
-    if (decide && reply === "changes" && open(r).length) {
+    if (decide && reply === "changes" && (open(r).length || batch.length)) {
       // The agent continues from its own commits with this feedback, as the next round.
       const box = el("section", "reply-box");
-      const ask = field("What needs fixing?", feedback, (value) => {
-        feedback = value;
-        send.disabled = !value.trim();
-      }, 3);
+      const ask = field(
+        batch.length ? "Anything else? (optional)" : "What needs fixing?",
+        feedback,
+        (value) => {
+          feedback = value;
+          send.disabled = !value.trim() && !batch.length;
+        },
+        3,
+      );
       const send = action(
         "Send to agent",
         async () => {
@@ -911,7 +1017,7 @@ export function createWorkflow({
         },
         true,
       );
-      send.disabled = !feedback.trim();
+      send.disabled = !feedback.trim() && !batch.length;
       const row = el("div", "sel-acts task-actions");
       row.append(
         send,
@@ -963,22 +1069,18 @@ export function createWorkflow({
     refresh,
     compose,
     openTask,
-    /** True when a finished task, not yet continued, has instructions to send back. */
+    focusRun,
+    /** True when a finished task, not yet continued, can collect changes for a next round. */
     revisable(id) {
       const r = data.runs.find((x) => x.id === id);
-      return Boolean(r && !active(r) && !r.revisedBy && open(r).length);
+      return Boolean(r && !active(r) && r.status !== "preview" && !r.revisedBy);
     },
-    /** Opens the Request changes box on task `id`, adding `text` to any feedback there. */
-    requestChanges(id, text) {
-      runId = id;
-      reply = "changes";
-      feedback = feedback.trim() ? `${feedback.trim()}\n\n${text}` : text;
-      redraw();
-      requestAnimationFrame(() =>
-        document
-          .querySelector(".reply-box")
-          ?.scrollIntoView({ block: "start", behavior: "smooth" }),
-      );
+    /** How many instructions are waiting to go back with task `id`. */
+    collected: (id) => collected(id).length,
+    /** Adds an instruction at `anchor` on commit `sha` to task `id`'s next round. */
+    async collect(id, anchor, sha, text) {
+      await write("/api/comments", { anchor, sha, text, forRun: id });
+      await refresh(false);
     },
     renderComposer,
     /** Chooses between instructions on the selection ("here") and the Tasks overview ("all"). */
