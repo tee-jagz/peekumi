@@ -23,6 +23,9 @@ const files = {
   "d.mjs": "export const d = 4;\n",
   "e.mjs": 'import { a } from "./a.mjs";\nexport const e = () => a();\n',
   "f.mjs": 'import { a } from "./a.mjs";\nexport const f = () => a();\n',
+  // A long parameter list, to check that inputs scroll sideways in the minimal sheet.
+  "wide.mjs":
+    "export function wide(alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet, kilo, lima) { return alpha; }\n",
 };
 for (const [name, source] of Object.entries(files))
   await writeFile(join(dir, "lib", name), source);
@@ -112,6 +115,22 @@ try {
     assert.deepEqual(report.bent, [], "Every line meets its arrowhead straight on");
     assert.deepEqual(report.offCentre, [], "Arrows across leave the middle of a card's side");
     await page.screenshot({ path: `test-results/edges-${viewport.width}.png` });
+    if (viewport.width < 900) {
+      const file = front.locator('.node[data-path="lib/wide.mjs"]');
+      await file.click();
+      await file.click();
+      await front.locator('.node[data-key="symbol:wide"]').click();
+      assert.equal(await page.locator("#panel").getAttribute("data-height"), "peek");
+      const line = page.locator("#selectionContract dd.contract-line").first();
+      await line.waitFor();
+      const scrolled = await line.evaluate((el) => {
+        el.scrollLeft = 60;
+        return { overflow: getComputedStyle(el).overflowX, left: el.scrollLeft, wider: el.scrollWidth > el.clientWidth };
+      });
+      assert.ok(scrolled.wider, "The inputs are wider than the sheet");
+      assert.equal(scrolled.overflow, "auto");
+      assert.ok(scrolled.left > 0, "The inputs scroll sideways while the sheet is minimal");
+    }
     assert.deepEqual(errors, []);
     await page.close();
     console.log(`PASS ${viewport.width}: dependency lines avoid cards and land separately`);

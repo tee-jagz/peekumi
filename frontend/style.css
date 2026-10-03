@@ -5554,3 +5554,10 @@ details.p-section[open] > summary::before {
   height: 40px;
   margin-left: auto;
 }
+/* Inputs, outputs and fields scroll sideways at every sheet height. The older wrapping
+   rule for #selectionContract dd is more specific, so restate the scrolling line here. */
+#selectionContract dd.contract-line {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
