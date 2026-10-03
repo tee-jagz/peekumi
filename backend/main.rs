@@ -459,9 +459,20 @@ async fn json_response(
     )
     .await
 }
-/// Keeps one repository's Ask conversation in its private state folder, so reloading the
-/// page, updating the app or switching device does not lose it. Accepts at most 100 messages;
-/// the request size limit bounds the rest. Writes a private file atomically.
+/// Where a repository keeps the Ask conversation for one branch (or commit, when the view is
+/// detached): a private file named by a hash of the branch, so any ref name is safe. The
+/// watched branch is used when none is given. `None` for an unusable branch name.
+fn ask_history_file(app: &App, branch: Option<&str>) -> Option<PathBuf> {
+    let branch = branch.unwrap_or(&app.workflow.watched);
+    if branch.is_empty() || branch.len() > 256 || branch.contains('\0') {
+        return None;
+    }
+    let id = &engine::hash(branch.as_bytes())[..16];
+    Some(app.options.state_dir.join("ask-history").join(format!("{id}.json")))
+}
+/// Keeps one branch's Ask conversation in the repository's private state folder, so reloading
+/// the page, updating the app or switching device does not lose it. Accepts at most 100
+/// messages; the request size limit bounds the rest. Writes a private file atomically.
 fn save_ask_history(file: &std::path::Path, body: &Value) -> Result<()> {
     let messages = body["messages"]
         .as_array()
@@ -474,6 +485,9 @@ fn save_ask_history(file: &std::path::Path, body: &Value) -> Result<()> {
                 && m["text"].is_string()),
         "Invalid message"
     );
+    if let Some(folder) = file.parent() {
+        std::fs::create_dir_all(folder)?;
+    }
     let staged = file.with_extension("json.tmp");
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
@@ -797,6 +811,10 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         || path.starts_with("/api/runs")
     {
         let method = request.method().to_string();
+        // Ask conversations are kept per branch; the query names the branch viewed.
+        let branch = url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
+            .find(|(key, _)| key == "branch")
+            .map(|(_, value)| value.into_owned());
         if method != "GET" {
             let origin = header(request.headers(), "origin");
             let valid_origin = origin.is_empty()
@@ -841,15 +859,28 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             };
         }
         if path == "/api/ask/history" {
-            let file = app.options.state_dir.join("ask-history.json");
+            let Some(file) = ask_history_file(&app, branch.as_deref()) else {
+                return error(StatusCode::BAD_REQUEST, "Invalid branch", gzip).await;
+            };
             return match method.as_str() {
                 "GET" => {
-                    let saved = std::fs::read(&file)
-                        .ok()
-                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-                        .filter(|v| v["messages"].is_array())
+                    let read = |file: &std::path::Path| {
+                        std::fs::read(file)
+                            .ok()
+                            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                            .filter(|v| v["messages"].is_array())
+                    };
+                    // The watched branch keeps the single conversation saved before conversations
+                    // were kept per branch.
+                    let watched = branch.as_deref().is_none_or(|b| b == app.workflow.watched);
+                    let saved = read(&file)
+                        .or_else(|| {
+                            watched
+                                .then(|| read(&app.options.state_dir.join("ask-history.json")))
+                                .flatten()
+                        })
                         .unwrap_or_else(|| json!({"messages": []}));
-                    json_response(StatusCode::OK, saved, gzip, None).await
+                    json_response(StatusCode::OK, json!({"messages": saved["messages"]}), gzip, None).await
                 }
                 "PUT" => match save_ask_history(&file, &body) {
                     Ok(()) => json_response(StatusCode::OK, json!({"ok": true}), gzip, None).await,

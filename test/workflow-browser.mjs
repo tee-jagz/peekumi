@@ -350,17 +350,22 @@ try {
       await page.locator("#openTasks").click();
       assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "true");
       await page.locator(".task-link").first().click();
-      // Request changes asks what needs fixing and continues the work as round 2.
-      await page.getByRole("button", { name: "Request changes", exact: true }).click();
-      const send = page.getByRole("button", { name: "Send to agent", exact: true });
-      assert.equal(await send.isDisabled(), false, "Collected changes can go without another note");
-      await page.getByLabel("Anything else? (optional)").fill("Also say which round made the change.");
+      // On the task, the bottom box adds to its list too, and one button sends the list to
+      // the agent as round 2; there is no second box to fill in.
+      assert.equal(await page.getByLabel("Anything else? (optional)").count(), 0);
+      await page.getByLabel("What should change, and why").fill("Also say which round made the change.");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add to requested changes", exact: true })
+        .click();
+      const send = page.getByRole("button", { name: "Send 3 changes to Codex", exact: true });
+      await send.waitFor();
       await page.screenshot({
         path: `test-results/workflow-request-${viewport.width}.png`,
       });
       await send.click();
-      await page.getByText("You asked for changes", { exact: true }).waitFor();
-      assert.match(await page.locator(".task-meta").innerText(), /round 2$/);
+      await page.locator(".task-meta", { hasText: /round 2$/ }).waitFor();
+      assert.equal(await page.getByText(/^Requested changes/).count(), 0, "The list went with round 2");
       await page
         .getByRole("button", { name: "Approve", exact: true })
         .waitFor({ timeout: 20000 });
@@ -537,6 +542,11 @@ try {
       assert.ok(
         await page.locator(".ask-message.from-user", { hasText: "What would improve this function?" }).isVisible(),
         "The whole conversation is restored after a reload",
+      );
+      assert.equal(
+        await page.locator(".ask-message", { hasText: "What would improve this change?" }).count(),
+        0,
+        "A question asked on the agent's branch stays in that branch's conversation",
       );
       // Inputs must remain reachable at the viewport edge, not merely inside a panel.
       const assertDockVisible = async () => {
