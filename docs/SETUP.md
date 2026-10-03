@@ -81,9 +81,39 @@ peekumi pair
 
 `share` configures private Tailscale Serve HTTPS, enables secure cookies and restarts Peekumi. It never enables public Funnel. Tailscale can ask you to enable HTTPS for your tailnet. Before you give the default HTTPS endpoint of Serve to Peekumi, examine the current Serve configuration. After this, `peekumi pair` prints the HTTPS pairing link.
 
+If the Tailscale status or the exposure fails, `peekumi share` prints the cause, the Tailscale setup and retry steps, and the explicit alternative `peekumi share --tunnel cloudflare` with its warning about public access. Then it exits with a non-zero code. It does not save the sharing settings or restart Peekumi. It never uses Cloudflare automatically.
+
 After you pair the phone, install the app with the browser action “Add to Home Screen” / “Install app”. Keep Tailscale connected. The PWA does not run the backend, and the network access requirements do not change.
 
 The service worker caches only an explicit allowlist of application assets. It never caches source, API responses or pairing tokens. If you are offline, connect again to examine code. An update shows as a reload action. Save unsent drafts before you accept the update. Browser memory and usual browser history are not a guarantee of secure erasure.
+
+### Optional public Cloudflare tunnel
+
+Setup agents: before you run `peekumi share --tunnel cloudflare`, tell the owner these facts:
+
+- The URL is public, and anyone on the internet can reach it.
+- The traffic goes through Cloudflare.
+- The private pairing link gives owner access to all registered repositories.
+
+Ask the owner if they want that public tunnel. Wait for explicit approval, unless the owner already approved it after that explanation. A request for phone access is not approval. A Tailscale failure is also not approval.
+
+For temporary phone access without Tailscale, the owner (or an agent with that approval) can run this command:
+
+```sh
+peekumi share --tunnel cloudflare
+```
+
+**The URL is public, and anyone on the internet can reach it.** The traffic goes through Cloudflare. Peekumi still requires device pairing. Keep the printed pairing link private, because it gives owner access to all registered repositories. The command shows a warning before it downloads anything or exposes the service. Plain `peekumi share` (or `--tunnel tailscale`) continues to use private Tailscale, and no environment setting or saved preference enables Cloudflare.
+
+On the first opt-in, Peekumi downloads the pinned `cloudflared` 2026.9.3 from the official GitHub release of Cloudflare. It verifies the SHA-256 digest before it extracts or runs the file. It supports the same four macOS/Linux architectures as the Peekumi distribution. Peekumi keeps the downloads in the `tunnel/` folder of the private state directory, and it verifies them again each time it uses them.
+
+If the checksum does not agree, sharing stops and Peekumi does not run the download. If the cache is damaged, remove the cached file that the message names, then try again explicitly. You do not need a system installation, a Cloudflare account or a login. Peekumi does not change the current cloudflared configuration, and it disables automatic binary updates.
+
+The command enables secure cookies and restarts Peekumi if necessary. Then it prints the temporary HTTPS URL and its pairing link. Open that link on your phone and keep the command running. Ctrl+C closes the tunnel, and each new run gets a new hostname. Peekumi does not save the hostname, and `peekumi pair` continues to use the current permanent URL.
+
+When the tunnel closes, Peekumi continues to run with secure cookies enabled. The download stays in the cache. A later `start`, `restart` or `doctor` does not start Cloudflare.
+
+[Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) are for testing and development. They have no uptime guarantee, allow a maximum of 200 in-flight requests and do not support Server-Sent Events. For continued phone access and a stable PWA address, use Tailscale.
 
 ## Device access
 
