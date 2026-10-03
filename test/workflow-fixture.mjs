@@ -1,6 +1,6 @@
 /** Deterministic agent fixture: commits in its supplied worktree and reports through real stdio MCP. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 let task = "";
 for await (const chunk of process.stdin) task += chunk;
 const values = process.argv.slice(2);
@@ -146,9 +146,12 @@ if (
   throw Error("Accepted base commit");
 if (!call("flag_comment", { comment_id: "c-other-run", reason: "bad" }).error)
   throw Error("Accepted unrelated comment");
+// A later round builds on the earlier one, so it adds to the file rather than rewriting it.
 writeFileSync(
   "agent-result.txt",
-  "A deterministic agent fixture completed this change.\n",
+  existsSync("agent-result.txt")
+    ? readFileSync("agent-result.txt", "utf8") + `Round ${run.round} applied the requested changes.\n`
+    : "A deterministic agent fixture completed this change.\n",
 );
 git("add", "agent-result.txt");
 git("commit", "-m", "Fixture change without attribution");

@@ -223,6 +223,77 @@ test("cancelled runs stop the agent and leave unanswered comments reopenable", a
     "draft",
   );
 });
+test("requesting changes starts a next round that builds on the agent's own commits", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const c = await f.req("/api/comments", {
+    text: "Write the result file",
+    sha: f.sha,
+    anchor: { kind: "repo", path: "" },
+  });
+  const p = await f.req("/api/runs/preview", { agent: "codex", commentIds: [c.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  const first = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + p.id);
+    return r.status === "completed" && r;
+  });
+  const empty = await fetch(`${f.server.url}/api/runs/${p.id}/revise`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + f.server.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback: "  " }),
+  });
+  assert.equal(empty.status, 400);
+  assert.match((await empty.json()).error, /feedback is empty/);
+  const next = await f.req(`/api/runs/${p.id}/revise`, {
+    feedback: "Also say which round made the change.",
+  });
+  assert.equal(next.round, 2);
+  assert.equal(next.revises, p.id);
+  assert.equal(next.agent, "codex");
+  assert.notEqual(next.branch, first.branch);
+  assert.equal(next.base, first.results.at(-1), "The next round starts from the agent's last commit");
+  assert.equal(next.reportHash, undefined, "The reporting credential never reaches the browser");
+  assert.match(next.task, /## Changes requested by the owner\nAlso say which round made the change\./);
+  assert.match(next.task, /Earlier round's report: Implemented the requested fixture change\./);
+  assert.match(next.task, /build on it rather than starting over/);
+  const second = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + next.id);
+    return r.status === "completed" && r;
+  });
+  const result = second.results.at(-1);
+  await f.git("merge-base", "--is-ancestor", first.results.at(-1), result);
+  assert.match(
+    (await f.git("show", `${result}:agent-result.txt`)).toString(),
+    /completed this change\.\nRound 2 applied the requested changes\./,
+  );
+  const state = await f.req("/api/workflow");
+  const moved = state.comments.find((x) => x.id === c.id);
+  assert.equal(moved.runId, next.id);
+  assert.equal(moved.status, "addressed");
+  assert.ok(
+    moved.history.some((h) => h.runId === p.id && h.status === "addressed"),
+    "The first round's report stays in the instruction's history",
+  );
+  assert.equal(state.runs.find((r) => r.id === p.id).revisedBy, next.id);
+  const again = await f.req(`/api/runs/${p.id}/revise`, { feedback: "Once more" });
+  assert.equal(again.status, 400);
+  assert.match(again.error, /already requested/);
+  // Approving the latest round verifies against its commit, which contains every round.
+  const verified = await f.req(
+    "/api/comments/" + c.id,
+    { action: "verify", version: moved.version },
+    "PATCH",
+  );
+  assert.equal(verified.status, "verified");
+  assert.equal(verified.verification.commit, result);
+  const done = await f.req(`/api/runs/${next.id}/revise`, { feedback: "More" });
+  assert.match(done.error, /Nothing in this task is left to change/);
+  assert.equal(
+    (await f.git("rev-parse", "HEAD")).toString().trim(),
+    f.sha,
+    "The inspected checkout never moves",
+  );
+});
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

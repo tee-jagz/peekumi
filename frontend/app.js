@@ -135,6 +135,48 @@ function reviewContext() {
     anchor = { kind: n.kind, path: n.path };
   return { anchor, sha: useBefore ? baseRef : headRef };
 }
+/** Compares `base` with `head` (a ref or commit) on the map and opens `anchor` there:
+ * a file or folder path, an optional declaration, or the repository root. */
+async function inspectRevision(base, head, anchor) {
+  document.querySelector("#tabs").inert = true;
+  try {
+    mode = "diff";
+    baseRef = base;
+    diffBase = base;
+    headRef = head;
+    before = false;
+    await boot(true, head);
+    const url = new URL(location.href);
+    url.searchParams.set("branch", head);
+    history.replaceState(null, "", url);
+    if (anchor.path) {
+      await navigate({
+        kind: anchor.kind === "folder" ? "folder" : "file",
+        path: anchor.path,
+      });
+      if (scope.kind === "file") await loadSource();
+    } else await navigate(rootScope());
+    if (anchor.symbol)
+      selected = nodes.find((n) => n.name === anchor.symbol) || null;
+    tab = anchor.path && anchor.kind !== "folder" ? "source" : "changes";
+    sourceView = base === head ? "after" : "diff";
+    render();
+  } finally {
+    document.querySelector("#tabs").inert = false;
+  }
+}
+/** Where "Back to task" returns: the branch and manual base before exploring, and the task. */
+let taskReturn = null;
+/** Restores the branch and base from before exploring, then opens the task. */
+async function returnToTask() {
+  const back = taskReturn;
+  taskReturn = null;
+  diffBase = back.base;
+  await switchBranch(back.branch || "HEAD");
+  await workflow.openTask(back.id);
+  return back.id;
+}
+$("#taskReturn").onclick = returnToTask;
 const workflow = createWorkflow({
   api,
   context: reviewContext,
@@ -148,35 +190,16 @@ const workflow = createWorkflow({
   redraw() {
     if (comparison) renderTab();
   },
-  viewBranch: (branch) => switchBranch("refs/heads/" + branch),
-  async inspect(base, head, anchor) {
-    document.querySelector("#tabs").inert = true;
-    try {
-      mode = "diff";
-      baseRef = base;
-      diffBase = base;
-      headRef = head;
-      before = false;
-      await boot(true, head);
-      const url = new URL(location.href);
-      url.searchParams.set("branch", head);
-      history.replaceState(null, "", url);
-      if (anchor.path) {
-        await navigate({
-          kind: anchor.kind === "folder" ? "folder" : "file",
-          path: anchor.path,
-        });
-        if (scope.kind === "file") await loadSource();
-      } else await navigate(rootScope());
-      if (anchor.symbol)
-        selected = nodes.find((n) => n.name === anchor.symbol) || null;
-      tab = anchor.path && anchor.kind !== "folder" ? "source" : "changes";
-      sourceView = base === head ? "after" : "diff";
-      render();
-    } finally {
-      document.querySelector("#tabs").inert = false;
-    }
+  /** Shows everything a task's agent did on the map: its branch against where the task
+   * started. The sheet drops to peek so the map leads, and a chip leads back to the task. */
+  async explore(base, branch, id) {
+    taskReturn ??= { branch: viewingBranch, base: diffBase };
+    taskReturn.id = id;
+    await inspectRevision(base, "refs/heads/" + branch, { kind: "repo" });
+    setSheetHeight("peek");
+    renderPanel();
   },
+  inspect: inspectRevision,
 });
 const ask = createAsk({
   api,
@@ -223,9 +246,23 @@ const ask = createAsk({
     showDiscussion();
     renderPanel();
   },
+  /** The task being explored, when it can still take requested changes. */
+  changeTarget: () =>
+    taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
+  /** Returns to the explored task with its Request changes box holding `text`. */
+  async addToChanges(text) {
+    workflow.requestChanges(await returnToTask(), text);
+  },
 });
-/** Updates the status banner and distinguishes ordinary progress from errors. */
+let noticeTimer = 0,
+  noticeView = "";
+/** Updates the status banner and distinguishes ordinary progress from errors. An error fades
+ * after a few seconds, and leaving the view it happened in clears it; losing the connection
+ * stays until a later request succeeds. */
 function showNotice(message, error = false) {
+  clearTimeout(noticeTimer);
+  if (error && message && message !== UNREACHABLE)
+    noticeTimer = setTimeout(() => showNotice(""), 6000);
   // Errors get Peek's sunken face; progress notices stay plain text.
   $("#notice").replaceChildren(
     ...(error && message ? [peek("error")] : []),
@@ -321,6 +358,12 @@ async function boot(refresh = false, branch = viewingBranch) {
   showNotice("Loading branch…");
   try {
     await setupRepositories();
+    // The saved Ask conversation comes back after a reload; owner devices only.
+    if (document.documentElement.dataset.access !== "reader")
+      ask
+        .load()
+        .then((restored) => restored && tab === "ask" && renderTab())
+        .catch(() => {});
     const next = await api(
       "/api/repo" + (branch ? "?" + new URLSearchParams({ head: branch }) : ""),
     );
@@ -782,6 +825,60 @@ function renderGraph(body) {
     );
     y += Math.ceil(list.length / cols) * 46 + 20;
   }
+  /** Lays `list` out in a compact grid at `top` and returns its bottom edge. Space opens
+   * only where a drawn line needs it, and only in that card's column: a gap a line turns
+   * through grows enough for a straight run into its arrowhead, so each column is spaced
+   * on its own. The gap between columns widens when neighbours in a row are connected,
+   * so their arrow can run straight across. */
+  function placeGrid(list, { cols, left, span, h, top }) {
+    const GAP = 12,
+      ROOM = 26;
+    const rowOf = new Map(list.map((n, i) => [n.key, Math.floor(i / cols)])),
+      colOf = new Map(list.map((n, i) => [n.key, i % cols])),
+      above = new Set(root ? [] : incoming.map((n) => n.key)),
+      shown = new Set([
+        ...rowOf.keys(),
+        ...above,
+        ...(root ? [] : outgoing.map((n) => n.key)),
+        "boundary",
+      ]),
+      rowFor = (key) => (rowOf.has(key) ? rowOf.get(key) : above.has(key) ? -1 : Infinity),
+      roomy = new Set(),
+      room = (key, row) => roomy.add(colOf.get(key) + ":" + row);
+    let across = false;
+    for (const e of visibleEdges((key) => shown.has(key))) {
+      const a = rowFor(e.from.key),
+        b = rowFor(e.to.key);
+      if (a === b) {
+        if (Math.abs(colOf.get(e.from.key) - colOf.get(e.to.key)) === 1) across = true;
+        else {
+          // Further apart in a row: the line dips under both cards.
+          room(e.from.key, a);
+          room(e.to.key, b);
+        }
+        continue;
+      }
+      const down = b > a;
+      for (const [key, leaving] of [[e.from.key, true], [e.to.key, false]])
+        if (rowOf.has(key))
+          // Leaving downwards or arriving from below uses the gap under the card.
+          room(key, (leaving ? down : !down) ? rowOf.get(key) : rowOf.get(key) - 1);
+    }
+    const colGap = across ? ROOM : GAP,
+      w = (span - (cols - 1) * colGap) / cols;
+    let bottom = top;
+    for (let c = 0; c < cols; c++) {
+      let next = top;
+      list.forEach((node, i) => {
+        if (i % cols !== c) return;
+        const row = Math.floor(i / cols);
+        positions.set(node.key, { node, x: left + c * (w + colGap), y: next, w, h });
+        next += h + (roomy.has(c + ":" + row) ? ROOM : GAP);
+      });
+      bottom = Math.max(bottom, next - GAP);
+    }
+    return bottom;
+  }
   if (!root) stubRow(incoming, "Depended on by");
   let emptyTop = null;
   const boundaryTop = y;
@@ -802,20 +899,8 @@ function renderGraph(body) {
     y += 38;
   }
   if (root) {
-    const cols = Math.min(current.length || 1, graphWidth < 540 ? 2 : 3),
-      gap = 24,
-      w = (graphWidth - 32 - (cols - 1) * gap) / cols,
-      h = 108;
-    current.forEach((node, index) =>
-      positions.set(node.key, {
-        node,
-        x: 16 + (index % cols) * (w + gap),
-        y: y + Math.floor(index / cols) * (h + 32),
-        w,
-        h,
-      }),
-    );
-    y += Math.ceil(current.length / cols) * (h + 32);
+    const cols = Math.min(current.length || 1, graphWidth < 540 ? 2 : 3);
+    y = placeGrid(current, { cols, left: 16, span: graphWidth - 32, h: 108, top: y }) + 20;
   } else {
     const isFile = scope.kind === "file",
       cols = isFile
@@ -827,24 +912,16 @@ function renderGraph(body) {
         : graphWidth < 540
           ? 2
           : 3;
-    const w =
-      isFile && cols === 1
-        ? graphWidth - 74
-        : (graphWidth - 42 - (cols - 1) * 12) / cols;
-    const h = isFile ? 46 : 108,
-      gap = isFile ? 10 : 28,
-      left = isFile && cols === 1 ? 28 : 21;
-    current.forEach((node, index) =>
-      positions.set(node.key, {
-        node,
-        x: left + (index % cols) * (w + 12),
-        y: y + Math.floor(index / cols) * (h + gap),
-        w,
-        h,
-      }),
-    );
-    // An empty level keeps its message inside the folder or file card, not below it.
-    if (current.length) y += Math.ceil(current.length / cols) * (h + gap) + 10;
+    const single = isFile && cols === 1;
+    if (current.length)
+      y =
+        placeGrid(current, {
+          cols,
+          left: single ? 28 : 21,
+          span: single ? graphWidth - 74 : graphWidth - 42,
+          h: isFile ? 46 : 108,
+          top: y,
+        }) + 20;
     else {
       emptyTop = y;
       y += 150;
@@ -1052,6 +1129,245 @@ function graphNode({ node, x, y, w, h }) {
   }
   return card;
 }
+/** The connections the map draws among the cards `placed` reports as shown: filtered by
+ * Changes only, the Before/After side and the colour lens, narrowed to the selection when
+ * there are many, and with calls hidden in a busy file unless they touch the selection. */
+function visibleEdges(placed) {
+  let drawable = edges.filter(
+    (e) =>
+      (!changesOnly || e.status !== "unchanged") &&
+      placed(e.from.key) &&
+      placed(e.to.key) &&
+      (before ? e.before.size : lens === "structure" ? e.after.size : true),
+  );
+  if (drawable.length > 40 && selected)
+    drawable = drawable.filter(
+      (e) =>
+        e.key === selected.key ||
+        e.from.key === selected.key ||
+        e.to.key === selected.key,
+    );
+  if (scope.kind === "file" && nodes.length > 12)
+    drawable = drawable.filter(
+      (e) =>
+        e.relationshipKind !== "calls" ||
+        [e.from.key, e.to.key].includes(selected?.key),
+    );
+  return drawable.slice(0, 40);
+}
+/** Plans one curved path per edge between positioned cards. Every line leaves and arrives
+ * through a card's top or bottom edge, from the open gap between rows, so its arrowhead has
+ * room and is never squeezed into the narrow gap between columns. Lines sharing a card edge
+ * get their own ports, ordered by where they head, and end just short of the card so the
+ * arrowhead stays clear of its border. A line whose direct curve would cross another card is
+ * routed around it: into the row gap, along the nearest gap between columns, and back.
+ * Returns SVG path data in edge order. */
+function routeEdges(list, positions, width) {
+  // Lines stop just short of their target so the arrowhead clears its border, and end with a
+  // straight run longer than the arrowhead.
+  const CLEAR = 2,
+    TAIL = 12;
+  const cards = [...positions.entries()]
+    .filter(([key]) => key !== "boundary")
+    .map(([key, r]) => ({ key, ...r }));
+  const mid = (r) => r.x + r.w / 2;
+  const overlaps = (p, q) => p.x < q.x + q.w && q.x < p.x + p.w;
+  // The free space above and below a card, up to the next card in its column.
+  const gap = (r, below) => {
+    const limits = cards
+      .filter((c) => c !== r && overlaps(c, r))
+      .map((c) => (below ? c.y - (r.y + r.h) : r.y - (c.y + c.h)))
+      .filter((d) => d >= 0);
+    return Math.max(10, Math.min(36, ...limits, below ? 36 : r.y));
+  };
+  // Vertical channels: the gaps between card columns, then the outer margins.
+  const lanes = [
+    ...new Map(
+      cards.filter((r) => r.w < width * 0.6).map((r) => [Math.round(r.x), r]),
+    ).values(),
+  ].sort((p, q) => p.x - q.x);
+  const channels = [];
+  for (let i = 1; i < lanes.length; i++) {
+    const left = lanes[i - 1].x + lanes[i - 1].w;
+    if (lanes[i].x - left >= 6)
+      channels.push({ x: (left + lanes[i].x) / 2, room: lanes[i].x - left });
+  }
+  if (lanes.length) {
+    channels.push({ x: Math.max(4, lanes[0].x / 2), room: lanes[0].x });
+    const last = lanes.at(-1),
+      right = last.x + last.w;
+    channels.push({ x: Math.min(width - 4, (right + width) / 2), room: width - right });
+  }
+  const bezier = ([p0, p1, p2, p3], t) => {
+    const u = 1 - t;
+    return [0, 1].map(
+      (i) => u * u * u * p0[i] + 3 * u * u * t * p1[i] + 3 * u * t * t * p2[i] + t * t * t * p3[i],
+    );
+  };
+  const crosses = (from, to, points) =>
+    cards.some(
+      (r) =>
+        r.key !== from &&
+        r.key !== to &&
+        points.some(
+          ([x, y]) => x > r.x + 2 && x < r.x + r.w - 2 && y > r.y + 2 && y < r.y + r.h - 2,
+        ),
+    );
+  // Plan each line's shape and which card edges it uses; ports are placed afterwards.
+  const plans = list.map((edge) => {
+    const a = positions.get(edge.from.key),
+      b = positions.get(edge.to.key);
+    const end = (key, r, side, toward) => ({ key, r, side, toward });
+    // Columns are spaced independently, so cards in one row may sit slightly apart.
+    const shared = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y),
+      level = shared > Math.min(a.h, b.h) / 2;
+    // Neighbours in a row, with room between them: a straight arrow across.
+    if (level) {
+      const right = b.x > a.x,
+        from = right ? a.x + a.w : a.x,
+        to = right ? b.x : b.x + b.w,
+        y = Math.max(a.y, b.y) + shared / 2 + (right ? -4 : 4),
+        between = cards.some(
+          (c) =>
+            c.y < y &&
+            c.y + c.h > y &&
+            c.x < Math.max(from, to) &&
+            c.x + c.w > Math.min(from, to),
+        );
+      if (!between && Math.abs(to - from) >= 20)
+        return { kind: "across", from, to: to + (right ? -CLEAR : CLEAR), y, ends: [] };
+    }
+    // Otherwise side by side in a row: a short dip through the gap below both cards.
+    if (level)
+      return {
+        kind: "row",
+        ends: [end(edge.from.key, a, "bottom", mid(b)), end(edge.to.key, b, "bottom", mid(a))],
+      };
+    const down = b.y > a.y;
+    const y0 = down ? a.y + a.h : a.y,
+      y3 = down ? b.y : b.y + b.h,
+      half = (y0 + y3) / 2;
+    const straight = [[mid(a), y0], [mid(a), half], [mid(b), half], [mid(b), y3]];
+    const sample = Array.from({ length: 23 }, (_, i) => bezier(straight, (i + 1) / 24));
+    if (!crosses(edge.from.key, edge.to.key, sample) || !channels.length)
+      return {
+        kind: "direct",
+        down,
+        ends: [
+          end(edge.from.key, a, down ? "bottom" : "top", mid(b)),
+          end(edge.to.key, b, down ? "top" : "bottom", mid(a)),
+        ],
+      };
+    // Around the cards in between, along the channel closest to both ends.
+    const lane = channels.reduce((best, c) =>
+      Math.abs(c.x - mid(a)) + Math.abs(c.x - mid(b)) <
+      Math.abs(best.x - mid(a)) + Math.abs(best.x - mid(b))
+        ? c
+        : best,
+    );
+    return {
+      kind: "lane",
+      lane,
+      down,
+      ends: [
+        end(edge.from.key, a, down ? "bottom" : "top", lane.x),
+        end(edge.to.key, b, down ? "top" : "bottom", lane.x),
+      ],
+    };
+  });
+  // Lines going around to the same card share one trunk in the channel and one arrowhead;
+  // trunks to different cards sit side by side.
+  const lanesUsed = new Map(),
+    trunks = new Map();
+  for (const plan of plans)
+    if (plan.kind === "lane") {
+      const trunk = plan.lane.x + ">" + plan.ends[1].key;
+      if (!trunks.has(trunk)) {
+        const n = lanesUsed.get(plan.lane) || 0;
+        lanesUsed.set(plan.lane, n + 1);
+        const step = Math.min(5, Math.max(2, (plan.lane.room - 4) / 4));
+        trunks.set(trunk, (n % 2 ? 1 : -1) * Math.ceil(n / 2) * step);
+      }
+      plan.offset = trunks.get(trunk);
+    }
+  // Spread the ports on each card edge, ordered by where each line heads.
+  const sides = new Map(),
+    ports = new Map();
+  for (const plan of plans)
+    for (const e of plan.ends) {
+      // Ends that reach the same card side through the same channel share a port.
+      if (plan.kind === "lane") {
+        const port = `${e.key}:${e.side}:${plan.lane.x}`;
+        if (ports.has(port)) {
+          e.port = ports.get(port);
+          continue;
+        }
+        ports.set(port, e);
+      }
+      const id = e.key + ":" + e.side;
+      if (!sides.has(id)) sides.set(id, []);
+      sides.get(id).push(e);
+    }
+  for (const group of sides.values()) {
+    group.sort((p, q) => p.toward - q.toward);
+    const n = group.length,
+      step = n > 1 ? Math.min(0.16, 0.64 / (n - 1)) : 0;
+    group.forEach((e, i) => (e.at = e.r.x + e.r.w * (0.5 + (i - (n - 1) / 2) * step)));
+  }
+  for (const plan of plans) for (const e of plan.ends) if (e.port) e.at = e.port.at;
+  const edgeY = (e, arriving) => {
+    const top = e.side === "top";
+    const y = top ? e.r.y : e.r.y + e.r.h;
+    return arriving ? y + (top ? -CLEAR : CLEAR) : y;
+  };
+  const rounded = (points, radius) => {
+    const pts = points.filter(
+      (p, i) => i === 0 || Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) > 0.5,
+    );
+    let d = `M${pts[0]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [p, c, n] = [pts[i - 1], pts[i], pts[i + 1]];
+      const l1 = Math.hypot(c[0] - p[0], c[1] - p[1]),
+        l2 = Math.hypot(n[0] - c[0], n[1] - c[1]),
+        r = Math.min(radius, l1 / 2, l2 / 2);
+      const into = [c[0] + ((p[0] - c[0]) * r) / l1, c[1] + ((p[1] - c[1]) * r) / l1],
+        out = [c[0] + ((n[0] - c[0]) * r) / l2, c[1] + ((n[1] - c[1]) * r) / l2];
+      d += ` L${into} Q${c} ${out}`;
+    }
+    return d + ` L${pts.at(-1)}`;
+  };
+  return plans.map((plan) => {
+    if (plan.kind === "across") return `M${plan.from},${plan.y} L${plan.to},${plan.y}`;
+    const [from, to] = plan.ends;
+    const x = from.at,
+      y = edgeY(from, false),
+      x2 = to.at,
+      y2 = edgeY(to, true);
+    // The last stretch is straight, so the line meets the arrowhead's point along its axis
+    // instead of cutting across one of its arms.
+    if (plan.kind === "row") {
+      const dip = Math.min(gap(from.r, true), gap(to.r, true)) * 0.85,
+        tail = Math.min(TAIL, dip * 0.6);
+      return `M${x},${y} C${x},${y + dip} ${x2},${y2 + dip} ${x2},${y2 + tail} L${x2},${y2}`;
+    }
+    if (plan.kind === "direct") {
+      const sign = Math.sign(y2 - y),
+        tail = Math.min(TAIL, Math.abs(y2 - y) / 2),
+        end = y2 - sign * tail,
+        half = (y + end) / 2;
+      return `M${x},${y} C${x},${half} ${x2},${half} ${x2},${end} L${x2},${y2}`;
+    }
+    // Into the row gap beside each end, then along the channel between them.
+    const dir = plan.down ? 1 : -1,
+      gx = plan.lane.x + plan.offset;
+    // In a shared row gap, a line leaving runs nearer its source and a line arriving leaves
+    // room for a straight run into the arrowhead.
+    const ys = y + dir * gap(from.r, plan.down) * 0.3 + plan.offset,
+      room = gap(to.r, !plan.down),
+      yt = y2 - dir * Math.min(room - 3, Math.max(room * 0.6, TAIL + 5));
+    return rounded([[x, y], [x, ys], [gx, ys], [gx, yt], [x2, yt], [x2, y2]], 5);
+  });
+}
 /** Draws selectable static import connections between positioned cards; these are not runtime call edges. */
 function drawEdges(canvas, positions, width, height, arcs) {
   const NS = "http://www.w3.org/2000/svg",
@@ -1070,12 +1386,15 @@ function drawEdges(canvas, positions, width, height, arcs) {
   })) {
     const marker = document.createElementNS(NS, "marker");
     marker.id = "arrow-" + status;
+    // The same chevron at one size for every line, so a thicker highlighted line never
+    // gets a head longer than the straight run that leads into it.
     for (const [key, value] of Object.entries({
       viewBox: "0 0 10 10",
       refX: 8.5,
       refY: 5,
-      markerWidth: 7,
-      markerHeight: 7,
+      markerUnits: "userSpaceOnUse",
+      markerWidth: 11,
+      markerHeight: 11,
       orient: "auto-start-reverse",
     }))
       marker.setAttribute(key, value);
@@ -1088,31 +1407,12 @@ function drawEdges(canvas, positions, width, height, arcs) {
     defs.append(marker);
   }
   svg.append(defs);
-  let drawable = edges.filter(
-    (e) =>
-      (!changesOnly || e.status !== "unchanged") &&
-      positions.has(e.from.key) &&
-      positions.has(e.to.key) &&
-      (before ? e.before.size : lens === "structure" ? e.after.size : true),
-  );
-  if (drawable.length > 40 && selected)
-    drawable = drawable.filter(
-      (e) =>
-        e.key === selected.key ||
-        e.from.key === selected.key ||
-        e.to.key === selected.key,
-    );
-  if (scope.kind === "file" && nodes.length > 12)
-    drawable = drawable.filter(
-      (e) =>
-        e.relationshipKind !== "calls" ||
-        [e.from.key, e.to.key].includes(selected?.key),
-    );
+  const drawable = visibleEdges((key) => positions.has(key));
   // A selected card emphasises its own connections by direction and quiets the rest; a
   // selected line does the same for its two ends.
   const focus = selected && selected.kind !== "edge" ? selected.key : null;
   linkedKeys = selected ? new Set() : null;
-  for (const edge of drawable.slice(0, 40))
+  for (const edge of drawable)
     if (
       selected &&
       (edge.key === selected.key ||
@@ -1122,11 +1422,13 @@ function drawEdges(canvas, positions, width, height, arcs) {
       linkedKeys.add(edge.from.key).add(edge.to.key);
   // With nothing connected there is nothing to emphasise, so keep the full context visible.
   if (!linkedKeys?.size) linkedKeys = null;
-  for (const [index, edge] of drawable.slice(0, 40).entries()) {
+  const routes = arcs ? null : routeEdges(drawable, positions, width);
+  for (const [index, edge] of drawable.entries()) {
     const a = positions.get(edge.from.key),
       b = positions.get(edge.to.key);
     let d;
-    if (arcs) {
+    if (routes) d = routes[index];
+    else if (arcs) {
       const x = a.x + a.w,
         x2 = b.x + b.w,
         y = a.y + a.h / 2,
@@ -1166,6 +1468,8 @@ function drawEdges(canvas, positions, width, height, arcs) {
           : null;
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", d);
+    path.dataset.from = edge.from.key;
+    path.dataset.to = edge.to.key;
     path.setAttribute(
       "class",
       "e " +
@@ -1292,6 +1596,12 @@ function goUp() {
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
 function renderPanel() {
+  $("#openTasks").setAttribute("aria-pressed", String(inTasks()));
+  $("#taskReturn").hidden = !taskReturn || ["comments", "runs"].includes(tab);
+  const view = [tab, scope.path, selected?.id || selected?.name || ""].join("|");
+  if (view !== noticeView && $("#notice").classList.contains("error"))
+    showNotice("");
+  noticeView = view;
 
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(
@@ -1966,10 +2276,19 @@ function renderTab() {
   const conversation = element("div", "conversation");
   if (primaryTab === "ask") ask.render(conversation, composerHost);
   else workflow.renderComposer(composerHost);
+  const box = composerHost.querySelector("textarea");
+  if (box) {
+    // The box grows with its text up to the CSS max-height (four lines), then scrolls.
+    const fit = () => {
+      box.style.height = "auto";
+      box.style.height = box.scrollHeight + 2 + "px";
+    };
+    box.addEventListener("input", fit);
+    requestAnimationFrame(fit);
+  }
   if (caret) {
-    const input = composerHost.querySelector("textarea");
-    input?.focus({ preventScroll: true });
-    input?.setSelectionRange(...caret);
+    box?.focus({ preventScroll: true });
+    box?.setSelectionRange(...caret);
   }
   const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
   $("#dockContext").replaceChildren(
@@ -2524,7 +2843,18 @@ document.querySelectorAll("[data-compose]").forEach(
       $("#composerHost textarea")?.focus({ preventScroll: true });
     }),
 );
+/** True while the Tasks overview or a task fills the sheet (not instructions on a selection). */
+function inTasks() {
+  return tab === "runs" || (tab === "comments" && !workflow.scoped());
+}
+/** Leaves Tasks for the selection's details, as tapping a card would. */
+function closeTasks() {
+  tab = "details";
+  renderPanel();
+}
 $("#openTasks").onclick = () => {
+  // The Tasks button toggles: pressed again, it returns to the map selection.
+  if (inTasks()) return closeTasks();
   tab = "comments";
   primaryTab = "comments";
   workflow.scope("all");
@@ -2805,3 +3135,9 @@ for (const type of ["focusin", "focusout"])
     requestAnimationFrame(fitVisualViewport),
   );
 fitVisualViewport();
+
+// Tapping empty map space also leaves Tasks; cards and map controls keep their own actions.
+$("#stage").addEventListener("click", (event) => {
+  if (inTasks() && !event.target.closest(".node, button, a, summary, details, input, select"))
+    closeTasks();
+});

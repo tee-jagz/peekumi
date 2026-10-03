@@ -5231,3 +5231,104 @@ details.p-section[open] > summary::before {
   flex: 1 0 100%;
   margin: 2px 0 0;
 }
+/* The Ask and Instruction boxes grow with their text to four lines, then scroll; the
+   buttons stay level with the last line. 15px fits more per line; iOS zooms into fields
+   under 16px, so it keeps 16px there. */
+#composerHost textarea {
+  min-height: 44px;
+  max-height: calc(4 * 1.35em + 20px);
+  font-size: 15px;
+  line-height: 1.35;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+@supports (-webkit-touch-callout: none) {
+  #composerHost textarea {
+    font-size: 16px;
+  }
+}
+.dock-form,
+#composerHost .composer {
+  align-items: end;
+}
+#composerHost .icon-action:disabled {
+  opacity: 0.4;
+}
+/* Task view: a back arrow, the task's state as the heading and one quiet line under it. */
+.task-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 12px;
+}
+.panel .task-head .icon-action {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 18px;
+}
+.task-head .task-heading {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+}
+.task-meta {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.task-live:empty {
+  display: none;
+}
+/* The instruction leads its card; where it was left sits quietly beneath. */
+.workflow-card > .workflow-text:first-child {
+  margin-top: 0;
+}
+.workflow-card .cm-top {
+  margin-top: 8px;
+}
+.panel .workflow-card .cm-top .link-button {
+  color: var(--muted);
+}
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.panel .task-actions .link-button {
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 14px;
+}
+.review-note {
+  margin-top: 8px;
+}
+/* After exploring a task's changes, one small chip leads back to the task. */
+#taskReturn {
+  display: block;
+  width: fit-content;
+  min-height: 32px;
+  margin: 0 14px 8px;
+  padding: 4px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+#taskReturn[hidden] {
+  display: none;
+}
+/* Request changes: the owner's feedback leads the next round, and its box sits under the actions. */
+.workflow-card.requested {
+  border-left: 2px solid var(--accent);
+}
+.reply-box {
+  margin: 10px 0 4px;
+}
+.reply-box .read-note {
+  margin: 6px 0 0;
+}
