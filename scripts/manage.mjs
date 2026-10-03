@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { homedir, platform } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createTailscaleProvider } from "./tunnel/tailscale.mjs";
+const tunnel = createTailscaleProvider(run);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** Reads a PEEKUMI_* setting, or its STRATA_* name from before the rename. */
 const setting = (name) =>
@@ -300,7 +302,6 @@ async function doctor() {
     ["GitHub CLI", "gh", ["--version"], false],
     ["Claude Code", "claude", ["--version"], false],
     ["Codex", "codex", ["--version"], false],
-    ["Tailscale", "tailscale", ["version"], false],
   ]) {
     try {
       checks.push({
@@ -318,6 +319,7 @@ async function doctor() {
       });
     }
   }
+  checks.push({ name: "Tailscale", ...tunnel.available(), required: false });
   if (system === "linux")
     checks.push({
       name: "Background service",
@@ -479,22 +481,9 @@ async function main() {
     const c = await config();
     if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
-    const ts = JSON.parse(run("tailscale", ["status", "--json"]));
-    const host = ts.Self?.DNSName?.replace(/\.$/, "");
-    if (!host) throw new Error("Sign into Tailscale first");
-    const existing = JSON.parse(
-      run("tailscale", ["serve", "status", "--json"]),
-    );
-    if (
-      Object.keys(existing).length &&
-      !JSON.stringify(existing).includes(`http://127.0.0.1:${c.port}`)
-    )
-      throw new Error(
-        "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Peekumi.",
-      );
-    // No Funnel/public exposure: Serve is restricted to devices on the tailnet.
-    run("tailscale", ["serve", "--bg", `http://127.0.0.1:${c.port}`]);
-    c.publicUrl = "https://" + host;
+    const tunnelStatus = tunnel.status();
+    tunnel.expose(c.port, tunnelStatus);
+    c.publicUrl = tunnel.url(tunnelStatus);
     c.secureCookie = true;
     await save(c);
     await stop();
