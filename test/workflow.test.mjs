@@ -243,10 +243,27 @@ test("requesting changes starts a next round that builds on the agent's own comm
     body: JSON.stringify({ feedback: "  " }),
   });
   assert.equal(empty.status, 400);
-  assert.match((await empty.json()).error, /feedback is empty/);
+  assert.match((await empty.json()).error, /Say what needs fixing/);
+  // Instructions collected while exploring the agent's commit join the next round.
+  const result1 = first.results.at(-1);
+  const collected = await f.req("/api/comments", {
+    text: "Name the round in the file too.",
+    sha: result1,
+    anchor: { kind: "file", path: "agent-result.txt" },
+    forRun: p.id,
+  });
+  assert.equal(collected.forRun, p.id);
+  const misuse = await f.req("/api/runs/preview", { agent: "codex", commentIds: [collected.id] });
+  assert.match(misuse.error, /waiting to go back to its task/);
   const next = await f.req(`/api/runs/${p.id}/revise`, {
     feedback: "Also say which round made the change.",
   });
+  assert.deepEqual(
+    next.comments.map((x) => x.id).sort(),
+    [c.id, collected.id].sort(),
+    "The round carries the open instruction and the collected one",
+  );
+  assert.match(next.task, /"path":"agent-result.txt"[^\n]*\(left on [0-9a-f]{40}\)\nName the round in the file too\./);
   assert.equal(next.round, 2);
   assert.equal(next.revises, p.id);
   assert.equal(next.agent, "codex");
@@ -268,6 +285,7 @@ test("requesting changes starts a next round that builds on the agent's own comm
   );
   const state = await f.req("/api/workflow");
   const moved = state.comments.find((x) => x.id === c.id);
+  assert.equal(state.comments.find((x) => x.id === collected.id).forRun, undefined);
   assert.equal(moved.runId, next.id);
   assert.equal(moved.status, "addressed");
   assert.ok(
@@ -275,6 +293,13 @@ test("requesting changes starts a next round that builds on the agent's own comm
     "The first round's report stays in the instruction's history",
   );
   assert.equal(state.runs.find((r) => r.id === p.id).revisedBy, next.id);
+  const late = await f.req("/api/comments", {
+    text: "Too late for round one",
+    sha: result1,
+    anchor: { kind: "repo", path: "" },
+    forRun: p.id,
+  });
+  assert.match(late.error, /already requested/);
   const again = await f.req(`/api/runs/${p.id}/revise`, { feedback: "Once more" });
   assert.equal(again.status, 400);
   assert.match(again.error, /already requested/);
@@ -286,6 +311,10 @@ test("requesting changes starts a next round that builds on the agent's own comm
   );
   assert.equal(verified.status, "verified");
   assert.equal(verified.verification.commit, result);
+  // The fixture flags the second instruction; once it is dropped, nothing is left to change.
+  const flagged = (await f.req("/api/workflow")).comments.find((x) => x.id === collected.id);
+  assert.equal(flagged.status, "flagged");
+  await f.req("/api/comments/" + collected.id, { action: "delete", version: flagged.version }, "PATCH");
   const done = await f.req(`/api/runs/${next.id}/revise`, { feedback: "More" });
   assert.match(done.error, /Nothing in this task is left to change/);
   assert.equal(

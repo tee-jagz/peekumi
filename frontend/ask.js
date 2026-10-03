@@ -76,7 +76,11 @@ export function createAsk({
     } else {
       const label = el("span", "Reading the code");
       label.className = "pending-text";
-      waiting.append(peek("thinking"), label);
+      // Peek looks over its layers while Ask is reading the code, and thinks otherwise. The
+      // reply is redrawn on every event, so the same Peek carries on rather than restarting.
+      const mood = chat.live.length ? "peeking" : "thinking",
+        current = document.querySelector(".ask-message.is-pending .peek-mark");
+      waiting.append(current?.dataset.state === mood ? current : peek(mood), label);
     }
     if (chat.live.length) {
       const read = el("p", "Looking up: " + [...new Set(chat.live)].join(" · "));
@@ -167,8 +171,14 @@ export function createAsk({
             words,
             // While exploring a task's changes, a suggestion belongs with that task's next
             // round, which builds on the agent's work; a draft would start again from main.
-            changeTarget()
-              ? btn("Add to requested changes", () => addToChanges(message.suggestion))
+            message.added
+              ? Object.assign(el("p", "Added to requested changes"), { className: "read-note" })
+              : changeTarget()
+              ? btn("Add to requested changes", async () => {
+                  await addToChanges(message);
+                  message.added = true;
+                  redraw();
+                })
               : btn("Save as draft instruction", async () => {
                   await makeDraft({
                     anchor: message.asked.anchor,

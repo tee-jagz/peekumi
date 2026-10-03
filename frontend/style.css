@@ -4780,8 +4780,18 @@ details.p-section[open] > summary::before {
 .peek .pupil,
 .peek .lid,
 .peek .dots circle,
-.peek .sparkle path {
+.peek .sparkle path,
+.peek .l1,
+.peek .l2,
+.peek .l3,
+.peek .zz circle {
   transform-box: fill-box;
+}
+.peek .l1,
+.peek .l2,
+.peek .l3,
+.peek .zz circle {
+  transform-origin: 50% 50%;
 }
 .peek .lid {
   transform-origin: 50% 0;
@@ -4792,7 +4802,8 @@ details.p-section[open] > summary::before {
 }
 .peek .squint,
 .peek .dots,
-.peek .sparkle {
+.peek .sparkle,
+.peek .zz {
   opacity: 0;
 }
 .peek.is-idle .lid {
@@ -4904,6 +4915,135 @@ details.p-section[open] > summary::before {
   36%, 46% { transform: translate(-10px, 1px); }
   56%, 66% { transform: translate(4px, 0); }
   76%, 100% { transform: translate(0, 0); }
+}
+/* Working: reading, while its layers lift and settle in turn. */
+.peek.is-working .lid {
+  transform: scaleY(0.24);
+}
+.peek.is-working .pupil {
+  animation: peek-read 2.4s ease-in-out infinite;
+}
+.peek.is-working .l1 {
+  animation: peek-place 2.4s ease-in-out infinite;
+}
+.peek.is-working .l2 {
+  animation: peek-place 2.4s ease-in-out 0.35s infinite;
+}
+.peek.is-working .l3 {
+  animation: peek-place 2.4s ease-in-out 0.7s infinite;
+}
+/* Peeking: ducks behind its layers, then looks over them. */
+.peek.is-peeking .head {
+  animation: peek-dive 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.peek.is-peeking .pupil {
+  animation: peek-dart 2.8s ease-in-out infinite;
+}
+/* Ready: eye on you, one bounce, then a long wait. */
+.peek.is-ready .pupil {
+  transform: translate(-5px, 3px) scale(1.06);
+}
+.peek.is-ready .head {
+  animation: peek-perk 3.2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+/* Merged: the lower layers slide into the top one, then a sparkle. */
+.peek.is-merged .pupil {
+  transform: translate(-3px, -5px);
+}
+.peek.is-merged .l2 {
+  animation: peek-merge2 3.8s ease-in-out infinite;
+}
+.peek.is-merged .l3 {
+  animation: peek-merge3 3.8s ease-in-out infinite;
+}
+.peek.is-merged .sparkle {
+  animation: peek-shine 3.8s ease-in-out infinite;
+}
+/* Asleep: eye closed, breathing, dots drifting up. */
+.peek.is-asleep .lid {
+  transform: scaleY(1);
+}
+.peek.is-asleep .head {
+  animation: peek-breathe 4s ease-in-out infinite;
+}
+.peek.is-asleep .zz {
+  opacity: 1;
+}
+.peek.is-asleep .zz circle {
+  opacity: 0;
+  animation: peek-drift 4s ease-out infinite;
+}
+.peek.is-asleep .zz circle:nth-child(2) {
+  animation-delay: 1.3s;
+}
+/* Stopped: half-lidded, sunk, its layers out of line. */
+.peek.is-stopped .head {
+  transform: translateY(10px);
+}
+.peek.is-stopped .lid {
+  transform: scaleY(0.5);
+}
+.peek.is-stopped .pupil {
+  animation: peek-down 5s ease-in-out infinite;
+}
+.peek.is-stopped .l1 {
+  transform: rotate(-3deg);
+}
+.peek.is-stopped .l2 {
+  transform: translateX(8px) rotate(2deg);
+}
+.peek.is-stopped .l3 {
+  transform: translateX(-6px) rotate(-3deg);
+}
+@keyframes peek-read {
+  0%, 100% { transform: translate(-9px, 9px); }
+  50% { transform: translate(6px, 9px); }
+}
+@keyframes peek-place {
+  0%, 45%, 100% { transform: translateY(0) scaleX(1); }
+  15% { transform: translateY(-6px) scaleX(0.94); }
+  28% { transform: translateY(1px) scaleX(1.02); }
+}
+@keyframes peek-dive {
+  0%, 12% { transform: translateY(0); }
+  24%, 40% { transform: translateY(50px); }
+  54%, 100% { transform: translateY(0); }
+}
+@keyframes peek-dart {
+  0%, 54% { transform: translate(0, 0); }
+  62%, 72% { transform: translate(-10px, 1px); }
+  80%, 92% { transform: translate(5px, 0); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes peek-perk {
+  0%, 30%, 100% { transform: translateY(0); }
+  10% { transform: translateY(-12px) scaleY(1.03); }
+  20% { transform: translateY(0) scaleY(0.97); }
+}
+@keyframes peek-merge2 {
+  0%, 15%, 92%, 100% { transform: none; opacity: 1; }
+  40%, 80% { transform: translateY(-23px) scaleX(1.27); opacity: 0; }
+}
+@keyframes peek-merge3 {
+  0%, 22%, 92%, 100% { transform: none; opacity: 1; }
+  47%, 80% { transform: translateY(-44px) scaleX(1.81); opacity: 0; }
+}
+@keyframes peek-shine {
+  0%, 45%, 86%, 100% { opacity: 0; }
+  56%, 76% { opacity: 1; }
+}
+@keyframes peek-breathe {
+  0%, 100% { transform: translateY(12px) scaleY(1); }
+  50% { transform: translateY(12px) scaleY(1.035); }
+}
+@keyframes peek-drift {
+  0% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(12px, -26px); }
+}
+@keyframes peek-down {
+  0%, 100% { transform: translate(-6px, 8px); }
+  50% { transform: translate(1px, 8px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .peek * {
@@ -5331,4 +5471,86 @@ details.p-section[open] > summary::before {
 }
 .reply-box .read-note {
   margin: 6px 0 0;
+}
+/* App notices (update ready, offline) are a frosted card in Peekumi's glass, floating
+   below the status bar rather than covering the header. */
+.pwa-notice {
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(440px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-line);
+  border-radius: 20px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.7);
+  backdrop-filter: blur(24px) saturate(1.7);
+  box-shadow: var(--shadow), var(--card-shadow);
+  color: var(--ink);
+  animation: pwa-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pwa-notice .peek-mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+.pwa-notice.is-update {
+  flex-wrap: wrap;
+}
+.pwa-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 160px;
+  min-width: 0;
+  line-height: 1.35;
+}
+.pwa-text strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.pwa-text span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.pwa-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.pwa-actions .btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+@keyframes pwa-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pwa-notice {
+    animation: none;
+  }
+}
+/* Peek takes the Tasks icon's place while an agent works or a task needs attention. */
+#openTasks .peek-mark {
+  width: 30px;
+  height: 30px;
+}
+#openTasks[data-cue="attention"] {
+  background: color-mix(in srgb, var(--mod) 14%, transparent);
+  border-color: color-mix(in srgb, var(--mod) 55%, transparent);
+}
+/* The task's Peek sits at the end of its heading row. */
+.task-head .task-peek {
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
 }

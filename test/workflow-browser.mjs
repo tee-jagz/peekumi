@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { fixture, waitFor } from "./workflow-support.mjs";
 let browser;
@@ -203,9 +203,35 @@ try {
       await page.screenshot({
         path: `test-results/workflow-preview-${viewport.width}.png`,
       });
+      // The fixture agent keeps running while this file exists.
+      await writeFile(f.state + "/hold", "");
       await page
         .getByRole("button", { name: "Start task", exact: true })
         .click();
+      // While the agent works, Peek works in the Tasks button, visible from every view, and
+      // tapping it opens that task.
+      const tasks = page.locator("#openTasks");
+      await page.locator('#openTasks[data-cue="working"] .peek-mark[data-state="working"]').waitFor({ timeout: 15000 });
+      assert.equal(await tasks.getAttribute("aria-label"), "Codex is working on a task");
+      assert.equal(
+        await page.locator('.task-head .task-peek[data-state="working"]').count(),
+        1,
+        "The running task shows Peek working too",
+      );
+      // Starting left the task open: the first tap closes Tasks, the second goes straight
+      // back to the running task rather than the list.
+      await tasks.click();
+      await tasks.click();
+      await page.locator('.task-head .task-peek[data-state="working"]').waitFor();
+      await page.screenshot({ path: `test-results/tasks-working-${viewport.width}.png` });
+      await rm(f.state + "/hold", { force: true });
+      // When it finishes, Peek hops once and the usual icon returns in the accent colour.
+      await page.locator('#openTasks[data-cue="ready"]').waitFor({ timeout: 20000 });
+      await page.waitForFunction(
+        () => !document.querySelector("#openTasks .peek-mark") && document.querySelector("#openTasks svg"),
+        null,
+        { timeout: 5000 },
+      );
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
       assert.ok(await page.getByLabel("Your question").isVisible());
       assert.ok(
@@ -263,7 +289,8 @@ try {
       await page.screenshot({
         path: `test-results/agent-branch-${viewport.width}.png`,
       });
-      // While exploring, Ask's suggestion goes to this task's next round, not a new draft.
+      // While exploring, changes are collected for this task's next round, not new drafts
+      // from main, and exploring carries on.
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
       await page.getByLabel("Your question").fill("What would improve this change?");
       await page
@@ -273,10 +300,22 @@ try {
       await page
         .getByRole("button", { name: "Add to requested changes", exact: true })
         .click();
-      const fix = page.getByLabel("What needs fixing?");
-      await fix.waitFor();
-      assert.match(await fix.inputValue(), /Add a focused regression test for this behavior\./);
-      await page.locator(".reply-box").getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.getByText("Added to requested changes", { exact: true }).waitFor();
+      assert.equal(await page.locator("#taskReturn").innerText(), "Back to task · 1 to send");
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
+      await page.getByLabel("What should change, and why").fill("Keep the result file short.");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add to requested changes", exact: true })
+        .click();
+      await page.locator("#taskReturn", { hasText: "2 to send" }).waitFor();
+      assert.equal(
+        await page.locator("#branchPicker").inputValue(),
+        "refs/heads/" + completed.branch,
+        "Collecting a change does not leave the agent's work",
+      );
+      await page.locator("#taskReturn").click();
+      await page.getByText("Requested changes · 2", { exact: true }).waitFor();
       await page
         .getByRole("button", { name: "Approve", exact: true })
         .waitFor();
@@ -314,8 +353,8 @@ try {
       // Request changes asks what needs fixing and continues the work as round 2.
       await page.getByRole("button", { name: "Request changes", exact: true }).click();
       const send = page.getByRole("button", { name: "Send to agent", exact: true });
-      assert.equal(await send.isDisabled(), true, "Feedback is required");
-      await page.getByLabel("What needs fixing?").fill("Also say which round made the change.");
+      assert.equal(await send.isDisabled(), false, "Collected changes can go without another note");
+      await page.getByLabel("Anything else? (optional)").fill("Also say which round made the change.");
       await page.screenshot({
         path: `test-results/workflow-request-${viewport.width}.png`,
       });

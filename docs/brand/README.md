@@ -18,6 +18,12 @@ Colours: tile `#1b4a44` to `#0a1a19`, Peek `#78e2c0` to `#1a6553`, eye white wit
 | Idle | Blinks and glances aside | Sign-in card |
 | Loading | Bobs and scans the horizon | Reading the repository, loading a file's declarations |
 | Thinking | Looks up with three pulsing thought dots | While Ask is answering |
+| Peeking | Ducks behind its layers and looks over them, eye darting | While Ask is looking up code |
+| Working | Reads with its eye down while its layers lift and settle in turn | An agent running a task: the Tasks button and the task |
+| Ready | Eye on you, one small bounce, then it waits | A finished task waiting for review; the Tasks button as the agent finishes |
 | Success | Hops with a happy closed eye and sparkles | A reviewed task's next step |
-| Error | Sinks behind the horizon with a droopy eye | Error notices and offline |
+| Merged | Its lower layers slide into the top one, then a sparkle | A task applied to main |
+| Stopped | Half-lidded and sunk, its layers out of line | A task that failed, was interrupted or was stopped; the Tasks button while one needs attention |
+| Error | Sinks behind the horizon with a droopy eye | Error notices |
+| Asleep | Eye closed, breathing slowly, dots drifting up | Offline, or the server cannot be reached |
 | Empty | Peeks up, looks around and ducks down | An empty map level, no instructions yet |
