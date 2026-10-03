@@ -75,6 +75,22 @@ peekumi pair
 
 `share` configures private Tailscale Serve HTTPS, enables secure cookies, and restarts Peekumi. It never enables public Funnel. Tailscale may ask you to enable HTTPS for your tailnet. Review existing Serve configuration before assigning its default HTTPS endpoint to Peekumi. `peekumi pair` now prints the HTTPS pairing link. After pairing, install through the browser's “Add to Home Screen” / “Install app” action and keep Tailscale connected. The PWA does not run the backend or bypass network access requirements.
 
+### Optional public Cloudflare tunnel
+
+For temporary phone access without Tailscale, explicitly run:
+
+```sh
+peekumi share --tunnel cloudflare
+```
+
+**The URL is public and reachable from the internet.** Traffic passes through Cloudflare. Peekumi still requires device pairing; keep the printed pairing link private because it grants owner access to all registered repositories. The command warns before downloading or exposing the service. Plain `peekumi share` (or `--tunnel tailscale`) continues to use private Tailscale; no environment setting or saved preference enables Cloudflare.
+
+On first opt-in, Peekumi downloads pinned `cloudflared` 2026.9.3 from Cloudflare's official GitHub release and verifies its SHA-256 digest before extracting or running it. It supports the same four macOS/Linux architectures as Peekumi's distribution. Downloads are cached under the private state directory's `tunnel/` folder and reverified on reuse. A mismatched checksum stops sharing without executing the download; remove the indicated cached artifact and explicitly retry if the cache is damaged. No system installation, Cloudflare account or login is needed. Existing cloudflared configuration is left alone, and automatic binary updates are disabled.
+
+The command enables secure cookies and restarts Peekumi if necessary, then prints the temporary HTTPS URL and its pairing link. Open that printed link on your phone and keep the command running. Ctrl+C closes the tunnel; each new run gets a new hostname. The hostname is not saved, and `peekumi pair` continues to use the existing permanent URL. Closing the tunnel leaves Peekumi running with secure cookies enabled. The download remains cached; a later `start`, `restart` or `doctor` does not launch Cloudflare.
+
+[Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) are intended for testing and development, have no uptime guarantee, allow at most 200 in-flight requests and do not support Server-Sent Events. Use Tailscale for ongoing phone access and a stable PWA address.
+
 The service worker caches an explicit allowlist of application assets only. It never caches source, API responses or pairing tokens. When offline, reconnect to inspect code. Updates appear as a reload action; save unsent drafts before accepting. Browser memory and ordinary browser history are not a secure-erasure guarantee.
 
 ## Device access

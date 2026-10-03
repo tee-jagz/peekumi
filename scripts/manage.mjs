@@ -16,6 +16,8 @@ import { homedir, platform } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createTailscaleProvider } from "./tunnel/tailscale.mjs";
+import { createCloudflareProvider } from "./tunnel/cloudflare.mjs";
+import { tunnelName } from "./tunnel/select.mjs";
 const tunnel = createTailscaleProvider(run);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** Reads a PEEKUMI_* setting, or its STRATA_* name from before the rename. */
@@ -357,8 +359,44 @@ async function doctor() {
   );
   if (checks.some((c) => c.required && !c.ok)) process.exitCode = 1;
 }
+/**
+ * Keeps an explicitly requested public tunnel in the foreground. Management owns
+ * secure-cookie persistence/restarts; the temporary hostname is never persisted.
+ * Signals cancel download/startup and close the child before returning.
+ */
+async function shareCloudflare(c) {
+  console.error("Warning: the Cloudflare URL is PUBLIC and reachable from the internet. Peekumi still requires pairing; keep pairing links private. Traffic passes through Cloudflare.");
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  const provider = createCloudflareProvider({ state });
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, cancel);
+  try {
+    const token = (await readFile(join(state, "access-token"), "utf8")).trim();
+    if (!c.secureCookie) {
+      c.secureCookie = true;
+      await save(c);
+      await stop();
+      await start();
+    }
+    controller.signal.throwIfAborted();
+    const status = provider.status();
+    await provider.expose(c.port, status, { signal: controller.signal });
+    const url = provider.url(status);
+    console.log(`Public phone URL: ${url}/\nPrivate pairing link: ${url}/#token=${token}\nKeep this command running. Ctrl+C closes the tunnel; the next run gets a new URL.`);
+    const result = await status.done;
+    if (!controller.signal.aborted)
+      throw result.error || new Error(`cloudflared exited (${result.code ?? result.signal}); run peekumi share --tunnel cloudflare again`);
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+  } finally {
+    await provider.close();
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.off(signal, cancel);
+  }
+}
 async function main() {
   const [command = "help", sub, ...args] = process.argv.slice(2);
+  if (command !== "share" && process.argv.slice(3).some((arg) => arg === "--tunnel" || arg.startsWith("--tunnel=")))
+    throw new Error("--tunnel is supported only by peekumi share");
   if (command === "doctor") return doctor();
   if (command === "repo") {
     const c = await config();
@@ -478,9 +516,11 @@ async function main() {
     return;
   }
   if (command === "share") {
+    const name = tunnelName(process.argv.slice(3));
     const c = await config();
     if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
+    if (name === "cloudflare") return shareCloudflare(c);
     const tunnelStatus = tunnel.status();
     tunnel.expose(c.port, tunnelStatus);
     c.publicUrl = tunnel.url(tunnelStatus);
@@ -609,7 +649,7 @@ async function main() {
     return;
   }
   console.log(
-    "Peekumi setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share                 Private Tailscale HTTPS access\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nPEEKUMI_HOME (or the former STRATA_HOME) selects the private registry/state directory. Agents: read docs/SETUP.md.",
+    "Peekumi setup\n  doctor\n  install|upgrade [directory]\n  repo add|remove <path> | repo list\n  port <port>\n  start | stop | restart | serve | status | logs\n  share [--tunnel tailscale]  Private Tailscale HTTPS access (default)\n  share --tunnel cloudflare  PUBLIC temporary HTTPS URL; downloads verified cloudflared, stays in foreground\n  pair [--read-only]     Print a private device pairing link\n  devices [revoke <id>]\n\nPEEKUMI_HOME (or the former STRATA_HOME) selects the private registry/state directory. Agents: read docs/SETUP.md.",
   );
 }
 main().catch((e) => {
