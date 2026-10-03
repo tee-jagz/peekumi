@@ -6,11 +6,14 @@ import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
 export function createAsk({
+  api,
   stream,
   context,
   redraw,
   notice,
   makeDraft,
+  changeTarget,
+  addToChanges,
   openReference,
 }) {
   const chat = {
@@ -21,6 +24,21 @@ export function createAsk({
     live: [],
     reveal: false,
   };
+  // The conversation is kept on the server with the repository's private state, so a
+  // reload, an app update or another device picks it up where it left off.
+  let restored = false;
+  function save() {
+    let messages = chat.messages.slice(-60);
+    while (messages.length && JSON.stringify(messages).length > 120000)
+      messages = messages.slice(1);
+    api("/api/ask/history", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    }).catch(() => {
+      /* The conversation still works in this page; it is saved again after the next answer. */
+    });
+  }
   /** A short name for what a question was about. */
   const subjectOf = (anchor) =>
     anchor.symbol || anchor.path?.split("/").at(-1) || "the repository";
@@ -79,6 +97,16 @@ export function createAsk({
     });
   }
   return {
+    /** Restores the saved conversation once, unless this page already has one. Returns
+     * whether anything was restored. */
+    async load() {
+      if (restored) return false;
+      restored = true;
+      const saved = await api("/api/ask/history");
+      if (chat.messages.length || !saved.messages?.length) return false;
+      chat.messages = saved.messages;
+      return true;
+    },
     render(body, composerHost) {
       // New questions are about the current selection; earlier ones keep their own subject.
       const c = context(),
@@ -137,13 +165,17 @@ export function createAsk({
           proposal.append(
             el("span", "Suggested instruction"),
             words,
-            btn("Save as draft instruction", async () => {
-              await makeDraft({
-                anchor: message.asked.anchor,
-                sha: message.asked.sha,
-                text: message.suggestion,
-              });
-            }),
+            // While exploring a task's changes, a suggestion belongs with that task's next
+            // round, which builds on the agent's work; a draft would start again from main.
+            changeTarget()
+              ? btn("Add to requested changes", () => addToChanges(message.suggestion))
+              : btn("Save as draft instruction", async () => {
+                  await makeDraft({
+                    anchor: message.asked.anchor,
+                    sha: message.asked.sha,
+                    text: message.suggestion,
+                  });
+                }),
           );
           bubble.append(proposal);
         }
@@ -174,6 +206,7 @@ export function createAsk({
       input.required = true;
       input.oninput = () => {
         chat.question = input.value;
+        submit.disabled = chat.pending || !chat.question.trim();
       };
       label.append(input);
       form.append(label);
@@ -184,7 +217,7 @@ export function createAsk({
       );
       submit.className = "btn primary icon-action";
       submit.type = "submit";
-      submit.disabled = chat.pending;
+      submit.disabled = chat.pending || !chat.question.trim();
       form.append(submit);
       form.onsubmit = async (event) => {
         event.preventDefault();
@@ -226,6 +259,7 @@ export function createAsk({
             omitted: response.context.omitted,
             lookups: response.lookups || [],
           });
+          save();
         } catch (e) {
           // Put the question back so it can be retried or edited.
           chat.messages.pop();

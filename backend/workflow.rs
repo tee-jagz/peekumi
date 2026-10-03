@@ -26,10 +26,10 @@ pub fn now() -> u64 {
 /// Returns a required, bounded, nonempty text field without changing its content.
 pub fn text<'a>(v: &'a Value, key: &str, max: usize) -> Result<&'a str> {
     let s = v[key].as_str().with_context(|| format!("Missing {key}"))?;
-    ensure!(
-        !s.trim().is_empty() && s.len() <= max && !s.contains('\0'),
-        "Invalid {key}"
-    );
+    let name = if key == "text" { "instruction" } else { key };
+    ensure!(!s.trim().is_empty(), "The {name} is empty");
+    ensure!(s.len() <= max, "The {name} is too long");
+    ensure!(!s.contains('\0'), "Invalid {key}");
     Ok(s)
 }
 fn list<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
@@ -314,6 +314,16 @@ impl Workflow {
             }
             return Ok(run);
         }
+        if method == "POST" && path.ends_with("/revise") && path.starts_with("/api/runs/") {
+            let previous = path
+                .trim_start_matches("/api/runs/")
+                .trim_end_matches("/revise");
+            let (mut run, token) = self.revise(previous, &body)?;
+            let id = run["id"].as_str().unwrap_or_default().to_string();
+            crate::runner::launch(self.clone(), id, token);
+            run.as_object_mut().unwrap().remove("reportHash");
+            return Ok(run);
+        }
         if method == "POST" && path.ends_with("/cancel") && path.starts_with("/api/runs/") {
             let id = path
                 .trim_start_matches("/api/runs/")
@@ -373,16 +383,122 @@ impl Workflow {
             }
             let id = crate::random_token()[..16].to_string();
             let branch = format!("peekumi/run-{id}");
-            let mut task=format!("# Task for {agent}, run {id}\nRepository: {}\nStart from {base} on {}. Work only on {branch} in the supplied worktree. Do not push or merge.\n\n## Brief\n{brief}\n\n## Review comments\n", self.repo.file_name().unwrap_or_default().to_string_lossy(), self.watched);
-            for c in &comments { task.push_str(&format!("\n[{}] {} (left on {})\n{}\n",c["id"].as_str().unwrap(),c["anchor"],c["sha"].as_str().unwrap(),c["text"].as_str().unwrap()));
-            }
-            task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Strata state or another worktree. Run appropriate checks and describe failures honestly.\n"));
+            let start = format!("Start from {base} on {}.", self.watched);
+            let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &rules);
             let r=json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
             list(v,"runs").push(r.clone());
             Ok(r)
         })
+    }
+    /// Writes the exact task an agent receives: where to start, any changes the owner asked
+    /// for after an earlier round, the instructions (with that round's results), the
+    /// dependency rules and the reporting contract.
+    #[allow(clippy::too_many_arguments)]
+    fn task_text(
+        &self,
+        agent: &str,
+        id: &str,
+        branch: &str,
+        start: &str,
+        requested: &str,
+        brief: &str,
+        comments: &[Value],
+        rules: &str,
+    ) -> String {
+        let mut task = format!(
+            "# Task for {agent}, run {id}\nRepository: {}\n{start} Work only on {branch} in the supplied worktree. Do not push or merge.\n\n",
+            self.repo.file_name().unwrap_or_default().to_string_lossy()
+        );
+        if !requested.is_empty() {
+            task.push_str(&format!("## Changes requested by the owner\n{requested}\n\n"));
+        }
+        task.push_str(&format!("## Brief\n{brief}\n\n## Review comments\n"));
+        for c in comments {
+            task.push_str(&format!(
+                "\n[{}] {} (left on {})\n{}\n",
+                c["id"].as_str().unwrap(),
+                c["anchor"],
+                c["sha"].as_str().unwrap(),
+                c["text"].as_str().unwrap()
+            ));
+            let earlier = &c["report"];
+            if let Some(result) = earlier["note"].as_str().or(earlier["reason"].as_str()) {
+                task.push_str(&format!("Earlier round's report: {result}\n"));
+            }
+        }
+        task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Peekumi state or another worktree. Run appropriate checks and describe failures honestly.\n"));
+        task
+    }
+    /// Starts the next round of a finished task with the owner's requested changes. The new
+    /// run builds on the previous round's last commit on a fresh branch, so earlier work is
+    /// kept and merging the latest round applies every round. Instructions not yet approved
+    /// move to the new round; the previous round is marked as revised and cannot be revised again.
+    /// Returns the new run, already starting.
+    fn revise(&self, previous: &str, body: &Value) -> Result<(Value, String)> {
+        let requested = text(body, "feedback", 12000)?;
+        let earlier = self.run(previous)?;
+        ensure!(!active(&earlier), "Wait for this task to finish");
+        let branch_tip = self.resolve(&format!(
+            "refs/heads/{}",
+            earlier["branch"].as_str().context("Missing branch")?
+        ));
+        // A round that never created its branch has nothing to build on; start where it did.
+        let base = match branch_tip {
+            Ok(sha) => sha,
+            Err(_) => earlier["base"].as_str().context("Missing base")?.to_string(),
+        };
+        let rules = crate::rules::CONFIG_FILES
+            .iter()
+            .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
+            .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
+        ensure!(rules.len() <= 65536, "Rule configuration is too large");
+        let token = crate::random_token();
+        let run = self.update(|v| {
+            ensure!(
+                !v["runs"].as_array().unwrap().iter().any(active),
+                "A run is already active"
+            );
+            let r = find(v, "runs", previous)?.clone();
+            ensure!(
+                r["revisedBy"].is_null(),
+                "Changes were already requested; continue from the latest round"
+            );
+            let mut comments = vec![];
+            for c in v["comments"].as_array().unwrap() {
+                if c["runId"] == previous
+                    && ["addressed", "flagged", "unreported"].contains(&c["status"].as_str().unwrap_or(""))
+                {
+                    let mut c = c.clone();
+                    c.as_object_mut().unwrap().remove("history");
+                    comments.push(c);
+                }
+            }
+            ensure!(!comments.is_empty(), "Nothing in this task is left to change");
+            let agent = r["agent"].as_str().context("Missing agent")?;
+            let round = r["round"].as_u64().unwrap_or(1) + 1;
+            let id = crate::random_token()[..16].to_string();
+            let branch = format!("peekumi/run-{id}");
+            let start = format!(
+                "Round {round}. Start from {base}, the last commit of the previous round on {}. That work is already committed: build on it rather than starting over.",
+                r["branch"].as_str().unwrap_or("")
+            );
+            let brief = r["brief"].as_str().unwrap_or("");
+            let task = self.task_text(agent, &id, &branch, &start, requested, brief, &comments, &rules);
+            for snapshot in &comments {
+                let c = find_mut(v, "comments", snapshot["id"].as_str().unwrap())?;
+                c["status"] = json!("with_agent");
+                c["runId"] = json!(id);
+                c["report"] = Value::Null;
+                event(c, "owner");
+            }
+            find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
+            let next = json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
+            list(v, "runs").push(next.clone());
+            Ok(next)
+        })?;
+        Ok((run, token))
     }
     /// Reads one internal run, including its credential hash for the reporting boundary.
     pub fn run(&self, id: &str) -> Result<Value> {

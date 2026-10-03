@@ -11,7 +11,7 @@ mod rules;
 mod runner;
 mod sessions;
 mod workflow;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -168,12 +168,119 @@ struct App {
     cookie_name: String,
     sessions: Arc<Mutex<sessions::Sessions>>,
     options: Options,
+    /// Holds this repository's state folder against other services; released when removed.
+    _lock: std::fs::File,
+}
+/// What every repository on one listener shares: credentials, sessions, and the options a
+/// repository added while running starts from.
+#[derive(Clone)]
+struct Shared {
+    options: Options,
+    cookie_name: String,
+    access_token: String,
+    reader_token: String,
+    sessions: Arc<Mutex<sessions::Sessions>>,
 }
 /// One listener with independent repository workers and a shared device session registry.
+/// Repositories can be added and removed while it runs; the primary one is fixed.
 struct Fleet {
     primary: Arc<App>,
-    repositories: HashMap<String, Arc<App>>,
-    _locks: Vec<std::fs::File>,
+    repositories: std::sync::RwLock<HashMap<String, Arc<App>>>,
+    shared: Shared,
+    _lock: std::fs::File,
+}
+impl Fleet {
+    fn get(&self, id: &str) -> Option<Arc<App>> {
+        self.repositories.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+    }
+    fn all(&self) -> Vec<(String, Arc<App>)> {
+        let map = self.repositories.read().unwrap_or_else(|e| e.into_inner());
+        map.iter().map(|(id, app)| (id.clone(), app.clone())).collect()
+    }
+}
+/// A repository's stable identifier: the start of a hash of its canonical path.
+fn repository_id(directory: &std::path::Path) -> String {
+    engine::hash(directory.to_string_lossy().as_bytes())[..16].to_string()
+}
+/// Options for a repository served beside the primary one: its own private state folder,
+/// comparing its latest commit with its parent.
+fn repository_options(base: &Options, directory: PathBuf) -> Options {
+    let mut options = base.clone();
+    options.state_dir = base.state_dir.join("repositories").join(repository_id(&directory));
+    options.directory = directory;
+    options.base = "HEAD~1".into();
+    options.head = "HEAD".into();
+    options
+}
+/// Opens one repository for serving: its analysis worker, its locked private state folder,
+/// the watched branch, its workflow store and recovery of interrupted agent runs.
+/// `repository` reuses an already opened primary repository.
+fn open_repository(
+    shared: &Shared,
+    config: Options,
+    repository: Option<Repository>,
+) -> Result<(String, Arc<App>)> {
+    let repository = match repository {
+        Some(repo) => repo,
+        None => Repository::new(
+            config.directory.clone(),
+            &config.state_dir,
+            config.parser_root.clone(),
+            config.python.clone(),
+            config.node.clone(),
+        )?,
+    };
+    repository.resolve("HEAD")?;
+    let id = repository_id(&repository.directory);
+    std::fs::create_dir_all(&config.state_dir)?;
+    let lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(config.state_dir.join("workflow-service.lock"))?;
+    lock.try_lock()
+        .context("Another Peekumi service is using this state directory")?;
+    let watched = if config.head == "HEAD" {
+        String::from_utf8(
+            process::run(
+                "git",
+                &["symbolic-ref", "-q", "HEAD"],
+                Some(&repository.directory),
+                vec![],
+            )
+            .unwrap_or_default(),
+        )?
+        .trim()
+        .to_string()
+    } else {
+        config.head.clone()
+    };
+    let workflow = workflow::Workflow::new(
+        &repository.directory,
+        &config.state_dir,
+        if watched.is_empty() {
+            &config.head
+        } else {
+            &watched
+        },
+        &config.codex,
+        &config.claude,
+    )?;
+    runner::recover(workflow.clone())?;
+    let app = Arc::new(App {
+        cookie_name: shared.cookie_name.clone(),
+        workflow,
+        ask_lock: Arc::new(Mutex::new(())),
+        ask_grant: std::sync::Mutex::new(None),
+        engine: Engine::start(repository),
+        token: shared.access_token.clone(),
+        reader_token: shared.reader_token.clone(),
+        sessions: shared.sessions.clone(),
+        options: config,
+        _lock: lock,
+    });
+    Ok((id, app))
 }
 
 /// The loopback origin of this listener, set once after binding. Ask's lookup client connects
@@ -199,7 +306,7 @@ async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
     let key = header(request.headers(), "authorization")
         .strip_prefix("Bearer ")
         .unwrap_or("");
-    let app = fleet.repositories.values().find(|app| {
+    let app = fleet.all().into_iter().map(|(_, app)| app).find(|app| {
         !key.is_empty()
             && app
                 .ask_grant
@@ -208,7 +315,7 @@ async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
                 .as_ref()
                 .is_some_and(|grant| equal(key, &grant.key))
     });
-    let Some(app) = app.cloned() else {
+    let Some(app) = app else {
         return error(StatusCode::UNAUTHORIZED, "No Ask answer is in progress", gzip).await;
     };
     let body = match to_bytes(request.into_body(), 65536).await {
@@ -351,6 +458,35 @@ async fn json_response(
         cookie,
     )
     .await
+}
+/// Keeps one repository's Ask conversation in its private state folder, so reloading the
+/// page, updating the app or switching device does not lose it. Accepts at most 100 messages;
+/// the request size limit bounds the rest. Writes a private file atomically.
+fn save_ask_history(file: &std::path::Path, body: &Value) -> Result<()> {
+    let messages = body["messages"]
+        .as_array()
+        .context("Missing messages")?;
+    ensure!(messages.len() <= 100, "Too many messages");
+    ensure!(
+        messages
+            .iter()
+            .all(|m| ["user", "assistant"].contains(&m["role"].as_str().unwrap_or(""))
+                && m["text"].is_string()),
+        "Invalid message"
+    );
+    let staged = file.with_extension("json.tmp");
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut out = options.open(&staged)?;
+    std::io::Write::write_all(&mut out, json!({"messages": messages}).to_string().as_bytes())?;
+    out.sync_all()?;
+    std::fs::rename(&staged, file)?;
+    Ok(())
 }
 /// Formats an API failure as a JSON error using the supplied HTTP status.
 async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
@@ -502,6 +638,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         && (request.method() != Method::GET
             || path == "/api/devices"
             || path == "/api/workflow"
+            || path == "/api/ask/history"
             || path.starts_with("/api/runs")
             || path.starts_with("/api/comments"))
     {
@@ -542,8 +679,88 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string(), gzip).await,
         };
     }
+    // Serving another repository exposes more of this Mac, so only the owner access token held
+    // by the local `peekumi` command may change the set; paired devices cannot.
+    if (path == "/api/repositories" && request.method() == Method::POST)
+        || (path.starts_with("/api/repositories/") && request.method() == Method::DELETE)
+    {
+        if !equal(bearer, &app.token) {
+            return error(
+                StatusCode::FORBIDDEN,
+                "Repositories are added and removed with the peekumi command on the host",
+                gzip,
+            )
+            .await;
+        }
+        if request.method() == Method::DELETE {
+            let id = path.trim_start_matches("/api/repositories/").to_string();
+            let Some(repo) = fleet.get(&id) else {
+                return error(StatusCode::NOT_FOUND, "Repository is not registered", gzip).await;
+            };
+            if Arc::ptr_eq(&repo, &fleet.primary) {
+                return error(
+                    StatusCode::CONFLICT,
+                    "The first repository changes only when Peekumi restarts",
+                    gzip,
+                )
+                .await;
+            }
+            let busy = repo.workflow.read().ok().is_some_and(|v| {
+                v["runs"]
+                    .as_array()
+                    .is_some_and(|runs| runs.iter().any(workflow::active))
+            });
+            if busy {
+                return error(
+                    StatusCode::CONFLICT,
+                    "An agent run is still active in this repository",
+                    gzip,
+                )
+                .await;
+            }
+            fleet
+                .repositories
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            return json_response(StatusCode::OK, json!({"id":id,"removed":true}), gzip, None).await;
+        }
+        let body = match to_bytes(request.into_body(), 4096).await {
+            Ok(body) => body,
+            Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "Request too large", gzip).await,
+        };
+        let requested = serde_json::from_slice::<Value>(&body)
+            .ok()
+            .and_then(|v| v["path"].as_str().map(PathBuf::from));
+        let Some(directory) = requested.and_then(|p| p.canonicalize().ok()) else {
+            return error(StatusCode::BAD_REQUEST, "Give the path of a repository on this Mac", gzip).await;
+        };
+        let name = directory.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let id = repository_id(&directory);
+        if fleet.get(&id).is_some() {
+            return json_response(StatusCode::OK, json!({"id":id,"name":name,"added":false}), gzip, None).await;
+        }
+        let shared = fleet.shared.clone();
+        let opened = tokio::task::spawn_blocking(move || {
+            open_repository(&shared, repository_options(&shared.options, directory), None)
+        })
+        .await;
+        return match opened {
+            Ok(Ok((id, repo))) => {
+                fleet
+                    .repositories
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .entry(id.clone())
+                    .or_insert(repo);
+                json_response(StatusCode::OK, json!({"id":id,"name":name,"added":true}), gzip, None).await
+            }
+            Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &format!("{e:#}"), gzip).await,
+            Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "Opening the repository failed", gzip).await,
+        };
+    }
     if path == "/api/repositories" && request.method() == Method::GET {
-        let mut repos: Vec<Value> = fleet.repositories.iter().map(|(id, repo)| json!({
+        let mut repos: Vec<Value> = fleet.all().iter().map(|(id, repo)| json!({
             "id": id, "name": repo.options.directory.file_name().unwrap_or_default().to_string_lossy(),
             "path": repo.options.directory, "default": Arc::ptr_eq(repo, &fleet.primary)
         })).collect();
@@ -564,14 +781,15 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     let app = if selected.is_empty() {
         app
     } else {
-        match fleet.repositories.get(selected) {
-            Some(repo) => repo.clone(),
+        match fleet.get(selected) {
+            Some(repo) => repo,
             None => {
                 return error(StatusCode::NOT_FOUND, "Repository is not registered", gzip).await;
             }
         }
     };
     if path == "/api/ask"
+        || path == "/api/ask/history"
         || path == "/api/workflow"
         || path == "/api/prs"
         || path == "/api/prs/open"
@@ -620,6 +838,24 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 Ok(Ok(value)) => json_response(StatusCode::OK, value, gzip, None).await,
                 Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
                 Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "PR lookup failed", gzip).await,
+            };
+        }
+        if path == "/api/ask/history" {
+            let file = app.options.state_dir.join("ask-history.json");
+            return match method.as_str() {
+                "GET" => {
+                    let saved = std::fs::read(&file)
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                        .filter(|v| v["messages"].is_array())
+                        .unwrap_or_else(|| json!({"messages": []}));
+                    json_response(StatusCode::OK, saved, gzip, None).await
+                }
+                "PUT" => match save_ask_history(&file, &body) {
+                    Ok(()) => json_response(StatusCode::OK, json!({"ok": true}), gzip, None).await,
+                    Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                },
+                _ => error(StatusCode::METHOD_NOT_ALLOWED, "Use GET or PUT", gzip).await,
             };
         }
         if path == "/api/ask" {
@@ -864,95 +1100,23 @@ async fn serve() -> Result<()> {
             options.node.clone(),
         )?;
     }
-    let mut configurations = vec![primary_options];
+    let shared = Shared {
+        options: options.clone(),
+        cookie_name: cookie_name.clone(),
+        access_token: access_token.clone(),
+        reader_token: reader_token.clone(),
+        sessions: shared_sessions.clone(),
+    };
+    let (primary_id, primary) = open_repository(&shared, primary_options, Some(repo))?;
+    let mut repositories = HashMap::from([(primary_id, primary.clone())]);
     for directory in &options.repositories {
         let directory = directory
             .canonicalize()
             .context("Cannot open registered repository")?;
-        if directory == repo.directory {
+        if repositories.contains_key(&repository_id(&directory)) {
             continue;
         }
-        let mut extra = options.clone();
-        extra.directory = directory.clone();
-        extra.state_dir = options
-            .state_dir
-            .join("repositories")
-            .join(&engine::hash(directory.to_string_lossy().as_bytes())[..16]);
-        extra.base = "HEAD~1".into();
-        extra.head = "HEAD".into();
-        configurations.push(extra);
-    }
-    let mut repositories = HashMap::new();
-    let mut locks = vec![server_lock];
-    let mut primary = None;
-    let mut first_repo = Some(repo);
-    for config in configurations {
-        let repository = match first_repo.take() {
-            Some(repo) => repo,
-            None => Repository::new(
-                config.directory.clone(),
-                &config.state_dir,
-                config.parser_root.clone(),
-                config.python.clone(),
-                config.node.clone(),
-            )?,
-        };
-        repository.resolve("HEAD")?;
-        let id = engine::hash(repository.directory.to_string_lossy().as_bytes())[..16].to_string();
-        if repositories.contains_key(&id) {
-            continue;
-        }
-        std::fs::create_dir_all(&config.state_dir)?;
-        let lock = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(config.state_dir.join("workflow-service.lock"))?;
-        lock.try_lock()
-            .context("Another Peekumi service is using this state directory")?;
-        locks.push(lock);
-        let watched = if config.head == "HEAD" {
-            String::from_utf8(
-                process::run(
-                    "git",
-                    &["symbolic-ref", "-q", "HEAD"],
-                    Some(&repository.directory),
-                    vec![],
-                )
-                .unwrap_or_default(),
-            )?
-            .trim()
-            .to_string()
-        } else {
-            config.head.clone()
-        };
-        let workflow = workflow::Workflow::new(
-            &repository.directory,
-            &config.state_dir,
-            if watched.is_empty() {
-                &config.head
-            } else {
-                &watched
-            },
-            &config.codex,
-            &config.claude,
-        )?;
-        runner::recover(workflow.clone())?;
-        let app = Arc::new(App {
-            cookie_name: cookie_name.clone(),
-            workflow,
-            ask_lock: Arc::new(Mutex::new(())),
-            ask_grant: std::sync::Mutex::new(None),
-            engine: Engine::start(repository),
-            token: access_token.clone(),
-            reader_token: reader_token.clone(),
-            sessions: shared_sessions.clone(),
-            options: config,
-        });
-        if primary.is_none() {
-            primary = Some(app.clone());
-        }
+        let (id, app) = open_repository(&shared, repository_options(&options, directory), None)?;
         repositories.insert(id, app);
     }
     let listener = tokio::net::TcpListener::bind((options.host.as_str(), options.port)).await?;
@@ -963,9 +1127,10 @@ async fn serve() -> Result<()> {
         json!({"port":address.port()})
     );
     let fleet = Arc::new(Fleet {
-        primary: primary.context("No repository registered")?,
-        repositories,
-        _locks: locks,
+        primary,
+        repositories: std::sync::RwLock::new(repositories),
+        shared,
+        _lock: server_lock,
     });
     axum::serve(listener, Router::new().fallback(handle).with_state(fleet))
         .with_graceful_shutdown(async {

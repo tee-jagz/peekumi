@@ -131,7 +131,8 @@ async function retireFormerServices() {
     const file = system === "darwin" ? plistFor(label) : unitFor(label);
     if (!(await exists(file))) continue;
     try {
-      if (system === "darwin") run("launchctl", ["bootout", `gui/${uid}`, file]);
+      if (system === "darwin")
+        run("launchctl", ["bootout", `gui/${uid}`, file]);
       else run("systemctl", ["--user", "disable", "--now", label]);
     } catch {}
     await rm(file, { force: true });
@@ -144,7 +145,8 @@ async function retireFormerServices() {
 /** Moves ~/.local/share/strata to ~/.local/share/peekumi when it is the state in use, no
  * setting chose another place, nothing is serving from it and the new folder is free. */
 async function moveFormerState() {
-  if (chosenState || state !== formerState || (await exists(newState))) return state;
+  if (chosenState || state !== formerState || (await exists(newState)))
+    return state;
   await rename(formerState, newState);
   console.log(`Moved ${formerState} to ${newState}`);
   return newState;
@@ -168,7 +170,7 @@ async function api(path, options = {}) {
   const r = await fetch(`http://127.0.0.1:${c.port}${path}`, {
     ...options,
     headers: { Authorization: "Bearer " + token, ...options.headers },
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(options.timeout || 10000),
   });
   const v = await r.json();
   if (!r.ok) throw new Error(v.error);
@@ -236,9 +238,13 @@ async function start() {
   await retireFormerServices();
   if ((await moveFormerState()) !== state) {
     // The state moved; run again so every path, label and log points at the new folder.
-    const again = spawnSync(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
-      stdio: "inherit",
-    });
+    const again = spawnSync(
+      process.execPath,
+      [...process.execArgv, ...process.argv.slice(1)],
+      {
+        stdio: "inherit",
+      },
+    );
     process.exitCode = again.status ?? 1;
     return;
   }
@@ -366,17 +372,56 @@ async function main() {
     }
     if (!["add", "remove"].includes(sub) || !args[0])
       throw new Error("Use peekumi repo add|remove /path/to/repo");
-    const directory = await realpath(args[0]);
+    // A running service picks the change up straight away; the registry is what it starts
+    // from next time.
+    const live = await running();
     if (sub === "add") {
+      const directory = await realpath(args[0]);
       const actual = await realpath(
         run("git", ["-C", directory, "rev-parse", "--show-toplevel"]),
       );
       run("git", ["-C", actual, "rev-parse", "--verify", "HEAD"]);
       if (!c.repositories.includes(actual)) c.repositories.push(actual);
-    } else c.repositories = c.repositories.filter((p) => p !== directory);
+      await save(c);
+      if (!live)
+        return console.log(
+          `Added ${actual}. It is served from the next start.`,
+        );
+      try {
+        await api("/api/repositories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: actual }),
+          timeout: 60000,
+        });
+        console.log(`Added ${actual}. It is being served now.`);
+      } catch (error) {
+        console.log(
+          `Added ${actual} to the registry, but the running service could not open it: ${error.message}\nRun peekumi restart to try again.`,
+        );
+      }
+      return;
+    }
+    // The folder may already be gone; remove it by the path it was registered under.
+    const directory = await realpath(args[0]).catch(() => resolve(args[0]));
+    if (!c.repositories.includes(directory))
+      return console.log(`${directory} is not registered.`);
+    const first = c.repositories[0] === directory;
+    if (live && !first)
+      await api(
+        `/api/repositories/${createHash("sha256").update(directory).digest("hex").slice(0, 16)}`,
+        {
+          method: "DELETE",
+        },
+      ).catch((error) => {
+        if (!/not registered/.test(error.message)) throw error;
+      });
+    c.repositories = c.repositories.filter((p) => p !== directory);
     await save(c);
     console.log(
-      "Repository registry saved. Run peekumi restart if the service is already running.",
+      live && first
+        ? `Removed ${directory}. It was the first repository, so run peekumi restart to stop serving it.`
+        : `Removed ${directory}.`,
     );
     return;
   }
@@ -604,7 +649,8 @@ async function main() {
           .filter((name) => name.startsWith(prefix))
           .map((name) => join(dirname(dest), name))
           .filter((path) => path !== backup);
-        for (const path of older) await rm(path, { recursive: true, force: true });
+        for (const path of older)
+          await rm(path, { recursive: true, force: true });
         console.log("Previous installation retained at " + backup);
       }
     } catch (error) {

@@ -11,6 +11,8 @@ try {
     { width: 1366, height: 768 },
   ]) {
     const f = await fixture();
+    // Each viewport starts with no saved conversation from the previous one.
+    await f.req("/api/ask/history", { messages: [] }, "PUT");
     const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -145,9 +147,16 @@ try {
         await page.getByLabel("Your question").fill("");
       }
       await page.getByRole("tab", { name: "Instruction", exact: true }).click();
-      await page
-        .getByLabel("What should change, and why")
-        .fill("Make the implementation easier to review.");
+      const save = page.getByRole("button", { name: "Save draft", exact: true });
+      assert.equal(await save.isDisabled(), true, "An empty instruction cannot be saved");
+      const box = page.getByLabel("What should change, and why");
+      const oneLine = await box.evaluate((t) => t.offsetHeight);
+      await box.fill("One\nTwo\nThree\nFour\nFive\nSix");
+      const grown = await box.evaluate((t) => t.offsetHeight);
+      assert.ok(grown > oneLine * 1.8, "The box grows with its text");
+      assert.ok(grown < oneLine * 3.2, "and stops at about four lines");
+      await box.fill("Make the implementation easier to review.");
+      assert.equal(await save.isDisabled(), false);
       await page
         .getByRole("button", { name: "Save draft", exact: true })
         .click();
@@ -208,7 +217,7 @@ try {
       // Keeping diagnostics open must not freeze the terminal state or review actions.
       await page.locator(".diagnostics > summary").click();
       await page
-        .getByRole("button", { name: "Mark task reviewed", exact: true })
+        .getByRole("button", { name: "Approve", exact: true })
         .waitFor({ timeout: 20000 });
       assert.equal(
         await page.locator(".diagnostics").evaluate((d) => d.open),
@@ -226,65 +235,105 @@ try {
       const completed = (await f.req("/api/workflow")).runs.find(
         (r) => r.status === "completed",
       );
-      await page
-        .getByRole("button", { name: "Review agent branch", exact: true })
-        .click();
-      await page.waitForFunction(
-        () =>
-          !document.querySelector("#branchPicker").disabled &&
-          document
-            .querySelector("#branchPicker")
-            .value.startsWith("refs/heads/peekumi/"),
-      );
+      // Explore changes shows the agent's whole branch on the map, compared with where the
+      // task started, and a chip leads back to the task and the previous view.
+      const explore = async () => {
+        await page
+          .getByRole("button", { name: "Explore changes", exact: true })
+          .click();
+        await page.waitForFunction(
+          () =>
+            !document.querySelector("#branchPicker").disabled &&
+            document
+              .querySelector("#branchPicker")
+              .value.startsWith("refs/heads/peekumi/"),
+        );
+      };
+      await explore();
       assert.equal(
         await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
       );
       assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
+      await page.locator("#taskReturn").waitFor();
+      assert.ok(
+        (await page.locator('.sheet[data-front="true"] .node:not([data-status="unchanged"])').count()) > 0,
+        "The agent's changes are coloured on the map",
+      );
+      await page.screenshot({
+        path: `test-results/agent-branch-${viewport.width}.png`,
+      });
+      // While exploring, Ask's suggestion goes to this task's next round, not a new draft.
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page.getByLabel("Your question").fill("What would improve this change?");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Send question", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Add to requested changes", exact: true })
+        .click();
+      const fix = page.getByLabel("What needs fixing?");
+      await fix.waitFor();
+      assert.match(await fix.inputValue(), /Add a focused regression test for this behavior\./);
+      await page.locator(".reply-box").getByRole("button", { name: "Cancel", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Approve", exact: true })
+        .waitFor();
+      assert.equal(await page.locator("#branchPicker").inputValue(), "refs/heads/main");
+      assert.equal(await page.locator("#taskReturn").isVisible(), false);
+      await explore();
       await page.reload();
       await page.locator('.sheet[data-front="true"] .node').first().waitFor();
       assert.equal(
         await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
       );
-      await page.screenshot({
-        path: `test-results/agent-branch-${viewport.width}.png`,
-      });
       await page.locator("#revisionDetails > summary").click();
       await page.locator("#branchPicker").selectOption("refs/heads/main");
       await page.locator("#notice").waitFor({ state: "hidden" });
       await page.locator("#openTasks").click();
       await page.locator(".task-link").first().click();
-      await page
-        .getByRole("button", { name: "Review all changes", exact: true })
-        .click();
-      await page.locator('select[aria-label="Changed file"]').waitFor();
-      await page.locator(".readable-diff .addition").first().waitFor();
-      assert.ok(
-        (await page.locator(".readable-diff .line-number").count()) > 0,
-      );
-      assert.ok(
-        !(await page.locator(".readable-diff").innerText()).includes(
-          "diff --git",
-        ),
-      );
-      await page.screenshot({
-        path: `test-results/workflow-diff-${viewport.width}.png`,
-      });
-      await page
-        .getByRole("button", { name: "Back to result", exact: true })
-        .click();
-      await page
-        .getByRole("button", { name: "Mark task reviewed", exact: true })
-        .click();
-      // The note is optional: the phone run confirms without one.
-      if (viewport.width > 600)
+      // The note is optional: the phone run approves without one.
+      if (viewport.width > 600) {
+        await page.getByRole("button", { name: "Add note", exact: true }).click();
         await page
           .getByLabel("Review note")
           .fill("Inspected the result commit and the agent's reported checks.");
+      }
+      await page.getByRole("button", { name: "Approve", exact: true }).waitFor();
+      await page.screenshot({
+        path: `test-results/workflow-task-${viewport.width}.png`,
+      });
+      // The Tasks button toggles back to the map selection, and so does empty map space.
+      await page.locator("#openTasks").click();
+      assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "false");
+      await page.locator("#openTasks").click();
+      assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "true");
+      await page.locator(".task-link").first().click();
+      // Request changes asks what needs fixing and continues the work as round 2.
+      await page.getByRole("button", { name: "Request changes", exact: true }).click();
+      const send = page.getByRole("button", { name: "Send to agent", exact: true });
+      assert.equal(await send.isDisabled(), true, "Feedback is required");
+      await page.getByLabel("What needs fixing?").fill("Also say which round made the change.");
+      await page.screenshot({
+        path: `test-results/workflow-request-${viewport.width}.png`,
+      });
+      await send.click();
+      await page.getByText("You asked for changes", { exact: true }).waitFor();
+      assert.match(await page.locator(".task-meta").innerText(), /round 2$/);
       await page
-        .getByRole("button", { name: "Confirm review", exact: true })
-        .click();
+        .getByRole("button", { name: "Approve", exact: true })
+        .waitFor({ timeout: 20000 });
+      await page.locator("#openTasks").click();
+      await page.locator("#openTasks").click();
+      assert.equal(
+        await page.locator(".task-link").count(),
+        1,
+        "Earlier rounds are part of the task, not separate tasks",
+      );
+      await page.locator(".task-link").first().click();
+      await page.getByRole("button", { name: "Approve", exact: true }).click();
       await page.getByText("Reviewed by you", { exact: false }).first().waitFor();
       await page
         .getByText("Reviewed · not applied to main", { exact: true })
@@ -348,11 +397,13 @@ try {
         .click();
       await page
         .getByRole("button", { name: "Save as draft instruction", exact: true })
+        .last()
         .waitFor();
       const countBefore = (await f.req("/api/workflow")).comments.length;
       await page.screenshot({ path: `test-results/ask-${viewport.width}.png` });
       await page
         .getByRole("button", { name: "Save as draft instruction", exact: true })
+        .last()
         .click();
       await waitFor(
         async () =>
@@ -437,6 +488,17 @@ try {
       await page.screenshot({
         path: `test-results/persistent-review-${viewport.width}.png`,
       });
+      // Reloading (as an app update does) brings the conversation back.
+      await page.reload();
+      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      if (!(await page.locator("#showDiscussion").isVisible())) await page.locator("#sheetHandle").click();
+      await page.locator("#showDiscussion").click();
+      await page.locator(".ask-message.from-user", { hasText: "Name references." }).waitFor();
+      assert.ok(
+        await page.locator(".ask-message.from-user", { hasText: "What would improve this function?" }).isVisible(),
+        "The whole conversation is restored after a reload",
+      );
       // Inputs must remain reachable at the viewport edge, not merely inside a panel.
       const assertDockVisible = async () => {
         const dock = await page.locator("#conversationDock").boundingBox();
