@@ -14,5 +14,7 @@ These scripts launch Peekumi, locate the Rust toolchain and measure backend perf
 - `tunnel/select.mjs`: strict CLI selection; environment variables and saved configuration cannot enable Cloudflare. Management owns secure-cookie setup and prints a temporary pairing link without saving the Cloudflare hostname.
 - `package.mjs`: platform archive with bundled Node/TypeScript and SHA-256 checksum; excludes private state.
 
+Setup agents must explain that Cloudflare creates a public URL and obtain the owner's explicit approval before running `peekumi share --tunnel cloudflare`; see the [setup skill](../skills/peekumi-setup/SKILL.md) and [setup guide](../docs/SETUP.md#optional-public-cloudflare-tunnel).
+
 `install.sh` at the repository root downloads a release archive, verifies its checksum and installs it with the archive's own `peekumi upgrade`.
 - `guide-screenshots.mjs`: regenerates the user guide's labelled screenshots, its icon images and the README screenshots from a private, temporary Peekumi instance on this repository. Run `npm run build:rust` first.

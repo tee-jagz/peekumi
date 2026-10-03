@@ -79,7 +79,9 @@ If Tailscale status or exposure fails, `peekumi share` prints the underlying cau
 
 ### Optional public Cloudflare tunnel
 
-For temporary phone access without Tailscale, explicitly run:
+Setup agents: before running `peekumi share --tunnel cloudflare`, explain to the owner that the URL is public and reachable from the internet, traffic passes through Cloudflare, and the private pairing link grants owner access to all registered repositories. Ask whether they want that public tunnel and wait for explicit approval, unless the owner has already approved it with that explanation. A request for phone access or a Tailscale failure alone is not approval.
+
+For temporary phone access without Tailscale, an owner (or an agent with that approval) can explicitly run:
 
 ```sh
 peekumi share --tunnel cloudflare
