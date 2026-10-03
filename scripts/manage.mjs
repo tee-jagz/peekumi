@@ -521,8 +521,24 @@ async function main() {
     if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
     if (name === "cloudflare") return shareCloudflare(c);
-    const tunnelStatus = tunnel.status();
-    tunnel.expose(c.port, tunnelStatus);
+    let tunnelStatus;
+    try {
+      tunnelStatus = tunnel.status();
+      tunnel.expose(c.port, tunnelStatus);
+    } catch (cause) {
+      throw new Error(
+        `Tailscale sharing is not ready: ${cause.message}\n\n` +
+          "To use private Tailscale sharing:\n" +
+          "1. Install Tailscale on this host and your phone, and make sure the tailscale CLI is on PATH.\n" +
+          "2. Start Tailscale and sign into the same tailnet on both devices. Run tailscale status on the host to check the connection.\n" +
+          "3. Enable tailnet HTTPS if prompted. Review tailscale serve status and preserve any existing Serve configuration.\n" +
+          "4. Retry peekumi share, then run peekumi pair for your private pairing link.\n\n" +
+          "For an explicitly opted-in PUBLIC temporary URL instead, run:\n" +
+          "  peekumi share --tunnel cloudflare\n" +
+          "The Cloudflare URL is reachable from the internet; keep pairing links private.",
+        { cause },
+      );
+    }
     c.publicUrl = tunnel.url(tunnelStatus);
     c.secureCookie = true;
     await save(c);
