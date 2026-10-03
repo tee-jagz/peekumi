@@ -49,6 +49,87 @@ test("share rejects malformed provider flags before state or network access", as
   assert.deepEqual(await readdir(state), []);
 });
 
+test("Tailscale share failures print the cause and both recovery paths without changing state", async (t) => {
+  const state = await mkdtemp(join(tmpdir(), "peekumi-share-tailscale-"));
+  t.after(() => rm(state, { recursive: true, force: true }));
+  const server = createServer((req, res) => {
+    assert.equal(req.headers.authorization, "Bearer fixture-token");
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ repositories: [] }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const original = JSON.stringify({ version: 1, repositories: [], port: server.address().port, secureCookie: false, publicUrl: "https://existing.example" });
+  await writeFile(join(state, "config.json"), original);
+  await writeFile(join(state, "access-token"), "fixture-token");
+  const signedIn = JSON.stringify({ Self: { DNSName: "machine.example." } });
+  const ok = (stdout) => ({ status: 0, stdout });
+  const cases = [
+    { name: "missing CLI", responses: [{ error: { message: "spawnSync tailscale ENOENT" } }], cause: /Cannot run tailscale: spawnSync tailscale ENOENT/ },
+    { name: "daemon unavailable", responses: [{ status: 1, stderr: "failed to connect to local tailscaled" }], cause: /tailscale: failed to connect to local tailscaled/ },
+    { name: "signed out", responses: [ok("{}")], cause: /Sign into Tailscale first/ },
+    { name: "malformed status", responses: [ok("invalid JSON")], cause: /JSON/ },
+    { name: "Serve status failure", responses: [ok(signedIn), { status: 1, stderr: "cannot read Serve configuration" }], cause: /tailscale: cannot read Serve configuration/ },
+    { name: "existing Serve configuration", responses: [ok(signedIn), ok('{"Proxy":"http://127.0.0.1:9999"}')], cause: /Tailscale Serve already has another configuration/ },
+    { name: "exposure denied", responses: [ok(signedIn), ok("{}"), { status: 1, stderr: "HTTPS is not enabled in the tailnet" }], cause: /tailscale: HTTPS is not enabled in the tailnet/ },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      // Exercise the real provider and CLI; intercept subprocesses so the test
+      // cannot expose a tunnel or invoke an OS service manager even on regression.
+      const mock = `import { appendFileSync } from 'node:fs';
+        const responses = ${JSON.stringify(scenario.responses)};
+        export function spawnSync(program, args) {
+          appendFileSync(${JSON.stringify(join(state, "calls"))}, JSON.stringify([program, ...args]) + '\\n');
+          if (program !== 'tailscale' || !responses.length) throw new Error('Unexpected subprocess: ' + program);
+          return responses.shift();
+        }
+        export function spawn() { throw new Error('Unexpected background process'); }`;
+      const loader = join(state, "loader.mjs");
+      await writeFile(loader, `export async function load(url, context, next) {
+        if (url === 'node:child_process') return {format: 'module', shortCircuit: true, source: ${JSON.stringify(mock)}};
+        if (url.endsWith('/scripts/tunnel/cloudflare.mjs')) return {format: 'module', shortCircuit: true, source: "export function createCloudflareProvider() { throw new Error('Unexpected public fallback'); }"};
+        return next(url, context);
+      }`);
+      for (const flags of [[], ["--tunnel", "tailscale"]]) {
+        await writeFile(join(state, "calls"), "");
+        const child = spawn(process.execPath, ["--no-warnings", "--experimental-loader", pathToFileURL(loader).href, "scripts/manage.mjs", "share", ...flags], {
+          env: { ...process.env, PEEKUMI_HOME: state }, stdio: ["ignore", "pipe", "pipe"], timeout: 10000,
+        });
+        t.after(() => { if (child.exitCode === null) child.kill("SIGKILL"); });
+        let output = "";
+        let errors = "";
+        child.stdout.on("data", chunk => { output += chunk; });
+        child.stderr.on("data", chunk => { errors += chunk; });
+        assert.equal((await once(child, "close"))[0], 1, errors);
+        assert.equal(output, "");
+        assert.match(errors, /Tailscale sharing is not ready:/);
+        assert.match(errors, scenario.cause);
+        assert.match(errors, /Install Tailscale on this host and your phone/);
+        assert.match(errors, /sign into the same tailnet/);
+        assert.match(errors, /tailscale status/);
+        assert.match(errors, /Enable tailnet HTTPS/);
+        assert.match(errors, /tailscale serve status/);
+        assert.match(errors, /Retry peekumi share, then run peekumi pair/);
+        assert.match(errors, /peekumi share --tunnel cloudflare/);
+        assert.match(errors, /PUBLIC temporary URL/);
+        assert.match(errors, /keep pairing links private/);
+        assert.doesNotMatch(errors, /Unexpected (subprocess|background process|public fallback)/);
+        assert.equal(await readFile(join(state, "config.json"), "utf8"), original);
+        assert.equal(await readFile(join(state, "access-token"), "utf8"), "fixture-token");
+        const calls = (await readFile(join(state, "calls"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+        assert.deepEqual(calls, [
+          ["tailscale", "status", "--json"],
+          ["tailscale", "serve", "status", "--json"],
+          ["tailscale", "serve", "--bg", `http://127.0.0.1:${server.address().port}`],
+        ].slice(0, scenario.responses.length));
+        assert.deepEqual((await readdir(state)).sort(), ["access-token", "calls", "config.json", "loader.mjs"]);
+      }
+    });
+  }
+});
+
 test("explicit Cloudflare share warns, prints a temporary pairing link and closes on SIGINT without persisting its URL", async (t) => {
   const state = await mkdtemp(join(tmpdir(), "peekumi-share-cloudflare-"));
   t.after(() => rm(state, { recursive: true, force: true }));
