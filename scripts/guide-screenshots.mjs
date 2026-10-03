@@ -151,7 +151,7 @@ try {
     ["#selectionSummary", "16", "tr"],
     ["#tabs", "17"],
     ["#dockContext", "18", "tr"],
-    ["#composerHost textarea", "19", "tr"],
+    ["#composerHost textarea", "19"],
     ["#composerHost .icon-action", "20"],
   ]);
   await page.screenshot({ path: join(readmeShots, "mobile-map.png") });
