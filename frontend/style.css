@@ -3811,6 +3811,56 @@ body {
   opacity: 0.45;
   cursor: default;
 }
+.frost-label {
+  display: grid;
+  gap: 2px;
+}
+.frost-label small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.frost-filter {
+  position: sticky;
+  top: -6px;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  margin: -6px 0 4px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--el-line);
+  background: var(--surface);
+  z-index: 2;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.frost-menu > div[hidden] {
+  display: none;
+}
+.frost-menu > .frost-count {
+  position: sticky;
+  bottom: -6px;
+  margin: 4px -6px -6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  z-index: 2;
+  font-size: 12px;
+  color: var(--muted);
+}
+.frost-group {
+  padding: 10px 12px 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.frost-group:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
 .frost-option .glyph {
   margin-left: auto;
   width: 16px;
@@ -4240,19 +4290,6 @@ details.p-section[open] > summary::before {
 .pwa-notice[hidden] {
   display: none;
 }
-.pr-controls {
-  display: grid;
-  gap: 8px;
-}
-#prContext {
-  max-height: 220px;
-  overflow: auto;
-  overflow-wrap: anywhere;
-}
-#prContext a {
-  color: var(--accent);
-}
-
 /* The header carries context only: repository name and comparison. */
 .top .repo {
   margin: 0;
@@ -5570,6 +5607,7 @@ details.p-section[open] > summary::before {
 }
 #revisionSummary {
   display: flex;
+  align-items: center;
   min-width: 0;
   overflow: hidden;
 }
@@ -5599,4 +5637,281 @@ details.p-section[open] > summary::before {
 }
 .earlier-instructions {
   opacity: 0.8;
+}
+/* A pull request in the sheet: state, title and size on top; then its description and
+   one quiet row each for checks, reviews and GitHub. */
+.panel[data-pr="true"] #selectionSummary,
+.panel[data-pr="true"] #selectionContract {
+  display: none;
+}
+#reviewScope .pr-head {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.pr-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pr-state {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--add);
+  background: color-mix(in srgb, var(--add) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--add) 35%, transparent);
+}
+.pr-state[data-state="merged"] {
+  color: #b48cff;
+  background: color-mix(in srgb, #b48cff 14%, transparent);
+  border-color: color-mix(in srgb, #b48cff 35%, transparent);
+}
+.pr-state[data-state="closed"] {
+  color: var(--del);
+  background: color-mix(in srgb, var(--del) 12%, transparent);
+  border-color: color-mix(in srgb, var(--del) 35%, transparent);
+}
+.pr-state[data-state="draft"] {
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--line);
+}
+.pr-branches {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.pr-title {
+  font-size: 15px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.pr-meta {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.pr-add {
+  color: var(--add);
+}
+.pr-del {
+  color: var(--del);
+}
+.pr-card {
+  display: grid;
+  padding: 2px 14px 12px;
+  overflow-wrap: anywhere;
+}
+.pr-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pr-summary.empty {
+  color: var(--muted);
+}
+.pr-card > .pr-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pr-body p,
+.pr-body ul,
+.pr-body ol {
+  margin: 0 0 8px;
+}
+.pr-body ul,
+.pr-body ol {
+  padding-left: 18px;
+}
+.pr-card .pr-body .md-heading {
+  margin: 12px 0 4px;
+  font-weight: 700;
+}
+.panel .pr-more.link-button {
+  justify-self: start;
+  margin: 2px 0 6px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.panel details.pr-row {
+  background: none;
+  box-shadow: none;
+  border-color: var(--line);
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+.pr-row {
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.pr-row-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  list-style: none;
+  cursor: default;
+}
+summary.pr-row-line {
+  cursor: pointer;
+}
+summary.pr-row-line::-webkit-details-marker {
+  display: none;
+}
+.pr-row-value {
+  color: var(--muted);
+  text-align: right;
+}
+.pr-row-value[data-tone="good"] {
+  color: var(--add);
+}
+.pr-row-value[data-tone="bad"] {
+  color: var(--del);
+}
+.pr-row-value[data-tone="wait"] {
+  color: var(--mod);
+}
+.pr-row .pr-entry {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pr-row .pr-author {
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: var(--ink);
+}
+a.pr-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  color: var(--accent);
+  text-decoration: none;
+}
+a.pr-link .glyph {
+  width: 16px;
+  height: 16px;
+}
+#revisionSummary .rev-branch.pr {
+  flex: none;
+}
+/* A PR's name, commits and ✕ need the whole line; the name already says what it is. */
+#revisionDetails > summary:has(.rev-branch.pr) > [data-glyph="branch"] {
+  display: none;
+}
+#revisionSummary .rev-leave {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+}
+#revisionSummary .rev-leave .glyph {
+  width: 12px;
+  height: 12px;
+}
+
+/* The Comparison panel shows branches or pull requests, one side at a time. */
+.history-content .view-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  padding: 3px;
+  border-radius: 12px;
+}
+.history-content .view-kind button {
+  min-height: 36px;
+  font-size: 14px;
+  border-radius: 9px;
+}
+.history-content .view-kind[hidden],
+#branchView[hidden],
+#prView[hidden] {
+  display: none;
+}
+#prRows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#prRows .pr-group {
+  margin: 4px 0 -2px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+#prRows .pr-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--field-glass);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+#prRows .pr-pick[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--field-glass));
+}
+#prRows .pr-pick .glyph {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+}
+.pr-pick-text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+.pr-pick-title {
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.pr-pick-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pr-state-word {
+  font-weight: 650;
+  color: var(--add);
+}
+.pr-state-word[data-state="merged"] {
+  color: #b48cff;
+}
+.pr-state-word[data-state="closed"] {
+  color: var(--del);
+}
+.pr-state-word[data-state="draft"] {
+  color: var(--muted);
+}
+#prNote:empty {
+  display: none;
 }

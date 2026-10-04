@@ -168,8 +168,8 @@ try {
   // 3. Comparison popover and a frosted select menu.
   await page.locator("#revisionDetails > summary").click();
   await shot(page, "03-comparison", [
-    ["#branchPicker + .frost-select", "1", "tr"],
-    ["#loadPrs", "2", "tr"],
+    ["#viewKind", "1", "tr"],
+    ["#branchPicker + .frost-select", "2", "tr"],
     ["#commitHead", "3", "tr"],
     ["#headRevision + .frost-select", "4", "tr"],
     ["#base + .frost-select", "5", "tr"],

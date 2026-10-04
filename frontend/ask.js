@@ -15,6 +15,8 @@ export function createAsk({
   changeTarget,
   addToChanges,
   openReference,
+  // The name for questions about the whole comparison, such as "PR #3"; optional.
+  rootSubject,
 }) {
   const chat = {
     messages: [],
@@ -45,7 +47,10 @@ export function createAsk({
   }
   /** A short name for what a question was about. */
   const subjectOf = (anchor) =>
-    anchor.symbol || anchor.path?.split("/").at(-1) || "the repository";
+    anchor.symbol ||
+    anchor.path?.split("/").at(-1) ||
+    rootSubject?.() ||
+    "the repository";
   const el = (tag, text) => {
     const n = document.createElement(tag);
     if (text !== undefined) n.textContent = text;
@@ -303,7 +308,7 @@ export function createAsk({
       };
       const anchor = el(
         "p",
-        `${[c.anchor.path?.split("/").at(-1) || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${c.sha.slice(0, 7)}`,
+        `${[c.anchor.path?.split("/").at(-1) || rootSubject?.() || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${c.sha.slice(0, 7)}`,
       );
       anchor.className = "composer-anchor";
       anchor.title = anchor.textContent;

@@ -92,29 +92,41 @@
                 >Repository
                 <select id="repositoryPicker" aria-label="Repository"></select>
               </label>
-              <label class="cmp"
-                >Branch
-                <select
-                  id="branchPicker"
-                  aria-label="Viewing branch"
-                  title="View a branch without changing the working checkout"
-                  hidden
-                ></select>
-              </label>
-              <div class="pr-controls">
-                <button id="loadPrs" type="button" class="btn">
-                  Pull requests
+              <div
+                class="seg view-kind"
+                id="viewKind"
+                role="group"
+                aria-label="What to view"
+              >
+                <button type="button" data-kind="branch" aria-pressed="true">
+                  Branch
                 </button>
-                <select id="prPicker" aria-label="Pull request" hidden></select>
-                <p id="prFeedback" class="read-note" role="status"></p>
-                <div id="prContext" hidden></div>
+                <button type="button" data-kind="pr" aria-pressed="false">
+                  Pull request
+                </button>
               </div>
-              <div id="commitHead"></div>
-              <div id="commitBar"></div>
-              <p class="read-note">
-                Peekumi compares committed Git objects. Uncommitted work is not
-                included, and the checkout is never switched.
-              </p>
+              <div id="branchView">
+                <label class="cmp"
+                  >Branch
+                  <select
+                    id="branchPicker"
+                    aria-label="Branch"
+                    data-noun="branches"
+                    title="View a branch without changing the working checkout"
+                    hidden
+                  ></select>
+                </label>
+                <div id="commitHead"></div>
+                <div id="commitBar"></div>
+                <p class="read-note">
+                  Peekumi compares committed Git objects. Uncommitted work is
+                  not included, and the checkout is never switched.
+                </p>
+              </div>
+              <div id="prView" hidden>
+                <ul id="prRows" aria-label="Pull requests"></ul>
+                <p id="prNote" class="read-note" role="status"></p>
+              </div>
             </div>
           </details>
         </div>

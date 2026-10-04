@@ -4,6 +4,7 @@ import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
 import { peek } from "./peek.js";
+import { richText } from "./text.js";
 import {
   statusIcon,
   interfaceIcon,
@@ -68,7 +69,27 @@ let metadata,
   before = false,
   tab = "details";
 let viewingBranch = new URL(location.href).searchParams.get("branch"),
+  // The pull request on view, if any; it names the comparison instead of "detached".
+  viewingPr = new URL(location.href).searchParams.get("pr"),
+  // Its details from GitHub (title, description, checks, reviews) for the sheet.
+  prData = null,
+  // Open and recently merged PRs for the View list; null until the first load.
+  prList = null,
+  // The PR description shows in full only after "Read full description".
+  prExpanded = false,
   bootId = 0;
+/** Stops naming the view after a pull request once the owner looks at something else. */
+function leavePr() {
+  viewingPr = null;
+  prData = null;
+  const url = new URL(location.href);
+  url.searchParams.delete("pr");
+  history.replaceState(null, "", url);
+}
+/** True when the sheet shows the pull request itself: one is open, and nothing is
+ * selected at the top of the map. */
+const prView = () =>
+  !!(viewingPr && prData && !selected && scope.kind === "repo");
 let baseRef,
   headRef,
   diffBase = new URL(location.href).searchParams.get("base"),
@@ -138,6 +159,7 @@ function reviewContext() {
 /** Compares `base` with `head` (a ref or commit) on the map and opens `anchor` there:
  * a file or folder path, an optional declaration, or the repository root. */
 async function inspectRevision(base, head, anchor) {
+  leavePr();
   document.querySelector("#tabs").inert = true;
   try {
     mode = "diff";
@@ -207,6 +229,7 @@ const workflow = createWorkflow({
 const ask = createAsk({
   api,
   stream: apiStream,
+  rootSubject: () => (viewingPr ? `PR #${viewingPr}` : null),
   context() {
     return {
       ...reviewContext(),
@@ -382,9 +405,23 @@ async function boot(refresh = false, branch = viewingBranch) {
         .switchTo(viewingBranch || metadata.initialHead)
         .then((changed) => changed && tab === "ask" && renderTab())
         .catch(() => {});
-    const picker = $("#branchPicker");
+    // Most recent first (the server's order). A remote branch with a local copy and the
+    // branches of agent tasks (the Tasks view shows those) stay out of the list, unless
+    // one of them is on view.
+    const picker = $("#branchPicker"),
+      local = new Set(metadata.branches.filter((b) => !b.remote).map((b) => b.name)),
+      internal = /^(worktree-agent-|peekumi\/run-|strata\/run-)/;
     picker.replaceChildren();
+    if (viewingPr && !metadata.selectedBranch) {
+      const option = element("option", "", "Select a branch");
+      option.value = "";
+      option.disabled = true;
+      picker.append(option);
+    }
     for (const b of metadata.branches) {
+      const copy = b.remote && local.has(b.name.replace(/^[^/]+\//, ""));
+      if ((copy || internal.test(b.name)) && b.ref !== metadata.selectedBranch?.ref)
+        continue;
       const option = element(
         "option",
         "",
@@ -393,7 +430,7 @@ async function boot(refresh = false, branch = viewingBranch) {
       option.value = b.ref;
       picker.append(option);
     }
-    if (!metadata.selectedBranch) {
+    if (!metadata.selectedBranch && !viewingPr) {
       const option = element(
         "option",
         "",
@@ -402,7 +439,8 @@ async function boot(refresh = false, branch = viewingBranch) {
       option.value = branch || "HEAD";
       picker.append(option);
     }
-    picker.value = viewingBranch || "HEAD";
+    picker.value = pickerValue();
+    if (viewingPr && !prData) loadPrDetails();
     picker.hidden = false;
     $("#repo-sub").hidden = true;
     $("#connect").hidden = true;
@@ -418,7 +456,7 @@ async function boot(refresh = false, branch = viewingBranch) {
       workflow.refresh(false).catch((error) => showNotice(error.message, true));
   } catch (error) {
     if (id === bootId) {
-      $("#branchPicker").value = viewingBranch || "HEAD";
+      $("#branchPicker").value = pickerValue();
       showNotice(error.message, true);
     }
   } finally {
@@ -431,6 +469,14 @@ async function boot(refresh = false, branch = viewingBranch) {
 }
 /** Switches only the inspected ref. Manual comparison bases and unsent messages survive. */
 async function switchBranch(branch) {
+  // A pull request's merge base belongs to it; a branch goes back to its own comparison.
+  if (viewingPr) {
+    diffBase = null;
+    const url = new URL(location.href);
+    url.searchParams.delete("base");
+    history.replaceState(null, "", url);
+  }
+  leavePr();
   setSheetHeight("peek");
   scope = rootScope();
   selected = null;
@@ -441,7 +487,167 @@ async function switchBranch(branch) {
   if (viewingBranch) url.searchParams.set("branch", viewingBranch);
   history.replaceState(null, "", url);
 }
-$("#branchPicker").onchange = (event) => switchBranch(event.target.value);
+$("#branchPicker").onchange = (event) => {
+  if (event.target.value) switchBranch(event.target.value);
+};
+/** The branch list entry for what is on the map: none while a PR is open, else the branch
+ * or a detached commit. */
+const pickerValue = () =>
+  viewingPr && !metadata?.selectedBranch ? "" : viewingBranch || "HEAD";
+/** Shows one side of the Comparison panel: branches with their commits, or pull requests. */
+function showViewKind(kind) {
+  for (const b of document.querySelectorAll("#viewKind button"))
+    b.setAttribute("aria-pressed", String(b.dataset.kind === kind));
+  $("#branchView").hidden = kind !== "branch";
+  $("#prView").hidden = kind !== "pr";
+  if (kind === "pr") {
+    renderPrRows();
+    loadPrs();
+  }
+}
+for (const b of document.querySelectorAll("#viewKind button"))
+  b.onclick = () => showViewKind(b.dataset.kind);
+/** A pull request's state as one word: Draft, Open, Merged or Closed. */
+const prState = (pr) =>
+  pr.isDraft && (pr.state || "OPEN") === "OPEN"
+    ? "Draft"
+    : { MERGED: "Merged", CLOSED: "Closed" }[pr.state] || "Open";
+/** Lists the pull requests as rows: open ones, then recently merged ones, each with its
+ * state, author and date. The PR on view has a check mark; a tap on another opens it. */
+function renderPrRows() {
+  const rows = $("#prRows"),
+    list = prList || [],
+    open = list.filter((pr) => (pr.state || "OPEN") === "OPEN"),
+    merged = list.filter((pr) => pr.state === "MERGED");
+  rows.replaceChildren();
+  for (const [label, group] of [
+    ["Open", open],
+    ["Recently merged", merged],
+  ]) {
+    if (!group.length) continue;
+    // Headings only help when both kinds are in the list.
+    if (open.length && merged.length)
+      rows.append(element("li", "pr-group", label));
+    for (const pr of group) {
+      const current = String(pr.number) === viewingPr,
+        when = pr.mergedAt || pr.createdAt,
+        state = element("span", "pr-state-word", prState(pr)),
+        meta = element("span", "pr-pick-meta"),
+        text = element("span", "pr-pick-text"),
+        row = button("pr-pick", "", () =>
+          current ? ($("#revisionDetails").open = false) : openPr(pr.number),
+        ),
+        li = element("li");
+      state.dataset.state = prState(pr).toLowerCase();
+      meta.append(
+        state,
+        [
+          "",
+          pr.author?.login,
+          when &&
+            new Date(when).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "short",
+            }),
+        ]
+          .filter((part) => part !== undefined && part !== null && part !== false)
+          .join(" · "),
+      );
+      text.append(element("span", "pr-pick-title", `#${pr.number} ${pr.title}`), meta);
+      row.append(text);
+      if (current) row.append(glyph("check"));
+      row.setAttribute("aria-pressed", String(current));
+      li.append(row);
+      rows.append(li);
+    }
+  }
+  if (prList && !list.length)
+    $("#prNote").textContent = "No open or recently merged pull requests.";
+}
+/** Loads open PRs, then up to 10 merged ones, each time the Comparison panel opens, so
+ * new PRs appear. Without the GitHub CLI or access the View list shows branches only.
+ * Read-only devices cannot fetch a PR, so they do not see the list. */
+let prLoad = null;
+async function loadPrs() {
+  if (prLoad || document.documentElement.dataset.access === "reader") return;
+  prLoad = api("/api/prs");
+  if (!prList) $("#prNote").textContent = "Loading pull requests…";
+  try {
+    const all = await prLoad;
+    prList = [
+      ...all.filter((pr) => (pr.state || "OPEN") === "OPEN"),
+      ...all.filter((pr) => pr.state === "MERGED").slice(0, 10),
+    ];
+    $("#prNote").textContent = "";
+    renderPrRows();
+  } catch (error) {
+    // Usually GitHub CLI is missing or not signed in on the host; the message says how.
+    if (!prList) $("#prNote").textContent = error.message;
+  } finally {
+    prLoad = null;
+  }
+}
+$("#revisionDetails").addEventListener("toggle", (event) => {
+  if (event.target.open) showViewKind(viewingPr ? "pr" : "branch");
+});
+/** Reads the open PR's details again after a reload; the comparison itself is in the URL. */
+async function loadPrDetails() {
+  const number = viewingPr;
+  try {
+    const pr = await api("/api/prs/" + number);
+    if (viewingPr !== number) return;
+    prData = pr;
+    render();
+  } catch {
+    /* The map still shows the PR's changes; the sheet keeps the repository view. */
+  }
+}
+/** Fetches a PR into private refs and shows its changes: merge base → head. The checkout
+ * stays unchanged, and nothing is sent to GitHub. */
+async function openPr(number) {
+  const rows = $("#prRows");
+  rows.inert = true;
+  $("#prNote").textContent = `Fetching PR #${number}…`;
+  try {
+    const data = await api("/api/prs/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number }),
+    });
+    mode = "diff";
+    before = false;
+    scope = rootScope();
+    selected = null;
+    tab = "details";
+    headRef = data.head;
+    diffBase = data.base;
+    baseRef = data.base;
+    viewingPr = String(number);
+    prData = data.pr;
+    prExpanded = false;
+    setSheetHeight("peek");
+    $("#revisionDetails").open = false;
+    await boot(true, data.head);
+    const url = new URL(location.href);
+    url.searchParams.set("branch", data.head);
+    url.searchParams.set("base", data.base);
+    url.searchParams.set("pr", viewingPr);
+    history.replaceState(null, "", url);
+    $("#prNote").textContent = "";
+    renderPrRows();
+  } catch (e) {
+    $("#prNote").textContent = e.message;
+  } finally {
+    rows.inert = false;
+  }
+}
+/** Leaves the pull request and goes back to the checkout's own branch. */
+function closePr() {
+  const url = new URL(location.href);
+  url.searchParams.delete("branch");
+  history.replaceState(null, "", url);
+  switchBranch(null);
+}
 /** Lists registered local checkouts; reload on switching prevents cross-repository task or source state. */
 async function setupRepositories() {
   const data = await api("/api/repositories");
@@ -449,8 +655,8 @@ async function setupRepositories() {
   if (data.role === "reader") {
     $("#openTasks").hidden = true;
     $("#conversationDock").hidden = true;
-    $("#loadPrs").title =
-      "Read-only: PR listing is available; fetching a new comparison requires owner access";
+    // Opening a PR fetches refs, which a read-only device cannot do.
+    $("#viewKind").hidden = true;
   }
   const picker = $("#repositoryPicker");
   picker.replaceChildren();
@@ -478,90 +684,6 @@ $("#repositoryPicker").onchange = (event) => {
   url.hash = "";
   url.searchParams.set("repo", event.target.value);
   location.assign(url);
-};
-$("#loadPrs").onclick = async () => {
-  $("#loadPrs").disabled = true;
-  $("#prFeedback").textContent = "Loading pull requests…";
-  try {
-    const prs = await api("/api/prs");
-    const picker = $("#prPicker");
-    picker.replaceChildren(element("option", "", "Select a pull request…"));
-    picker.firstChild.value = "";
-    for (const pr of prs) {
-      const o = element("option", "", `#${pr.number} ${pr.title}`);
-      o.value = pr.number;
-      picker.append(o);
-    }
-    picker.hidden = prs.length === 0;
-    $("#prFeedback").textContent = prs.length
-      ? "Opening a PR fetches its refs; your checkout stays unchanged."
-      : "No open pull requests.";
-  } catch (e) {
-    $("#prFeedback").textContent = e.message;
-  } finally {
-    $("#loadPrs").disabled = false;
-  }
-};
-$("#prPicker").onchange = async (event) => {
-  const number = Number(event.target.value);
-  if (!number) return;
-  event.target.disabled = true;
-  $("#prFeedback").textContent = "Fetching PR comparison…";
-  try {
-    const data = await api("/api/prs/open", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ number }),
-    });
-    mode = "diff";
-    before = false;
-    scope = rootScope();
-    selected = null;
-    headRef = data.head;
-    diffBase = data.base;
-    baseRef = data.base;
-    await boot(true, data.head);
-    const url = new URL(location.href);
-    url.searchParams.set("branch", data.head);
-    url.searchParams.set("base", data.base);
-    history.replaceState(null, "", url);
-    const context = $("#prContext");
-    context.replaceChildren();
-    context.hidden = false;
-    const link = element("a", "", `#${number} ${data.pr.title}`);
-    link.href = data.pr.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    context.append(
-      link,
-      element("p", "read-note", data.pr.body || "No description."),
-    );
-    for (const check of data.pr.statusCheckRollup || [])
-      context.append(
-        element(
-          "p",
-          "read-note",
-          `${check.name || check.context}: ${check.conclusion || check.state || check.status}`,
-        ),
-      );
-    for (const entry of [
-      ...(data.pr.reviews || []),
-      ...(data.pr.comments || []),
-    ])
-      context.append(
-        element(
-          "p",
-          "read-note",
-          `${entry.author?.login || "Reviewer"}${entry.state ? " · " + entry.state : ""}: ${entry.body || ""}`,
-        ),
-      );
-    $("#prFeedback").textContent =
-      "PR comparison · merge base → head. Instructions here stay local; nothing is published to GitHub.";
-  } catch (e) {
-    $("#prFeedback").textContent = e.message;
-  } finally {
-    event.target.disabled = false;
-  }
 };
 /** Uses the selected commit's first parent, or itself when it has no parent. */
 function parentRevision(sha) {
@@ -1709,6 +1831,9 @@ function renderPanel() {
     scopeBar.append(clear);
   }
 
+  // With a pull request open and nothing selected, the sheet is about the PR.
+  if (prView()) scopeBar.replaceChildren(prHead());
+  $("#panel").dataset.pr = String(prView());
   $("#panel").dataset.selection = String(!!selected);
   renderCommits();
   renderSelection();
@@ -1751,6 +1876,7 @@ function renderCommits() {
     const headRow = element("label", "cmp", "Head revision");
     const headPicker = element("select");
     headPicker.id = "headRevision";
+    headPicker.dataset.noun = "commits";
     headPicker.setAttribute("aria-label", "Head revision");
     const candidates = metadata.commits.some((c) => c.sha === headRef)
       ? metadata.commits
@@ -1767,6 +1893,7 @@ function renderCommits() {
     const row = element("label", "cmp", "Compare with");
     const picker = element("select");
     picker.id = "base";
+    picker.dataset.noun = "commits";
     picker.setAttribute("aria-label", "Compare with revision");
     const automatic = element(
       "option",
@@ -1817,13 +1944,30 @@ function renderCommits() {
   const branchName = element(
     "span",
     "rev-branch",
-    metadata.selectedBranch?.name || "detached",
+    viewingPr && !metadata.selectedBranch
+      ? `PR #${viewingPr}`
+      : metadata.selectedBranch?.name || "detached",
   );
   branchName.title = branchName.textContent;
+  branchName.classList.toggle("pr", !!(viewingPr && !metadata.selectedBranch));
   $("#revisionSummary").replaceChildren(
     branchName,
-    element("span", "rev-compare", ` · ${commit(baseRef).short} → ${c.short}`),
+    // Both commits use the same short form, whichever list they come from.
+    element("span", "rev-compare", ` · ${baseRef.slice(0, 7)} → ${c.sha.slice(0, 7)}`),
   );
+  if (viewingPr && !metadata.selectedBranch) {
+    // The way out of a pull request sits beside its name.
+    const leave = iconButton(
+      button("rev-leave", "", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closePr();
+      }),
+      "close",
+      "Leave pull request",
+    );
+    $("#revisionSummary").append(leave);
+  }
   requestAnimationFrame(() => {
     const active = strip.querySelector('[aria-selected="true"]');
     if (active)
@@ -1913,6 +2057,163 @@ function scopeHint() {
   return scope.kind === "file"
     ? "Select a declaration to inspect it, or open Source for the whole file."
     : "Select a card to review it; tap it again to open.";
+}
+/** The sheet's top for an open pull request: its state and branches, its title, and who
+ * made it, when, and how large it is. */
+function prHead() {
+  const pr = prData,
+    state = prState(pr),
+    head = element("div", "pr-head"),
+    top = element("div", "pr-top"),
+    meta = element("span", "pr-meta");
+  top.append(
+    element("span", "pr-state", state),
+    element(
+      "span",
+      "pr-branches",
+      `PR #${viewingPr} · ${pr.headRefName || "head"} → ${pr.baseRefName || "base"}`,
+    ),
+  );
+  top.firstChild.dataset.state = state.toLowerCase();
+  const [word, when] = pr.mergedAt
+    ? ["merged", pr.mergedAt]
+    : pr.closedAt
+      ? ["closed", pr.closedAt]
+      : ["opened", pr.createdAt];
+  const date = when
+    ? new Date(when).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "";
+  meta.append(
+    [pr.author?.login, date && `${word} ${date}`, pr.changedFiles != null && `${pr.changedFiles} files`]
+      .filter(Boolean)
+      .join(" · "),
+  );
+  if (pr.additions != null)
+    meta.append(
+      " ",
+      element("span", "pr-add", `+${pr.additions.toLocaleString()}`),
+      " ",
+      element("span", "pr-del", `−${(pr.deletions || 0).toLocaleString()}`),
+    );
+  head.append(top, element("strong", "pr-title", pr.title || `PR #${viewingPr}`), meta);
+  return head;
+}
+/** One quiet row of the PR sheet. With `items` it opens to list them; otherwise it only
+ * states `value`. */
+function prRow(label, value, tone, items = []) {
+  const row = element(items.length ? "details" : "div", "pr-row"),
+    line = element(items.length ? "summary" : "div", "pr-row-line"),
+    text = element("span", "pr-row-value", value);
+  if (tone) text.dataset.tone = tone;
+  line.append(element("span", "", label), text);
+  row.append(line, ...items);
+  return row;
+}
+/** The pull request in the sheet: the start of its description, then one row each for
+ * checks, reviews and the link to GitHub. Lists open only when the reader asks. */
+function prCard() {
+  const pr = prData,
+    box = element("section", "pr-card"),
+    body = pr.body?.trim() || "";
+  // The first paragraph of prose, without Markdown headings, emphasis or code marks.
+  const first =
+    body
+      .split(/\n\s*\n/)
+      .map((part) => part.trim())
+      .find((part) => part && !/^(#|[-*+] |\d+\. |```|<)/.test(part) && part.length > 30) ||
+    body.split(/\n\s*\n/)[0] ||
+    "";
+  if (!body) box.append(element("p", "pr-summary empty", "No description."));
+  else if (prExpanded) box.append(richText(body, "pr-body"));
+  else
+    box.append(
+      element("p", "pr-summary", first.replace(/\*\*|__|`/g, "").replace(/^#+\s*/, "")),
+    );
+  if (body && body !== first)
+    box.append(
+      button("pr-more link-button", prExpanded ? "Show less" : "Read full description", () => {
+        prExpanded = !prExpanded;
+        renderSelection();
+      }),
+    );
+  // Checks: one line that says what matters most; the list opens on request.
+  const checks = pr.statusCheckRollup || [],
+    result = (c) => (c.conclusion || c.state || c.status || "").toUpperCase(),
+    failing = checks.filter((c) =>
+      ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(result(c)),
+    ).length,
+    running = checks.filter((c) =>
+      ["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING"].includes(result(c)),
+    ).length;
+  box.append(
+    prRow(
+      "Checks",
+      !checks.length
+        ? "None reported"
+        : failing
+          ? `${failing} failing of ${checks.length}`
+          : running
+            ? `${running} running of ${checks.length}`
+            : `All ${checks.length} passed`,
+      !checks.length ? "" : failing ? "bad" : running ? "wait" : "good",
+      checks.map((c) =>
+        element("p", "pr-entry", `${c.name || c.context}: ${(result(c) || "unknown").toLowerCase()}`),
+      ),
+    ),
+  );
+  // Reviews: each reviewer's latest decision, then the comments.
+  const reviews = pr.reviews || [],
+    comments = pr.comments || [],
+    latest = new Map();
+  for (const r of reviews)
+    if (r.state !== "COMMENTED") latest.set(r.author?.login, r.state);
+  const decisions = [...latest.values()],
+    approvals = decisions.filter((d) => d === "APPROVED").length,
+    talk = reviews.filter((r) => r.body?.trim()).length + comments.length,
+    summary = [
+      decisions.includes("CHANGES_REQUESTED")
+        ? "Changes requested"
+        : approvals
+          ? `${approvals} approved`
+          : "",
+      talk ? `${talk} comment${talk === 1 ? "" : "s"}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  box.append(
+    prRow(
+      "Reviews",
+      summary || "None",
+      decisions.includes("CHANGES_REQUESTED") ? "wait" : approvals ? "good" : "",
+      [...reviews, ...comments]
+        .filter((entry) => entry.body?.trim() || entry.state)
+        .map((entry) => {
+          const note = element("div", "pr-entry");
+          note.append(
+            element(
+              "p",
+              "pr-author",
+              `${entry.author?.login || "Reviewer"}${entry.state ? " · " + entry.state.toLowerCase().replace("_", " ") : ""}`,
+            ),
+          );
+          if (entry.body?.trim()) note.append(richText(entry.body, "pr-body"));
+          return note;
+        }),
+    ),
+  );
+  if (pr.url) {
+    const link = element("a", "pr-row pr-link");
+    link.href = pr.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.append(element("span", "", "Open on GitHub"), glyph("external"));
+    box.append(link);
+  }
+  return box;
 }
 /** Describes a selection in one line when it has no committed documentation. */
 function selectionLine(node) {
@@ -2056,6 +2357,10 @@ function renderSelection() {
   });
   const strip = $("#selStrip");
   strip.replaceChildren();
+  if (prView()) {
+    strip.append(prCard());
+    return;
+  }
   if (!selected) {
     if (scope.kind === "file" && sourceData)
       strip.append(metadataCard(), adapterCard());
@@ -3221,8 +3526,28 @@ for (const type of ["focusin", "focusout"])
   );
 fitVisualViewport();
 
-// Tapping empty map space also leaves Tasks; cards and map controls keep their own actions.
+// Tapping empty map space leaves Tasks, or else clears the selection, as Escape does.
+// Cards, lines and map controls keep their own actions; a drag is not a tap.
+let stagePress = null;
+$("#stage").addEventListener("pointerdown", (event) => {
+  stagePress = { x: event.clientX, y: event.clientY };
+});
 $("#stage").addEventListener("click", (event) => {
-  if (inTasks() && !event.target.closest(".node, button, a, summary, details, input, select"))
-    closeTasks();
+  const dragged =
+    stagePress &&
+    event.detail !== 0 &&
+    Math.hypot(event.clientX - stagePress.x, event.clientY - stagePress.y) > 5;
+  if (
+    dragged ||
+    event.target.closest(
+      '.node, [role="button"], button, a, summary, details, input, select',
+    )
+  )
+    return;
+  if (inTasks()) closeTasks();
+  else if (selected) {
+    selected = null;
+    renderDeck();
+    renderPanel();
+  }
 });

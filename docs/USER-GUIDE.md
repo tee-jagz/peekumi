@@ -63,7 +63,7 @@ When you select a card, Peekumi highlights the connections of that card and fade
 | Pan the map | Drag. After a flick, the map continues to move | Drag, scroll, or use the arrow keys when the map has the focus |
 | Zoom | Pinch | Control or Command and scroll, or `+` and `-` |
 | Go up a level | Up button | Up button, or Escape when no item is selected |
-| Clear a selection | × in the sheet | Escape |
+| Clear a selection | Tap an empty area of the map, or × in the sheet | Click an empty area of the map, or Escape |
 | Close a popover | Tap outside it, or ✕ | Escape |
 | Change sheet height | Drag or tap the handle | Arrow keys, Home and End on the handle |
 
@@ -85,13 +85,28 @@ Tap the comparison line in the header to open this popover.
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Branch | Select the branch to inspect. This changes only what you see. Peekumi never switches your checkout. |
-| 2 | Pull requests | Shows a list of open pull requests when GitHub CLI is signed in on the host. When you select one, Peekumi shows its full diff against its merge base, with its description, checks and discussion. |
+| 1 | Branch or Pull request | Select which list to use. **Pull request** shows the pull requests of the repository instead of the branch controls. |
+| 2 | Branch | Select the branch to inspect. The most recent branches are first. The list does not show a remote branch that has a local copy, or the branches of agent tasks (the Tasks view shows them). Type in the filter box at the top of a long list to find a branch. This changes only what you see. Peekumi never switches your checkout. |
 | 3 | Commit summary | The message and date of the head commit, and the commit that Peekumi compares it with. |
 | 4 | Head revision | The newer commit in the comparison. |
 | 5 | Compare with | The older commit. **Previous commit (automatic)** follows the first parent of the head. If you select a specific commit, Peekumi pins it until you select the automatic option again or tap **Use previous commit**. |
 | 6 | Refresh | Looks for new commits. Peekumi never shows uncommitted work. |
 | 7 | Close | Closes the popover. You can also tap anywhere outside the popover to close it. |
+
+A list with more than 12 entries opens at the current entry. It has a filter box at the top and shows the number of entries at the bottom.
+
+### Viewing a pull request
+
+Tap **Pull request** in the comparison popover. The popover shows the open pull requests, then up to 10 recently merged pull requests. Each row shows the number, title, state, author and date. You see this list only when GitHub CLI is signed in on the host.
+
+When you tap a pull request, the map shows all of its changes, from its merge base to its head. The header shows `PR #3 · base → head`. Tap **✕** next to it to go back to your branch.
+
+When nothing is selected, the sheet shows the pull request:
+
+- At the lowest sheet height, the sheet shows the state (Open, Draft, Merged or Closed), the branches, the title, the author, the date and the size.
+- When you pull up the sheet, it also shows the first paragraph of the description, **Read full description**, one line for checks, one line for reviews and **Open on GitHub**. Tap **Checks** or **Reviews** to see the full list.
+
+Select a card to see its details. To see the pull request again, tap an empty area of the map and go back to the top of the map. Ask uses the two commits of the pull request. Peekumi does not send comments or reviews to GitHub.
 
 When you register more than one repository, a **Repository** picker shows above Branch.
 
