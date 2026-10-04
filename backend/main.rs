@@ -810,7 +810,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         || path == "/api/ask/history"
         || path == "/api/workflow"
         || path == "/api/prs"
-        || path == "/api/prs/open"
+        || path.starts_with("/api/prs/")
         || path.starts_with("/api/comments")
         || path.starts_with("/api/runs")
     {

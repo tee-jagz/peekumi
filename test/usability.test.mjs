@@ -239,6 +239,43 @@ fi
   assert.equal(git(dir, "status", "--porcelain"), before);
   assert.equal(git(dir, "branch", "--show-current"), "main");
   assert.equal(git(dir, "rev-parse", "refs/peekumi/pr/7/head"), head);
+  // After a reload, the sheet reads the PR's details again without a new fetch.
+  const details = await fetch(server.url + "/api/prs/7", {
+    headers: { Authorization: "Bearer " + server.token },
+  });
+  assert.equal(details.status, 200);
+  assert.equal((await details.json()).title, "Change run");
+  assert.equal(
+    (await fetch(server.url + "/api/prs/x", { headers: { Authorization: "Bearer " + server.token } })).status,
+    400,
+  );
+  // A merged PR keeps the base it had while main moves on; it still opens, compared with
+  // that base, and does not report a change during the fetch.
+  git(dir, "stash");
+  await writeFile(join(dir, "NEWS.md"), "after the merge");
+  git(dir, "add", ".");
+  git(dir, "commit", "-m", "main moves on");
+  git(dir, "push", "-q", remote, "main");
+  git(dir, "stash", "pop");
+  const merged = join(bin, "github-merged.sh");
+  await writeFile(
+    merged,
+    (await readFile(gh, "utf8")).replace(prData, JSON.stringify({ ...JSON.parse(prData), state: "MERGED" })),
+  );
+  await chmod(merged, 0o755);
+  const later = await startRust(dir, {
+    extraEnv: { PEEKUMI_GH: merged, GIT_CONFIG_GLOBAL: config },
+  });
+  t.after(() => later.close());
+  const m = await fetch(later.url + "/api/prs/open", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + later.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ number: 7 }),
+  });
+  const opened = await m.json();
+  assert.equal(m.status, 200, JSON.stringify(opened));
+  assert.deepEqual([opened.base, opened.head], [common, head]);
+  assert.notEqual(git(dir, "rev-parse", "refs/peekumi/pr/7/base"), base, "main moved on after the merge");
 });
 
 test("workflow migration retains comments and refuses newer schemas", async (t) => {

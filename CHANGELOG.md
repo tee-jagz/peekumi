@@ -9,7 +9,8 @@ This is the first public release. Peekumi was called Repo Strata during its deve
 ### Map and inspection
 
 - A mobile map of the real folders, files and declarations of a repository, with pan, pinch and zoom, and drill-down from the folder structure to one function.
-- Coloured Git comparisons between two commits, a Time mode with commit cards, read-only branch switching, and PR merge-base comparisons through the GitHub CLI.
+- Coloured Git comparisons between two commits, a Time mode with commit cards, and read-only branch switching. The branch list shows the most recent branches first and has a filter.
+- Open and recently merged pull requests through the GitHub CLI, as merge-base comparisons. The sheet shows the state, title, description, checks and reviews of the pull request.
 - Static relationships (imports, calls, implementations and inheritance) with committed dependency rules. Unresolved and ambiguous targets stay explicit.
 - Dependency lines that do not cross cards and that run straight into their arrowheads.
 - Declaration details: inputs, outputs, fields, documentation and the changed parts of a declaration.

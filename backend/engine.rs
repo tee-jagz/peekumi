@@ -189,7 +189,7 @@ impl Repository {
         .trim()
         .into())
     }
-    /// Returns checkout identity, available local/remote-tracking branches and first-parent history for the selected head.
+    /// Returns checkout identity, available local/remote-tracking branches (most recent commit first) and first-parent history for the selected head.
     /// Reads refs and objects only; never checks out a branch or fetches remote refs.
     /// An invalid base falls back to the oldest listed commit; an invalid head or unreadable history is an error.
     pub fn metadata(&self, base: &str, head: &str) -> Result<Value> {
@@ -197,6 +197,8 @@ impl Repository {
         let initial_head = self.resolve(head)?;
         let refs = string(self.git(&[
             "for-each-ref",
+            // Most recent first: the branches people work on are at the top of the list.
+            "--sort=-committerdate",
             "--format=%(refname)%00%(objectname)%00%(symref)",
             "refs/heads",
             "refs/remotes",

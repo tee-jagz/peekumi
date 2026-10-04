@@ -244,6 +244,31 @@ try {
           ).includes(process.env.PEEKUMI_TEST_DIRECTORY_DOC),
         );
       assert.equal(await page.locator(".sel-name").textContent(), folder);
+      // A tap on empty map space clears the selection; a drag on it does not.
+      const empty = await page.evaluate(() => {
+        const box = document
+          .querySelector('.sheet[data-front="true"] .map-canvas')
+          .getBoundingClientRect();
+        for (let y = box.top + 20; y < box.bottom - 20; y += 12)
+          for (let x = box.left + 20; x < box.right - 20; x += 12) {
+            const hit = document.elementFromPoint(x, y);
+            if (
+              hit?.closest(".map-canvas") &&
+              !hit.closest('.node, [role="button"], button, a, summary, details, input, select')
+            )
+              return { x, y };
+          }
+      });
+      assert.ok(empty, "The map has empty space to tap");
+      await page.mouse.move(empty.x, empty.y);
+      await page.mouse.down();
+      await page.mouse.move(empty.x + 40, empty.y + 30, { steps: 5 });
+      await page.mouse.up();
+      assert.equal(await page.locator(".sel-name").textContent(), folder, "A drag keeps the selection");
+      await page.mouse.click(empty.x + 40, empty.y + 30);
+      await page.locator(".sel-name").waitFor({ state: "detached" });
+      await card.click();
+      assert.equal(await page.locator(".sel-name").textContent(), folder);
       assert.equal(
         await page.locator(".crumbs [aria-current]").textContent(),
         (await repo.metadata()).name,

@@ -45,6 +45,7 @@ const glyphs = {
   home: "M3 9l7-6 7 6v8H3ZM8 17v-5h4v5",
   up: "M9 13L4 8l5-5M4 8h8a4 4 0 0 1 4 4v5",
   file: "M4 2h8l4 4v12H4ZM12 2v5h4",
+  external: "M12 3h5v5M17 3l-7 7M15 12v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4",
 };
 const paths = {
   folder: "M2 5h6l2 2h8v10H2Z",

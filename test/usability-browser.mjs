@@ -36,45 +36,97 @@ try {
         await page.screenshot({ path: "test-results/setup-failure.png" });
         throw e;
       });
+    // PR context should reuse the actual canvas. Mock the network boundary, not UI internals.
+    await page.route("**/api/prs", (r) =>
+      r.fulfill({
+        json: [
+          { number: 7, title: "Review setup", state: "OPEN", author: { login: "octo" } },
+          { number: 5, title: "Earlier work", state: "MERGED" },
+        ],
+      }),
+    );
+    await page.route("**/api/prs/open", async (r) => {
+      const repo = await (await page.request.get(server.url + "/api/repo")).json();
+      await r.fulfill({
+        json: {
+          base: repo.initialHead,
+          head: repo.initialHead,
+          pr: {
+            number: 7,
+            title: "Review setup",
+            state: "OPEN",
+            author: { login: "octo" },
+            createdAt: "2026-03-30T11:20:20Z",
+            additions: 12,
+            deletions: 3,
+            changedFiles: 2,
+            headRefName: "setup",
+            baseRefName: "main",
+            url: "https://github.com/example/repo/pull/7",
+            body: "## Summary\n\nKeep the existing canvas and show the PR in the sheet.\n\n- One\n- Two",
+            comments: [],
+            reviews: [{ author: { login: "rev" }, state: "APPROVED", body: "" }],
+            statusCheckRollup: [{ name: "Tests", conclusion: "SUCCESS" }],
+          },
+        },
+      });
+    });
     await page.locator("#revisionDetails > summary").click();
     await page
       .getByLabel("Repository", { exact: true })
       .waitFor({ state: "visible" });
     await page.screenshot({ path: `test-results/usability-${width}.png` });
+    // A long list opens at its current entry and has a filter with a count.
+    await page.locator("#headRevision + .frost-select").click();
+    const menu = page.locator(".frost-menu");
+    await menu.locator(".frost-filter").waitFor();
+    const opened = await menu.evaluate((m) => {
+      const item = m.querySelector('.frost-option[aria-selected="true"]').getBoundingClientRect(),
+        box = m.getBoundingClientRect();
+      return item.top >= box.top && item.bottom <= box.bottom;
+    });
+    assert.ok(opened, "The current entry is in view when the list opens");
+    assert.match(await menu.locator(".frost-count").innerText(), /^\d+ commits$/);
+    await menu.locator(".frost-filter").fill("no commit has this text");
+    assert.match(await menu.locator(".frost-count").innerText(), /^0 of \d+ match$/);
+    assert.equal(await menu.locator(".frost-option:visible").count(), 0);
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
     const id = await page
       .locator("#repositoryPicker option")
       .filter({ hasText: "second" })
       .getAttribute("value");
-    // PR context should reuse the actual canvas. Mock the network boundary, not UI internals.
-    const repo = await (
-      await page.request.get(server.url + "/api/repo")
-    ).json();
-    await page.route("**/api/prs", (r) =>
-      r.fulfill({ json: [{ number: 7, title: "Review setup" }] }),
+    // Pull requests have their own side of the Comparison panel, as rows to tap.
+    await page.locator('#viewKind [data-kind="pr"]').click();
+    assert.equal(await page.locator("#branchView").isVisible(), false);
+    await page.locator(".pr-pick").first().waitFor();
+    assert.deepEqual(
+      await page.locator("#prRows .pr-group").allInnerTexts(),
+      ["Open", "Recently merged"],
     );
-    await page.route("**/api/prs/open", (r) =>
-      r.fulfill({
-        json: {
-          base: repo.initialHead,
-          head: repo.initialHead,
-          pr: {
-            title: "Review setup",
-            url: "https://github.com/example/repo/pull/7",
-            body: "Keep the existing canvas.",
-            comments: [],
-            reviews: [],
-            statusCheckRollup: [{ name: "Tests", conclusion: "SUCCESS" }],
-          },
-        },
-      }),
+    assert.match(await page.locator(".pr-pick").first().innerText(), /#7 Review setup[\s\S]*Open · octo/);
+    await page.locator(".pr-pick", { hasText: "#7" }).click();
+    await page.locator("#reviewScope .pr-head").waitFor();
+    assert.match(await page.locator("#reviewScope").innerText(), /Open[\s\S]*PR #7 · setup → main[\s\S]*Review setup[\s\S]*octo/);
+    assert.match(await page.locator("#revisionSummary").innerText(), /PR #7/);
+    assert.match(await page.locator(".pr-card").innerText(), /Keep the existing canvas[\s\S]*All 1 passed[\s\S]*1 approved[\s\S]*Open on GitHub/);
+    assert.equal(new URL(page.url()).searchParams.get("pr"), "7");
+    // A reload keeps the PR: its details come back without a new fetch.
+    await page.route("**/api/prs/7", (r) =>
+      r.fulfill({ json: { number: 7, title: "Review setup", state: "OPEN", body: "", url: "https://github.com/example/repo/pull/7" } }),
     );
-    await page.locator("#loadPrs").click();
-    await page.locator("#prPicker").selectOption("7");
-    await page.locator("#prContext a").waitFor();
-    assert.match(
-      await page.locator("#prContext").innerText(),
-      /Tests: SUCCESS/,
-    );
+    await page.reload();
+    await page.locator("#reviewScope .pr-head").waitFor();
+    assert.match(await page.locator(".pr-card").innerText(), /No description\.[\s\S]*None reported/);
+    // The ✕ beside the PR name goes back to the checkout's branch.
+    await page.locator("#revisionSummary .rev-leave").click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.get("pr"));
+    await page.waitForFunction(() => !document.querySelector("#reviewScope .pr-head"));
+    assert.doesNotMatch(await page.locator("#revisionSummary").innerText(), /PR #7/);
+    await page.locator("#revisionDetails > summary").click();
+    await page.getByLabel("Repository", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(await page.locator("#branchView").isVisible(), true);
+    assert.equal(await page.locator('#viewKind [data-kind="branch"]').getAttribute("aria-pressed"), "true");
     await page.locator("#repositoryPicker").selectOption(id);
     await page.waitForURL("**/?repo=" + id);
     await page.locator('.sheet[data-front="true"] .node').first().waitFor();

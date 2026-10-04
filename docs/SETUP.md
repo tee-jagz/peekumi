@@ -141,10 +141,11 @@ Make a backup of the state directory while the service is stopped. The state dir
 
 1. Install GitHub CLI on the host.
 2. Run `gh auth login` on the host.
-3. In the comparison menu, select Pull requests.
-4. Select an open PR.
+3. Tap the comparison line in the header.
+4. Tap **Pull request**. The list shows open PRs, then up to 10 merged PRs.
+5. Tap a PR.
 
-Peekumi fetches `refs/peekumi/pr/<number>/...` and does a check of the fetched revision. Then it shows the complete merge-base-to-head diff in the current canvas. The checkout and the local branches do not change. The comparison menu shows the description, checks, conversation comments and review summaries. The link opens the full review thread on GitHub.
+Peekumi fetches `refs/peekumi/pr/<number>/...` and does a check of the fetched revision. Then it shows the complete merge-base-to-head diff in the current canvas. The checkout and the local branches do not change. When nothing is selected, the sheet shows the title, state, description, checks and reviews of the PR. **Open on GitHub** opens the full review thread. To go back to your branch, tap **✕** next to the PR name in the header.
 
 `gh` manages the GitHub credentials, and Peekumi does not keep them. This first integration supports github.com. Peekumi shows network/authentication failures with guidance. Ask uses the selected comparison, and local comments stay local. Agent dispatch keeps its current target branch, which you explicitly previewed. When you open a PR, Peekumi does not silently retarget an agent.
 
