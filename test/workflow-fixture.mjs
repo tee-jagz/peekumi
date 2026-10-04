@@ -63,6 +63,8 @@ if (values.includes("--tools")) {
       ? "`run` is defined in `module.py` at `module.py:2`. `nowhere_at_all` does not exist, and `helper` is defined twice."
       : input.question === "Echo the context."
       ? JSON.stringify(input.repositoryContext.source)
+      : input.question === "Echo the rules."
+      ? JSON.stringify(input.repositoryContext.rules)
       : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
   if (values.includes("stream-json")) {
     // Claude Code's streaming shape: a working turn, then the answer in small pieces.

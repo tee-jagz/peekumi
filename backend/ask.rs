@@ -277,9 +277,11 @@ async fn prepare(app: &App, body: &Value) -> Result<Prepared> {
         .map(|c| json!({"anchor":c["anchor"],"text":c["text"],"status":c["status"]}))
         .collect();
     let comments = clipped(&json!(comments).to_string(), 4000, "Comments", &mut omitted);
+    // The resolved head is a JSON string; format its text, not its quoted JSON form.
+    let head_sha = head.as_str().context("Head did not resolve to a commit")?;
     let rules = crate::rules::CONFIG_FILES
         .iter()
-        .find_map(|name| app.workflow.git(&["show", &format!("{head}:{name}")]).ok())
+        .find_map(|name| app.workflow.git(&["show", &format!("{head_sha}:{name}")]).ok())
         .unwrap_or_else(|| "No rule configuration".into());
     let rules = clipped(&rules, 4000, "Rules", &mut omitted);
     let history = body["history"].as_array().cloned().unwrap_or_default();

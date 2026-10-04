@@ -259,10 +259,16 @@ test("requesting changes starts a next round that builds on the agent's own comm
     feedback: "Also say which round made the change.",
   });
   assert.deepEqual(
-    next.comments.map((x) => x.id).sort(),
-    [c.id, collected.id].sort(),
-    "The round carries the open instruction and the collected one",
+    next.comments.map((x) => x.id),
+    [collected.id],
+    "The round's work is the collected change",
   );
+  assert.deepEqual(
+    next.done.map((x) => x.id),
+    [c.id],
+    "The instruction the agent already addressed travels along as finished work",
+  );
+  assert.match(next.task, /## Already done in an earlier round\n[^]*Do not report on them\.[^]*Write the result file\nReport: Implemented the requested fixture change\./);
   assert.match(next.task, /"path":"agent-result.txt"[^\n]*\(left on [0-9a-f]{40}\)\nName the round in the file too\./);
   assert.equal(next.round, 2);
   assert.equal(next.revises, p.id);
@@ -271,7 +277,6 @@ test("requesting changes starts a next round that builds on the agent's own comm
   assert.equal(next.base, first.results.at(-1), "The next round starts from the agent's last commit");
   assert.equal(next.reportHash, undefined, "The reporting credential never reaches the browser");
   assert.match(next.task, /## Changes requested by the owner\nAlso say which round made the change\./);
-  assert.match(next.task, /Earlier round's report: Implemented the requested fixture change\./);
   assert.match(next.task, /build on it rather than starting over/);
   const second = await waitFor(async () => {
     const r = await f.req("/api/runs/" + next.id);
@@ -303,18 +308,19 @@ test("requesting changes starts a next round that builds on the agent's own comm
   const again = await f.req(`/api/runs/${p.id}/revise`, { feedback: "Once more" });
   assert.equal(again.status, 400);
   assert.match(again.error, /already requested/);
-  // Approving the latest round verifies against its commit, which contains every round.
+  // The finished instruction keeps its report from round 1: it never shows "Needs retry",
+  // and approving it verifies the commit that addressed it, which the latest branch contains.
   const verified = await f.req(
     "/api/comments/" + c.id,
     { action: "verify", version: moved.version },
     "PATCH",
   );
   assert.equal(verified.status, "verified");
-  assert.equal(verified.verification.commit, result);
-  // The fixture flags the second instruction; once it is dropped, nothing is left to change.
-  const flagged = (await f.req("/api/workflow")).comments.find((x) => x.id === collected.id);
-  assert.equal(flagged.status, "flagged");
-  await f.req("/api/comments/" + collected.id, { action: "delete", version: flagged.version }, "PATCH");
+  assert.equal(verified.verification.commit, result1);
+  const addressed = (await f.req("/api/workflow")).comments.find((x) => x.id === collected.id);
+  assert.equal(addressed.status, "addressed");
+  assert.equal(addressed.report.commit, result);
+  await f.req("/api/comments/" + collected.id, { action: "verify", version: addressed.version }, "PATCH");
   const done = await f.req(`/api/runs/${next.id}/revise`, { feedback: "More" });
   assert.match(done.error, /Nothing in this task is left to change/);
   assert.equal(
@@ -418,6 +424,26 @@ test("Ask receives committed context without tools and never automatically creat
     ).status,
     400,
   );
+});
+
+test("Ask sees the committed dependency rules at the compared head", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const rules = '{"version":1,"groups":{"all":["**"]},"rules":[]}';
+  await writeFile(path.join(f.dir, ".peekumi.json"), rules);
+  await f.git("add", ".peekumi.json");
+  await f.git("commit", "-m", "Add rules");
+  const head = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const result = await f.req("/api/ask", {
+    base: f.sha,
+    head,
+    sha: head,
+    anchor: { kind: "repo", path: "" },
+    question: "Echo the rules.",
+    history: [],
+  });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(JSON.parse(result.answer.text), rules);
 });
 
 test("Ask about a folder reads its README, declarations and changed code, not only file names", async (t) => {

@@ -395,7 +395,7 @@ impl Workflow {
             let id = crate::random_token()[..16].to_string();
             let branch = format!("peekumi/run-{id}");
             let start = format!("Start from {base} on {}.", self.watched);
-            let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &rules);
+            let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &[], &rules);
             let r=json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
@@ -416,6 +416,7 @@ impl Workflow {
         requested: &str,
         brief: &str,
         comments: &[Value],
+        done: &[Value],
         rules: &str,
     ) -> String {
         let mut task = format!(
@@ -437,6 +438,18 @@ impl Workflow {
             let earlier = &c["report"];
             if let Some(result) = earlier["note"].as_str().or(earlier["reason"].as_str()) {
                 task.push_str(&format!("Earlier round's report: {result}\n"));
+            }
+        }
+        if !done.is_empty() {
+            task.push_str("\n## Already done in an earlier round\nThese instructions are complete and their commits are already on this branch. Keep that work intact. Do not report on them.\n");
+            for c in done {
+                task.push_str(&format!(
+                    "\n[{}] {}\n{}\nReport: {}\n",
+                    c["id"].as_str().unwrap(),
+                    c["anchor"],
+                    c["text"].as_str().unwrap(),
+                    c["report"]["note"].as_str().unwrap_or("")
+                ));
             }
         }
         task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Peekumi state or another worktree. Run appropriate checks and describe failures honestly.\n"));
@@ -480,22 +493,32 @@ impl Workflow {
                 r["revisedBy"].is_null(),
                 "Changes were already requested; continue from the latest round"
             );
+            // Flagged and unreported instructions and newly collected changes are this round's
+            // work. Instructions the agent already addressed travel along as finished work:
+            // they keep their report and wait for approval, and the agent need not report them.
             let mut comments = vec![];
+            let mut done = vec![];
             for c in v["comments"].as_array().unwrap() {
-                let open = c["runId"] == previous
-                    && ["addressed", "flagged", "unreported"].contains(&c["status"].as_str().unwrap_or(""));
-                let collected = c["forRun"] == previous && c["status"] == "draft";
-                if open || collected {
+                let status = c["status"].as_str().unwrap_or("");
+                let earlier = c["runId"] == previous;
+                let snapshot = || {
                     let mut c = c.clone();
                     c.as_object_mut().unwrap().remove("history");
-                    comments.push(c);
+                    c
+                };
+                if (earlier && ["flagged", "unreported"].contains(&status))
+                    || (c["forRun"] == previous && status == "draft")
+                {
+                    comments.push(snapshot());
+                } else if earlier && status == "addressed" {
+                    done.push(snapshot());
                 }
             }
-            ensure!(!comments.is_empty(), "Nothing in this task is left to change");
             ensure!(
                 !requested.is_empty() || comments.iter().any(|c| c["forRun"] == previous),
                 "Say what needs fixing"
             );
+            ensure!(!comments.is_empty(), "Nothing in this task is left to change");
             let agent = r["agent"].as_str().context("Missing agent")?;
             let round = r["round"].as_u64().unwrap_or(1) + 1;
             let id = crate::random_token()[..16].to_string();
@@ -505,7 +528,12 @@ impl Workflow {
                 r["branch"].as_str().unwrap_or("")
             );
             let brief = r["brief"].as_str().unwrap_or("");
-            let task = self.task_text(agent, &id, &branch, &start, requested, brief, &comments, &rules);
+            let task = self.task_text(agent, &id, &branch, &start, requested, brief, &comments, &done, &rules);
+            for snapshot in &done {
+                let c = find_mut(v, "comments", snapshot["id"].as_str().unwrap())?;
+                c["runId"] = json!(id);
+                event(c, "owner");
+            }
             for snapshot in &comments {
                 let c = find_mut(v, "comments", snapshot["id"].as_str().unwrap())?;
                 c["status"] = json!("with_agent");
@@ -515,7 +543,7 @@ impl Workflow {
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
             list(v, "runs").push(next.clone());
             Ok(next)
         })?;
