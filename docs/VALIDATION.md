@@ -76,7 +76,7 @@ On the same simulated 1 Mbps / 100 ms mobile connection, the new warm map became
 
 We implemented content-addressed syntax reuse, a private SQLite index, a worker-backed CLI, asynchronous gzip and compact initial comparisons. Full symbol comparisons and unresolved imports now come with the file details. We kept the SVG map, file inventory, status rollups and dependency edges. Persistent data stays in the ignored `.strata/index/` directory. The inspected repository objects stay read-only.
 
-We measured against Visalytics with `STRATA_BASELINE_ENGINE=.strata/stable/src/engine.mjs STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /Users/tolu/projects/visalytics HEAD~10 HEAD`:
+We measured against Visalytics with `STRATA_BASELINE_ENGINE=.strata/stable/src/engine.mjs STRATA_PYTHON=/usr/bin/python3 node scripts/benchmark.mjs /path/to/visalytics HEAD~10 HEAD`:
 
 | Measurement | Result |
 | --- | ---: |
