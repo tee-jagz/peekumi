@@ -387,6 +387,29 @@ $("#login").onsubmit = (event) => {
   );
 };
 /** Loads repository identity and initial revisions, then renders the comparison. A refresh follows the latest configured head. */
+/** Until the first map is drawn, the map area shows Peek loading and the current step. The
+ * Peek from the page's first frame stays, so its motion never restarts. `failed` shows the
+ * error there instead. */
+function startStep(text, failed = false) {
+  if (comparison) return false;
+  let box = $("#startLoading");
+  if (!box) {
+    box = element("div", "loading-message");
+    box.id = "startLoading";
+    box.setAttribute("role", "status");
+    const step = element("span", "", text);
+    step.id = "startStep";
+    box.append(peek("loading"), step);
+    $("#deck").replaceChildren(box);
+  }
+  // An unreachable server sends Peek to sleep, as the notice does; other errors sink it.
+  if (failed)
+    box
+      .querySelector(".peek-mark")
+      .replaceWith(peek(text === UNREACHABLE ? "asleep" : "error"));
+  $("#startStep").textContent = text;
+  return true;
+}
 async function boot(refresh = false, branch = viewingBranch) {
   const id = ++bootId;
   ++loadId;
@@ -394,9 +417,10 @@ async function boot(refresh = false, branch = viewingBranch) {
   busy = true;
   $("#branchPicker").disabled = true;
   $("#refresh").disabled = true;
-  showNotice("Loading branch…");
+  if (!startStep("Connecting to your repository…")) showNotice("Loading branch…");
   try {
     await setupRepositories();
+    startStep("Reading the branches…");
     const next = await api(
       "/api/repo" + (branch ? "?" + new URLSearchParams({ head: branch }) : ""),
     );
@@ -461,7 +485,8 @@ async function boot(refresh = false, branch = viewingBranch) {
   } catch (error) {
     if (id === bootId) {
       $("#branchPicker").value = pickerValue();
-      showNotice(error.message, true);
+      // Before the first map, the error replaces the loading view; the sheet stays clear.
+      if (!startStep(error.message, true)) showNotice(error.message, true);
     }
   } finally {
     if (id === bootId) {
@@ -701,15 +726,8 @@ async function loadComparison() {
   selected = null;
   sourceData = null;
   $("#refresh").disabled = true;
-  showNotice("Loading this comparison…");
-  if (!comparison) {
-    const waiting = element("div", "loading-message");
-    waiting.append(
-      peek("loading"),
-      element("span", "", "Reading repository structure…"),
-    );
-    $("#deck").replaceChildren(waiting);
-  }
+  if (!startStep("Reading the repository structure…"))
+    showNotice("Loading this comparison…");
   try {
     const key = baseRef + ":" + headRef;
     let data = comparisons.get(key);
@@ -726,6 +744,7 @@ async function loadComparison() {
         "/api/directories?" +
           new URLSearchParams({ base: data.base, head: data.head }),
       );
+      startStep("Reading the relationships…");
       data.relationshipData = expandRelationships(
         await api(
           "/api/relationships?" +
@@ -747,11 +766,13 @@ async function loadComparison() {
     busy = false;
     showNotice("");
     render();
+    // The first map is drawn: the review sheet appears with it.
+    delete document.documentElement.dataset.starting;
     if (scope.kind === "file") loadSource();
   } catch (error) {
     if (id === loadId) {
       busy = false;
-      showNotice(error.message, true);
+      if (!startStep(error.message, true)) showNotice(error.message, true);
     }
   } finally {
     if (id === loadId) $("#refresh").disabled = false;

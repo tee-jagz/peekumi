@@ -6012,3 +6012,8 @@ a.pr-link .glyph {
 #prNote:empty {
   display: none;
 }
+
+/* While Peekumi starts, only Peek and the step show; the review sheet appears with the map. */
+[data-starting] #panel {
+  visibility: hidden;
+}
