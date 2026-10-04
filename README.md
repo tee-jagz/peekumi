@@ -29,5 +29,6 @@ Prebuilt releases are available for macOS and Linux (glibc 2.34+). Git is the on
 - [Relationships and dependency rules](docs/RELATIONSHIPS.md), with `.peekumi.json`.
 - [Development](docs/DEVELOPMENT.md): how to build and test, benchmarks and analysis limits.
 - [Architecture](docs/ARCHITECTURE.md), [scope](docs/MVP.md), [validation](docs/VALIDATION.md) and [brand](docs/brand/README.md).
+- [Security](SECURITY.md): how to report a problem, and what Peekumi protects. [Changelog](CHANGELOG.md).
 
 The name of Peekumi was Repo Strata until October 2026. The `strata` command and its settings continue to operate ([details](docs/SETUP.md#renamed-from-strata)).
