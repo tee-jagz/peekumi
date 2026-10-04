@@ -5,6 +5,15 @@ let task = "";
 for await (const chunk of process.stdin) task += chunk;
 const values = process.argv.slice(2);
 if (values.includes("--tools")) {
+  // A commit message for the owner's own changes: no tools, the diff as input.
+  if (values[values.indexOf("--system-prompt") + 1]?.startsWith("You write one Git commit message")) {
+    if (values[values.indexOf("--tools") + 1] !== "") throw Error("The commit message agent must have no tools");
+    if (process.env.PEEKUMI_TOKEN || process.env.PEEKUMI_REPORT_TOKEN)
+      throw Error("The commit message agent inherited a Peekumi credential");
+    if (!task.includes("agent-result.txt")) throw Error("Missing the owner's diff");
+    console.log(JSON.stringify({ is_error: false, result: "Record the owner's own result notes" }));
+    process.exit(0);
+  }
   if (
     values[values.indexOf("--tools") + 1] !== "" ||
     !values.includes("--strict-mcp-config") ||
@@ -144,6 +153,19 @@ const git = (...a) =>
   execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...a], {
     encoding: "utf8",
   }).trim();
+// An update round merges the target branch and resolves conflicts by keeping both sides.
+if (run.kind === "update") {
+  if (!run.task.includes(`git merge ${run.mergeTarget}`)) throw Error("Missing the merge instruction");
+  const merged = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "merge", "--no-edit", run.mergeTarget], { encoding: "utf8" });
+  if (merged.status !== 0) {
+    for (const file of git("diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean)) {
+      writeFileSync(file, git("show", `:2:${file}`) + "\n" + git("show", `:3:${file}`) + "\n");
+      git("add", file);
+    }
+    git("commit", "--no-edit");
+  }
+  process.exit(0);
+}
 if (run.brief === "WAIT_FOR_CANCEL")
   await new Promise((r) => setTimeout(r, 30000));
 const first = run.comments[0];

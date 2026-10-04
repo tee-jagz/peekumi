@@ -155,6 +155,8 @@ export function createWorkflow({
   inspect,
   explore,
   exploring,
+  // Called after Peekumi moves the target branch (a merge, an undo, the owner's commit).
+  moved = () => {},
 }) {
   let data = { comments: [], runs: [] },
     loaded = false,
@@ -170,6 +172,8 @@ export function createWorkflow({
     picks = new Set(),
     runId = null,
     runDetail = null,
+    // The open task's merge state from the server (see backend/merge.rs), or null.
+    mergeInfo = null,
     // Below a finished task's actions: null, or "note" while the Approve note is open.
     reply = null;
   // "here" lists comments on the current selection; "all" is the Tasks overview.
@@ -228,8 +232,14 @@ export function createWorkflow({
         data = await api("/api/workflow");
         loaded = true;
         if (runId) runDetail = await api("/api/runs/" + runId);
+        // An approved or merged task shows what a merge would do now.
+        const r = runId && runDetail;
+        mergeInfo =
+          r && r.status === "completed" && !r.revisedBy && (reviewed(r) || r.merge)
+            ? await api(`/api/runs/${r.id}/merge`).catch(() => null)
+            : null;
         bar();
-        const signature = JSON.stringify([data, runDetail]),
+        const signature = JSON.stringify([data, runDetail, mergeInfo]),
           changed = signature !== lastSignature;
         lastSignature = signature;
         if (render === "poll")
@@ -772,44 +782,237 @@ export function createWorkflow({
       body.append(b);
     }
   }
-  /** The step after approval. Peekumi never merges, so it names the branch and the exact command. */
-  function applyStep(r) {
-    const target = r.targetBranch || "main",
-      command = `git merge --ff-only ${r.branch}`;
-    const step = el("section", "apply-step");
-    // Approval is the happy moment: Peek celebrates beside the next step.
-    const heading = el("h3", "workflow-group");
-    heading.append(peek("success"), document.createTextNode(`Next: apply to ${target}`));
-    const line = el("div", "command-line"),
-      code = el("code", "", command),
-      copy = iconButton(el("button", "btn icon-action"), "copy", "Copy command");
-    copy.type = "button";
-    copy.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(command);
-        notice("Command copied");
-        setTimeout(() => notice(""), 1500);
-      } catch {
-        // Plain HTTP has no clipboard access; select the command for a manual copy.
-        getSelection().selectAllChildren(code);
-        notice("Clipboard unavailable here; the command is selected for copying");
-      }
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  /** One line per changed file: its path and line counts. */
+  function fileList(files) {
+    const list = el("ul", "merge-files");
+    for (const f of files) {
+      const row = el("li");
+      row.append(el("code", "", f.path));
+      const counts = el("span", "merge-counts");
+      if (f.added != null) counts.append(el("span", "merge-add", `+${f.added}`));
+      if (f.removed) counts.append(" ", el("span", "merge-del", `−${f.removed}`));
+      row.append(counts);
+      list.append(row);
+    }
+    return list;
+  }
+  /** Opens a modal sheet; `build(box, close)` fills it. Closing removes it. */
+  function sheet(label, build) {
+    const dialog = el("dialog", "merge-dialog");
+    dialog.setAttribute("aria-label", label);
+    const close = () => {
+      dialog.close();
+      dialog.remove();
     };
-    line.append(code, copy);
-    step.append(
-      heading,
-      el(
-        "p",
-        "read-note",
-        `Peekumi never merges. In the repository, with ${target} checked out, run:`,
-      ),
-      line,
-      el(
-        "p",
-        "read-note",
-        `If ${target} has moved on, run it without --ff-only or open a pull request from ${r.branch}. This task changes to “Applied to ${target}” once its commits are on ${target}.`,
-      ),
-    );
+    dialog.addEventListener("cancel", close);
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) close();
+    });
+    const box = el("div", "merge-sheet");
+    dialog.append(box);
+    document.body.append(dialog);
+    dialog.showModal();
+    build(box, close);
+    return dialog;
+  }
+  /** Brings the target's new commits into the task. A clean update keeps the approval; a
+   * conflict opens the new round in which the agent resolves it. */
+  async function updateTask(r) {
+    const out = await write(`/api/runs/${r.id}/update`, {});
+    if (out.round) {
+      notice(`The task and ${mergeInfo?.target || "main"} conflict. The agent resolves it in round ${out.round.round}.`);
+      setTimeout(() => notice(""), 5000);
+      await openTask(out.round.id);
+    } else {
+      notice(`Updated with ${mergeInfo?.target || "main"}. No conflicts.`);
+      setTimeout(() => notice(""), 3000);
+      await refresh();
+    }
+  }
+  /** Asks the owner to confirm the merge, with the files it changes and what happens to
+   * their checkout. Sends the exact state shown, so a change in between stops the merge. */
+  function confirmMerge(r, m) {
+    sheet("Merge into " + m.target, (box, close) => {
+      const note = !m.checkedOut
+        ? `${m.target} is not checked out, so only the branch moves. No files in your folder change.`
+        : m.uncommitted
+          ? `${m.target} is checked out in your folder. Your ${plural(m.uncommitted, "uncommitted change")} do not touch these files, and they stay as they are.`
+          : `${m.target} is checked out in your folder. Its files change to the merged result.`;
+      const buttons = el("div", "merge-buttons");
+      buttons.append(
+        action("Cancel", close),
+        Object.assign(
+          action(
+            "Merge",
+            async () => {
+              try {
+                await write(`/api/runs/${r.id}/merge`, { target: m.targetSha, head: m.head });
+              } catch (e) {
+                // Something changed since the sheet opened: show what is in the way now.
+                close();
+                await refresh();
+                throw e;
+              }
+              close();
+              notice(`Merged into ${m.target}`);
+              setTimeout(() => notice(""), 3000);
+              await refresh();
+              moved();
+            },
+            true,
+          ),
+          { id: "confirmMerge" },
+        ),
+      );
+      box.append(
+        el("h2", "merge-title", `Merge ${plural(m.commits, "commit")} into ${m.target}?`),
+        el("p", "read-note", `From ${r.branch} · fast-forward to ${m.head.slice(0, 7)}`),
+        fileList(m.files || []),
+        el("p", "merge-note", note),
+        buttons,
+        el("p", "read-note merge-foot", `Nothing is pushed. You can undo until ${m.target} changes.`),
+      );
+    });
+  }
+  /** Commits the owner's own files that block the merge: an agent drafts the message, the
+   * owner checks the files and the message, then the task is brought up to date. */
+  function commitMine(r, m) {
+    sheet("Commit your changes", async (box, close) => {
+      box.append(
+        el("h2", "merge-title", `Commit your changes to ${m.target}?`),
+        el("p", "read-note", "The agent writes a commit message…"),
+      );
+      let draft;
+      try {
+        draft = await write(`/api/runs/${r.id}/commit-draft`, {});
+      } catch (e) {
+        box.replaceChildren(el("h2", "merge-title", "Cannot commit now"), el("p", "merge-note", e.message), action("Close", close));
+        return;
+      }
+      let message = draft.message;
+      const others = (m.uncommitted || 0) - draft.files.length;
+      const buttons = el("div", "merge-buttons");
+      buttons.append(
+        action("Cancel", close),
+        Object.assign(
+          action(
+            "Commit",
+            async () => {
+              await write(`/api/runs/${r.id}/commit-mine`, { message, head: draft.head, hash: draft.hash });
+              close();
+              moved();
+              await updateTask(r);
+            },
+            true,
+          ),
+          { id: "commitMine" },
+        ),
+      );
+      box.replaceChildren(
+        el("h2", "merge-title", `Commit your changes to ${m.target}?`),
+        el(
+          "p",
+          "read-note",
+          `Only the ${plural(draft.files.length, "file")} in the way.` +
+            (others > 0 ? ` Your other ${plural(others, "change")} stay uncommitted.` : ""),
+        ),
+        fileList(draft.files),
+        field(
+          draft.agent ? "Commit message · written by the agent, you can edit it" : "Commit message · you can edit it",
+          message,
+          (value) => (message = value),
+        ),
+        buttons,
+        el("p", "read-note merge-foot", `The commit is yours, on ${m.target}. Nothing is pushed.`),
+      );
+    });
+  }
+  /** The step after approval: merge into the target branch on the owner's tap, or what is in
+   * the way and the way past it. Null while there is nothing to merge. Peekumi never pushes. */
+  function mergeStep(r) {
+    const m = mergeInfo;
+    if (!m || ["waiting", "applied"].includes(m.state)) return null;
+    const step = el("section", "apply-step merge-step");
+    step.dataset.state = m.state;
+    const heading = (mood, text) => {
+      const h = el("h3", "workflow-group");
+      if (mood) h.append(peek(mood));
+      h.append(document.createTextNode(text));
+      return h;
+    };
+    const size = () => {
+      const added = (m.files || []).reduce((n, f) => n + (f.added || 0), 0),
+        removed = (m.files || []).reduce((n, f) => n + (f.removed || 0), 0),
+        line = el("p", "merge-size", `${plural(m.commits, "commit")} · ${plural(m.files.length, "file")} `);
+      line.append(el("span", "merge-add", `+${added}`));
+      if (removed) line.append(" ", el("span", "merge-del", `−${removed}`));
+      return line;
+    };
+    const check = () => action("Check again", () => refresh());
+    if (m.state === "ready") {
+      step.append(
+        heading("success", `Ready to merge into ${m.target}`),
+        size(),
+        Object.assign(action(`Merge into ${m.target}`, () => confirmMerge(r, m), true), { id: "mergeTask" }),
+        el("p", "read-note", "Fast-forward only. Peekumi does not push to GitHub."),
+      );
+    } else if (m.state === "merged") {
+      const when = new Date(m.merge.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      step.append(heading("merged", `Merged into ${m.target}`), el("p", "merge-size", `${when} · ${m.target} is at ${m.merge.to.slice(0, 7)}`));
+      if (m.undoable)
+        step.append(
+          Object.assign(
+            action("Undo merge", async () => {
+              await write(`/api/runs/${r.id}/unmerge`, {});
+              notice(`${m.target} is back at ${m.merge.from.slice(0, 7)}`);
+              setTimeout(() => notice(""), 3000);
+              await refresh();
+              moved();
+            }),
+            { id: "undoMerge" },
+          ),
+          el("p", "read-note", `Undo works until ${m.target} changes.`),
+        );
+      else step.append(el("p", "read-note", `Undo is not possible: ${m.target} or the merged files changed after the merge.`));
+      step.append(el("p", "read-note", "Peekumi does not push. Push from your terminal when you are ready."));
+    } else if (m.state === "blocked") {
+      const n = m.blocking.length,
+        files = el("ul", "merge-files");
+      for (const path of m.blocking) files.append(el("li", "", path));
+      const row = el("div", "merge-buttons");
+      row.append(check());
+      step.append(
+        heading("", `${n === 1 ? "1 of your files is" : `${n} of your files are`} in the way`),
+        el("p", "merge-note", "You have uncommitted changes in these files, and the merge changes them too:"),
+        files,
+        Object.assign(action("Commit my changes, then merge", () => commitMine(r, m), true), { id: "commitFirst" }),
+        el(
+          "p",
+          "read-note",
+          "An agent writes the commit message. You check it before Peekumi commits. Then the task is brought up to date with your commit; if they conflict, the agent resolves it and you review again.",
+        ),
+        row,
+      );
+    } else if (m.state === "behind") {
+      step.append(
+        heading("", `${m.target} has ${plural(m.behind, "new commit")}`),
+        el("p", "merge-note", `${m.target} changed after this task ran, so a fast-forward merge is not possible yet.`),
+        Object.assign(action(`Update with ${m.target}`, () => updateTask(r), true), { id: "updateTask" }),
+        el(
+          "p",
+          "read-note",
+          `Peekumi merges ${m.target} into the task branch. If they conflict, the agent resolves it as a new round, and you review the result again before you merge.`,
+        ),
+      );
+    } else if (m.state === "elsewhere") {
+      step.append(
+        heading("", `${m.target} is checked out in another folder`),
+        el("p", "merge-note", m.folder),
+        el("p", "read-note", `Merge there, or check out another branch in that folder. Then check again.`),
+        check(),
+      );
+    }
     return step;
   }
   /** Every instruction in a task round: its work and any finished ones carried along. */
@@ -884,12 +1087,12 @@ export function createWorkflow({
   }
   function runStatus(r) {
     const target = r.targetBranch || "main";
-    if (r.applied) return `Applied to ${target}`;
+    if (r.applied) return r.merge ? `Merged into ${target}` : `Applied to ${target}`;
     if (r.revisedBy) return "Changes requested";
     if (r.status === "completed" && !reviewed(r) && !open(r).length)
       return "Nothing left to review";
     if (r.status === "completed")
-      return reviewed(r) ? `Approved · merge to apply` : "Ready for review";
+      return reviewed(r) ? `Approved · ready to merge` : "Ready for review";
     return (
       {
         running: "Working",
@@ -987,7 +1190,19 @@ export function createWorkflow({
           `This task's instructions were deleted, so there is nothing to approve or send back. The agent's work is still on ${r.branch}: Explore changes shows it.`,
         ),
       );
-    if (r.feedback) {
+    if (r.kind === "update") {
+      // This round only merges the target in and resolves the conflict.
+      const asked = el("article", "workflow-card requested");
+      asked.append(
+        el("p", "report-label", `Update with ${r.targetBranch || "main"}`),
+        el(
+          "p",
+          "workflow-text",
+          `${r.targetBranch || "main"} moved on, and it conflicts with this task in ${(r.conflicts || []).join(", ")}. The agent merges it and resolves the conflict. Then you review the result again.`,
+        ),
+      );
+      body.append(asked);
+    } else if (r.feedback) {
       const asked = el("article", "workflow-card requested");
       asked.append(
         el("p", "report-label", "You asked for changes"),
@@ -996,7 +1211,8 @@ export function createWorkflow({
       body.append(asked);
     }
     comments(body, r);
-    if (reviewed(r) && !r.applied && r.results?.length) body.append(applyStep(r));
+    const step = mergeStep(r);
+    if (step) body.append(step);
     const actions = el("div", "sel-acts task-actions");
     if (active(r) && r.status !== "interrupted")
       actions.append(
@@ -1009,7 +1225,8 @@ export function createWorkflow({
       actions.append(
         action(
           "Explore changes",
-          () => explore(r.base, r.branch, r.id),
+          // An update round shows the task on top of the new target, not the target's own changes.
+          () => explore(r.mergeTarget || r.base, r.branch, r.id),
           !(collected(r.id).length && !r.revisedBy),
         ),
       );

@@ -4,6 +4,7 @@ mod ask;
 mod engine;
 mod index;
 mod lookup;
+mod merge;
 mod process;
 mod pull_requests;
 mod relationships;

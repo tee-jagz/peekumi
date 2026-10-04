@@ -1,5 +1,6 @@
 //! Isolated agent processes and a run-scoped stdio MCP reporting bridge.
-//! Agents retain their own permission controls. Peekumi never pushes or merges their branches.
+//! Agents retain their own permission controls. Peekumi never pushes their branches; the
+//! owner merges an approved one explicitly (see the merge module).
 use crate::workflow::{Workflow, active};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};

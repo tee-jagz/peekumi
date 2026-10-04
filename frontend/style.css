@@ -4757,7 +4757,7 @@ details.p-section[open] > summary::before {
   margin: 0 10px 10px;
 }
 
-/* After approval: the exact command that applies the task branch, with a copy button. */
+/* After approval: merge on the owner's tap, or what is in the way and the way past it. */
 .apply-step {
   margin: 4px 0 8px;
   padding: 12px 14px;
@@ -4772,27 +4772,124 @@ details.p-section[open] > summary::before {
 .apply-step .read-note {
   margin: 0;
 }
-.command-line {
-  display: flex;
-  align-items: center;
+.merge-step {
+  display: grid;
   gap: 8px;
-  margin: 8px 0;
 }
-.command-line code {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 11px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  font: 12px/1.45 var(--mono);
+.merge-step[data-state="ready"],
+.merge-step[data-state="behind"] {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--el-glass));
+}
+.merge-step[data-state="merged"] {
+  border-color: color-mix(in srgb, #b48cff 40%, transparent);
+  background: color-mix(in srgb, #b48cff 7%, var(--el-glass));
+}
+.merge-step[data-state="blocked"],
+.merge-step[data-state="elsewhere"] {
+  border-color: color-mix(in srgb, var(--mod) 45%, transparent);
+  background: color-mix(in srgb, var(--mod) 8%, var(--el-glass));
+}
+.merge-step > .btn.primary {
+  width: 100%;
+  min-height: 46px;
+  font-size: 15px;
+}
+.merge-size,
+.merge-note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.merge-add {
+  color: var(--add);
+}
+.merge-del {
+  color: var(--del);
+}
+.merge-files {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 12.5px/1.5 var(--mono);
   overflow-wrap: anywhere;
-  user-select: all;
-  -webkit-user-select: all;
 }
-.command-line .icon-action {
+.merge-step[data-state="blocked"] .merge-files {
+  color: var(--mod);
+}
+.merge-sheet .merge-files {
+  padding: 4px 0;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.merge-sheet .merge-files li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+}
+.merge-sheet .merge-files li + li {
+  border-top: 1px solid var(--line);
+}
+.merge-counts {
   flex: none;
-  width: 40px;
-  height: 40px;
+}
+.merge-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.merge-buttons .btn {
+  min-height: 46px;
+  font-size: 15px;
+}
+/* The merge and commit confirmations: a glass sheet at the bottom of the screen. */
+.merge-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 20px));
+  max-height: calc(100dvh - 40px);
+  margin: auto auto 12px;
+  padding: 0;
+  border-radius: 24px;
+  border: 1px solid var(--panel-line);
+  background: var(--popover-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  backdrop-filter: blur(30px) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 var(--panel-glow),
+    var(--shadow);
+  color: var(--ink);
+  overflow: auto;
+}
+@media (min-width: 900px) {
+  .merge-dialog {
+    margin: auto;
+  }
+}
+.merge-dialog::backdrop {
+  background: rgba(5, 7, 10, 0.5);
+}
+.merge-sheet {
+  display: grid;
+  gap: 12px;
+  padding: 20px 18px 16px;
+}
+.merge-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.merge-sheet .read-note {
+  margin: 0;
+}
+.merge-sheet .merge-foot {
+  text-align: center;
+}
+.merge-sheet .workflow-field textarea {
+  min-height: 72px;
+  font-size: 15px;
 }
 
 /* Peek, the mascot (peek.js): small, decorative and only where a state needs a face.

@@ -29,6 +29,7 @@ This is the first public release. Peekumi was called Repo Strata during its deve
 - Tasks that Codex or Claude Code do in a separate worktree, with run-scoped reports and owner approval.
 - Explore changes on the map, request changes as a next round that continues from the last commit of the agent, and collect changes while you explore.
 - A Tasks button that shows a running task from every view.
+- Merge an approved task into main from Peekumi, as a fast-forward after a confirmation, with Undo. Peekumi never pushes. When your uncommitted files are in the way, an agent writes the commit message for them and you check it. When main moved on, Update with main merges it, and an agent resolves a conflict as a new round.
 
 ### Setup and access
 
