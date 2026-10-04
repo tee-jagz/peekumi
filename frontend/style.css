@@ -5561,3 +5561,25 @@ details.p-section[open] > summary::before {
   overflow-x: auto;
   overflow-y: hidden;
 }
+/* The branch and comparison line stays inside the title column, beside the header buttons:
+   the branch name shortens, and the compared commits always show in full. */
+.title-block .revision-details,
+.title-block .revision-details > summary {
+  max-width: 100%;
+  min-width: 0;
+}
+#revisionSummary {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+#revisionSummary .rev-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#revisionSummary .rev-compare {
+  flex: none;
+  white-space: pre;
+}

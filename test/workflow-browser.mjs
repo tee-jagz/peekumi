@@ -280,6 +280,17 @@ try {
         await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
       );
+      // The long run branch name shortens; it never runs under the header buttons, and
+      // the compared commits stay fully visible.
+      const header = await page.evaluate(() => {
+        const box = (s) => document.querySelector(s).getBoundingClientRect();
+        const line = box("#revisionDetails > summary"),
+          actions = box(".top-actions"),
+          compare = box("#revisionSummary .rev-compare"),
+          summary = box("#revisionSummary");
+        return { clear: line.right <= actions.left + 1, whole: compare.right <= summary.right + 1 };
+      });
+      assert.deepEqual(header, { clear: true, whole: true });
       assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
       await page.locator("#taskReturn").waitFor();
       assert.ok(

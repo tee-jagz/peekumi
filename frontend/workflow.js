@@ -526,7 +526,7 @@ export function createWorkflow({
     const items = task
       ? data.comments.filter(
           (c) =>
-            task.comments.some((snapshot) => snapshot.id === c.id) &&
+            instructionsOf(task).some((snapshot) => snapshot.id === c.id) &&
             c.status !== "deleted",
         )
       : here
@@ -768,19 +768,22 @@ export function createWorkflow({
     );
     return step;
   }
+  /** Every instruction in a task round: its work and any finished ones carried along. */
+  const instructionsOf = (r) => [...(r.comments || []), ...(r.done || [])];
   function taskTitle(r) {
     const paths = [
-      ...new Set((r.comments || []).map((c) => c.anchor.path || "Repository")),
+      ...new Set(instructionsOf(r).map((c) => c.anchor.path || "Repository")),
     ];
     const scope = paths.length === 1 ? paths[0] : `${paths.length} locations`;
     const round = r.round > 1 ? ` · round ${r.round}` : "";
-    return `${r.comments?.length || 0} instruction${r.comments?.length === 1 ? "" : "s"} · ${scope}${round}`;
+    const count = instructionsOf(r).length;
+    return `${count} instruction${count === 1 ? "" : "s"} · ${scope}${round}`;
   }
   /** True once a finished task has no instruction left to review and at least one approved. */
   function reviewed(r) {
     if (r.status !== "completed") return false;
     const comments = data.comments.filter((c) =>
-      r.comments.some((x) => x.id === c.id),
+      instructionsOf(r).some((x) => x.id === c.id),
     );
     return (
       comments.some((c) => c.status === "verified") &&

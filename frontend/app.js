@@ -1812,8 +1812,18 @@ function renderCommits() {
     `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
   );
   head.append(meta);
-  $("#revisionSummary").textContent =
-    `${metadata.selectedBranch?.name || "detached"} · ${commit(baseRef).short} → ${c.short}`;
+  // A long branch name (such as an agent's run branch) shortens with an ellipsis; the
+  // compared commits always stay readable.
+  const branchName = element(
+    "span",
+    "rev-branch",
+    metadata.selectedBranch?.name || "detached",
+  );
+  branchName.title = branchName.textContent;
+  $("#revisionSummary").replaceChildren(
+    branchName,
+    element("span", "rev-compare", ` · ${commit(baseRef).short} → ${c.short}`),
+  );
   requestAnimationFrame(() => {
     const active = strip.querySelector('[aria-selected="true"]');
     if (active)
