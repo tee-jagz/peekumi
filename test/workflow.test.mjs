@@ -345,6 +345,99 @@ test("requesting changes starts a next round that builds on the agent's own comm
   ];
   for (const r of locked) assert.match(r.error, /applied to main; start a new task/);
 });
+test("an approved task merges on the owner's action, never over uncommitted work, and can be undone", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const out = async (...a) => (await f.git(...a)).toString().trim();
+  const c = await f.req("/api/comments", {
+    text: "Write the result file",
+    sha: f.sha,
+    anchor: { kind: "repo", path: "" },
+  });
+  const p = await f.req("/api/runs/preview", { agent: "codex", commentIds: [c.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+  const merge = (id = p.id) => f.req(`/api/runs/${id}/merge`);
+  assert.equal((await merge()).state, "waiting", "An unapproved task cannot merge");
+  let comment = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  await f.req("/api/comments/" + c.id, { action: "verify", version: comment.version }, "PATCH");
+  let status = await merge();
+  assert.equal(status.state, "ready");
+  assert.equal(status.target, "main");
+  assert.equal(status.checkedOut, true);
+  assert.equal(status.commits, 1);
+  assert.deepEqual(status.files.map((x) => x.path), ["agent-result.txt"]);
+  // The owner's uncommitted file in the way blocks the merge; an unrelated one does not.
+  await writeFile(path.join(f.dir, "agent-result.txt"), "The owner's own notes.\n");
+  await writeFile(path.join(f.dir, "module.py"), '"""Fixture module."""\ndef run():\n    return 2\n');
+  status = await merge();
+  assert.equal(status.state, "blocked");
+  assert.deepEqual(status.blocking, ["agent-result.txt"]);
+  assert.equal(status.uncommitted, 2);
+  const refused = await f.req(`/api/runs/${p.id}/merge`, { target: status.targetSha, head: status.head });
+  assert.match(refused.error, /Uncommitted files are in the way/);
+  // An agent drafts the commit of exactly those files; Peekumi commits only what the owner saw.
+  const draft = await f.req(`/api/runs/${p.id}/commit-draft`, {});
+  assert.equal(draft.message, "Record the owner's own result notes");
+  assert.equal(draft.agent, true);
+  assert.deepEqual(draft.files.map((x) => [x.path, x.new]), [["agent-result.txt", true]]);
+  const stale = await f.req(`/api/runs/${p.id}/commit-mine`, { ...draft, hash: "0".repeat(64) });
+  assert.match(stale.error, /Your changes changed/);
+  const mine = await f.req(`/api/runs/${p.id}/commit-mine`, { ...draft, message: "Keep my result notes" });
+  assert.equal(mine.status.state, "behind");
+  assert.equal(await out("log", "-1", "--format=%s"), "Keep my result notes");
+  assert.equal(await out("show", "--name-only", "--format=", "HEAD"), "agent-result.txt");
+  assert.equal(await out("status", "--porcelain"), "M module.py", "Other uncommitted work stays uncommitted");
+  // Both sides added the file, so the update is a new round where the agent resolves it.
+  const update = await f.req(`/api/runs/${p.id}/update`, {});
+  assert.equal(update.round.kind, "update");
+  assert.deepEqual(update.round.conflicts, ["agent-result.txt"]);
+  assert.equal(update.round.reportHash, undefined);
+  const round = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + update.round.id);
+    return r.status === "completed" && r;
+  });
+  comment = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  assert.equal(comment.status, "addressed", "The merged result needs a new approval");
+  assert.equal(comment.runId, round.id);
+  assert.match(await out("show", `${round.branch}:agent-result.txt`), /deterministic agent[^]*owner's own notes/);
+  assert.equal((await merge(round.id)).state, "waiting");
+  await f.req("/api/comments/" + c.id, { action: "verify", version: comment.version }, "PATCH");
+  assert.equal((await merge(p.id)).state, "waiting", "Only the latest round merges");
+  status = await merge(round.id);
+  assert.equal(status.state, "ready");
+  const moved = await f.req(`/api/runs/${round.id}/merge`, { target: f.sha, head: status.head });
+  assert.match(moved.error, /changed; check the merge again/);
+  const before = await out("rev-parse", "main");
+  const merged = await f.req(`/api/runs/${round.id}/merge`, { target: status.targetSha, head: status.head });
+  assert.equal(merged.state, "merged");
+  assert.equal(merged.undoable, true);
+  assert.equal(await out("rev-parse", "main"), status.head);
+  assert.equal(await out("branch", "--show-current"), "main", "The checkout stays on its branch");
+  assert.equal(await out("status", "--porcelain"), "M module.py", "Uncommitted work survives the merge");
+  assert.equal((await f.req("/api/runs/" + round.id)).applied, true);
+  // Undo moves main back and keeps uncommitted work.
+  const undone = await f.req(`/api/runs/${round.id}/unmerge`, {});
+  assert.equal(undone.state, "ready");
+  assert.equal(await out("rev-parse", "main"), before);
+  assert.equal(await out("status", "--porcelain"), "M module.py");
+  // A clean update keeps the approval: main moves on in a file the task does not touch.
+  await f.git("commit", "-qam", "Main moves on");
+  status = await merge(round.id);
+  assert.equal(status.state, "behind");
+  const clean = await f.req(`/api/runs/${round.id}/update`, {});
+  assert.equal(clean.merged.state, "ready");
+  assert.match(await out("log", "-1", "--format=%s", status.head === clean.merged.head ? "HEAD" : clean.merged.head), /Merge main into peekumi\/run-/);
+  // With main not checked out, the merge moves only the branch, never the working files.
+  await f.git("checkout", "-q", "--detach");
+  const detached = await merge(round.id);
+  assert.equal(detached.checkedOut, false);
+  const done = await f.req(`/api/runs/${round.id}/merge`, { target: detached.targetSha, head: detached.head });
+  assert.equal(done.state, "merged");
+  assert.equal(await out("rev-parse", "main"), detached.head);
+  assert.equal(await out("rev-parse", "HEAD"), detached.targetSha, "The detached checkout does not move");
+});
+
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

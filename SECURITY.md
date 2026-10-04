@@ -39,7 +39,7 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 
 - A task runs the agent in a separate Git worktree on its own branch. The worktree is not a security sandbox: the agent runs with the permissions of your user account.
 - Codex runs with its `--approve-for-me` preset. Claude Code runs with accepted edits and can use Bash. Start tasks only with instructions that you trust.
-- Peekumi never pushes or merges an agent branch. Examine the result before you merge it.
+- Peekumi never pushes an agent branch. It merges a task into your branch only when you tap **Merge** and confirm, and only as a fast-forward. Examine the result before you merge it.
 
 ### Network exposure
 

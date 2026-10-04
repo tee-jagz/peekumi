@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { chromium } from "@playwright/test";
 import { fixture, waitFor } from "./workflow-support.mjs";
 let browser;
@@ -391,20 +392,16 @@ try {
       await page.getByRole("button", { name: "Approve", exact: true }).click();
       await page.getByText("Approved by you", { exact: false }).first().waitFor();
       await page
-        .getByText("Approved · merge to apply", { exact: true })
+        .getByText("Approved · ready to merge", { exact: true })
         .waitFor();
       // A mistaken approval can be undone while the work is not on main.
       await page.getByRole("button", { name: "Reopen review", exact: true }).click();
       await page.getByRole("button", { name: "Approve", exact: true }).click();
-      await page.getByText("Approved · merge to apply", { exact: true }).waitFor();
-      assert.match(
-        await page.locator(".apply-step code").innerText(),
-        /^git merge --ff-only peekumi\/run-[\w-]+$/,
-        "After approval the task names the branch and the command that applies it",
-      );
-      assert.ok(
-        await page.getByRole("button", { name: "Copy command" }).isVisible(),
-      );
+      await page.getByText("Approved · ready to merge", { exact: true }).waitFor();
+      // After approval the task offers the merge itself, fast-forward only.
+      await page.locator('.merge-step[data-state="ready"]').waitFor();
+      assert.ok(await page.locator("#mergeTask").isVisible());
+      assert.equal(await page.locator("#mergeTask").innerText(), "Merge into main");
       await page.waitForFunction(() => {
         const step = document.querySelector(".apply-step").getBoundingClientRect(),
           view = document.querySelector("#reviewScroll").getBoundingClientRect();
@@ -475,12 +472,9 @@ try {
         async () =>
           (await f.req("/api/workflow")).comments.length === countBefore + 1,
       );
-      assert.equal(
-        await page
-          .getByRole("tab", { name: "Instruction", exact: true })
-          .getAttribute("aria-selected"),
-        "true",
-      );
+      await page
+        .locator('[role="tab"][aria-label="Instruction"][aria-selected="true"]')
+        .waitFor({ timeout: 5000 });
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));
@@ -633,20 +627,57 @@ try {
       assert.equal(overflow, false);
       // Once merged, the task leaves the Tasks list for History, where it is a settled record:
       // no review actions, and Follow up starts a new instruction at the same place.
-      const latest = (await f.req("/api/workflow")).runs.find(
+      let latest = (await f.req("/api/workflow")).runs.find(
         (r) => r.status === "completed" && !r.revisedBy,
       );
-      await f.git("merge", "--ff-only", latest.branch);
-      if ((await page.locator("#openTasks").getAttribute("aria-pressed")) === "true")
+      if ((await page.locator("#openTasks").getAttribute("aria-pressed")) !== "true")
         await page.locator("#openTasks").click();
+      await page.locator(".task-link").first().click();
+      // The merge asks first, with the files it changes; it can be undone, then done again.
+      await page.locator("#mergeTask").click();
+      const sheet = page.locator("dialog.merge-dialog");
+      await sheet.waitFor();
+      assert.match(await sheet.innerText(), /Merge 2 commits into main\?[^]*agent-result\.txt[^]*Nothing is pushed/);
+      await page.screenshot({ path: `test-results/workflow-merge-confirm-${viewport.width}.png` });
+      await page.locator("#confirmMerge").click();
+      await page.locator('.merge-step[data-state="merged"]').waitFor();
+      assert.equal((await f.git("rev-parse", "main")).toString().trim(), (await f.git("rev-parse", latest.branch)).toString().trim());
+      await page.screenshot({ path: `test-results/workflow-merged-${viewport.width}.png` });
+      await page.locator("#undoMerge").click();
+      await page.locator('.merge-step[data-state="ready"]').waitFor();
+      assert.equal((await f.git("rev-parse", "main")).toString().trim(), f.sha);
+      // The owner's uncommitted file is in the way: the refused merge shows it, the owner
+      // commits it with the agent's message, and the conflict goes to the agent as a round.
+      await writeFile(path.join(f.dir, "agent-result.txt"), "The owner's own notes.\n");
+      await page.locator("#mergeTask").click();
+      await page.locator("#confirmMerge").click();
+      await page.locator('.merge-step[data-state="blocked"]').waitFor();
+      assert.match(await page.locator(".merge-step").innerText(), /1 of your files is in the way[^]*agent-result\.txt/);
+      await page.screenshot({ path: `test-results/workflow-blocked-${viewport.width}.png` });
+      await page.locator("#commitFirst").click();
+      const message = page.getByLabel("Commit message · written by the agent, you can edit it");
+      await message.waitFor();
+      assert.equal(await message.inputValue(), "Record the owner's own result notes");
+      await page.screenshot({ path: `test-results/workflow-commit-mine-${viewport.width}.png` });
+      await page.locator("#commitMine").click();
+      await page.locator(".workflow-card.requested", { hasText: "Update with main" }).waitFor({ timeout: 30000 });
+      assert.equal((await f.git("log", "-1", "--format=%s", "main")).toString().trim(), "Record the owner's own result notes");
+      await page.getByRole("button", { name: "Approve", exact: true }).waitFor({ timeout: 30000 });
+      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      await page.locator('.merge-step[data-state="ready"]').waitFor();
+      await page.locator("#mergeTask").click();
+      await page.locator("#confirmMerge").click();
+      await page.locator('.merge-step[data-state="merged"]').waitFor();
       await page.locator("#openTasks").click();
+      if ((await page.locator("#openTasks").getAttribute("aria-pressed")) !== "true")
+        await page.locator("#openTasks").click();
       const historyLink = page.locator(".history-link");
       await historyLink.waitFor();
       assert.match(await historyLink.innerText(), /^History · \d+$/);
       assert.equal(await page.getByText("Done · waiting to merge", { exact: true }).count(), 0);
       await historyLink.click();
       await page.locator(".task-link.quiet").first().click();
-      await page.getByText("Applied to main", { exact: true }).waitFor();
+      await page.getByText("Merged into main", { exact: true }).first().waitFor();
       for (const name of ["Approve", "Request changes", "Reopen review"])
         assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
       await page.getByRole("button", { name: "Follow up", exact: true }).click();

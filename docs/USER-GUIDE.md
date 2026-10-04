@@ -227,7 +227,9 @@ The Tasks list puts tasks in groups by what they need from you. **Needs you** ha
 
 The Tasks button is a toggle. To go back to the map selection, tap it again or tap an empty area of the map. While an agent works, Peek works inside the Tasks button in all parts of the app. Tap the button to open that task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
 
-Approval of a task does not change your code. Peekumi never merges: the commits of the agent stay on their task branch. After you approve, the task shows **Next: apply to main** with the exact command (for example, `git merge --ff-only peekumi/run-…`) and a copy button. Run the command in the repository while main is checked out, or open a pull request from that branch. When the commits are in main, the task shows **Applied to main**. Refer to [WORKFLOW.md](WORKFLOW.md) for the full loop.
+Approval of a task does not change your code. After you approve, the task shows **Ready to merge into main**, with the number of commits and changed files. Tap **Merge into main**, then **Merge** to confirm. Peekumi does a fast-forward of main to the last commit of the task. It never pushes. After the merge, the task shows **Merged into main** and an **Undo merge** button. Undo works until main changes.
+
+If you have uncommitted changes in a file that the merge changes, the task shows the files that are in the way. Tap **Commit my changes, then merge**. An agent writes a commit message for only those files. Examine the files and the message, then tap **Commit**. If main has new commits, tap **Update with main**. If main and the task conflict, the agent resolves the conflict in a new round, and you review the task again. Refer to [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
 ## Typing on a phone
 

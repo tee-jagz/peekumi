@@ -68,7 +68,7 @@ The authorized next slice is implemented as [WORKFLOW.md](WORKFLOW.md) describes
 
 The map key is with the floating zoom/fit controls on the canvas. The map key opens as an overlay and does not use a permanent content row. It contains the colour lens. Before/After floats over the map in Diff. When you drag the sheet, the inspection navigation becomes available at approximately half height.
 
-The task UI shows human-readable updates, the reported checks and the review of changed files together. With one review note, task review can verify all the addressed comments. Task review does not merge or deploy the run branch. Agent JSON and generated prompts are optional diagnostics.
+The task UI shows human-readable updates, the reported checks and the review of changed files together. With one review note, task review can verify all the addressed comments. Task review does not merge or deploy the run branch. After approval, the owner can merge the task into the watched branch with a fast-forward, confirm it and undo it. Peekumi never pushes or deploys. Agent JSON and generated prompts are optional diagnostics.
 
 Owners can change the viewed branch from the comparison line in the header. This is a read-only Git inspection. It does not change local edits or the checkout. A completed task offers Explore changes. Explore changes shows on the map all the work of the agent: it compares the agent branch with the commit where the task started. A ready cue shows on Tasks, and a Back to task chip restores the previous view.
 

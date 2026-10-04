@@ -225,6 +225,10 @@ const workflow = createWorkflow({
   /** The task being explored, when it can still collect changes for a next round. */
   exploring: () =>
     taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
+  // The watched branch moved: show its new commits, as the Refresh button does.
+  moved: () => {
+    if (!viewingPr && !taskReturn) boot(true).catch(() => {});
+  },
 });
 const ask = createAsk({
   api,

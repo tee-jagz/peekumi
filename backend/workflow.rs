@@ -50,7 +50,7 @@ fn find_mut<'a>(v: &'a mut Value, key: &str, id: &str) -> Result<&'a mut Value> 
         .context("Not found")
 }
 /// Appends a complete comment-state event so edits and previous reports remain inspectable.
-fn event(c: &mut Value, actor: &str) {
+pub(crate) fn event(c: &mut Value, actor: &str) {
     c["version"] = json!(c["version"].as_u64().unwrap_or(0) + 1);
     c["updatedAt"] = json!(now());
     let mut record = c.clone();
@@ -184,6 +184,10 @@ impl Workflow {
     }
     /// Serves the owner's workflow routes. Dispatch only accepts an unchanged persisted preview.
     pub fn route(&self, method: &str, path: &str, body: Value) -> Result<Value> {
+        // Merging an approved task: see the merge module.
+        if let Some(result) = self.merge_route(method, path, &body) {
+            return result;
+        }
         if method == "GET" && path == "/api/workflow" {
             let mut v = self.read()?;
             for r in list(&mut v, "runs") {
@@ -424,7 +428,7 @@ impl Workflow {
     /// for after an earlier round, the instructions (with that round's results), the
     /// dependency rules and the reporting contract.
     #[allow(clippy::too_many_arguments)]
-    fn task_text(
+    pub(crate) fn task_text(
         &self,
         agent: &str,
         id: &str,
@@ -437,7 +441,7 @@ impl Workflow {
         rules: &str,
     ) -> String {
         let mut task = format!(
-            "# Task for {agent}, run {id}\nRepository: {}\n{start} Work only on {branch} in the supplied worktree. Do not push or merge.\n\n",
+            "# Task for {agent}, run {id}\nRepository: {}\n{start} Work only on {branch} in the supplied worktree. Do not push, and do not merge into other branches.\n\n",
             self.repo.file_name().unwrap_or_default().to_string_lossy()
         );
         if !requested.is_empty() {
