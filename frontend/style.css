@@ -5583,3 +5583,20 @@ details.p-section[open] > summary::before {
   flex: none;
   white-space: pre;
 }
+/* Done and past tasks are a quiet record: muted, out of the way of work that needs you. */
+.task-link.quiet {
+  opacity: 0.62;
+}
+.workflow-group.quiet-group {
+  color: var(--muted);
+  font-weight: 600;
+}
+.panel .history-link {
+  margin-top: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--muted);
+}
+.earlier-instructions {
+  opacity: 0.8;
+}
