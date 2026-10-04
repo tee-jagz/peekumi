@@ -164,7 +164,13 @@ impl Workflow {
     /// Checks whether all result commits are already on the watched branch.
     /// This is read-only and does not imply that a deployment has occurred.
     fn annotate_application(&self, run: &mut Value) {
-        let applied = run["results"].as_array().is_some_and(|commits| {
+        run["applied"] = json!(self.applied(run));
+        run["targetBranch"] = json!(self.watched.trim_start_matches("refs/heads/"));
+    }
+    /// True once every result commit of `run` is on the watched branch: the task is applied,
+    /// so its work is settled and later changes start a new task.
+    fn applied(&self, run: &Value) -> bool {
+        run["results"].as_array().is_some_and(|commits| {
             !commits.is_empty()
                 && commits.iter().all(|commit| {
                     commit.as_str().is_some_and(|sha| {
@@ -174,9 +180,7 @@ impl Workflow {
                                 .is_ok()
                     })
                 })
-        });
-        run["applied"] = json!(applied);
-        run["targetBranch"] = json!(self.watched.trim_start_matches("refs/heads/"));
+        })
     }
     /// Serves the owner's workflow routes. Dispatch only accepts an unchanged persisted preview.
     pub fn route(&self, method: &str, path: &str, body: Value) -> Result<Value> {
@@ -225,6 +229,7 @@ impl Workflow {
                 if let Some(run) = &for_run {
                     let r = find(v, "runs", run)?;
                     ensure!(!active(r) && r["status"] != "preview", "Wait for this task to finish");
+                    ensure!(!self.applied(r), "This task is applied to main; start a new task for further changes");
                     ensure!(r["revisedBy"].is_null(), "Changes were already requested; continue from the latest round");
                 }
                 let mut c = json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]});
@@ -242,8 +247,15 @@ impl Workflow {
                 let c = find(v,"comments",id)?;
                 ensure!(body["version"] == c["version"],"Comment changed; refresh before editing");
                 let action = text(&body,"action",32)?;
-                if ["verify","reopen","delete"].contains(&action) && let Some(run) = c["runId"].as_str() {
+                if ["verify","unverify","reopen","delete"].contains(&action) && let Some(run) = c["runId"].as_str() {
                     ensure!(!active(find(v,"runs",run)?), "Wait for the run to finish");
+                }
+                if action == "unverify" {
+                    // Reopening a review is possible only while the work is not yet on main.
+                    ensure!(c["status"] == "verified", "Only approved instructions can be reopened for review");
+                    let run = find(v,"runs",c["runId"].as_str().context("Missing run")?)?;
+                    ensure!(run["revisedBy"].is_null(), "A later round continues this task");
+                    ensure!(!self.applied(run), "This task is applied to main; start a new task for further changes");
                 }
                 if action == "verify" {
                     ensure!(c["status"] == "addressed", "Only addressed comments can be verified");
@@ -271,6 +283,11 @@ impl Workflow {
                         };
                         c["verification"] = json!({"note":note,"commit":c["report"]["commit"],"at":now(),"actor":"owner"});
                         c["status"] = json!("verified");
+                    }
+                    "unverify" => {
+                        // The approval stays in the instruction's history.
+                        c["status"] = json!("addressed");
+                        c["verification"] = Value::Null;
                     }
                     _ => bail!("Unknown comment action"),
                 }
@@ -468,6 +485,7 @@ impl Workflow {
         };
         let earlier = self.run(previous)?;
         ensure!(!active(&earlier), "Wait for this task to finish");
+        ensure!(!self.applied(&earlier), "This task is applied to main; start a new task for further changes");
         let branch_tip = self.resolve(&format!(
             "refs/heads/{}",
             earlier["branch"].as_str().context("Missing branch")?

@@ -15,6 +15,8 @@ if (values.includes("--tools")) {
     throw Error("Ask inherited a Peekumi credential");
   if (!values[values.indexOf("--system-prompt") + 1]?.includes("ASD-STE100"))
     throw Error("Ask must answer in ASD-STE100 Simplified Technical English");
+  if (!values[values.indexOf("--system-prompt") + 1]?.includes("Check before you answer"))
+    throw Error("Ask must verify the facts its answer depends on before it answers");
   if (values[values.indexOf("--effort") + 1] !== "low")
     throw Error("Ask must run at low effort for fast answers");
   if (values[values.indexOf("--model") + 1] !== "sonnet")
@@ -65,6 +67,12 @@ if (values.includes("--tools")) {
       ? JSON.stringify(input.repositoryContext.source)
       : input.question === "Echo the rules."
       ? JSON.stringify(input.repositoryContext.rules)
+      : input.question === "Leave something unchecked."
+      ? "The function moved. I did not check the tests."
+      : input.question.startsWith("Your draft answer")
+      ? "Checked after: " + input.conversation.at(-1).text
+      : input.question === "Answer fully."
+      ? "The function moved to `module.py`."
       : "The supplied comparison shows the selected module. I have not run tests.\nSuggested instruction: Add a focused regression test for this behavior.";
   if (values.includes("stream-json")) {
     // Claude Code's streaming shape: a working turn, then the answer in small pieces.

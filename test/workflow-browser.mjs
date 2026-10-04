@@ -389,10 +389,14 @@ try {
       );
       await page.locator(".task-link").first().click();
       await page.getByRole("button", { name: "Approve", exact: true }).click();
-      await page.getByText("Reviewed by you", { exact: false }).first().waitFor();
+      await page.getByText("Approved by you", { exact: false }).first().waitFor();
       await page
-        .getByText("Reviewed · not applied to main", { exact: true })
+        .getByText("Approved · merge to apply", { exact: true })
         .waitFor();
+      // A mistaken approval can be undone while the work is not on main.
+      await page.getByRole("button", { name: "Reopen review", exact: true }).click();
+      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      await page.getByText("Approved · merge to apply", { exact: true }).waitFor();
       assert.match(
         await page.locator(".apply-step code").innerText(),
         /^git merge --ff-only peekumi\/run-[\w-]+$/,
@@ -409,6 +413,13 @@ try {
       await page.screenshot({
         path: `test-results/workflow-verified-${viewport.width}.png`,
       });
+      // In the Tasks list an approved task is quiet, under Done, not with work that needs you.
+      await page.locator("#openTasks").click();
+      if ((await page.locator("#openTasks").getAttribute("aria-pressed")) !== "true")
+        await page.locator("#openTasks").click();
+      await page.getByText("Done · waiting to merge", { exact: true }).waitFor();
+      assert.equal(await page.locator(".task-link.quiet").count(), 1);
+      assert.equal(await page.getByText("Needs you", { exact: true }).count(), 0);
       if (viewport.width < 900) {
         await page.locator("#sheetHandle").focus();
         await page.keyboard.press("Home");
@@ -620,6 +631,26 @@ try {
         () => document.documentElement.scrollWidth > innerWidth,
       );
       assert.equal(overflow, false);
+      // Once merged, the task leaves the Tasks list for History, where it is a settled record:
+      // no review actions, and Follow up starts a new instruction at the same place.
+      const latest = (await f.req("/api/workflow")).runs.find(
+        (r) => r.status === "completed" && !r.revisedBy,
+      );
+      await f.git("merge", "--ff-only", latest.branch);
+      if ((await page.locator("#openTasks").getAttribute("aria-pressed")) === "true")
+        await page.locator("#openTasks").click();
+      await page.locator("#openTasks").click();
+      const historyLink = page.locator(".history-link");
+      await historyLink.waitFor();
+      assert.match(await historyLink.innerText(), /^History · \d+$/);
+      assert.equal(await page.getByText("Done · waiting to merge", { exact: true }).count(), 0);
+      await historyLink.click();
+      await page.locator(".task-link.quiet").first().click();
+      await page.getByText("Applied to main", { exact: true }).waitFor();
+      for (const name of ["Approve", "Request changes", "Reopen review"])
+        assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
+      await page.getByRole("button", { name: "Follow up", exact: true }).click();
+      assert.match(await page.locator("#dockContext").innerText(), /main$/);
       assert.deepEqual(errors, []);
       console.log(
         `Workflow browser ${viewport.width}: draft → preview → dispatch → MCP report → inspect → verify passed`,

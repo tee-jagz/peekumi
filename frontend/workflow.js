@@ -13,7 +13,7 @@ const states = {
   with_agent: "With agent",
   addressed: "Ready for review",
   flagged: "Flagged",
-  verified: "Reviewed",
+  verified: "Approved",
   unreported: "Needs retry",
 };
 const active = (r) => ["starting", "running", "interrupted"].includes(r.status);
@@ -212,7 +212,7 @@ export function createWorkflow({
     const r = runDetail;
     if (document.querySelector("#panel")?.dataset.view !== "runs" || !r || r.id !== runId)
       return null;
-    return !active(r) && r.status !== "preview" && !r.revisedBy ? r.id : null;
+    return !active(r) && r.status !== "preview" && !r.revisedBy && !r.applied ? r.id : null;
   }
   /** Drafts waiting for a new task; those collected for a finished task go back with it. */
   const sendable = (c) => c.status === "draft" && !c.forRun;
@@ -402,7 +402,7 @@ export function createWorkflow({
   }
   /** Renders the persistent draft input independently of the current inspection view. */
   function renderComposer(composerHost) {
-    if (!composer || (!draft && !editing)) composer = context();
+    if (!composer || (!draft && !editing && !composer.pinned)) composer = context();
     if (composer) {
       const box = el("section", "composer");
       box.append(
@@ -412,7 +412,9 @@ export function createWorkflow({
           (editing ? "Edit · " : "") +
             dockLabel(composer.anchor) +
             " · " +
-            composer.sha.slice(0, 7),
+            (composer.sha.startsWith("refs/heads/")
+              ? composer.sha.slice(11)
+              : composer.sha.slice(0, 7)),
         ),
         field("What should change, and why", draft, (v) => (draft = v), 1),
       );
@@ -490,9 +492,20 @@ export function createWorkflow({
       );
       body.append(top);
     }
-    if (!task && !here) {
+    const overview = !task && filter === "all";
+    if (!task && filter === "history") {
+      history(body);
+      return;
+    }
+    if (overview) {
       body.append(el("h2", "task-heading", "Tasks"));
+      const shown = data.runs
+        .filter((r) => r.status !== "preview" && !r.revisedBy)
+        .slice()
+        .reverse();
       const drafts = data.comments.filter(sendable);
+      const needs = shown.filter((r) => stageOf(r) === "needs");
+      if (drafts.length || needs.length) body.append(el("h3", "workflow-group", "Needs you"));
       if (drafts.length)
         body.append(
           action(
@@ -506,22 +519,18 @@ export function createWorkflow({
             true,
           ),
         );
-      // A task's earlier rounds open from its latest one.
-      for (const r of data.runs
-        .filter((r) => r.status !== "preview" && !r.revisedBy)
-        .slice()
-        .reverse()) {
-        const card = action(taskTitle(r), () => openTask(r.id));
-        card.classList.add("task-link");
-        card.append(
-          el(
-            "span",
-            "rd",
-            `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`,
-          ),
+      // A task's earlier rounds open from its latest one. Tasks are grouped by what they
+      // need from you; applied and closed tasks leave this list for History.
+      body.append(...needs.map(taskCard));
+      const working = shown.filter((r) => stageOf(r) === "working");
+      if (working.length)
+        body.append(el("h3", "workflow-group", "Working"), ...working.map(taskCard));
+      const done = shown.filter((r) => stageOf(r) === "done");
+      if (done.length)
+        body.append(
+          el("h3", "workflow-group quiet-group", "Done · waiting to merge"),
+          ...done.map((r) => taskCard(r, true)),
         );
-        body.append(card);
-      }
     }
     const items = task
       ? data.comments.filter(
@@ -543,7 +552,11 @@ export function createWorkflow({
       empty.prepend(peek(loaded ? "empty" : "loading"));
       body.append(empty);
     }
-    else if (!here && !items.length && !data.runs.some((r) => r.status !== "preview"))
+    else if (
+      overview &&
+      !items.length &&
+      !data.runs.some((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) !== "history")
+    )
       body.append(
         el(
           "p",
@@ -551,11 +564,42 @@ export function createWorkflow({
           loaded ? "Add an instruction below to start a task." : "Loading tasks…",
         ),
       );
+    // On a selection, finished instructions (approved, or in an applied task) collapse into
+    // one line, so drafts and open instructions stay in front.
+    const settled = (c) =>
+      c.status === "verified" || data.runs.find((r) => r.id === c.runId)?.applied;
+    const earlier = here ? items.filter(settled) : [];
+    renderCards(body, here ? items.filter((c) => !settled(c)) : items, task);
+    if (earlier.length) {
+      const fold = el("details", "workflow-evidence earlier-instructions");
+      fold.dataset.key = "earlier-instructions";
+      fold.append(
+        el("summary", "", `${earlier.length} earlier instruction${earlier.length === 1 ? "" : "s"}`),
+      );
+      renderCards(fold, earlier);
+      body.append(fold);
+    }
+    if (overview) {
+      const past = data.runs.filter(
+        (r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history",
+      ).length;
+      if (past) {
+        const link = action(`History · ${past}`, () => {
+          filter = "history";
+          showTab("comments");
+        });
+        link.classList.add("link-button", "history-link");
+        body.append(link);
+      }
+    }
+  }
+  /** The instruction cards in `list`, grouped by state, added to `target`. */
+  function renderCards(target, list, task = null) {
     for (const state of Object.keys(states)) {
-      const group = items.filter((c) => c.status === state);
+      const group = list.filter((c) => c.status === state);
       if (!group.length) continue;
-      if (!task && !here)
-        body.append(el("h3", "workflow-group", "Your draft instructions"));
+      if (state === "draft" && filter === "all")
+        target.append(el("h3", "workflow-group", "Your draft instructions"));
       for (const c of group) {
         const card = el("article", "workflow-card");
         card.dataset.commentId = c.id;
@@ -599,8 +643,8 @@ export function createWorkflow({
               "p",
               "verification-note",
               c.verification.note
-                ? "Reviewed by you: " + c.verification.note
-                : "Reviewed by you",
+                ? "Approved by you: " + c.verification.note
+                : "Approved by you",
             ),
           );
         const controls = el("div", "sel-acts");
@@ -618,7 +662,7 @@ export function createWorkflow({
         if (c.runId && !task)
           controls.append(action("View task", () => openTask(c.runId)));
         if (controls.childElementCount) card.append(controls);
-        body.append(card);
+        target.append(card);
       }
     }
   }
@@ -798,6 +842,46 @@ export function createWorkflow({
         ["addressed", "flagged", "unreported"].includes(c.status),
     );
   }
+  /** Where a task belongs in the Tasks list: "working" while an agent runs, "needs" while
+   * it has instructions or changes waiting for you, "done" once approved but not yet merged,
+   * and "history" once applied or closed. */
+  function stageOf(r) {
+    if (active(r)) return "working";
+    if (r.applied) return "history";
+    // Changes being collected for a next round are current work, even on an approved task.
+    if (collected(r.id).length) return "needs";
+    // Approving is the owner's decision; anything left over stays visible inside the task.
+    if (reviewed(r)) return "done";
+    return open(r).length ? "needs" : "history";
+  }
+  /** One task in a list: its instructions, state and date. Done and past tasks are quiet. */
+  function taskCard(r, quiet = false) {
+    const card = action(taskTitle(r), () => openTask(r.id));
+    card.classList.add("task-link");
+    if (quiet) card.classList.add("quiet");
+    card.append(
+      el("span", "rd", `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`),
+    );
+    return card;
+  }
+  /** Applied and closed tasks, newest first: the record, out of the way of current work. */
+  function history(body) {
+    const row = el("div", "task-head"),
+      back = iconButton(el("button", "btn icon-action"), "back", "Back to tasks");
+    back.type = "button";
+    back.onclick = () => {
+      filter = "all";
+      showTab("comments");
+    };
+    row.append(back, el("h2", "task-heading", "History"));
+    body.append(row);
+    const past = data.runs
+      .filter((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history")
+      .slice()
+      .reverse();
+    if (!past.length) body.append(el("p", "empty", "No applied or closed tasks yet."));
+    body.append(...past.map((r) => taskCard(r, true)));
+  }
   function runStatus(r) {
     const target = r.targetBranch || "main";
     if (r.applied) return `Applied to ${target}`;
@@ -805,7 +889,7 @@ export function createWorkflow({
     if (r.status === "completed" && !reviewed(r) && !open(r).length)
       return "Nothing left to review";
     if (r.status === "completed")
-      return reviewed(r) ? `Reviewed · not applied to ${target}` : "Ready for review";
+      return reviewed(r) ? `Approved · merge to apply` : "Ready for review";
     return (
       {
         running: "Working",
@@ -853,6 +937,7 @@ export function createWorkflow({
     if (active(r) && r.status !== "interrupted") return "working";
     if (r.applied) return "merged";
     if (r.revisedBy) return "";
+    if (reviewed(r)) return "success";
     if (["failed", "interrupted", "cancelled"].includes(r.status)) return "stopped";
     return runStatus(r) === "Ready for review" ? "ready" : "";
   }
@@ -936,7 +1021,8 @@ export function createWorkflow({
     const ready = data.comments.filter(
       (c) => c.runId === r.id && c.status === "addressed",
     );
-    const decide = !active(r) && !r.revisedBy,
+    // An applied task is a settled record: later changes start a new task.
+    const decide = !active(r) && !r.revisedBy && !r.applied,
       batch = decide ? collected(r.id) : [];
     const agentName = r.agent === "claude" ? "Claude Code" : "Codex";
     if (batch.length) {
@@ -1022,6 +1108,41 @@ export function createWorkflow({
       add.classList.add("link-button");
       actions.append(add);
     }
+    // A mistaken approval can be undone while the work is not yet on main.
+    if (decide && reviewed(r))
+      actions.append(
+        action("Reopen review", async () => {
+          for (const c of data.comments.filter(
+            (x) => x.runId === r.id && x.status === "verified",
+          ))
+            await write(
+              "/api/comments/" + c.id,
+              { action: "unverify", version: c.version },
+              "PATCH",
+            );
+          await refresh();
+        }),
+      );
+    // Once applied, more changes are a new instruction at the same place, as a new task.
+    if (r.applied && !r.revisedBy)
+      actions.append(
+        action(
+          "Follow up",
+          () => {
+            const first = instructionsOf(r)[0];
+            composer = {
+              anchor: first?.anchor || { kind: "repo", path: "" },
+              sha: data.watched || "HEAD",
+              pinned: true,
+            };
+            editing = null;
+            draft = "";
+            redraw();
+            document.querySelector("#composerHost textarea")?.focus();
+          },
+          true,
+        ),
+      );
     if (actions.childElementCount) body.append(actions);
     if (decide && reply === "note" && ready.length) {
       const note = field(
@@ -1069,7 +1190,7 @@ export function createWorkflow({
     /** True when a finished task, not yet continued, can collect changes for a next round. */
     revisable(id) {
       const r = data.runs.find((x) => x.id === id);
-      return Boolean(r && !active(r) && r.status !== "preview" && !r.revisedBy);
+      return Boolean(r && !active(r) && r.status !== "preview" && !r.revisedBy && !r.applied);
     },
     /** How many instructions are waiting to go back with task `id`. */
     collected: (id) => collected(id).length,

@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 /// Tool calls one answer may make before it must reply with what it has.
-pub const MAX_CALLS: usize = 12;
+pub const MAX_CALLS: usize = 30;
 /// Tool names as Claude Code sees them through the `peekumi` server.
 pub const TOOLS: [&str; 5] = [
     "mcp__peekumi__find_declarations",

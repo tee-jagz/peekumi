@@ -78,6 +78,10 @@ struct Options {
     /// Model for Ask answers: a fast model by default; set `opus` for slower, deeper answers.
     #[arg(long, env = "PEEKUMI_ASK_MODEL", default_value = "sonnet")]
     ask_model: String,
+    /// Reasoning effort for Ask answers (low, medium or high): more effort checks more before
+    /// it answers, and takes longer.
+    #[arg(long, env = "PEEKUMI_ASK_EFFORT", default_value = "low")]
+    ask_effort: String,
     #[arg(long, env = "PEEKUMI_GH", default_value = "gh")]
     github: String,
     #[arg(long, hide = true)]

@@ -328,6 +328,22 @@ test("requesting changes starts a next round that builds on the agent's own comm
     f.sha,
     "The inspected checkout never moves",
   );
+  // An approval can be undone while the work is not on main, and given again.
+  let approved = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  const reopened = await f.req("/api/comments/" + c.id, { action: "unverify", version: approved.version }, "PATCH");
+  assert.equal(reopened.status, "addressed");
+  assert.ok(reopened.history.some((h) => h.status === "verified"), "The approval stays in the history");
+  approved = await f.req("/api/comments/" + c.id, { action: "verify", version: reopened.version }, "PATCH");
+  assert.equal(approved.status, "verified");
+  // Once the owner merges the latest round, the task is a settled record.
+  await f.git("merge", "--ff-only", next.branch);
+  assert.equal((await f.req("/api/runs/" + next.id)).applied, true);
+  const locked = [
+    await f.req("/api/comments/" + c.id, { action: "unverify", version: approved.version }, "PATCH"),
+    await f.req(`/api/runs/${next.id}/revise`, { feedback: "Again" }),
+    await f.req("/api/comments", { text: "More", sha: result, anchor: { kind: "repo", path: "" }, forRun: next.id }),
+  ];
+  for (const r of locked) assert.match(r.error, /applied to main; start a new task/);
 });
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
@@ -446,6 +462,41 @@ test("Ask sees the committed dependency rules at the compared head", async (t) =
   assert.equal(JSON.parse(result.answer.text), rules);
 });
 
+test("Ask checks what a draft left unchecked before it replies", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const ask = (question, stream = false) =>
+    fetch(f.server.url + "/api/ask", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + f.server.token, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base: f.sha,
+        head: f.sha,
+        sha: f.sha,
+        anchor: { kind: "file", path: "module.py" },
+        question,
+        history: [],
+        stream,
+      }),
+    });
+  const whole = await (await ask("Leave something unchecked.")).json();
+  assert.equal(
+    whole.answer.text,
+    "Checked after: The function moved. I did not check the tests.",
+    "A draft that leaves a check open goes back for a second pass with the draft",
+  );
+  const lines = (await (await ask("Leave something unchecked.", true)).text()).trim().split("\n").map((l) => JSON.parse(l));
+  assert.equal(lines.at(-1).type, "done");
+  assert.match(lines.at(-1).answer.text, /^Checked after: /, "Streamed answers get the same check");
+  const turns = lines.filter((e) => e.type === "turn").length;
+  assert.ok(turns >= 3, "The checked pass starts a new turn, which replaces the draft on screen");
+  assert.equal(
+    (await (await ask("Answer fully.")).json()).answer.text,
+    "The function moved to `module.py`.",
+    "A complete draft is the answer",
+  );
+});
+
 test("Ask about a folder reads its README, declarations and changed code, not only file names", async (t) => {
   const f = await fixture();
   t.after(() => f.close());
@@ -543,8 +594,8 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
     searched.matches.some((m) => m.path === "caller.py" && m.within === "use" && /return target\(1\)/.test(m.text)),
     "Code search finds the call site and the declaration it sits in: " + used.searched,
   );
-  assert.equal(used.calls, 12, "Lookups stop at the per-answer limit");
-  assert.equal(result.lookups.length, 12);
+  assert.equal(used.calls, 30, "Lookups stop at the per-answer limit");
+  assert.equal(result.lookups.length, 30);
   assert.ok(result.lookups.includes("Read target in late.py"));
 
   const after = await fetch(used.url, {
