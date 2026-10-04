@@ -26,7 +26,19 @@ try {
     });
     const page = await context.newPage();
     page.on("pageerror", (e) => console.error("PAGE", e.message));
+    // Until the first map is drawn, Peek loads in the map area and names the current step.
+    let release;
+    const held = new Promise((done) => (release = done));
+    await page.route("**/api/compare?*", async (r) => {
+      await held;
+      await r.continue();
+    });
     await page.goto(server.url + "/#token=" + server.token);
+    await page.locator("#startLoading .peek-mark[data-state=loading]").waitFor();
+    await page.locator("#startStep", { hasText: "Reading the repository structure…" }).waitFor();
+    assert.equal(await page.locator("#panel").isVisible(), false, "The sheet stays out of view while Peekumi starts");
+    release(); // Later comparisons pass straight through.
+    await page.locator("#panel").waitFor({ state: "visible" });
     await page
       .locator('.sheet[data-front="true"] .node')
       .first()
