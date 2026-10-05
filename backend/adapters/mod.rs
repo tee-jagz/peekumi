@@ -1,7 +1,7 @@
 //! Language-specific syntax analysis behind one shared contract.
 mod python;
 mod rust;
-mod rust_relationships;
+pub(crate) mod rust_relationships;
 mod typescript;
 use crate::process::run;
 use anyhow::Result;

@@ -72,7 +72,20 @@ pub struct Launch<'a> {
     pub bridge: &'a Path,
     pub args: &'a [String],
     pub token: &'a str,
+    /// The task's code graph endpoint and its run-scoped key (see the lookup module), when the
+    /// task has the graph.
+    pub graph: Option<(&'a str, &'a str)>,
 }
+/// The graph tools as an agent sees them through the `peekumi_graph` MCP server.
+pub const GRAPH_TOOLS: [&str; 7] = [
+    "mcp__peekumi_graph__highlight",
+    "mcp__peekumi_graph__route",
+    "mcp__peekumi_graph__find_declarations",
+    "mcp__peekumi_graph__read_declaration",
+    "mcp__peekumi_graph__relationships",
+    "mcp__peekumi_graph__search_code",
+    "mcp__peekumi_graph__read_file",
+];
 
 /// One provider that Peekumi can use. Implementations must not run the inspected checkout's
 /// code and must keep the agent inside the worktree the runner gives it.
@@ -245,6 +258,10 @@ impl Agent for ClaudeCode {
     }
     fn task_command(&self, launch: &Launch) -> Option<Command> {
         let mut c = Command::new(&self.executable);
+        let mut tools = "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment".to_string();
+        if launch.graph.is_some() {
+            tools = format!("{tools},{}", GRAPH_TOOLS.join(","));
+        }
         c.args([
             "-p",
             "--output-format",
@@ -254,7 +271,7 @@ impl Agent for ClaudeCode {
             "acceptEdits",
             "--strict-mcp-config",
             "--allowedTools",
-            "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment",
+            &tools,
         ]);
         if let Some(model) = launch.model {
             c.args(["--model", model]);
@@ -262,7 +279,13 @@ impl Agent for ClaudeCode {
         if let Some(effort) = launch.effort {
             c.args(["--effort", effort]);
         }
-        c.arg("--mcp-config").arg(json!({"mcpServers":{"peekumi":{"command":launch.bridge,"args":launch.args,"env":{"PEEKUMI_REPORT_TOKEN":launch.token}}}}).to_string());
+        // `alwaysLoad` puts these few tools in the first prompt. Otherwise Claude Code shows only
+        // their names until the agent loads them, and an agent often searches text first.
+        let mut servers = json!({"peekumi":{"command":launch.bridge,"args":launch.args,"env":{"PEEKUMI_REPORT_TOKEN":launch.token},"alwaysLoad":true}});
+        if let Some((url, key)) = launch.graph {
+            servers["peekumi_graph"] = json!({"type":"http","url":url,"headers":{"Authorization":format!("Bearer {key}")},"alwaysLoad":true});
+        }
+        c.arg("--mcp-config").arg(json!({"mcpServers": servers}).to_string());
         Some(c)
     }
 }
@@ -357,6 +380,13 @@ impl Agent for Codex {
             .arg(format!("mcp_servers.peekumi.args={}", json!(launch.args)));
         c.arg("-c")
             .arg("mcp_servers.peekumi.env_vars=[\"PEEKUMI_REPORT_TOKEN\"]");
+        // The code graph over streamable HTTP; Codex reads the run's key from the environment.
+        if let Some((url, key)) = launch.graph {
+            c.arg("-c").arg(format!("mcp_servers.peekumi_graph.url={}", json!(url)));
+            c.arg("-c")
+                .arg("mcp_servers.peekumi_graph.bearer_token_env_var=\"PEEKUMI_GRAPH_TOKEN\"");
+            c.env("PEEKUMI_GRAPH_TOKEN", key);
+        }
         c.arg("-");
         Some(c)
     }

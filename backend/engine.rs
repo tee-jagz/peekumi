@@ -751,6 +751,10 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
             .iter()
             .map(|(p, f)| (p.clone(), f.symbols.clone()))
             .collect(),
+        imports: files
+            .iter()
+            .map(|(p, f)| (p.clone(), f.imports.clone()))
+            .collect(),
     };
     let mut merged: BTreeMap<String, Value> = BTreeMap::new();
     for file in files.values() {

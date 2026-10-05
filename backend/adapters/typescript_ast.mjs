@@ -47,7 +47,7 @@ function relationships(tree, symbols) {
     ts.forEachChild(n, writesVisit);
   }
   writesVisit(tree);
-  function record(owner, expression, kind, blocked = new Set()) {
+  function record(owner, expression, kind, blocked = new Set(), klass = null) {
     const target = expression.getText(tree),
       entry = {
         source: owner,
@@ -59,7 +59,10 @@ function relationships(tree, symbols) {
       };
     const root = target.split(".")[0],
       binding = bindings.get(root);
-    if (blocked.has(root) || writes.has(root))
+    // this.method() in a class member: a method of that class (or unresolved).
+    const own = klass && /^this\.([A-Za-z_$][\w$]*)$/.exec(target);
+    if (own) entry.lookup = { method: { type: klass, fields: [], name: own[1] } };
+    else if (blocked.has(root) || writes.has(root))
       entry.reason = "Name is shadowed or assigned in this scope";
     else if (binding && names.has(root))
       entry.reason = "Conflicting local and imported declarations";
@@ -74,7 +77,7 @@ function relationships(tree, symbols) {
         "Dynamic receiver, external name or unsupported lexical binding";
     result.push(entry);
   }
-  function calls(owner, node) {
+  function calls(owner, node, klass = null) {
     if (!node.body) return;
     const blocked = new Set();
     function bind(name) {
@@ -97,7 +100,7 @@ function relationships(tree, symbols) {
     function visit(n) {
       if (ts.isFunctionLike(n) || ts.isClassDeclaration(n)) return;
       if (ts.isCallExpression(n) || ts.isNewExpression(n))
-        record(owner, n.expression, "calls", blocked);
+        record(owner, n.expression, "calls", blocked, klass);
       ts.forEachChild(n, visit);
     }
     visit(node.body);
@@ -131,7 +134,7 @@ function relationships(tree, symbols) {
           ts.isGetAccessor(m) ||
           ts.isSetAccessor(m)
         )
-          calls(owner + "." + (m.name?.getText(tree) || "constructor"), m);
+          calls(owner + "." + (m.name?.getText(tree) || "constructor"), m, owner);
     }
   }
   return result;

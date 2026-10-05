@@ -68,28 +68,43 @@ def relationships(tree, symbols):
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 bindings[alias.asname or alias.name] = {'specifier': alias.name, 'level': 0, 'names': [], 'namespace': True}
-    def record(owner, target, kind, node, blocked=()):
+    def bind(found, node):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != '*':
+                    found.setdefault(alias.asname or alias.name, []).append({'specifier': node.module or '', 'level': node.level, 'names': [alias.name], 'name': alias.name})
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                found.setdefault(alias.asname or alias.name, []).append({'specifier': alias.name, 'level': 0, 'names': [], 'namespace': True})
+    def record(owner, target, kind, node, blocked=(), klass=None, receiver=None, local=None):
         entry = {'source': owner, 'target': target, 'kind': kind, 'line': node.lineno}
         root = target.split('.')[0]
-        if root in blocked or root in global_writes:
+        parts = target.split('.')
+        # An import inside the function binds its name for that function only.
+        scope = {**bindings, **local} if local and root in local else bindings
+        if klass and receiver and len(parts) == 2 and parts[0] == receiver and parts[1].isidentifier():
+            # self.method() or cls.method() in a class: a method of that class (or unresolved).
+            entry['lookup'] = {'method': {'type': klass, 'fields': [], 'name': parts[1]}}
+        elif root in blocked or (root in global_writes and scope is bindings):
             entry['reason'] = 'Name is shadowed or assigned in this scope'
-        elif root in bindings and root in names:
+        elif root in bindings and root in names and scope is bindings:
             entry['reason'] = 'Conflicting local and imported declarations'
-        elif target in bindings and not bindings[target].get('namespace'):
-            entry['lookup'] = {'import': bindings[target], 'name': bindings[target]['name']}
+        elif target in scope and not scope[target].get('namespace'):
+            entry['lookup'] = {'import': scope[target], 'name': scope[target]['name']}
         elif target in names and '.' not in target:
             entry['lookup'] = {'local': target}
         else:
-            match = next((alias for alias in bindings if bindings[alias].get('namespace') and target.startswith(alias + '.')), None)
+            match = next((alias for alias in scope if scope[alias].get('namespace') and target.startswith(alias + '.')), None)
             if match:
-                entry['lookup'] = {'import': bindings[match], 'name': target[len(match)+1:]}
+                entry['lookup'] = {'import': scope[match], 'name': target[len(match)+1:]}
             else:
                 entry['reason'] = 'Dynamic receiver, external name or unsupported lexical binding'
         result.append(entry)
     class Calls(ast.NodeVisitor):
-        def __init__(self, owner, blocked): self.owner, self.blocked = owner, blocked
+        def __init__(self, owner, blocked, klass=None, receiver=None, local=None):
+            self.owner, self.blocked, self.klass, self.receiver, self.local = owner, blocked, klass, receiver, local
         def visit_Call(self, node):
-            record(self.owner, ast.unparse(node.func), 'calls', node, self.blocked)
+            record(self.owner, ast.unparse(node.func), 'calls', node, self.blocked, self.klass, self.receiver, self.local)
             self.generic_visit(node)
         def visit_FunctionDef(self, node): pass
         visit_AsyncFunctionDef = visit_FunctionDef
@@ -103,12 +118,25 @@ def relationships(tree, symbols):
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 blocked = {a.arg for a in node.args.posonlyargs+node.args.args+node.args.kwonlyargs}
                 blocked.update(a.arg for a in [node.args.vararg,node.args.kwarg] if a)
+                imported = {}
                 for child in ast.walk(node):
                     if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store,ast.Del)): blocked.add(child.id)
                     if isinstance(child, (ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and child is not node: blocked.add(child.name)
-                    if isinstance(child,(ast.Import,ast.ImportFrom)):
-                        blocked.update(a.asname or a.name.split('.')[0] for a in child.names)
-                visitor=Calls(prefix+node.name,blocked)
+                    if isinstance(child,(ast.Import,ast.ImportFrom)): bind(imported, child)
+                # A name that one import in the body binds, and nothing else, resolves through that
+                # import. A dotted `import a.b` or a name bound twice stays shadowed.
+                local = {}
+                for name, found in imported.items():
+                    if name in blocked or len(found) > 1 or '.' in name: blocked.add(name.split('.')[0])
+                    else: local[name] = found[0]
+                # In a class, the first parameter (self or cls) names the class itself, unless the
+                # method is a staticmethod or the name is bound again in the body.
+                params = node.args.posonlyargs + node.args.args
+                static = any(ast.unparse(d) == 'staticmethod' for d in node.decorator_list)
+                receiver = params[0].arg if prefix and params and not static else None
+                if receiver and any(isinstance(c, ast.Name) and c.id == receiver and isinstance(c.ctx, (ast.Store, ast.Del)) for c in ast.walk(node)):
+                    receiver = None
+                visitor=Calls(prefix+node.name,blocked,prefix[:-1] if prefix else None,receiver,local)
                 for statement in node.body: visitor.visit(statement)
     functions(tree.body)
     return result

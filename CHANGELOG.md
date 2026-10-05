@@ -29,6 +29,12 @@ This is the first public release. Peekumi was called Repo Strata during its deve
 - Tasks that Codex or Claude Code do in a separate worktree, with run-scoped reports and owner approval.
 - Explore changes on the map, request changes as a next round that continues from the last commit of the agent, and collect changes while you explore.
 - A Tasks button that shows a running task from every view.
+- The code graph in tasks: each task starts from a map of every folder, file and declaration name at the start commit. The agent opens a part with `highlight` (description, code, callers and calls) and follows the call paths with `route`, instead of only searching text.
+- The code graph now resolves Rust calls on `self`, `Self`, typed parameters and struct fields, calls inside macros, Python calls on `self` and `cls`, Python imports inside a function, names that a package `__init__.py` imports again, and JavaScript calls on `this`.
+- `route` lists every entry point that reaches a declaration, with its decorators (an HTTP route, for example), and it does not follow test callers unless asked.
+- Claude Code gets the graph tools in its first prompt (`alwaysLoad`), for tasks and for Ask. Before, it often searched text and did not use the graph.
+- The repository map has a limit of 12,000 characters. It folds whole folders, and it keeps the folders of the instructions open.
+- When a report has no attribution trailers, the error names the missing trailers and shows what git found.
 - OpenRouter: any OpenRouter model that can use tools answers questions (with Peekumi's read-only lookups) or does tasks (Peekumi's own task agent edits and commits in the worktree, with no shell). The key stays on the server.
 - Agents: for Ask and for tasks, choose a provider (Claude Code, Codex or OpenRouter for tasks, Claude Code or OpenRouter for Ask), one of the models that the provider reports, and an effort that the model supports, or type any model name. The choice stays on the device, and each task keeps the choice that it started with.
 - Merge an approved task into main from Peekumi, as a fast-forward after a confirmation, with Undo. Peekumi never pushes. When your uncommitted files are in the way, an agent writes the commit message for them and you check it. When main moved on, Update with main merges it, and an agent resolves a conflict as a new round.

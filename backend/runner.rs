@@ -87,6 +87,12 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
     // the ones this task started with.
     let agent = crate::agents::find(store, run["agent"].as_str().unwrap_or(""))
         .context("This task's agent is not available on this server")?;
+    // The code graph for this run: a read-only lookup grant on its start commit, closed when
+    // the run ends, whatever happens.
+    let graph_url = crate::local_origin().map(|origin| format!("{origin}/mcp/ask"));
+    let graph_key = (run["graph"] == true && graph_url.is_some()).then(crate::random_token);
+    let _grant = GraphGrant::open(store, graph_key.clone(), &run["base"]);
+    let graph = graph_url.as_deref().zip(graph_key.as_deref());
     let (status, message) = if agent.runs_in_process() {
         // A provider that is only an API: Peekumi's own agent runs the model here, with its
         // tools confined to the worktree.
@@ -103,7 +109,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
                 .map(|r| r["cancelRequested"] == true)
                 .unwrap_or(false)
         };
-        match crate::task_agent::run(store, id, token, &run, &worktree, &mut out, cancelled) {
+        match crate::task_agent::run(store, id, token, &run, &worktree, &mut out, cancelled, graph) {
             Ok(done) => done,
             Err(e) => ("failed", e.to_string()),
         }
@@ -116,6 +122,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
                 bridge: &exe,
                 args: &args,
                 token,
+                graph,
             })
             .context("This task's provider cannot start; check it in Agents (for OpenRouter, the key)")?;
         command
@@ -208,6 +215,35 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         json!(results.lines().collect::<Vec<_>>()),
     )?;
     Ok(())
+}
+/// A task run's code graph grant: open while the run lasts, closed on drop.
+struct GraphGrant<'a>(&'a Workflow, Option<String>);
+impl<'a> GraphGrant<'a> {
+    fn open(store: &'a Workflow, key: Option<String>, base: &Value) -> Self {
+        if let Some(key) = &key {
+            store.grants.lock().unwrap_or_else(|e| e.into_inner()).insert(
+                key.clone(),
+                crate::lookup::Grant::with_limit(
+                    key.clone(),
+                    base.clone(),
+                    base.clone(),
+                    crate::lookup::TASK_CALLS,
+                ),
+            );
+        }
+        Self(store, key)
+    }
+}
+impl Drop for GraphGrant<'_> {
+    fn drop(&mut self) {
+        if let Some(key) = &self.1 {
+            self.0
+                .grants
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(key);
+        }
+    }
 }
 /// Owns the child through all error paths, preventing a failed supervisor from leaving it running.
 struct OwnedChild(std::process::Child);

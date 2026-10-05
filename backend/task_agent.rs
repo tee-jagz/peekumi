@@ -51,6 +51,7 @@ fn tools() -> Value {
 
 /// One task run with an OpenRouter model. `cancelled` is checked before each turn. Returns
 /// the run's final status and message.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     store: &Workflow,
     id: &str,
@@ -59,6 +60,7 @@ pub fn run(
     worktree: &Path,
     log: &mut impl Write,
     cancelled: impl Fn() -> bool,
+    graph: Option<(&str, &str)>,
 ) -> Result<(&'static str, String)> {
     let provider = OpenRouter::new(store);
     let key = provider.key_or_error()?;
@@ -77,7 +79,19 @@ pub fn run(
         if cancelled() || start.elapsed() > Duration::from_secs(3600) {
             return Ok(("cancelled", "Agent stopped by owner or one-hour time limit.".into()));
         }
-        let mut request = json!({"model": model, "messages": messages, "tools": tools(), "stream": false});
+        let mut offered = tools();
+        if graph.is_some() {
+            // The code graph at the start commit: open parts of the map and follow calls;
+            // read_file and search stay on the worktree.
+            for tool in crate::lookup::function_tools().as_array().unwrap() {
+                if ["highlight", "route", "find_declarations"]
+                    .contains(&tool["function"]["name"].as_str().unwrap_or(""))
+                {
+                    offered.as_array_mut().unwrap().push(tool.clone());
+                }
+            }
+        }
+        let mut request = json!({"model": model, "messages": messages, "tools": offered, "stream": false});
         if let Some(effort) = task["effort"].as_str().filter(|e| *e != "auto") {
             request["reasoning"] = json!({"effort": effort});
         }
@@ -112,8 +126,13 @@ pub fn run(
             if name == "finish" {
                 finished = Some(args["summary"].as_str().unwrap_or("").to_string());
             }
-            let result = tool(store, id, token, &root, name, &args)
-                .unwrap_or_else(|e| format!("Error: {e}"));
+            let result = match (name, graph) {
+                ("highlight" | "route" | "find_declarations", Some((url, key))) => {
+                    graph_call(url, key, name, &args)
+                }
+                _ => tool(store, id, token, &root, name, &args),
+            }
+            .unwrap_or_else(|e| format!("Error: {e}"));
             messages.push(json!({"role": "tool", "tool_call_id": call["id"], "content": bounded(&result)}));
         }
         if finished.is_some() {
@@ -215,6 +234,28 @@ fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: 
         "finish" => Ok("Finished.".into()),
         other => bail!("Unknown tool {other}"),
     }
+}
+
+/// One code graph lookup through the task's grant on the Peekumi listener (the same MCP
+/// endpoint that Claude Code and Codex use). The run-scoped key reaches curl on stdin; the
+/// request itself is ordinary query data.
+fn graph_call(url: &str, key: &str, name: &str, args: &Value) -> Result<String> {
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}}).to_string();
+    let config = format!(
+        "url = \"{url}\"\nsilent\nshow-error\nfail-with-body\nheader = \"Authorization: Bearer {key}\"\nheader = \"Content-Type: application/json\"\nheader = \"Accept: application/json\"\n"
+    );
+    let out = crate::process::run_for(
+        "curl",
+        &["--config", "-", "--data-binary", &body],
+        None,
+        config.into_bytes(),
+        Duration::from_secs(60),
+    )?;
+    let reply: Value = serde_json::from_slice(&out).context("The graph returned invalid JSON")?;
+    let result = &reply["result"];
+    let text = result["content"][0]["text"].as_str().unwrap_or("").to_string();
+    ensure!(result["isError"] != true, "{text}");
+    Ok(text)
 }
 
 /// Git in the worktree, with hooks disabled.

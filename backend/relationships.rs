@@ -6,6 +6,65 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Context {
     pub paths: Resolution,
     pub symbols: BTreeMap<String, Vec<Value>>,
+    /// The imports of each file, to follow a name that a module imports again (a re-export).
+    pub imports: BTreeMap<String, Vec<Value>>,
+}
+/// The declarations a method call can reach, from the receiver's written type (see the
+/// adapters: Rust `self`, typed parameters and fields; Python `self`/`cls`; TypeScript `this`): walk the struct fields named in `fields`, then find `Type.name` and trait
+/// implementations `Type as Trait.name`. A trait object (`dyn Trait`) reaches every
+/// implementation `… as Trait.name`. A struct that is declared more than once stops the walk.
+fn method_targets(file: &str, method: &Value, context: &Context) -> Vec<Value> {
+    // A method is looked up only in files of the same language as the call.
+    let family = |path: &str| match path.rsplit('.').next().unwrap_or("") {
+        "rs" => "rust",
+        "py" => "python",
+        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "svelte" => "script",
+        _ => "",
+    };
+    let language = family(file);
+    let symbols = || {
+        context
+            .symbols
+            .iter()
+            .filter(move |(path, _)| !language.is_empty() && family(path) == language)
+            .flat_map(|(path, list)| list.iter().map(move |s| (path, s)))
+    };
+    let Some(mut ty) = method["type"].as_str().map(str::to_string) else {
+        return vec![];
+    };
+    for field in method["fields"].as_array().into_iter().flatten() {
+        let found: Vec<&Value> = symbols()
+            .filter(|(_, s)| s["kind"] == "struct" && s["name"].as_str().is_some_and(|n| n.rsplit("::").next() == Some(ty.as_str())))
+            .map(|(_, s)| s)
+            .collect();
+        let [one] = found.as_slice() else {
+            return vec![];
+        };
+        let written = one["details"]["fields"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|f| f["name"] == *field)
+            .and_then(|f| f["type"].as_str());
+        match written.and_then(crate::adapters::rust_relationships::type_name_of) {
+            Some(next) => ty = next,
+            None => return vec![],
+        }
+    }
+    let name = method["name"].as_str().unwrap_or("");
+    symbols()
+        .filter(|(_, s)| {
+            let symbol = s["name"].as_str().unwrap_or("");
+            match ty.strip_prefix("dyn ") {
+                Some(tr) => symbol.ends_with(&format!(" as {tr}.{name}")),
+                None => {
+                    symbol == format!("{ty}.{name}")
+                        || (symbol.starts_with(&format!("{ty} as ")) && symbol.ends_with(&format!(".{name}")))
+                }
+            }
+        })
+        .map(|(path, s)| json!({"path": path, "symbol": s["name"]}))
+        .collect()
 }
 /// Resolves only lookup evidence emitted by an adapter; it never guesses from a matching basename.
 pub fn resolve<A: LanguageAdapter + ?Sized>(
@@ -15,6 +74,9 @@ pub fn resolve<A: LanguageAdapter + ?Sized>(
     context: &Context,
 ) -> Vec<Value> {
     let lookup = &raw["lookup"];
+    if lookup["method"].is_object() {
+        return method_targets(file, &lookup["method"], context);
+    }
     let mut paths = BTreeSet::new();
     let name = if let Some(local) = lookup["local"].as_str() {
         paths.insert(file.to_string());
@@ -30,7 +92,30 @@ pub fn resolve<A: LanguageAdapter + ?Sized>(
         for import in imports {
             paths.extend(adapter.resolve(file, &import, &context.paths));
         }
-        lookup["name"].as_str().unwrap_or("")
+        let name = lookup["name"].as_str().unwrap_or("");
+        // A module that does not declare the name but imports it by that name (a package
+        // `__init__.py` with `from .worker import start`, say) passes it on: follow that
+        // import, for at most three steps.
+        let mut frontier: Vec<String> = paths.iter().cloned().collect();
+        for _ in 0..3 {
+            let mut next = vec![];
+            for path in frontier {
+                if context.symbols.get(&path).into_iter().flatten().any(|s| s["name"] == name) {
+                    continue;
+                }
+                for import in context.imports.get(&path).into_iter().flatten() {
+                    if import["names"].as_array().is_some_and(|n| n.iter().any(|n| n == name)) {
+                        for found in adapter.resolve(&path, import, &context.paths) {
+                            if paths.insert(found.clone()) {
+                                next.push(found);
+                            }
+                        }
+                    }
+                }
+            }
+            frontier = next;
+        }
+        name
     };
     let mut targets = vec![];
     for path in paths {

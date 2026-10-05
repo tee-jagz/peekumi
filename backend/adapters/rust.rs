@@ -323,8 +323,9 @@ impl super::LanguageAdapter for Rust {
         "Syntax-level calls, trait implementations and supertraits; receiver dispatch, closure bodies, macros and conditional compilation are not evaluated. Conventional module paths only."
     }
     /// Identifies the native syn parser generation for cache compatibility.
+    /// Changes when the extracted evidence changes, so cached analysis is rebuilt.
     fn identity(&self, _: &super::Config) -> String {
-        "syn2".into()
+        "syn2.methods".into()
     }
     /// Parses an ordered source batch with the native Rust analyzer.
     /// Syntax errors remain individual results, so one invalid file does not fail the batch.

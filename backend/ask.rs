@@ -326,7 +326,8 @@ fn open_grant(app: &App, base: &Value, head: &Value) -> Option<String> {
         let key = crate::random_token();
         *app.ask_grant.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(lookup::Grant::new(key.clone(), base.clone(), head.clone()));
-        json!({"mcpServers":{"peekumi":{"type":"http","url":format!("{origin}/mcp/ask"),"headers":{"Authorization":format!("Bearer {key}")}}}}).to_string()
+        // `alwaysLoad`: the lookups are in the first prompt, not hidden behind a tool search.
+        json!({"mcpServers":{"peekumi":{"type":"http","url":format!("{origin}/mcp/ask"),"headers":{"Authorization":format!("Bearer {key}")},"alwaysLoad":true}}}).to_string()
     })
 }
 /// Claude Code arguments: every built-in tool off, the configured effort and model, and the

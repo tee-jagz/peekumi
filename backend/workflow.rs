@@ -18,8 +18,14 @@ pub struct Workflow {
     /// Model and effort that Ask uses until the owner chooses others (see the agents module).
     pub ask_default: [String; 2],
     /// The server's private folder for secrets that every repository shares (API keys).
-    pub secrets: PathBuf,
+    pub secrets: PathBuf,    /// The code graph lookup grants of running tasks (see the lookup module), by key.
+    pub grants: crate::lookup::Grants,
+    /// Writes the repository map of a task's text for its instructions at a commit (see the
+    /// graph_brief module). The server sets it; without it, tasks have no map.
+    pub briefing: std::sync::Arc<std::sync::OnceLock<Briefing>>,
 }
+/// See [`Workflow::briefing`].
+pub type Briefing = Box<dyn Fn(&[Value], &str) -> String + Send + Sync>;
 /// Milliseconds since the Unix epoch for audit events, independent of commit dates.
 pub fn now() -> u64 {
     SystemTime::now()
@@ -80,6 +86,8 @@ impl Workflow {
             claude: claude.into(),
             ask_default: ["sonnet".into(), "low".into()],
             secrets: state.canonicalize()?,
+            grants: Default::default(),
+            briefing: Default::default(),
         };
         #[cfg(unix)]
         {
@@ -424,6 +432,15 @@ impl Workflow {
             .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
             .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
         ensure!(rules.len() <= 65536, "Rule configuration is too large");
+        // The graph section is written before the transaction: it reads the code graph.
+        let section = {
+            let state = self.read()?;
+            let picked: Vec<Value> = ids
+                .iter()
+                .filter_map(|id| find(&state, "comments", id.as_str().unwrap_or("")).ok().cloned())
+                .collect();
+            self.graph_section(&picked, &base)
+        };
         self.update(|v| {
             let mut comments=vec![];
             for id in ids { let c = find(v,"comments",id.as_str().unwrap())?;
@@ -436,8 +453,9 @@ impl Workflow {
             let id = crate::random_token()[..16].to_string();
             let branch = format!("peekumi/run-{id}");
             let start = format!("Start from {base} on {}.", self.watched);
-            let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &[], &rules);
-            let r=json!({"id":id,"agent":agent,"model":model,"effort":effort,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
+            let graph = graph_enabled();
+            let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &[], &rules, graph, &section);
+            let r=json!({"id":id,"agent":agent,"model":model,"effort":effort,"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
             list(v,"runs").push(r.clone());
@@ -459,6 +477,8 @@ impl Workflow {
         comments: &[Value],
         done: &[Value],
         rules: &str,
+        graph: bool,
+        section: &str,
     ) -> String {
         let mut task = format!(
             "# Task for {agent}, run {id}\nRepository: {}\n{start} Work only on {branch} in the supplied worktree. Do not push, and do not merge into other branches.\n\n",
@@ -493,7 +513,13 @@ impl Workflow {
                 ));
             }
         }
-        task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Peekumi state or another worktree. Run appropriate checks and describe failures honestly.\n"));
+        if !section.trim().is_empty() {
+            task.push_str(&format!("\n## Repository map\n{section}"));
+        }
+        if graph {
+            task.push_str("\n## Code graph tools\nPeekumi's read-only code graph of this repository at the start commit: highlight opens a folder, file or declaration with the details you ask for; route follows calls into a declaration or between two declarations; find_declarations finds a declaration by name; read_declaration, relationships, search_code and read_file read the same commit. The graph shows the start commit, not your own changes. Static calls only: some calls (on values whose type is not written, or through dynamic code) stay unresolved.\n");
+        }
+        task.push_str(&format!("\n## Dependency rules at start\n{rules}\n\n## Reporting contract\nUse the peekumi MCP tools get_run, resolve_comment and flag_comment. Commit completed work before reporting. Every addressed commit must carry trailers Peekumi-Run: {id}, Peekumi-Comment: <comment id> (repeat for each comment), and Peekumi-Agent: {agent}. Git reads trailers only from the last paragraph, so end the message with one block and no blank line in it, for example:\n\n```\nPeekumi-Run: {id}\nPeekumi-Comment: <comment id>\nPeekumi-Agent: {agent}\nCo-Authored-By: <if you add one>\n```\n\n Call resolve_comment with comment_id, commit_sha, note and checks (commands, outcomes and limitations). If blocked, use flag_comment with comment_id and reason. Never claim owner verification. Do not alter Peekumi state or another worktree. Run appropriate checks and describe failures honestly.\n"));
         task
     }
     /// Starts the next round of a finished task with the owner's requested changes. The new
@@ -524,6 +550,28 @@ impl Workflow {
             .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
             .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
         ensure!(rules.len() <= 65536, "Rule configuration is too large");
+        // The graph section for this round's work and the requested changes, written before
+        // the transaction because it reads the code graph.
+        let section = if earlier["graph"] == true {
+            let state = self.read()?;
+            let mut work: Vec<Value> = state["comments"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| {
+                    let status = c["status"].as_str().unwrap_or("");
+                    (c["runId"] == previous && ["flagged", "unreported"].contains(&status))
+                        || (c["forRun"] == previous && status == "draft")
+                })
+                .cloned()
+                .collect();
+            if !requested.is_empty() {
+                work.push(json!({"text": requested}));
+            }
+            self.graph_section(&work, &base)
+        } else {
+            String::new()
+        };
         let token = crate::random_token();
         let run = self.update(|v| {
             ensure!(
@@ -570,7 +618,8 @@ impl Workflow {
                 r["branch"].as_str().unwrap_or("")
             );
             let brief = r["brief"].as_str().unwrap_or("");
-            let task = self.task_text(agent, &id, &branch, &start, requested, brief, &comments, &done, &rules);
+            let graph = r["graph"] == true;
+            let task = self.task_text(agent, &id, &branch, &start, requested, brief, &comments, &done, &rules, graph, &section);
             for snapshot in &done {
                 let c = find_mut(v, "comments", snapshot["id"].as_str().unwrap())?;
                 c["runId"] = json!(id);
@@ -585,7 +634,7 @@ impl Workflow {
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
             list(v, "runs").push(next.clone());
             Ok(next)
         })?;
@@ -644,8 +693,12 @@ impl Workflow {
                 self.git(&["merge-base","--is-ancestor",&sha,run["branch"].as_str().unwrap()])?;
                 let trailers=self.git(&["show","-s","--format=%(trailers:only,unfold)",&sha])?;
                 // Commits from runs started before the rename carry Strata- trailers; both are accepted.
-                for required in [format!("Run: {id}"),format!("Comment: {cid}"),format!("Agent: {}",run["agent"].as_str().unwrap())] {ensure!(trailers.lines().any(|l|l==format!("Peekumi-{required}")||l==format!("Strata-{required}")),"Commit is missing required attribution trailers");
-                }
+                let missing:Vec<String>=[format!("Run: {id}"),format!("Comment: {cid}"),format!("Agent: {}",run["agent"].as_str().unwrap())].into_iter()
+                    .filter(|required|!trailers.lines().any(|l|l==format!("Peekumi-{required}")||l==format!("Strata-{required}")))
+                    .map(|required|format!("Peekumi-{required}")).collect();
+                // Git reads trailers only from the last paragraph, so the error says what it found.
+                ensure!(missing.is_empty(),"Commit is missing required attribution trailers: {}. Git found these trailers: {}. Put all trailers together in the last paragraph of the message, with no blank line between them, then amend the commit and report again",
+                    missing.join(", "),if trailers.trim().is_empty(){"none".to_string()}else{trailers.trim().lines().collect::<Vec<_>>().join(", ")});
                 json!({"commit":sha,"note":text(args,"note",12000)?,"checks":text(args,"checks",20000)?,"at":now(),"agent":run["agent"]})
             }else{json!({"reason":text(args,"reason",12000)?,"at":now(),"agent":run["agent"]})};
             let c=find_mut(v,"comments",cid)?;
@@ -654,6 +707,24 @@ impl Workflow {
             event(c,"agent");
             Ok(c.clone())
         })
+    }
+}
+/// True unless `PEEKUMI_TASK_GRAPH=0`: new tasks get the read-only code graph tools.
+pub fn graph_enabled() -> bool {
+    std::env::var("PEEKUMI_TASK_GRAPH").map_or(true, |v| v != "0")
+}
+/// True unless `PEEKUMI_TASK_GRAPH` is `0` or `tools`: new tasks also get the repository map
+/// in their text (the native form).
+pub fn graph_in_text() -> bool {
+    graph_enabled() && std::env::var("PEEKUMI_TASK_GRAPH").map_or(true, |v| v != "tools")
+}
+impl Workflow {
+    /// The repository map for a task with `comments` at `base`, when tasks have it in their text.
+    pub(crate) fn graph_section(&self, comments: &[Value], base: &str) -> String {
+        if !graph_in_text() {
+            return String::new();
+        }
+        self.briefing.get().map(|write| write(comments, base)).unwrap_or_default()
     }
 }
 /// Active and interrupted runs hold the repository slot until the supervisor closes them.

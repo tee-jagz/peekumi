@@ -3,6 +3,7 @@ mod adapters;
 mod agents;
 mod ask;
 mod engine;
+mod graph_brief;
 mod index;
 mod lookup;
 mod merge;
@@ -289,6 +290,17 @@ fn open_repository(
         options: config,
         _lock: lock,
     });
+    // A task's text gets the repository map (see the graph_brief module). The
+    // workflow store is synchronous; its routes run on blocking threads, which may wait here.
+    let weak = Arc::downgrade(&app);
+    let _ = app.workflow.briefing.set(Box::new(move |comments: &[Value], base: &str| {
+        let Some(app) = weak.upgrade() else {
+            return String::new();
+        };
+        tokio::runtime::Handle::try_current()
+            .map(|runtime| runtime.block_on(graph_brief::map(&app, comments, base)))
+            .unwrap_or_default()
+    }));
     Ok((id, app))
 }
 
@@ -314,16 +326,13 @@ async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
     }
     let key = header(request.headers(), "authorization")
         .strip_prefix("Bearer ")
-        .unwrap_or("");
-    let app = fleet.all().into_iter().map(|(_, app)| app).find(|app| {
-        !key.is_empty()
-            && app
-                .ask_grant
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-                .is_some_and(|grant| equal(key, &grant.key))
-    });
+        .unwrap_or("")
+        .to_string();
+    let app = fleet
+        .all()
+        .into_iter()
+        .map(|(_, app)| app)
+        .find(|app| lookup::has_grant(app, &key));
     let Some(app) = app else {
         return error(StatusCode::UNAUTHORIZED, "No Ask answer is in progress", gzip).await;
     };
@@ -334,7 +343,7 @@ async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
     let Ok(message) = serde_json::from_slice::<Value>(&body) else {
         return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await;
     };
-    match lookup::handle(&app, message).await {
+    match lookup::handle(&app, &key, message).await {
         Some(reply) => json_response(StatusCode::OK, reply, gzip, None).await,
         None => respond(StatusCode::ACCEPTED, "application/json", vec![], gzip, None).await,
     }

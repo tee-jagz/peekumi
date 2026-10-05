@@ -21,11 +21,13 @@ impl LanguageAdapter for Python {
     }
     /// Probes the installed helper runtime to identify compatible cached syntax.
     /// A failed probe is recorded as unavailable rather than hiding affected files.
+    /// The helper script's hash is part of it, so a changed helper rebuilds cached analysis.
     fn identity(&self, config: &Config) -> String {
         format!(
-            "{}:{}",
+            "{}:{}:{}",
             config.python,
-            version(run(&config.python, &["--version"], None, vec![]))
+            version(run(&config.python, &["--version"], None, vec![])),
+            &crate::engine::hash(include_str!("python_ast.py"))[..12]
         )
     }
     /// Sends committed source batches to the Python helper through JSON stdin.
