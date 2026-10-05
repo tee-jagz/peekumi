@@ -93,6 +93,21 @@ if (values.includes("--tools")) {
       url: config.url, key: config.headers.Authorization,
     });
   }
+  // "Look at route.": one real lookup with a place, then a pause while the answer works, so
+  // the map can show where Ask looks.
+  if (input.question === "Look at route." && values.includes("stream-json")) {
+    const config = JSON.parse(values[values.indexOf("--mcp-config") + 1]).mcpServers.peekumi;
+    const headers = { ...config.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+    const rpc = async (id, method, params) => (await (await fetch(config.url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) })).json()).result;
+    await rpc(1, "initialize", { protocolVersion: "2025-06-18" });
+    await rpc(2, "tools/call", { name: "read_declaration", arguments: { path: "backend/lookup.py", name: "route" } });
+    const say = (event) => console.log(JSON.stringify(event));
+    say({ type: "system", subtype: "init" });
+    say({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Reading route. " } } });
+    await new Promise((r) => setTimeout(r, 4000));
+    say({ type: "result", is_error: false, result: "`route` returns 1." });
+    process.exit(0);
+  }
   // Echoing lets tests inspect exactly what context the server supplied.
   const result =
     input.question === "Use the lookup tools."
@@ -128,7 +143,7 @@ let command, args;
 if (values.includes("--mcp-config")) {
   if (
     !values.includes("--strict-mcp-config") ||
-    !values.some((v) => v.includes("mcp__peekumi__resolve_comment"))
+    (!values.some((v) => v.includes("mcp__peekumi__resolve_comment")) && !values.includes("--permission-prompt-tool"))
   )
     throw Error("Missing scoped reporting tool configuration");
   const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
@@ -199,6 +214,71 @@ writeFileSync(args[args.indexOf("--state-dir") + 1] + "/agent-argv.json", JSON.s
     writeFileSync(state + "/agent-graph.json", JSON.stringify({ ...graph, text: reply.result?.content?.[0]?.text ?? null, error: !reply.result || reply.result.isError === true }));
   }
 }
+// A session turn: it continues one conversation, asks the owner before a command
+// ("RUN: <command>" in the owner's message), and commits once.
+if (task.includes("# Session with the owner") || task.startsWith("The owner's message:")) {
+  const state = args[args.indexOf("--state-dir") + 1];
+  const session = call("get_run");
+  if (session.kind !== "session") throw Error("A session turn must belong to a session");
+  const turn = session.turns;
+  writeFileSync(`${state}/session-turn-${turn}.json`, JSON.stringify({ values, task }));
+  const say = (event) => console.log(JSON.stringify(event));
+  const claude = values.includes("--mcp-config");
+  if (claude) {
+    // "Ask": manual mode without Bash, so commands outside the list reach the owner. "Allow
+    // all": Bash is allowed and nothing waits.
+    const all = session.permissions === "allow";
+    if (
+      !values.includes("--permission-prompt-tool") ||
+      values[values.indexOf("--permission-prompt-tool") + 1] !== "mcp__peekumi__approve" ||
+      values[values.indexOf("--permission-mode") + 1] !== (all ? "acceptEdits" : "manual") ||
+      values[values.indexOf("--setting-sources") + 1] !== "" ||
+      values[values.indexOf("--allowedTools") + 1].split(",").includes("Bash") !== all
+    )
+      throw Error("A session must ask the owner before commands outside its list, unless all are allowed");
+    if (turn === 1 ? values[values.indexOf("--session-id") + 1] !== session.conversation : values[values.indexOf("--resume") + 1] !== session.conversation)
+      throw Error("A session turn must continue its conversation");
+  } else if (turn === 1) say({ type: "thread.started", thread_id: "thread-fixture" });
+  else if (values[values.indexOf("resume") + 1] !== "thread-fixture") throw Error("A Codex turn must resume its thread");
+  const text = (t) =>
+    claude
+      ? say({ type: "assistant", message: { content: [{ type: "text", text: t }] } })
+      : say({ type: "item.completed", item: { type: "agent_message", text: t } });
+  text(`Turn ${turn}: I read the message. The function \`run\` is in \`module.py\`.`);
+  const wanted = task.match(/RUN: (.+)/);
+  if (wanted) {
+    const answer = call("approve", { tool_name: "Bash", input: { command: wanted[1].trim(), description: "Fixture command" }, tool_use_id: `tool-${turn}` });
+    writeFileSync(`${state}/session-approval-${turn}.json`, JSON.stringify(answer));
+    text(answer.behavior === "allow" ? "The command ran." : `The command was denied: ${answer.message}`);
+  }
+  // FOCUS: the agent reads a file, runs a command on it, adds a file, then looks up a
+  // declaration in another file and keeps working (the map follows it).
+  if (claude && task.includes("FOCUS")) {
+    const tool = (id, name, input, result) => {
+      say({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
+      if (result !== undefined) say({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: result }] } });
+    };
+    tool(`read-${turn}`, "Read", { file_path: `${process.cwd()}/backend/graph.py` }, "def fold(): pass");
+    tool(`sed-${turn}`, "Bash", { command: "sed -n 1,5p backend/graph.py" }, "def fold(): pass");
+    writeFileSync("backend/notes.py", "notes = 1\n");
+    tool(`map-${turn}`, "mcp__peekumi_graph__read_declaration", { path: "backend/lookup.py", name: "route" });
+  } else if (claude) {
+    // Two visible steps: a check with its output, and an edit in the worktree.
+    say({ type: "assistant", message: { content: [{ type: "tool_use", id: `bash-${turn}`, name: "Bash", input: { command: "npm test", description: "Run the tests" } }] } });
+    say({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `bash-${turn}`, content: "78 passed, 0 failed" }] } });
+    say({ type: "assistant", message: { content: [{ type: "tool_use", id: `edit-${turn}`, name: "Edit", input: { file_path: `${process.cwd()}/session-notes.txt` } }] } });
+    say({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `edit-${turn}`, content: "Edited." }] } });
+  }
+  if (task.includes("WAIT_FOR_STOP")) await new Promise((r) => setTimeout(r, 30000));
+  const git = (...a) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...a], { encoding: "utf8" }).trim();
+  writeFileSync("session-notes.txt", (existsSync("session-notes.txt") ? readFileSync("session-notes.txt", "utf8") : "") + `Turn ${turn}\n`);
+  git("add", "session-notes.txt");
+  git("commit", "-m", `Session turn ${turn}`);
+  // Claude Code writes its last text, then the result that repeats it.
+  text(`Turn ${turn} is done.`);
+  if (claude) say({ type: "result", is_error: false, result: `Turn ${turn} is done.`, total_cost_usd: 0.25 });
+  process.exit(0);
+}
 const run = call("get_run");
 if (run.task !== task) throw Error("Preview and dispatched task differ");
 const git = (...a) =>
@@ -220,6 +300,11 @@ if (run.kind === "update") {
 }
 if (run.brief === "WAIT_FOR_CANCEL")
   await new Promise((r) => setTimeout(r, 30000));
+// FOCUS_TASK: the agent reads a file, then works for a while, so the map can show where.
+if (run.brief === "FOCUS_TASK") {
+  console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "focus-read", name: "Read", input: { file_path: `${process.cwd()}/backend/graph.py` } }] } }));
+  await new Promise((r) => setTimeout(r, 6000));
+}
 const first = run.comments[0];
 if (
   !call("resolve_comment", {

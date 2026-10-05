@@ -75,7 +75,41 @@ pub struct Launch<'a> {
     /// The task's code graph endpoint and its run-scoped key (see the lookup module), when the
     /// task has the graph.
     pub graph: Option<(&'a str, &'a str)>,
+    /// One turn of a session (a conversation with the owner), or `None` for a task.
+    pub session: Option<SessionTurn<'a>>,
 }
+
+/// One turn of a session: the agent continues the same conversation in the same worktree.
+pub struct SessionTurn<'a> {
+    /// The agent's conversation ID: Peekumi's own UUID for Claude Code, set on the first turn;
+    /// the thread ID that Codex reported, for later turns.
+    pub conversation: Option<&'a str>,
+    /// True on the first turn, which starts the conversation.
+    pub first: bool,
+    /// Commands the owner allowed for this session, as Claude Code rules (`Bash(npm install:*)`).
+    pub allow: &'a [String],
+    /// True when the owner allowed every command: no command waits for a question.
+    pub allow_all: bool,
+}
+
+/// Commands a session agent may run with no question: Git on its own branch and common test
+/// runners. Any other command waits for the owner (Claude Code), see the runner's `approve`.
+pub const SESSION_COMMANDS: [&str; 14] = [
+    "Bash(git status:*)",
+    "Bash(git diff:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(git add:*)",
+    "Bash(git commit:*)",
+    "Bash(npm test:*)",
+    "Bash(npm run test:*)",
+    "Bash(cargo test:*)",
+    "Bash(cargo check:*)",
+    "Bash(pytest:*)",
+    "Bash(python -m pytest:*)",
+    "Bash(go test:*)",
+    "Bash(node --test:*)",
+];
 /// The graph tools as an agent sees them through the `peekumi_graph` MCP server.
 pub const GRAPH_TOOLS: [&str; 7] = [
     "mcp__peekumi_graph__highlight",
@@ -259,20 +293,49 @@ impl Agent for ClaudeCode {
     fn task_command(&self, launch: &Launch) -> Option<Command> {
         let mut c = Command::new(&self.executable);
         let mut tools = "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment".to_string();
-        if launch.graph.is_some() {
+        if let Some(session) = &launch.session {
+            // A session asks the owner before any command outside its list: manual mode, no
+            // user or project settings that could allow more, and Peekumi's approve tool.
+            let mut allowed: Vec<String> = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__peekumi__get_run"]
+                .iter()
+                .map(|t| t.to_string())
+                .chain(SESSION_COMMANDS.iter().map(|t| t.to_string()))
+                .chain(session.allow.iter().cloned())
+                .collect();
+            if launch.graph.is_some() {
+                allowed.extend(GRAPH_TOOLS.iter().map(|t| t.to_string()));
+            }
+            if session.allow_all {
+                allowed.push("Bash".into());
+            }
+            tools = allowed.join(",");
+        } else if launch.graph.is_some() {
             tools = format!("{tools},{}", GRAPH_TOOLS.join(","));
         }
+        // "Allow all" works as a task does; any other request (a web fetch, say) still reaches
+        // Peekumi's approve tool, which allows it at once in this mode.
+        let mode = match &launch.session {
+            Some(session) if !session.allow_all => "manual",
+            _ => "acceptEdits",
+        };
         c.args([
             "-p",
             "--output-format",
             "stream-json",
             "--verbose",
             "--permission-mode",
-            "acceptEdits",
+            mode,
             "--strict-mcp-config",
             "--allowedTools",
             &tools,
         ]);
+        if let Some(session) = &launch.session {
+            c.args(["--setting-sources", "", "--permission-prompt-tool", "mcp__peekumi__approve"]);
+            // The owner may take a while to answer on the phone.
+            c.env("MCP_TOOL_TIMEOUT", "1000000");
+            let conversation = session.conversation?;
+            c.args([if session.first { "--session-id" } else { "--resume" }, conversation]);
+        }
         if let Some(model) = launch.model {
             c.args(["--model", model]);
         }
@@ -386,6 +449,12 @@ impl Agent for Codex {
             c.arg("-c")
                 .arg("mcp_servers.peekumi_graph.bearer_token_env_var=\"PEEKUMI_GRAPH_TOKEN\"");
             c.env("PEEKUMI_GRAPH_TOKEN", key);
+        }
+        // A later session turn continues the thread that the first turn started.
+        if let Some(session) = &launch.session
+            && !session.first
+        {
+            c.args(["resume", session.conversation?]);
         }
         c.arg("-");
         Some(c)

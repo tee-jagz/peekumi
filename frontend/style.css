@@ -6346,3 +6346,781 @@ a.pr-link .glyph {
 .agents-keyrow .btn.link-button.agents-remove {
   color: var(--del);
 }
+
+/* Sessions: a live conversation with an agent (session.js). */
+.task-head .task-titles {
+  flex: 1;
+  min-width: 0;
+}
+.session-state {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.session-state[data-state="running"] {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  border-color: color-mix(in srgb, var(--good) 40%, transparent);
+}
+.session-state[data-state="needs"] {
+  color: var(--mod);
+  background: color-mix(in srgb, var(--mid) 16%, transparent);
+  border-color: color-mix(in srgb, var(--mid) 45%, transparent);
+}
+.session-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.session-owner {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 9px 13px;
+  border-radius: 16px 16px 4px 16px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--field-glass));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  overflow-wrap: anywhere;
+}
+.session-anchors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.session-anchor {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font: 12px var(--mono);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.session-agent {
+  overflow-wrap: anywhere;
+}
+.session-steps {
+  display: flex;
+  flex-direction: column;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+.session-step > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 26px;
+  padding: 3px 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.session-step > summary::-webkit-details-marker {
+  display: none;
+}
+.session-mark {
+  flex: none;
+  width: 14px;
+  color: var(--good);
+}
+.session-step.failed .session-mark {
+  color: var(--bad);
+}
+.session-mark.is-running::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  animation: session-spin 0.9s linear infinite;
+}
+@keyframes session-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.session-label {
+  flex: none;
+  color: var(--muted);
+}
+.session-code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px var(--mono);
+}
+.session-step[open] .session-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.session-step > .read-note,
+.session-step > .code-link {
+  margin: 0 0 6px 22px;
+}
+.session-output {
+  margin: 0 0 8px 22px;
+  max-height: 260px;
+  overflow: auto;
+}
+.session-error {
+  margin: 0;
+  color: var(--bad);
+}
+.session-working {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.session-approval,
+.session-end {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--mid) 50%, transparent);
+  background: color-mix(in srgb, var(--mid) 10%, var(--el-glass));
+}
+.session-end {
+  margin-top: 12px;
+  border-color: var(--el-line);
+  background: var(--el-glass);
+}
+.session-command {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font: 13px var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.session-approval-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.session-approval input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.btn.danger {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+}
+/* An open session outside its view (workflow.js): one line in the place of the selection's
+   description, with a small Peek at the end of whichever row shows. It copies the
+   description row (#reviewScope), so the sheet keeps its shape. */
+#sessionLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 14px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+#sessionLine[hidden],
+#peekToggle[hidden] {
+  display: none;
+}
+#panel[data-peek="session"] #reviewScope,
+#panel[data-peek="session"] #selectionSummary,
+#panel[data-peek="session"] #selectionContract {
+  display: none;
+}
+.session-line-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-line-title {
+  flex: none;
+  font-size: 13px;
+  color: var(--good);
+}
+#sessionLine[data-state="needs"] .session-line-title {
+  color: var(--mod);
+}
+#sessionLine[data-state="waiting"] .session-line-title {
+  color: var(--accent);
+}
+.session-line-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-line-code {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 11px var(--mono);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#sessionLine[data-state="needs"] .session-line-code {
+  color: var(--mod);
+  background: color-mix(in srgb, var(--mid) 16%, transparent);
+}
+#peekToggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+#peekToggle .peek-mark {
+  width: 24px;
+  height: 24px;
+}
+/* Where the session's agent has been: a fading outline for its last places, newest first. */
+.node.agent-trail {
+  border-color: color-mix(in srgb, var(--good) 60%, transparent) !important;
+}
+.node.agent-trail[data-trail="2"] {
+  border-color: color-mix(in srgb, var(--good) 42%, transparent) !important;
+}
+.node.agent-trail[data-trail="3"] {
+  border-color: color-mix(in srgb, var(--good) 28%, transparent) !important;
+}
+.node.agent-trail[data-trail="4"] {
+  border-color: color-mix(in srgb, var(--good) 18%, transparent) !important;
+}
+/* A file the session changed, or a folder that holds one. */
+.node.agent-changed::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mid);
+  pointer-events: none;
+}
+.node.agent-here.agent-changed::after {
+  right: 26px;
+}
+/* The map card the session's agent works on now. */
+.node.agent-here {
+  border-color: color-mix(in srgb, var(--good) 70%, transparent) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent),
+    0 0 26px color-mix(in srgb, var(--good) 40%, transparent) !important;
+}
+.node .agent-badge {
+  position: absolute;
+  top: -12px;
+  right: -10px;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+  z-index: 2;
+}
+.btn.session-mode {
+  min-height: 30px;
+  padding: 3px 10px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.btn.session-mode.is-open {
+  color: var(--mod);
+  border-color: color-mix(in srgb, var(--mid) 50%, transparent);
+  background: color-mix(in srgb, var(--mid) 12%, transparent);
+}
+.session-working-peek {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.btn.session-stop {
+  flex: none;
+  min-height: 30px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+/* Session parts are plain: no glass behind the line, Peek, the steps or the links. */
+/* !important: the panel's glass rule carries an ID in its :not() list. */
+.panel #sessionLine .session-line-open,
+.panel #peekToggle,
+.panel .session-steps details.session-step,
+.panel .session-log .code-link {
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.panel #peekToggle[aria-pressed="false"][data-state="needs"] {
+  background: color-mix(in srgb, var(--mid) 22%, transparent) !important;
+}
+.panel .session-log .code-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.panel .session-log .code-link code {
+  text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.panel .session-log .code-link:hover code,
+.panel .session-log .code-link:focus-visible code {
+  color: var(--accent);
+}
+.panel .session-mode-link {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.panel .session-mode-link.is-open {
+  color: var(--mod);
+}
+/* Follow and the key of the agent's marks, on the map (workflow.js). */
+#agentFocus {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  /* Above the map deck (its front sheet is at 10), below the top bar and its popovers
+     (Comparison is at 30 and 40). */
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+#agentFocus > * {
+  pointer-events: auto;
+}
+.follow-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  border: 1px solid var(--el-line);
+  background: var(--popover-glass);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.follow-pill[data-on="true"] {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 50%, transparent);
+  background: color-mix(in srgb, var(--good) 14%, var(--popover-glass));
+}
+.follow-pill svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The session agent's marks in the map legend (app.js renderMapLegend). */
+.agent-swatch {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 11px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.agent-swatch.here {
+  border: 1.5px solid var(--good);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--good) 60%, transparent);
+}
+.agent-swatch.trail {
+  border: 1.5px solid color-mix(in srgb, var(--good) 55%, transparent);
+}
+.agent-swatch.changed {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mid);
+}
+/* The step the agent takes now. */
+.session-step.is-current > summary {
+  margin-left: -12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--good);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--good) 9%, transparent);
+}
+.session-step.is-current .session-label {
+  color: var(--ink);
+}
+/* The open legend explains the marks; the Follow pill steps aside for it. */
+#stage:has(#mapLegend[open]) #agentFocus {
+  display: none;
+}
+
+/* Session view, minimal (session.js): one quiet header row that stays at the top, a dot for
+   the state, plain text in place of chips, and no boxed cards. */
+/* Above the scrolling conversation: no background or line is needed. */
+#sessionHead {
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+#sessionHead:empty,
+.panel[data-height="peek"] #sessionHead {
+  display: none;
+}
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+.panel .session-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 50%;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--muted);
+}
+.panel .session-icon .glyph {
+  width: 18px;
+  height: 18px;
+}
+.panel .session-stop {
+  color: var(--bad);
+}
+.session-titles {
+  flex: 1;
+  min-width: 0;
+}
+.session-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 650;
+}
+.session-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  margin: 1px 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.session-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+  align-self: center;
+}
+.session-meta[data-state="running"] .session-dot {
+  background: var(--good);
+}
+.session-meta[data-state="needs"] .session-dot {
+  background: var(--mid);
+}
+.panel .session-meta .session-mode-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.panel .session-meta .session-mode-link.is-open {
+  color: var(--mod);
+}
+.session-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+.panel .session-links .link-button {
+  padding: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* Where the owner pointed: quiet text, no chips. */
+.session-anchors {
+  margin: 4px 0 0;
+  font: 11px var(--mono);
+  color: var(--muted);
+}
+/* A request and the end of a session: no box, a thin rule at the left. */
+.session-approval,
+.session-end {
+  padding: 4px 0 4px 12px;
+  border: 0;
+  border-left: 2px solid var(--mid);
+  border-radius: 0;
+  background: none;
+}
+.session-end {
+  margin-top: 12px;
+  border-left-color: var(--accent);
+}
+.session-approval-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.session-approval-actions .btn,
+.session-end .btn {
+  min-height: 34px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+/* The line's command or file: monospace, no chip. */
+.session-line-code,
+#sessionLine[data-state="needs"] .session-line-code {
+  padding: 0;
+  background: none;
+}
+/* Follow: an eye alone. */
+.follow-pill {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+.follow-pill .glyph {
+  width: 18px;
+  height: 18px;
+}
+/* On the map: a thin glow and a small Peek. */
+.node.agent-here {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--good) 22%, transparent),
+    0 0 14px color-mix(in srgb, var(--good) 28%, transparent) !important;
+}
+.node .agent-badge {
+  top: -9px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+}
+/* Room for the fixed header when a request scrolls into view. */
+.session-approval,
+.session-end {
+  scroll-margin-top: 8px;
+}
+.panel .session-meta .session-mode-link,
+.panel .session-links .link-button {
+  font-family: inherit;
+}
+/* The session header, plain: back, the title, the state, Stop. */
+.session-head .session-title {
+  flex: 1;
+  min-width: 0;
+}
+.session-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.session-status .session-dot {
+  margin: 0;
+}
+.session-status[data-state="running"] {
+  color: var(--good);
+}
+.session-status[data-state="running"] .session-dot {
+  background: var(--good);
+}
+.session-status[data-state="needs"] {
+  color: var(--mod);
+}
+.session-status[data-state="needs"] .session-dot {
+  background: var(--mid);
+}
+.panel .session-head .session-stop {
+  color: var(--bad);
+}
+.session-info {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.session-links {
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 6px;
+}
+.panel .session-links .link-button.is-open {
+  color: var(--mod);
+}
+.session-end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.panel .session-end-actions .link-button {
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* The context menu (menu.js): a small popover next to the finger or cursor. */
+.context-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 220px;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 6px 0;
+  border-radius: 16px;
+  border: 1px solid var(--el-line);
+  background: var(--popover-glass);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.55);
+}
+.context-menu-head {
+  margin: 0;
+  padding: 6px 14px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.context-menu-head strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.context-menu-item:hover,
+.context-menu-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.context-menu-item .glyph {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+.context-menu-item.is-accent,
+.context-menu-item.is-accent .glyph {
+  color: var(--good);
+}
+.context-menu-item small {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.context-menu-item kbd {
+  margin-left: auto;
+  font: 11px var(--mono);
+  color: var(--faint);
+}
+.context-menu-item small + kbd {
+  margin-left: 8px;
+}
+.context-menu-rule {
+  height: 1px;
+  margin: 4px 14px;
+  background: var(--line);
+}
+/* A desktop menu is denser and shows its keys; a phone menu has no keys. */
+@media (pointer: fine) {
+  .context-menu-item {
+    min-height: 34px;
+    font-size: 14px;
+  }
+}
+@media (pointer: coarse) {
+  .context-menu-item kbd {
+    display: none;
+  }
+}
+/* While the menu is open: its item lifts, and the rest of the map dims. */
+body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
+  opacity: 0.45;
+}
+.node.menu-target {
+  z-index: 3;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 18px 40px -12px rgba(0, 0, 0, 0.6) !important;
+}
+.code-link.menu-target code {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+/* A long press opens Peekumi's menu, not the browser's callout or a text selection. */
+.node,
+.code-link {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

@@ -1,5 +1,6 @@
 //! Authenticated HTTP API, embedded frontend and repository worker.
 mod adapters;
+mod agent_session;
 mod agents;
 mod ask;
 mod engine;
@@ -380,6 +381,9 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/text.js" => Some(("text/javascript", include_bytes!("../frontend/text.js"))),
         "/peek.js" => Some(("text/javascript", include_bytes!("../frontend/peek.js"))),
         "/agents.js" => Some(("text/javascript", include_bytes!("../frontend/agents.js"))),
+        "/session.js" => Some(("text/javascript", include_bytes!("../frontend/session.js"))),
+        "/focus.js" => Some(("text/javascript", include_bytes!("../frontend/focus.js"))),
+        "/menu.js" => Some(("text/javascript", include_bytes!("../frontend/menu.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -544,6 +548,9 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/text.js",
             "/peek.js",
             "/agents.js",
+            "/session.js",
+            "/focus.js",
+            "/menu.js",
             "/style.css",
             "/pwa.js",
             "/manifest.webmanifest",
@@ -824,6 +831,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         }
     };
     if path == "/api/ask"
+        || path == "/api/references"
         || path == "/api/ask/history"
         || path == "/api/workflow"
         || path.starts_with("/api/agents")
@@ -909,6 +917,21 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                     Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
                 },
                 _ => error(StatusCode::METHOD_NOT_ALLOWED, "Use GET or PUT", gzip).await,
+            };
+        }
+        // The places that the code names of a text point at (a session's messages, say).
+        if path == "/api/references" {
+            if method != "POST" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
+            }
+            let text = body["text"].as_str().unwrap_or("");
+            let revision = |v: &Value| v.as_str().is_some_and(|r| !r.is_empty() && r.len() < 256 && !r.starts_with('-'));
+            if text.len() > 400_000 || !revision(&body["base"]) || !revision(&body["head"]) {
+                return error(StatusCode::BAD_REQUEST, "Send {base, head, text}", gzip).await;
+            }
+            return match ask::references_for(&app, &body["base"], &body["head"], body["about"].as_str().unwrap_or(""), text).await {
+                Ok(found) => json_response(StatusCode::OK, json!({"references": found}), gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };
         }
         if path == "/api/ask" {

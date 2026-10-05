@@ -11,6 +11,9 @@ On a phone, you use the browser interface to explore the repository structure, c
 - `select.js`: frosted menus that replace native select popups. Each `<select>` stays in the DOM as the source of the value and of the change event. A button and a listbox copy its state, and they accept the arrow, Home/End, Enter and Escape keys.
 - `text.js`: a safe Markdown renderer (paragraphs, lists, code, bold, italic) for answers, instructions and agent reports. It builds DOM nodes and never parses HTML. When the server resolved a code span, that code span becomes a link into the map.
 - `peek.js`: Peek, the mascot, as an inline SVG. CSS animates its state (idle, loading, thinking, success, error, empty). Peek is decorative, and it stays still when reduced motion is on.
+- `menu.js`: the context menu. A long press, a right-click or the context-menu key opens a small menu of actions for a map card or a name in a conversation; `app.js` decides which actions fit.
+- `focus.js`: the agent focus on the map, for a session, a running task and an Ask answer. It marks the agent's current place, its trail and the changed files, moves the map with the agent (Follow) and puts its card in the middle.
+- `session.js`: the Session view and composer. It reads a session's agent log into a conversation of messages, steps and their output for Claude Code, Codex and Peekumi's own agent. It also shows the agent's command requests and the way to end a session.
 - `agents.js`: the Agents sheet. It shows the agents, models and efforts that the server lists for Ask and for tasks, and keeps the choice on the device for each repository. Each Ask question, task preview and commit message request sends the choice as `using`, and the server checks it.
 - `index.html` and `style.css`: the page structure and the responsive appearance.
 

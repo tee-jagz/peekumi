@@ -9,7 +9,8 @@ The Rust backend serves the authenticated API. It reads committed Git objects, c
 - `ask.rs`: Limited committed context and Claude conversations. For files and declarations, the context is the source, the diff, the static relationships and the code that calls them. For folders, the context is the README, the declarations and the diffs of changed files. Each conversation has all built-in tools disabled and uses low effort on a fast model. The answer comes as one whole reply or as a stream of events. Answers follow ASD-STE100 Simplified Technical English.
 - `lookup.rs`: The read-only lookup tools for Ask (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`, `highlight`, `route`). They use Streamable HTTP MCP at `/mcp/ask`. The tools are open only while one answer runs, and they accept a maximum of 30 calls.
 - `workflow.rs`: Durable draft instructions (the backend keeps them as comments), frozen task previews, agent reports and owner verification.
-- `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP.
+- `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP. It also runs the turns of a session, and its bridge has the `approve` tool for a session agent's command requests.
+- `agent_session.rs`: Sessions, a live conversation with an agent on its own branch. It starts a session, keeps the owner's messages for the next turn, stores the agent's command requests and the owner's decisions, and ends a session in the normal review.
 - `index.rs`: The persistent SQLite syntax cache.
 - `process.rs`: Limited execution of Git and parser subprocesses.
 - `adapters/`: The common language interface and its implementations.

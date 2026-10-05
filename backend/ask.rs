@@ -433,17 +433,24 @@ async fn resolve_references(app: &App, prepared: &Prepared, answer: &Value) -> R
         text.push('\n');
         text.push_str(suggestion);
     }
-    let spans = code_spans(&text);
+    references_for(app, &prepared.base, &prepared.head, text_of(&prepared.anchor["path"]), &text).await
+}
+/// The places that the code spans of `text` name, in the comparison `base`..`head`, keyed by
+/// the span as written (see [`resolve_references`]). `about` is the path that a bare name may
+/// also mean, when it is declared more than once. A dotted name (`Workflow.route` or
+/// `Workflow::route`) names a method by its type. Ask and the session view use this.
+pub async fn references_for(app: &App, base: &Value, head: &Value, about: &str, text: &str) -> Result<Value> {
+    let spans = code_spans(text);
     if spans.is_empty() {
         return Ok(json!({}));
     }
     let full = app
         .engine
-        .call("compare", json!([prepared.base, prepared.head]))
+        .call("compare", json!([base, head]))
         .await
         .map_err(anyhow::Error::msg)?;
     let files = full["files"].as_array().context("Missing comparison")?;
-    let asked_about = text_of(&prepared.anchor["path"]);
+    let asked_about = about;
     let side = |removed: bool| if removed { "before" } else { "after" };
     let mut found = serde_json::Map::new();
     for span in spans {
@@ -464,7 +471,26 @@ async fn resolve_references(app: &App, prepared: &Prepared, answer: &Value) -> R
             continue;
         }
         let name = span.trim_end_matches("()");
-        if !files_named.is_empty() || !is_identifier(name) {
+        // A method by its type: `Workflow.route` and `Workflow::route` name `Workflow.route`.
+        let dotted = name.replace("::", ".");
+        let parts_ok = dotted.split('.').all(is_identifier) && dotted.split('.').count() <= 3;
+        if !files_named.is_empty() || !parts_ok {
+            continue;
+        }
+        if dotted.contains('.') {
+            let methods: Vec<(&Value, &Value)> = files
+                .iter()
+                .flat_map(|f| f["symbols"].as_array().into_iter().flatten().map(move |s| (f, s)))
+                .filter(|(_, s)| {
+                    let symbol = text_of(&s["name"]);
+                    symbol == dotted || symbol.ends_with(&format!(" as {}", dotted.rsplit_once('.').map(|(_, m)| m).unwrap_or(""))) && symbol.starts_with(&format!("{} as ", dotted.split('.').next().unwrap_or("")))
+                })
+                .collect();
+            if let [(file, symbol)] = methods.as_slice() {
+                let removed = symbol["status"] == "removed";
+                let line = if removed { &symbol["before"]["start"] } else { &symbol["start"] };
+                found.insert(span.clone(), json!({"kind":"symbol","path":file["path"],"symbol":symbol["name"],"line":line,"side":side(removed)}));
+            }
             continue;
         }
         let declared: Vec<(&Value, &Value)> = files
@@ -688,16 +714,16 @@ async fn openrouter_pass(
                 lookup::call_tool(app, call["name"].as_str().unwrap_or(""), &args).await;
             messages.push(json!({"role": "tool", "tool_call_id": call["id"], "content": result}));
         }
-        let made = app
+        let (made, places) = app
             .ask_grant
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
-            .map(|g| g.calls.clone())
+            .map(|g| (g.calls.clone(), g.places.clone()))
             .unwrap_or_default();
         if let Some(relay) = &relay {
-            for call in made.iter().skip(reported) {
-                let _ = relay.send(json!({"type": "lookup", "text": call})).await;
+            for (i, call) in made.iter().enumerate().skip(reported) {
+                let _ = relay.send(json!({"type": "lookup", "text": call, "place": places.get(i)})).await;
             }
         }
         reported = made.len();
@@ -823,15 +849,16 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
                             }
                             _ => {}
                         }
-                        let calls = worker
+                        let (calls, places) = worker
                             .ask_grant
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
                             .as_ref()
-                            .map(|g| g.calls.clone())
+                            .map(|g| (g.calls.clone(), g.places.clone()))
                             .unwrap_or_default();
-                        for call in calls.iter().skip(reported) {
-                            let _ = relay.blocking_send(json!({"type":"lookup","text":call}));
+                        // Each lookup with the place it read, so the map can show it.
+                        for (i, call) in calls.iter().enumerate().skip(reported) {
+                            let _ = relay.blocking_send(json!({"type":"lookup","text":call,"place":places.get(i)}));
                         }
                         reported = calls.len();
                     },
