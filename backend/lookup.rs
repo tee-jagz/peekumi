@@ -32,6 +32,9 @@ pub struct Grant {
     base: Value,
     head: Value,
     pub calls: Vec<String>,
+    /// For each call, the place it read: `{path, symbol?}`, or null (a search with no path).
+    /// The app marks it on the map while Ask answers.
+    pub places: Vec<Value>,
     limit: usize,
 }
 impl Grant {
@@ -46,6 +49,7 @@ impl Grant {
             base,
             head,
             calls: vec![],
+            places: vec![],
             limit,
         }
     }
@@ -155,6 +159,7 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
         )),
         Some(g) => {
             g.calls.push(describe(name, args));
+            g.places.push(place_of(args));
             Ok((g.base.clone(), g.head.clone()))
         }
     };
@@ -184,6 +189,17 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
 }
 
 /// A short, human description of a call, shown under the answer.
+/// The place a lookup reads, for the map: its file and, when it names one, its declaration.
+fn place_of(args: &Value) -> Value {
+    let target = if args["to"].is_object() { &args["to"] } else { args };
+    match target["path"].as_str().filter(|p| !p.is_empty()) {
+        Some(path) => match target["name"].as_str().filter(|n| !n.is_empty()) {
+            Some(name) => json!({"path": path, "symbol": name}),
+            None => json!({"path": path}),
+        },
+        None => Value::Null,
+    }
+}
 fn describe(name: &str, args: &Value) -> String {
     let s = |key: &str| args[key].as_str().unwrap_or("").to_string();
     let file = |key: &str| s(key).rsplit('/').next().unwrap_or("").to_string();

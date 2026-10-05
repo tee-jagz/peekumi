@@ -78,15 +78,74 @@ Authenticated owner writes must use same-origin JSON. Untrusted repository text,
 - `POST /api/runs/<id>/update`: merges the watched branch into the task branch. It returns `{merged}` with the new merge state, or `{round}` when a conflict starts a new round.
 - `POST /api/runs/<id>/commit-draft`: the blocking files, the checked-out commit, a hash of the changes and a commit message from the agent.
 - `POST /api/runs/<id>/commit-mine`: `{message, head, hash}`. It commits exactly the blocking files.
+- `POST /api/runs/session`: `{text, sha, anchor, using?}`. It starts a session with the owner's first message, and returns the session (a run with `kind: "session"`). Peekumi rejects it while an agent runs.
+- `POST /api/runs/<id>/message`: `{text, anchors?}`. It adds the owner's message to a session. A waiting session starts its next turn. A running session keeps the message for the next turn (`queued: true`).
+- `POST /api/runs/<id>/approval`: `{approval, decision, message?}`. It answers the agent's request to run a command. `decision` is `allow`, `session` (allow, and allow the same command for the rest of the session), `all` (allow every command from now on) or `deny`.
+- `POST /api/runs/session` also takes `permissions`: `ask` (the default) or `allow`.
+- `POST /api/runs/<id>/permissions`: `{mode}`, `ask` or `allow`. It changes how an open session treats commands.
+- `GET /api/runs/<id>/tail`: a session with only the last 16 KB of its log.
+- `GET /api/runs/<id>` and `GET /api/runs/<id>/tail` of a session also return `changed`: the files that the session changed since its start commit, committed or not, and its new files.
+- `POST /api/references`: `{base, head, text, about?}`. It returns `references`, the place of each code span in `text` that names exactly one file or declaration in the comparison, in the same form as Ask's `references`. A dotted name such as `Workflow.route` names a method by its type.
+- `POST /api/runs/<id>/end`: `{review}`. It ends a waiting session. With `review: true`, the session's instruction gets a report with the last commit of the branch, and it goes to the normal review.
 - `POST /api/runs/<id>/revise`: `{feedback?}` (necessary if no instructions were collected for the task). It starts the next round of a finished run that is not yet revised, and returns that round (`round`, `revises`, `feedback`). Peekumi rejects the request while a run is active or when nothing remains to change.
 
-The viewer polls active runs every three seconds. Peekumi does not have SSE. The usual comparison/source APIs can get completed work by commit SHA. They do not change the checkout that you examine.
+The viewer polls every three seconds while an agent works, and every ten seconds otherwise, so a run started from a different device also shows. Peekumi does not have SSE. The usual comparison/source APIs can get completed work by commit SHA. They do not change the checkout that you examine.
 
 ## Validation and remaining boundaries
 
 The deterministic integration agent makes real Git commits and reports through the production MCP transport. The tests cover exact preview delivery, stale drafts and refs, duplicate dispatch, concurrency, invalid attribution and unrelated comments. They also cover flags, unanswered comments, verification, reopen, follow-up rounds, persistence, cancellation and missing executables. The browser tests complete the loop on phone and desktop. These tests do not show a paid Codex or Claude session. For a first real run, local agent authentication and permissions are still necessary.
 
 These items are outside this slice: automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE, merges without an owner action, and push. Each task includes the dependency rules. Owners can use a draft to explicitly ask the agent to propose changes to `.peekumi.json`.
+
+## Sessions
+
+A **Session** is a live conversation with an agent. Use it when you want to work together with the agent, step by step, and not only send a finished instruction. The agent reads and changes code, runs checks and commits, in its own worktree and on its own branch. You read each step and reply between its turns.
+
+**Start a session.** Select a part of the map, choose **Session** in the dock, and write what you want to work on. The selection becomes the anchor of the session. A session uses the agent, model and effort that you chose for tasks in **Agents**.
+
+**Turns.** Each message that you send starts one agent turn. The turn continues the same agent conversation in the same worktree: Claude Code continues its session ID, Codex continues its thread, and Peekumi's own OpenRouter agent gets its saved messages again. If you send a message while a turn runs, the message waits and starts the next turn. To stop a turn, use **Stop**. The session then waits for your next message. Between turns, the session does not hold the repository, so a task can run. A session message waits until that task ends.
+
+**Names are links.** In the conversation, a name in backticks that names one file or declaration is a link, as in Ask. Examples are `backend/main.rs:953`, `has_grant` and `Workflow.route`. Tap it, and the map moves there and puts it in the middle, while the session stays on screen. A session opens at its latest message. Its header stays above the conversation while you scroll: the title, the state (**Working**, **Your turn** or **Needs you**) and the stop button (a small square) while the agent works. Under the conversation, one line gives the agent, turns, commits and cost, and links show the changes on the map, change how the session treats commands, and end the session.
+
+**Point at code.** While a session is open, the dock replies to it. When a part of the map is selected, the message includes it, for example `(About: lookup.rs · route)`.
+
+**Commands.** A session agent can run Git on its branch and the usual test commands with no question: `npm test`, `npm run test…`, `cargo test`, `cargo check`, `pytest`, `go test` and `node --test`. For Claude Code, every other command waits for you. The request shows the command and the reason. Choose **Allow once**, **Allow … in this session**, **Allow all commands** or **Deny**, with an optional note for the agent. A command with several parts (for example `ls; cargo test`) has no **Allow … in this session**, because one rule cannot cover it safely. After 15 minutes with no answer, the agent continues without the command.
+
+**Allow all commands.** In this mode, no command waits for you. Set it before you start (the switch next to **Start session**; the device keeps your choice), or change it at any time with **Commands: ask first** under the conversation. **Allow all commands** on a request also sets it. The next turn starts the agent in the new mode, and a request that waits is allowed at once.
+
+**While you look elsewhere.** When a session is open and its view is not on screen, a small Peek shows at the top right of the sheet, on every sheet height: working, thinking (the agent needs you) or ready (your turn). One line in place of the description says what the agent does now, with the command or file highlighted, for example "Working `cargo test`". Tap the line to open the session. Tap Peek to switch between the line and the description of the selected part of the map. When you select a part of the map, the sheet shows its description. When the agent asks to run a command, the line comes back.
+
+**Agent focus.** The map shows where the agent looks. This works for a session, for a task while its agent works, and for an Ask answer while it reads the code (its lookups). One shows at a time: an agent at work first, else the latest. After an Ask answer, its trail stays until the next question. Peekumi finds the place from every step: a file that the agent reads or changes, a folder that it searches, a file path in a command (for example `sed -n 1,40p backend/lookup.rs`), and a file and declaration in a map lookup (for example `read_declaration route`).
+
+- **Now:** while the agent works, the card of its current place glows, and a small Peek works on it. Inside a file, the declaration card glows. When the place is not on screen, the folder card that holds it glows.
+- **Trail:** the four places before the current one keep an outline that fades with age.
+- **Changed:** a file that the session changed, or a folder that holds one, has an amber dot. The dots stay for the whole session. The server finds these files with Git, so they include changes from commands and uncommitted changes.
+- **Follow:** the eye button at the top right of the map moves the map to the agent's current place, and puts its card in the middle of the map. It moves to another level of the map at most once every three seconds. When you move the map or select a card yourself, Follow pauses, and the eye shows a line through it. Tap the eye to follow again. Tap it while it follows to turn it off. The device keeps that choice.
+- **Your turn:** when the agent waits, the "now" mark goes, and the trail and the dots stay.
+- **Legend:** while a session is open, the map's legend starts with **Session agent**, which explains the three marks. The eye button hides while the legend is open.
+
+A place that Follow showed is not a pointer. Only a place that you select goes with your next reply.
+
+**End a session.** **End session** shows the commits on the branch. **Send to review** reports the session's instruction with the last commit, and the work then goes through the normal review: **Approve**, then **Merge** with **Undo**. The conversation stays with the work, under **Session conversation**. **End without review** keeps the branch, and the instruction stays unreported.
+
+Peekumi never pushes a session branch and never changes your checkout. A turn has a time limit of one hour.
+
+## The context menu
+
+Hold a card on the map, or a name in a conversation, for half a second on a phone. On a desktop, right-click it, or press the context-menu key or Shift+F10 on a focused card. A small menu opens next to it, and the rest of the map dims. The menu shows only the actions that fit:
+
+- **Open** (a folder or file) or **Source** (a declaration).
+- **Ask about this** and **Add instruction**: the dock switches to that mode, about this part.
+- **Point the agent here** while a session is open: your next reply carries this part. Without a session: **Start a session here**.
+- **Relations** with their number, and **Changes** when the part changed.
+- **Copy path** or **Copy name**.
+- For a name in a conversation: **Show on the map**, and **Reply about this** in a session.
+
+On a desktop, keys run the actions: Enter opens, A asks, I adds an instruction, S points the agent or starts a session, R replies about a name and C copies. Arrow keys move in the menu, and Escape closes it. A finger that moves before the half second pans the map and opens no menu. The menu has no action that deletes or changes anything.
+
+## The back button
+
+The phone's back button, and the browser's back, step back inside Peekumi before they leave it. Each press undoes one layer, the most recent first: an open menu, popover or dialog; a task's or session's branch that you explore on the map; a task or session (back to the Tasks list); the Tasks list; another sheet view such as Ask or Source (back to the details); the selection; and then one level up on the map. When nothing is left, back leaves Peekumi as usual.
 
 ## Ask versus Instruction
 

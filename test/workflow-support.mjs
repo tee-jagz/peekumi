@@ -4,7 +4,7 @@ import path from "node:path";
 import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
 const root = path.resolve(import.meta.dirname, "..");
-export async function fixture({ env = {} } = {}) {
+export async function fixture({ env = {}, files = {} } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-workflow-"));
   const git = (...args) => command("git", ["-C", dir, ...args]);
   await git("init", "-b", "main");
@@ -14,6 +14,12 @@ export async function fixture({ env = {} } = {}) {
     path.join(dir, "module.py"),
     '"""Fixture module."""\ndef run():\n    return 1\n',
   );
+  // More files for tests that need folders on the map.
+  const { mkdir } = await import("node:fs/promises");
+  for (const [name, content] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+    await writeFile(path.join(dir, name), content);
+  }
   await git("add", ".");
   await git("commit", "-m", "Initial");
   const sha = (await git("rev-parse", "HEAD")).toString().trim();

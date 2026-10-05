@@ -274,6 +274,12 @@
           Back to task
         </button>
         <div id="notice" class="notice" role="status" hidden></div>
+        <!-- A live session outside its view (workflow.js): a small Peek switches between the
+             selection's description and one line on what the session's agent does now. -->
+        <div id="sessionLine" hidden>
+          <button type="button" class="session-line-open"></button>
+        </div>
+        <button id="peekToggle" type="button" hidden></button>
         <div id="reviewScope"></div>
         <p id="selectionSummary"></p>
         <dl
@@ -333,6 +339,9 @@
             <span class="tab-label">Discussion</span>
           </button>
         </nav>
+        <!-- An open session's header (session.js): above the scrolling conversation, so it
+             stays in view with no band behind it. -->
+        <div id="sessionHead"></div>
         <div id="reviewScroll">
           <section id="selectionDetails"><div id="selStrip"></div></section>
           <div id="runBar"></div>
@@ -363,6 +372,15 @@
                 data-glyph="comment"
                 aria-label="Instruction"
                 title="Instruction"
+                aria-selected="false"
+              ></button>
+              <button
+                type="button"
+                role="tab"
+                data-compose="session"
+                data-glyph="session"
+                aria-label="Session"
+                title="Session: work live with an agent"
                 aria-selected="false"
               ></button>
             </div>

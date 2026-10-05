@@ -627,6 +627,163 @@ test("a task starts from a names-only map of the repository, and the graph tools
   assert.ok(!map.includes("return 1"), "No code in the map");
 });
 
+test("a session continues one conversation over turns, asks before commands, and ends in the normal review", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const session = await f.req("/api/runs/session", {
+    text: "Make the change.\nRUN: npm install left-pad",
+    sha: f.sha,
+    anchor: { kind: "file", path: "module.py" },
+    using: { agent: "claude" },
+  });
+  assert.equal(session.status, "running", session.error);
+  assert.equal(session.kind, "session");
+  assert.match(session.branch, /^peekumi\/session-/);
+  const get = () => f.req("/api/runs/" + session.id);
+  const waiting = (turns) => waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === turns && r; });
+  // A command outside the list waits for the owner; "allow in this session" adds a rule.
+  const asked = await waitFor(async () => (await get()).approval);
+  assert.equal(asked.tool, "Bash");
+  assert.equal(asked.input, "npm install left-pad");
+  assert.equal(asked.reason, "Fixture command");
+  assert.equal((await f.req(`/api/runs/${session.id}/approval`, { approval: asked.id, decision: "session" })).ok, true);
+  let run = await waiting(1);
+  assert.deepEqual(JSON.parse(await readFile(path.join(f.state, "session-approval-1.json"), "utf8")).behavior, "allow");
+  assert.deepEqual(run.allow, ["Bash(npm install:*)"]);
+  assert.equal(run.results.length, 1);
+  assert.equal(run.summary, "Turn 1 is done.");
+  assert.match(run.output, /"type":"peekumi.owner","turn":1/);
+  const first = JSON.parse(await readFile(path.join(f.state, "session-turn-1.json"), "utf8"));
+  assert.match(first.task, /# Session with the owner/);
+  assert.match(first.task, /## The owner's first message\nMake the change\./);
+  assert.match(first.task, /## Repository map/);
+  // The next turn resumes the conversation; the session rule answers without asking.
+  const sent = await f.req(`/api/runs/${session.id}/message`, { text: "Again.\nRUN: npm install other", anchors: [{ kind: "symbol", path: "module.py", symbol: "run" }] });
+  assert.equal(sent.queued, false);
+  run = await waiting(2);
+  const second = JSON.parse(await readFile(path.join(f.state, "session-turn-2.json"), "utf8"));
+  assert.equal(second.task, "The owner's message:\nAgain.\nRUN: npm install other\n(About: module.py · run)\n");
+  assert.ok(second.values.join(" ").includes("Bash(npm install:*)"), "The rule reaches the next turn");
+  assert.equal(JSON.parse(await readFile(path.join(f.state, "session-approval-2.json"), "utf8")).behavior, "allow");
+  // A denied command reaches the agent with the owner's reason.
+  await f.req(`/api/runs/${session.id}/message`, { text: "RUN: rm -rf build" });
+  const denied = await waitFor(async () => (await get()).approval);
+  assert.equal((await f.req(`/api/runs/${session.id}/approval`, { approval: denied.id, decision: "deny", message: "Not now" })).ok, true);
+  run = await waiting(3);
+  assert.match(JSON.parse(await readFile(path.join(f.state, "session-approval-3.json"), "utf8")).message, /The owner denied this: Not now/);
+  // A command with several parts cannot get a session rule; "allow all" answers it.
+  await f.req(`/api/runs/${session.id}/message`, { text: "RUN: ls; (cargo test 2>&1 | tail -15)" });
+  const chained = await waitFor(async () => (await get()).approval);
+  assert.match((await f.req(`/api/runs/${session.id}/approval`, { approval: chained.id, decision: "session" })).error, /several parts/);
+  assert.equal((await f.req(`/api/runs/${session.id}/approval`, { approval: chained.id, decision: "all" })).ok, true);
+  run = await waiting(4);
+  assert.equal(run.permissions, "allow");
+  assert.equal(JSON.parse(await readFile(path.join(f.state, "session-approval-4.json"), "utf8")).behavior, "allow");
+  // From now on nothing waits: the next turn allows every command.
+  await f.req(`/api/runs/${session.id}/message`, { text: "RUN: rm -rf build" });
+  run = await waiting(5);
+  assert.equal(run.approval, null);
+  assert.equal(JSON.parse(await readFile(path.join(f.state, "session-approval-5.json"), "utf8")).behavior, "allow");
+  const fifth = JSON.parse(await readFile(path.join(f.state, "session-turn-5.json"), "utf8")).values;
+  assert.equal(fifth[fifth.indexOf("--permission-mode") + 1], "acceptEdits");
+  // The owner can ask again; the end of the log is small.
+  assert.equal((await f.req(`/api/runs/${session.id}/permissions`, { mode: "ask" })).permissions, "ask");
+  const tail = await f.req(`/api/runs/${session.id}/tail`);
+  assert.match(tail.output, /Turn 5 is done\./);
+  assert.ok(tail.output.length <= 16 * 1024 && !tail.reportHash);
+  // Ending with review reports the session's instruction with the branch's last commit.
+  const ended = await f.req(`/api/runs/${session.id}/end`, { review: true });
+  assert.equal(ended.ok, true, ended.error);
+  const state = await f.req("/api/workflow");
+  const done = state.runs.find((r) => r.id === session.id);
+  assert.equal(done.status, "completed");
+  assert.equal(done.results.length, 5);
+  const comment = state.comments.find((c) => c.runId === session.id);
+  assert.equal(comment.status, "addressed");
+  assert.equal(comment.report.commit, done.results[4]);
+  assert.equal(comment.report.note, "Turn 5 is done.");
+  // From here it is a normal task: the owner approves it.
+  const approved = await f.req("/api/comments/" + comment.id, { action: "verify", version: comment.version }, "PATCH");
+  assert.equal(approved.status, "verified", approved.error);
+  assert.equal((await f.req(`/api/runs/${session.id}/message`, { text: "More" })).error, "This session has ended");
+});
+
+test("a Codex session resumes its thread, can stop a turn, and can end without review", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const session = await f.req("/api/runs/session", { text: "Look around.", sha: f.sha, anchor: { kind: "repo", path: "" }, using: { agent: "codex" }, permissions: "allow" });
+  assert.equal(session.status, "running", session.error);
+  assert.equal(session.permissions, "allow");
+  const get = () => f.req("/api/runs/" + session.id);
+  let run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r; });
+  assert.equal(run.conversation, "thread-fixture");
+  // A task cannot start while a session turn runs, and a session message waits for a task.
+  await f.req(`/api/runs/${session.id}/message`, { text: "Keep going. WAIT_FOR_STOP" });
+  await waitFor(async () => (await get()).pid);
+  assert.match((await f.req("/api/runs/session", { text: "Another", sha: f.sha, anchor: { kind: "repo", path: "" }, using: { agent: "codex" } })).error, /An agent is working now/);
+  const queued = await f.req(`/api/runs/${session.id}/message`, { text: "And this after." });
+  assert.equal(queued.queued, true);
+  assert.equal((await f.req(`/api/runs/${session.id}/end`, { review: false })).error, "Stop the agent first, or wait for its turn to end");
+  await f.req(`/api/runs/${session.id}/cancel`, {});
+  // The stopped turn ends; the waiting message starts the next turn, which resumes the thread.
+  run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 3 && r; });
+  assert.match(run.output, /"type":"peekumi.turn","turn":2,"status":"cancelled"/);
+  const third = JSON.parse(await readFile(path.join(f.state, "session-turn-3.json"), "utf8"));
+  assert.ok(third.values.includes("resume"));
+  assert.equal(third.task, "The owner's message:\nAnd this after.\n");
+  const ended = await f.req(`/api/runs/${session.id}/end`, { review: false });
+  assert.equal(ended.ok, true, ended.error);
+  const state = await f.req("/api/workflow");
+  assert.equal(state.runs.find((r) => r.id === session.id).status, "cancelled");
+  assert.equal(state.comments.find((c) => c.runId === session.id).status, "unreported");
+});
+
+test("an OpenRouter session keeps its conversation between turns and commits with only a message", async (t) => {
+  const { createServer } = await import("node:http");
+  const KEY = "sk-or-test-session-1234"; // gitleaks:allow (a fake test key)
+  const chats = [];
+  const api = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const json = body ? JSON.parse(body) : null;
+    const send = (value) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(value));
+    };
+    if (req.url === "/api/v1/models") return send({ data: [{ id: "vendor/tool-model", name: "Tool Model", supported_parameters: ["tools"] }] });
+    if (req.url === "/api/v1/key") return send({ data: {} });
+    chats.push(json);
+    const owner = json.messages.filter((m) => m.role === "user").length;
+    const last = json.messages.at(-1);
+    const call = (name, args) => ({ id: `call-${chats.length}`, type: "function", function: { name, arguments: JSON.stringify(args) } });
+    // Turn 1 writes and commits; turn 2 only answers.
+    if (owner === 1 && last.role === "user") return send({ choices: [{ message: { content: "I will write it.", tool_calls: [call("write_file", { path: "notes.txt", content: "From the session.\n" })] } }] });
+    if (owner === 1 && last.content === "Written.") return send({ choices: [{ message: { content: null, tool_calls: [call("commit", { message: "Add notes" })] } }] });
+    return send({ choices: [{ message: { content: owner === 1 ? "Committed the notes." : "The notes file has one line." } }] });
+  });
+  await new Promise((done) => api.listen(0, "127.0.0.1", done));
+  t.after(() => api.close());
+  const f = await fixture({ env: { PEEKUMI_OPENROUTER_URL: `http://127.0.0.1:${api.address().port}/api/v1` } });
+  t.after(() => f.close());
+  await f.req("/api/agents/openrouter-key", { key: KEY }, "PUT");
+  const session = await f.req("/api/runs/session", { text: "Write notes.", sha: f.sha, anchor: { kind: "repo", path: "" }, using: { agent: "openrouter", model: "vendor/tool-model" } });
+  assert.equal(session.status, "running", session.error);
+  const get = () => f.req("/api/runs/" + session.id);
+  let run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r; });
+  assert.equal(run.results.length, 1, run.message);
+  assert.equal((await f.git("show", "-s", "--format=%B", run.results[0])).toString().trimEnd(), `Add notes\n\nPeekumi-Run: ${session.id}\nPeekumi-Agent: openrouter`);
+  assert.equal(run.summary, "Committed the notes.");
+  const offered = chats[0].tools.map((x) => x.function.name);
+  assert.ok(!offered.some((n) => ["resolve_comment", "flag_comment", "finish"].includes(n) || /run|shell|command/.test(n)), offered.join());
+  await f.req(`/api/runs/${session.id}/message`, { text: "How long is it?" });
+  run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 2 && r; });
+  // The second turn sends the whole conversation: the first turn's steps, then the new message.
+  const second = chats.at(-1).messages;
+  assert.deepEqual(second.map((m) => m.role), ["system", "user", "assistant", "tool", "assistant", "tool", "assistant", "user"]);
+  assert.equal(second.at(-1).content, "The owner's message:\nHow long is it?\n");
+  assert.equal(run.summary, "The notes file has one line.");
+});
+
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

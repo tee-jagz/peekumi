@@ -487,7 +487,7 @@ try {
           "Primary action stays inside visible panel",
         );
       }
-      assert.equal(await page.locator('#tabs [role="tab"]').count(), 2);
+      assert.equal(await page.locator('#tabs [role="tab"]').count(), 3, "Ask, Instruction and Session");
       // A name in an answer links to the map; following it keeps the conversation in view.
       const home = page.locator(".crumbs .crumb-home");
       if (await home.isEnabled()) await home.click();
@@ -573,9 +573,13 @@ try {
           size.height - (dock.y + dock.height) < 24,
           "Dock stays at the bottom edge",
         );
-        const input = await page
-          .locator("#composerHost textarea")
-          .boundingBox();
+        // A poll can redraw the composer between finding the box and measuring it: measure
+        // the current one again.
+        let input = null;
+        for (let tries = 0; !input && tries < 10; tries++) {
+          await page.locator("#composerHost textarea").waitFor({ state: "visible" });
+          input = await page.locator("#composerHost textarea").boundingBox();
+        }
         assert.ok(input.y >= dock.y && input.y + input.height <= size.height);
       };
       await page.getByRole("tab", { name: "Ask", exact: true }).click();

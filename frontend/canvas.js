@@ -289,5 +289,24 @@ export function mountCanvas(
       remember();
     }
   });
+  /** Pans so that `card` sits in the middle of the visible map: Follow and links use it, so
+   * the place they show is never at the edge. The part under the sheet does not count.
+   * Animated unless the owner prefers reduced motion. */
+  viewport.centerCard = (card) => {
+    if (!card?.isConnected) return;
+    stopGlide();
+    const box = card.getBoundingClientRect(),
+      bounds = viewport.getBoundingClientRect(),
+      sheet = document.querySelector("#panel")?.getBoundingClientRect();
+    const bottom = sheet && sheet.top > bounds.top + 80 ? Math.min(bounds.bottom, sheet.top) : bounds.bottom;
+    view.x += bounds.left + bounds.width / 2 - (box.left + box.width / 2);
+    view.y += (bounds.top + bottom) / 2 - (box.top + box.height / 2);
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      layer.style.transition = "transform 280ms cubic-bezier(.3,.7,.3,1)";
+      setTimeout(() => (layer.style.transition = ""), 320);
+    }
+    moving();
+    remember();
+  };
   remember();
 }

@@ -32,6 +32,8 @@ function appendInline(parent, text, links, onLink) {
       link.type = "button";
       link.className = "code-link link-button";
       link.title = `Show ${target.symbol ? target.symbol + " in " : ""}${target.path} on the map`;
+      // The place, for the context menu (menu.js).
+      link.dataset.target = JSON.stringify(target);
       link.onclick = () => onLink(target);
       link.append(node);
       parent.append(link);

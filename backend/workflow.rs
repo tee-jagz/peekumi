@@ -42,10 +42,10 @@ pub fn text<'a>(v: &'a Value, key: &str, max: usize) -> Result<&'a str> {
     ensure!(!s.contains('\0'), "Invalid {key}");
     Ok(s)
 }
-fn list<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
+pub(crate) fn list<'a>(v: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
     v[key].as_array_mut().unwrap()
 }
-fn find<'a>(v: &'a Value, key: &str, id: &str) -> Result<&'a Value> {
+pub(crate) fn find<'a>(v: &'a Value, key: &str, id: &str) -> Result<&'a Value> {
     v[key]
         .as_array()
         .unwrap()
@@ -53,7 +53,7 @@ fn find<'a>(v: &'a Value, key: &str, id: &str) -> Result<&'a Value> {
         .find(|x| x["id"] == id)
         .context("Not found")
 }
-fn find_mut<'a>(v: &'a mut Value, key: &str, id: &str) -> Result<&'a mut Value> {
+pub(crate) fn find_mut<'a>(v: &'a mut Value, key: &str, id: &str) -> Result<&'a mut Value> {
     list(v, key)
         .iter_mut()
         .find(|x| x["id"] == id)
@@ -128,7 +128,7 @@ impl Workflow {
         Ok(c)
     }
     /// Applies a complete state transition atomically, rolling back validation failures.
-    pub fn update(&self, f: impl FnOnce(&mut Value) -> Result<Value>) -> Result<Value> {
+    pub fn update<T>(&self, f: impl FnOnce(&mut Value) -> Result<T>) -> Result<T> {
         let mut conn = self.connection()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let raw: String = tx.query_row("SELECT body FROM workflow WHERE id=1", [], |r| r.get(0))?;
@@ -183,7 +183,7 @@ impl Workflow {
     }
     /// True once every result commit of `run` is on the watched branch: the task is applied,
     /// so its work is settled and later changes start a new task.
-    fn applied(&self, run: &Value) -> bool {
+    pub(crate) fn applied(&self, run: &Value) -> bool {
         run["results"].as_array().is_some_and(|commits| {
             !commits.is_empty()
                 && commits.iter().all(|commit| {
@@ -215,35 +215,12 @@ impl Workflow {
             v["watched"] = json!(self.watched);
             return Ok(v);
         }
+        // Sessions: a live conversation with an agent (see the agent_session module).
+        if let Some(result) = self.session_route(method, path, &body) {
+            return result;
+        }
         if method == "POST" && path == "/api/comments" {
-            let content = text(&body, "text", 12000)?;
-            let sha = self.resolve(text(&body, "sha", 256)?)?;
-            let anchor = &body["anchor"];
-            let kind = text(anchor, "kind", 32)?;
-            ensure!(
-                ["repo", "folder", "file", "symbol", "edge"].contains(&kind),
-                "Invalid anchor kind"
-            );
-            let path = anchor["path"].as_str().unwrap_or("");
-            ensure!(
-                path.len() <= 2048
-                    && !path.starts_with('/')
-                    && !path.split('/').any(|p| p == "..")
-                    && !path.contains('\0'),
-                "Invalid anchor path"
-            );
-            if kind != "repo" {
-                ensure!(!path.is_empty(), "Missing anchor path");
-                self.git(&["cat-file", "-e", &format!("{sha}:{path}")])?;
-            }
-            ensure!(anchor.to_string().len() <= 6000, "Anchor too large");
-            if kind == "symbol" {
-                text(anchor, "symbol", 512)?;
-            }
-            if kind == "edge" {
-                text(anchor, "target", 2048)?;
-                text(anchor, "relationship", 32)?;
-            }
+            let comment = self.checked_comment(&body)?;
             // An instruction written while exploring a finished task joins that task's next round.
             let for_run = body["forRun"].as_str().map(str::to_string);
             return self.update(|v| {
@@ -254,7 +231,7 @@ impl Workflow {
                     ensure!(!self.applied(r), "This task is applied to main; start a new task for further changes");
                     ensure!(r["revisedBy"].is_null(), "Changes were already requested; continue from the latest round");
                 }
-                let mut c = json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]});
+                let mut c = comment;
                 if let Some(run) = &for_run {
                     c["forRun"] = json!(run);
                 }
@@ -395,9 +372,53 @@ impl Workflow {
             r["output"] = json!(String::from_utf8_lossy(
                 &std::fs::read(log).unwrap_or_default()
             ));
+            // The run's changed files, for the marks on the map (see the agent_session module).
+            r["changed"] = json!(self.session_changes(&r));
             return Ok(r);
         }
         bail!("Unknown workflow route")
+    }
+    /// A new draft comment from `{text, sha, anchor}`, checked: the text is bounded, the commit
+    /// exists, and the anchor names a path that exists at that commit. Not stored yet.
+    pub(crate) fn checked_comment(&self, body: &Value) -> Result<Value> {
+        let content = text(body, "text", 12000)?;
+        let sha = self.resolve(text(body, "sha", 256)?)?;
+        let anchor = &body["anchor"];
+        let kind = text(anchor, "kind", 32)?;
+        ensure!(
+            ["repo", "folder", "file", "symbol", "edge"].contains(&kind),
+            "Invalid anchor kind"
+        );
+        let path = anchor["path"].as_str().unwrap_or("");
+        ensure!(
+            path.len() <= 2048
+                && !path.starts_with('/')
+                && !path.split('/').any(|p| p == "..")
+                && !path.contains('\0'),
+            "Invalid anchor path"
+        );
+        if kind != "repo" {
+            ensure!(!path.is_empty(), "Missing anchor path");
+            self.git(&["cat-file", "-e", &format!("{sha}:{path}")])?;
+        }
+        ensure!(anchor.to_string().len() <= 6000, "Anchor too large");
+        if kind == "symbol" {
+            text(anchor, "symbol", 512)?;
+        }
+        if kind == "edge" {
+            text(anchor, "target", 2048)?;
+            text(anchor, "relationship", 32)?;
+        }
+        Ok(json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}))
+    }
+    /// The dependency rule configuration at `base`, or a note that there is none.
+    pub(crate) fn rules_at(&self, base: &str) -> Result<String> {
+        let rules = crate::rules::CONFIG_FILES
+            .iter()
+            .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
+            .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
+        ensure!(rules.len() <= 65536, "Rule configuration is too large");
+        Ok(rules)
     }
     /// Freezes the exact brief, selected draft versions, rules and watched-branch commit.
     fn preview(&self, body: &Value) -> Result<Value> {
