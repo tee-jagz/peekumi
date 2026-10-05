@@ -6,6 +6,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 This is the first public release. Peekumi was called Repo Strata during its development, and the former `strata` command and `STRATA_*` settings still work.
 
+Peekumi is licensed under the Apache License 2.0. The release archives include `LICENSE` and `NOTICE`.
+
 ### Map and inspection
 
 - A mobile map of the real folders, files and declarations of a repository, with pan, pinch and zoom, and drill-down from the folder structure to one function.
