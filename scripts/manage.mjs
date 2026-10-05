@@ -630,6 +630,9 @@ async function main() {
       await cp(join(root, "skills"), join(staging, "skills"), {
         recursive: true,
       });
+      for (const name of ["LICENSE", "NOTICE"])
+        if (await exists(join(root, name)))
+          await copyFile(join(root, name), join(staging, name));
       const nodeLicense = join(dirname(dirname(node)), "LICENSE");
       if (await exists(nodeLicense))
         await copyFile(nodeLicense, join(staging, "NODE-LICENSE"));
