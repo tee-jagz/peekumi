@@ -22,7 +22,10 @@ jobs:
           - { target: darwin-x64, os: macos-15-intel, browser: false }
     runs-on: ${{ matrix.os }}
     steps:
+      # The browser tests compare HEAD with its parent, so they need the history.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       # Official Node builds are self-contained, so they can be bundled into the archive.
       - uses: actions/setup-node@v4
         with:
