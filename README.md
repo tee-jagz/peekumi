@@ -4,11 +4,11 @@
 
 Use your phone to examine a repository and its changes, from the folder structure to one function. Then ask about it or give work to an agent.
 
-Peekumi makes a map of the real folders, files and declarations in your repository. It colours the changes between two commits and shows the code and its static relationships. **Ask** uses Claude Code to answer questions about the selection. **Instructions** become tasks that Codex or Claude Code does in a separate worktree, and then you review the result. Peekumi reads only committed code. It never changes your checkout.
+Peekumi makes a map of the real folders, files and declarations in your repository. It colours the changes between two commits and shows the code and its static relationships. **Ask** uses Claude Code to answer questions about the selection. **Instructions** become tasks that Codex or Claude Code does in a separate worktree, and then you review the result. A **Session** is a live conversation with an agent in its own worktree: you see each step, and the map shows where the agent looks. Peekumi reads only committed code. It changes your checkout only when you tap **Merge** and confirm.
 
-| Repository map | Time travel | Tasks |
-| --- | --- | --- |
-| [<img src="docs/screenshots/mobile-map.png" width="260" alt="Mobile repository map with coloured changes, floating map controls and the Ask and Instruction box">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="260" alt="Commit cards above the repository map in Time mode">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-tasks.png" width="260" alt="Tasks view with a draft instruction ready to send to an agent">](docs/screenshots/mobile-tasks.png) |
+| Repository map | Time travel | Tasks | Sessions |
+| --- | --- | --- | --- |
+| [<img src="docs/screenshots/mobile-map.png" width="200" alt="Mobile repository map with coloured changes, floating map controls and the Ask and Instruction box">](docs/screenshots/mobile-map.png) | [<img src="docs/screenshots/mobile-history.png" width="200" alt="Commit cards above the repository map in Time mode">](docs/screenshots/mobile-history.png) | [<img src="docs/screenshots/mobile-tasks.png" width="200" alt="Tasks view with a draft instruction ready to send to an agent">](docs/screenshots/mobile-tasks.png) | [<img src="docs/screenshots/mobile-session.png" width="200" alt="A session in which the agent asks to run a command">](docs/screenshots/mobile-session.png) |
 
 ## Install
 

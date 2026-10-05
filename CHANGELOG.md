@@ -2,7 +2,7 @@
 
 This file records the changes in each release of Peekumi. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version numbers follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [0.2.0] - 2026-10-05
 
 This is the first public release. Peekumi was called Repo Strata during its development, and the former `strata` command and `STRATA_*` settings still work.
 

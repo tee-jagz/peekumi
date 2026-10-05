@@ -16,6 +16,9 @@ The command `node scripts/guide-screenshots.mjs` makes the screenshots and icon 
 - [Selecting something](#selecting-something)
 - [The review sheet](#the-review-sheet): Details, Source, Changes, Relations
 - [Ask, instructions and tasks](#ask-instructions-and-tasks)
+- [Sessions](#sessions) and [agent focus](#agent-focus)
+- [The context menu](#the-context-menu)
+- [The back button](#the-back-button)
 - [Typing on a phone](#typing-on-a-phone)
 - [Desktop layout](#desktop-layout)
 - [Icon reference](#icon-reference)
@@ -45,7 +48,7 @@ The screen has three parts. The header shows the name of the repository and the 
 | 14 | Key | Opens the map key. The map key also contains the colour lens. Refer to [Map key](#map-key). |
 | 15 | Sheet handle | Drag it up or down, or tap it, to move the sheet between peek, half and full height. |
 | 16 | Summary | The description of the selection or the current folder. This text comes from committed documentation. You can scroll long text. While more text is available, its last line fades. |
-| 17 | Ask / Instruction | Ask a question about the selection, or write an instruction for an agent. |
+| 17 | Ask / Instruction / Session | Ask a question about the selection, write an instruction for an agent, or start a [session](#sessions) with an agent. |
 | 18 | Anchor | The subject of your question or instruction, and the commit that it refers to. |
 | 19 | Text field | Type your question or instruction here. |
 | 20 | Send | Sends the question. In Instruction mode, Cancel and Save draft replace this button. |
@@ -66,6 +69,8 @@ When you select a card, Peekumi highlights the connections of that card and fade
 | Clear a selection | Tap an empty area of the map, or × in the sheet | Click an empty area of the map, or Escape |
 | Close a popover | Tap outside it, or ✕ | Escape |
 | Change sheet height | Drag or tap the handle | Arrow keys, Home and End on the handle |
+| Open the context menu | Hold a card or a name for half a second | Right-click, or Shift+F10 on a focused card |
+| Go back one step | The back button or back gesture of the phone | The back button of the browser |
 
 ## Map key
 
@@ -240,6 +245,62 @@ The Tasks button is a toggle. To go back to the map selection, tap it again or t
 Approval of a task does not change your code. After you approve, the task shows **Ready to merge into main**, with the number of commits and changed files. Tap **Merge into main**, then **Merge** to confirm. Peekumi does a fast-forward of main to the last commit of the task. It never pushes. After the merge, the task shows **Merged into main** and an **Undo merge** button. Undo works until main changes.
 
 If you have uncommitted changes in a file that the merge changes, the task shows the files that are in the way. Tap **Commit my changes, then merge**. An agent writes a commit message for only those files. Examine the files and the message, then tap **Commit**. If main has new commits, tap **Update with main**. If main and the task conflict, the agent resolves the conflict in a new round, and you review the task again. Refer to [WORKFLOW.md](WORKFLOW.md) for the full loop.
+
+## Sessions
+
+<img src="guide/16-session.jpg" width="340" alt="A session in which the agent asks to run a command">
+
+A session is a live conversation with an agent. Use it when you want to work together with the agent, step by step. The agent reads and changes code, runs checks and commits, in its own worktree and on its own branch. You read each step and reply between its turns.
+
+To start a session, select a part of the map and tap **Session** in the dock. Write what you want to work on, and tap **Start session**. The session uses your choice for tasks in **Agents**.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Header | The title and the state of the session: **Working**, **Your turn** or **Needs you**. While the agent works, the small square stops the turn. The arrow takes you back to the Tasks list. |
+| 2 | Command request | Claude Code asks before it runs a command that is not on the session's list. The request shows the command and the reason. |
+| 3 | Answer | **Allow once**, **Allow … in this session**, **Allow all commands** or **Deny**. You can add a note for the agent. |
+| 4 | Reply | Your next message to the agent. If a part of the map is selected, the message includes it. If you send while the agent works, the message waits for the next turn. |
+
+Each step of the agent shows in the conversation. Tap a step to see its output. A file or declaration name in the conversation is a link: tap it, and the map moves there while the session stays on the screen. Under the conversation, one line gives the agent, the turns, the commits and the cost. Links there show the changes on the map, change how the session treats commands, and end the session.
+
+**Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
+
+To finish, tap **End session**, then **Send to review**. The work then goes through the normal review: **Approve**, then **Merge**. Refer to [WORKFLOW.md](WORKFLOW.md#sessions) for all the details.
+
+### Agent focus
+
+<img src="guide/17-agent-focus.jpg" width="340" alt="The map with the agent's place, its earlier place and changed files marked">
+
+The map shows where the agent looks. This works for a session, for a task while its agent works, and for an Ask answer while it reads the code.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Now | The card of the agent's current place glows, and a small Peek works on it. When the place is inside a folder, the folder card glows. |
+| 2 | Trail | The places before the current one keep an outline that fades with age. |
+| 3 | Changed | An amber dot marks a file that the session changed, or a folder that holds one. |
+| 4 | Follow | Tap the eye to move the map with the agent. The map puts the agent's place in the middle. When you move the map yourself, Follow pauses. Tap the eye again to continue. |
+| 5 | Session line | When the session is not on the screen, this line tells what the agent does now. Tap it to open the session. |
+| 6 | Peek | Tap it to switch between the session line and the description of the selection. Peek shows the state: it works while the agent works, it thinks when the agent needs you, and it rests when it is your turn. |
+
+The map key explains the three marks while a session is open.
+
+## The context menu
+
+<img src="guide/15-context-menu.jpg" width="340" alt="The context menu of a folder card">
+
+Hold a card or a name for half a second. On a desktop, right-click it. A small menu opens next to it, and the rest of the map dims.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Item | The card or name that the menu is about. |
+| 2 | Header | The name and the kind of the item. |
+| 3 | Actions | Only the actions that fit the item: **Open** or **Source**, **Ask about this**, **Add instruction**, **Start a session here** (or **Point the agent here** while a session is open), **Relations**, **Changes** and **Copy path**. For a name in a conversation: **Show on the map** and **Reply about this**. |
+
+On a desktop, the letters at the right run the actions. A finger that moves before the half second pans the map and opens no menu. The menu has no action that deletes or changes anything.
+
+## The back button
+
+The back button of the phone, and the back button of the browser, go back one step inside Peekumi. Each press closes the most recent layer first: a menu or a popover, then a task or a session, then a sheet view such as Ask or Source, then the selection, and then one level of the map. At the top of the map, with nothing open, back leaves Peekumi.
 
 ## Typing on a phone
 

@@ -20,8 +20,8 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 
 ### What each device can do
 
-- An owner device can read code, use Ask, write instructions, start tasks, approve results and manage devices.
-- A read-only device can read the map and the source. It cannot use Ask, write instructions, see tasks or read the Ask conversation.
+- An owner device can read code, use Ask, write instructions, start tasks and sessions, answer command requests, approve results and manage devices.
+- A read-only device can read the map and the source. It cannot use Ask, write instructions, see tasks or sessions, or read the Ask conversation.
 - Each paired device can see all registered repositories. Peekumi does not have permissions for each repository. Register only the repositories that your devices can see.
 - Only the owner token can add or remove a repository. The `peekumi` command on the host uses it. A device session cannot do this.
 
@@ -33,13 +33,16 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 ### Where your code goes
 
 - **Ask** sends the selected code and its context to Anthropic through the Claude Code client on your computer. All built-in tools of Claude Code are disabled for Ask. While one answer runs, Ask can use read-only lookups through a key that is valid only for that answer. The lookups read committed code and cannot run code or change files.
-- **Tasks** run Codex or Claude Code, which send code to OpenAI or Anthropic. If you choose OpenRouter for Ask, Ask sends your question and the code that it reads to OpenRouter, which sends them to the provider of the model that you chose. An OpenRouter task runs in Peekumi's own task agent. It can change files only in the worktree of the task, and it cannot run commands. The server keeps the OpenRouter key in its private state folder and never sends it to the browser. Do not use Ask or tasks on code that must not leave your computer.
+- **Tasks** and **sessions** run Codex or Claude Code, which send code to OpenAI or Anthropic. If you choose OpenRouter for Ask, Ask sends your question and the code that it reads to OpenRouter, which sends them to the provider of the model that you chose. An OpenRouter task or session runs in Peekumi's own task agent. It can change files only in the worktree of the task, and it cannot run commands. The server keeps the OpenRouter key in its private state folder and never sends it to the browser. Do not use Ask or tasks on code that must not leave your computer.
 
-### Agent tasks
+### Agent tasks and sessions
 
-- A task runs the agent in a separate Git worktree on its own branch. The worktree is not a security sandbox: the agent runs with the permissions of your user account.
-- Codex runs with its `--approve-for-me` preset. Claude Code runs with accepted edits and can use Bash. Start tasks only with instructions that you trust.
-- Peekumi never pushes an agent branch. It merges a task into your branch only when you tap **Merge** and confirm, and only as a fast-forward. Examine the result before you merge it.
+- A task or a session runs the agent in a separate Git worktree on its own branch. The worktree is not a security sandbox: the agent runs with the permissions of your user account.
+- Codex runs with its `--approve-for-me` preset, in tasks and in sessions. Claude Code runs with accepted edits and can use Bash in a task. Start tasks only with instructions that you trust.
+- In a Claude Code session, the agent can run Git on its branch and a short list of test commands without a question. Each other command waits until you allow or deny it on an owner device. The list is in [WORKFLOW.md](docs/WORKFLOW.md#sessions).
+- **Allow all commands** removes that question. The agent can then run any command with the permissions of your user account. It can read files outside the worktree, use the network and change other files on your computer. Use this mode only for work that you trust, and turn it off with **Commands: ask first**.
+- Peekumi gives a session agent no project or user settings of Claude Code, so your own permission rules and hooks do not apply to it.
+- Peekumi never pushes an agent branch. It merges a task or an ended session into your branch only when you tap **Merge** and confirm, and only as a fast-forward. Examine the result before you merge it.
 
 ### Network exposure
 
