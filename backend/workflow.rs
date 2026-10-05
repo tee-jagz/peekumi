@@ -15,6 +15,10 @@ pub struct Workflow {
     pub watched: String,
     pub codex: String,
     pub claude: String,
+    /// Model and effort that Ask uses until the owner chooses others (see the agents module).
+    pub ask_default: [String; 2],
+    /// The server's private folder for secrets that every repository shares (API keys).
+    pub secrets: PathBuf,
 }
 /// Milliseconds since the Unix epoch for audit events, independent of commit dates.
 pub fn now() -> u64 {
@@ -74,6 +78,8 @@ impl Workflow {
             watched: watched.into(),
             codex: codex.into(),
             claude: claude.into(),
+            ask_default: ["sonnet".into(), "low".into()],
+            secrets: state.canonicalize()?,
         };
         #[cfg(unix)]
         {
@@ -187,6 +193,10 @@ impl Workflow {
         // Merging an approved task: see the merge module.
         if let Some(result) = self.merge_route(method, path, &body) {
             return result;
+        }
+        // The agent, model and effort for Ask and for tasks: see the agents module.
+        if path == "/api/agents" || path.starts_with("/api/agents/") {
+            return self.agents_route(method, path, &body);
         }
         if method == "GET" && path == "/api/workflow" {
             let mut v = self.read()?;
@@ -383,8 +393,18 @@ impl Workflow {
     }
     /// Freezes the exact brief, selected draft versions, rules and watched-branch commit.
     fn preview(&self, body: &Value) -> Result<Value> {
-        let agent = text(body, "agent", 32)?;
-        ensure!(["codex", "claude"].contains(&agent), "Unsupported agent");
+        // The owner's choice for tasks from this device (`using`), or `agent` alone with its
+        // default model, or the server's default. The task keeps it for all its rounds.
+        let using = if body["using"].is_null() && body["agent"].is_string() {
+            json!({"agent": text(body, "agent", 32)?})
+        } else {
+            body["using"].clone()
+        };
+        let chosen = self
+            .choice(crate::agents::Job::Task, &using)
+            .map_err(|e| anyhow::anyhow!("Unsupported agent: {e}"))?;
+        let (model, effort) = (chosen["model"].clone(), chosen["effort"].clone());
+        let agent = chosen["agent"].as_str().unwrap_or("codex");
         let ids = body["commentIds"]
             .as_array()
             .context("Missing commentIds")?;
@@ -417,7 +437,7 @@ impl Workflow {
             let branch = format!("peekumi/run-{id}");
             let start = format!("Start from {base} on {}.", self.watched);
             let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &[], &rules);
-            let r=json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
+            let r=json!({"id":id,"agent":agent,"model":model,"effort":effort,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
             list(v,"runs").push(r.clone());
@@ -565,7 +585,7 @@ impl Workflow {
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
             list(v, "runs").push(next.clone());
             Ok(next)
         })?;

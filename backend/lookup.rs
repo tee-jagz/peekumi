@@ -71,6 +71,33 @@ pub async fn handle(app: &App, request: Value) -> Option<Value> {
     })
 }
 
+/// The same tools in the function-calling form of chat APIs (OpenRouter), for an Ask engine
+/// that runs the lookups itself instead of through MCP.
+pub fn function_tools() -> Value {
+    json!(tool_list()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| json!({"type":"function","function":{"name":t["name"],"description":t["description"],"parameters":t["inputSchema"]}}))
+        .collect::<Vec<_>>())
+}
+
+/// Runs one lookup for an Ask engine that calls the tools itself, under the open grant and its
+/// call limit. Returns the result text and `true` for an error.
+pub async fn call_tool(app: &App, name: &str, args: &Value) -> (String, bool) {
+    let out = call(app, &json!({"name": name, "arguments": args})).await;
+    (
+        out["content"][0]["text"].as_str().unwrap_or("").to_string(),
+        out["isError"] == true,
+    )
+}
+
+/// Opens a lookup grant for an Ask engine that calls the tools itself (no MCP address needed).
+pub fn open(app: &App, base: &Value, head: &Value) {
+    *app.ask_grant.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some(Grant::new(crate::random_token(), base.clone(), head.clone()));
+}
+
 fn tool_error(message: &str) -> Value {
     json!({"isError":true,"content":[{"type":"text","text":message}]})
 }

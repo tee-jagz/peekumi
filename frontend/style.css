@@ -6017,3 +6017,332 @@ a.pr-link .glyph {
 [data-starting] #panel {
   visibility: hidden;
 }
+
+/* Agents (agents.js): two jobs, each opening one short list, in the glass sheet. */
+.tasks-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tasks-top .task-heading {
+  margin: 0;
+}
+.tasks-uses {
+  margin: 2px 0 8px;
+}
+.task-uses {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.task-uses .link-button {
+  min-height: 32px;
+  font: inherit;
+  font-size: 14px;
+}
+.agents-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.agents-head .merge-title {
+  flex: 1;
+  font-size: 20px;
+}
+.agents-back {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font-size: 18px;
+  cursor: pointer;
+}
+.agents-rows {
+  display: grid;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.agents-row,
+.agents-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agents-row + .agents-row,
+.agents-option + .agents-option {
+  border-top: 1px solid var(--line);
+}
+.agents-option input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.agents-option:has(input:disabled) {
+  cursor: default;
+  color: var(--muted);
+}
+.agents-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.agents-text strong,
+.agents-text > span {
+  font-size: 16px;
+}
+.agents-text small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.agents-text small.agents-problem,
+.agents-custom .agents-problem {
+  color: var(--mod);
+}
+.agents-value {
+  font-size: 14px;
+  color: var(--muted);
+  text-align: right;
+}
+.agents-chevron {
+  color: var(--muted);
+  font-size: 18px;
+}
+.agents-custom {
+  display: grid;
+  gap: 8px;
+}
+.agents-custom[hidden] {
+  display: none;
+}
+.agents-custom-line {
+  display: flex;
+  gap: 8px;
+}
+.agents-custom input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--field-glass);
+  color: var(--ink);
+  font: 14px var(--mono);
+}
+.agents-custom .btn {
+  min-height: 42px;
+}
+.agents-label {
+  margin: 2px 0 -6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.seg.agents-providers {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 12px;
+}
+.seg.agents-providers button {
+  min-height: 40px;
+  font-size: 14px;
+}
+.seg.agents-providers button:disabled {
+  opacity: 0.5;
+}
+.agents-efforts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agents-effort {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--field-glass);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.agents-effort[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--field-glass));
+  font-weight: 600;
+}
+.merge-sheet > small.agents-problem {
+  margin-top: -6px;
+  font-size: 12.5px;
+  color: var(--mod);
+}
+
+/* The composer's agent chip: always in reach, it names what the current mode uses. */
+.agent-chip {
+  flex: none;
+  max-width: 46%;
+  min-height: 30px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--el-glass);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.agent-chip[hidden] {
+  display: none;
+}
+#dockContext {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Agents rows sit flush inside their one rounded box: no button frame of their own. */
+.agents-rows > .agents-row,
+.agents-rows > .agents-option {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.agents-rows > .agents-row + .agents-row,
+.agents-rows > .agents-option + .agents-option {
+  border-top: 1px solid var(--line);
+}
+.agents-row .agents-text strong {
+  font-size: 16px;
+}
+.agents-row .agents-text small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agents-row .agents-value {
+  flex: 0 1 auto;
+  max-width: 55%;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* With the agent chip beside it, the pinned place stays on one line. */
+#reviewActions #dockContext {
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#reviewActions #dockContext .glyph {
+  flex: none;
+  margin-top: 0;
+}
+#dockContext .dock-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-search {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--field-glass);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.agents-rows > .agents-option[hidden] {
+  display: none;
+}
+.agents-key {
+  display: grid;
+  gap: 10px;
+}
+.agents-key input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--field-glass);
+  color: var(--ink);
+  font: 15px var(--mono);
+}
+.agents-keyrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+}
+.agents-keyrow > span {
+  font-family: var(--mono);
+}
+.agents-keyrow .link-button {
+  min-height: 32px;
+  font-size: 14px;
+}
+.agents-keyrow .agents-remove {
+  color: var(--del);
+}
+.agents-privacy {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--mod) 30%, transparent);
+  background: color-mix(in srgb, var(--mod) 7%, transparent);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.agents-rows {
+  max-height: 46dvh;
+  overflow-y: auto;
+}
+.agents-keyrow .btn.link-button {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+}
+.agents-keyrow .btn.link-button.agents-remove {
+  color: var(--del);
+}

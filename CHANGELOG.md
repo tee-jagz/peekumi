@@ -29,6 +29,8 @@ This is the first public release. Peekumi was called Repo Strata during its deve
 - Tasks that Codex or Claude Code do in a separate worktree, with run-scoped reports and owner approval.
 - Explore changes on the map, request changes as a next round that continues from the last commit of the agent, and collect changes while you explore.
 - A Tasks button that shows a running task from every view.
+- OpenRouter: any OpenRouter model that can use tools answers questions (with Peekumi's read-only lookups) or does tasks (Peekumi's own task agent edits and commits in the worktree, with no shell). The key stays on the server.
+- Agents: for Ask and for tasks, choose a provider (Claude Code, Codex or OpenRouter for tasks, Claude Code or OpenRouter for Ask), one of the models that the provider reports, and an effort that the model supports, or type any model name. The choice stays on the device, and each task keeps the choice that it started with.
 - Merge an approved task into main from Peekumi, as a fast-forward after a confirmation, with Undo. Peekumi never pushes. When your uncommitted files are in the way, an agent writes the commit message for them and you check it. When main moved on, Update with main merges it, and an agent resolves a conflict as a new round.
 
 ### Setup and access

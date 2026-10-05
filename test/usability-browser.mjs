@@ -48,6 +48,38 @@ try {
         await page.screenshot({ path: "test-results/setup-failure.png" });
         throw e;
       });
+    // OpenRouter for Ask: choosing it asks for a key first; then its models and a privacy note.
+    const routerModels = Array.from({ length: 14 }, (_, i) => ({ id: `vendor/model-${i}`, label: `Model ${i}`, note: "128K context", efforts: i ? [] : ["low", "high"], defaultEffort: null }));
+    const catalog = (keySet) => ({
+      agents: [
+        { id: "claude", label: "Claude Code", short: "Claude", jobs: ["ask", "task"], defaultModel: true, key: null, source: "agent", status: { ready: true, reason: null }, models: { ask: [{ id: "sonnet", label: "Sonnet", note: "Latest", efforts: ["low"], defaultEffort: null }], task: [] } },
+        { id: "openrouter", label: "OpenRouter", short: "OpenRouter", jobs: ["ask"], defaultModel: false, source: "agent", key: keySet ? { set: true, end: "7890", fromEnvironment: false } : { set: false }, status: { ready: keySet, reason: keySet ? null : "Add your OpenRouter key" }, models: { ask: routerModels } },
+      ],
+      defaults: { ask: { agent: "claude", model: "sonnet", effort: "low" }, task: { agent: "claude", model: null, effort: "auto" } },
+    });
+    let sentKey = null;
+    await page.route("**/api/agents", (r) => r.fulfill({ json: catalog(false) }));
+    await page.route("**/api/agents/openrouter-key", (r) => {
+      sentKey = r.request().postDataJSON().key;
+      return r.fulfill({ json: catalog(true) });
+    });
+    await page.locator("#dockAgent:not([hidden])").click();
+    const sheet = page.locator("dialog.agents-dialog");
+    await sheet.getByRole("button", { name: "OpenRouter", exact: true }).click();
+    await sheet.getByLabel("OpenRouter API key").fill("sk-or-test-1234567890");
+    await sheet.getByRole("button", { name: "Test and save", exact: true }).click();
+    await sheet.getByText("API key •••• 7890").waitFor();
+    assert.equal(sentKey, "sk-or-test-1234567890"); // gitleaks:allow (a fake test key)
+    assert.match(await sheet.locator(".agents-privacy").innerText(), /sends your question and the code it reads to OpenRouter/);
+    await sheet.getByLabel("Search models").fill("model-13");
+    assert.equal(await sheet.locator(".agents-option:visible").count(), 2, "The match and Other model");
+    await page.screenshot({ path: `test-results/openrouter-${width}.png` });
+    await sheet.getByText("Model 13", { exact: true }).click();
+    await page.keyboard.press("Escape");
+    await page.locator("#dockAgent", { hasText: "OpenRouter · Model 13" }).waitFor();
+    await page.evaluate(() => localStorage.clear());
+    await page.unroute("**/api/agents");
+    await page.unroute("**/api/agents/openrouter-key");
     // PR context should reuse the actual canvas. Mock the network boundary, not UI internals.
     await page.route("**/api/prs", (r) =>
       r.fulfill({

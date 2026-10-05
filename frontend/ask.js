@@ -17,6 +17,8 @@ export function createAsk({
   openReference,
   // The name for questions about the whole comparison, such as "PR #3"; optional.
   rootSubject,
+  // The agent choice for Ask on this device (see agents.js), sent with each question.
+  using = () => null,
 }) {
   const chat = {
     messages: [],
@@ -275,7 +277,7 @@ export function createAsk({
         try {
           let response = null;
           // The answer streams in; each new model turn replaces earlier working text.
-          await stream("/api/ask", { ...asked, question, history, stream: true }, (event) => {
+          await stream("/api/ask", { ...asked, question, history, stream: true, using: using() }, (event) => {
             if (event.type === "text") chat.partial += event.text;
             else if (event.type === "turn") chat.partial = "";
             else if (event.type === "lookup") chat.live.push(event.text);

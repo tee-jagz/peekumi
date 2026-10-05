@@ -6,7 +6,7 @@
 //! written in ASD-STE100 Simplified Technical English. A suggestion only becomes an instruction
 //! when the owner explicitly saves it as a draft.
 use crate::{App, lookup, workflow::text};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -332,8 +332,8 @@ fn open_grant(app: &App, base: &Value, head: &Value) -> Option<String> {
 /// Claude Code arguments: every built-in tool off, the configured effort and model, and the
 /// lookup server when a grant is open. `stream` asks for incremental text events.
 fn provider_args<'a>(
-    model: &'a str,
-    effort: &'a str,
+    model: Option<&'a str>,
+    effort: Option<&'a str>,
     lookups: Option<&'a str>,
     tools: &'a str,
     stream: bool,
@@ -347,13 +347,16 @@ fn provider_args<'a>(
         "--setting-sources",
         "",
         "--no-session-persistence",
-        "--effort",
-        effort,
-        "--model",
-        model,
         "--system-prompt",
         INSTRUCTIONS,
     ];
+    // No model means Claude Code's own default; no effort ("auto") lets it decide.
+    if let Some(model) = model {
+        args.extend(["--model", model]);
+    }
+    if let Some(effort) = effort {
+        args.extend(["--effort", effort]);
+    }
     if stream {
         args.extend([
             "--output-format",
@@ -540,7 +543,7 @@ fn recheck_prompt(prompt: &str, draft: &str) -> Result<String> {
 }
 /// The reply body: the answer, the places its code spans name, the lookups it made and what
 /// the context left out.
-fn reply(app: &App, prepared: &Prepared, answer: Value, references: Value) -> Value {
+fn reply(app: &App, prepared: &Prepared, answer: Value, references: Value, provider: &str) -> Value {
     let lookups = app
         .ask_grant
         .lock()
@@ -548,26 +551,183 @@ fn reply(app: &App, prepared: &Prepared, answer: Value, references: Value) -> Va
         .as_ref()
         .map(|grant| grant.calls.clone())
         .unwrap_or_default();
-    json!({"answer":answer,"references":references,"lookups":lookups,"context":{"base":prepared.base,"head":prepared.head,"anchor":prepared.anchor,"omitted":prepared.omitted},"provider":"Claude Code"})
+    json!({"answer":answer,"references":references,"lookups":lookups,"context":{"base":prepared.base,"head":prepared.head,"anchor":prepared.anchor,"omitted":prepared.omitted},"provider":provider})
 }
 
+/// Where an answer comes from: Claude Code (its executable, model and effort), with every
+/// built-in tool off and the lookups over MCP; or an OpenRouter model (and effort), with the
+/// lookups run by Peekumi. Both can only read the repository at the compared revisions.
+enum Engine {
+    Claude(String, Option<String>, Option<String>),
+    OpenRouter(String, Option<String>),
+}
+/// The owner's choice for Ask from this device (`using`, see the agents module).
+fn ask_engine(app: &App, body: &Value) -> Result<Engine> {
+    let choice = app.workflow.choice(crate::agents::Job::Ask, &body["using"])?;
+    let (model, effort) = crate::agents::flags(&choice);
+    match choice["agent"].as_str() {
+        Some("claude") => Ok(Engine::Claude(app.options.claude.clone(), model, effort)),
+        Some("openrouter") => Ok(Engine::OpenRouter(
+            model.context("Choose an OpenRouter model in Agents")?,
+            effort,
+        )),
+        _ => bail!("This provider cannot answer questions; choose another in Agents"),
+    }
+}
+/// Answers with an OpenRouter model. A draft that leaves repository facts unchecked gets one
+/// more pass, as with Claude Code. `relay` receives the same events as the Claude stream.
+async fn openrouter_answer(
+    app: &App,
+    model: &str,
+    effort: Option<String>,
+    first: &str,
+    relay: Option<mpsc::Sender<Value>>,
+) -> Result<String> {
+    let draft = openrouter_pass(app, model, effort.clone(), first, relay.clone()).await?;
+    if left_unchecked(&draft) {
+        openrouter_pass(app, model, effort, &recheck_prompt(first, &draft)?, relay).await
+    } else {
+        Ok(draft)
+    }
+}
+/// One OpenRouter conversation: Peekumi sends the instructions, the prompt and the lookup
+/// tools; for each tool call it runs the lookup under the answer's grant and sends the result
+/// back, until the model answers. The last turn offers no tools, so the model must answer.
+async fn openrouter_pass(
+    app: &App,
+    model: &str,
+    effort: Option<String>,
+    prompt: &str,
+    relay: Option<mpsc::Sender<Value>>,
+) -> Result<String> {
+    const TURNS: usize = 12;
+    let provider = crate::agents::OpenRouter::new(&app.workflow);
+    let key = provider.key_or_error()?;
+    let mut messages = vec![
+        json!({"role": "system", "content": INSTRUCTIONS}),
+        json!({"role": "user", "content": prompt}),
+    ];
+    let mut reported = 0;
+    for turn in 0..TURNS {
+        let mut request = json!({"model": model, "messages": messages, "stream": true});
+        if turn + 1 < TURNS {
+            request["tools"] = lookup::function_tools();
+        }
+        if let Some(effort) = &effort {
+            request["reasoning"] = json!({"effort": effort});
+        }
+        if let Some(relay) = &relay {
+            let _ = relay.send(json!({"type": "turn"})).await;
+        }
+        let (provider, key, text_relay) = (provider.clone(), key.clone(), relay.clone());
+        let (text, calls) = tokio::task::spawn_blocking(move || -> Result<(String, Vec<Value>)> {
+            let (mut text, mut calls, mut failure) = (String::new(), Vec::<Value>::new(), None);
+            provider.request(
+                "/chat/completions",
+                Some(&key),
+                Some(&request),
+                std::time::Duration::from_secs(240),
+                |line| {
+                    let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+                        return;
+                    };
+                    let Ok(chunk) = serde_json::from_str::<Value>(data) else {
+                        return;
+                    };
+                    if let Some(message) = chunk["error"]["message"].as_str() {
+                        failure = Some(message.to_string());
+                        return;
+                    }
+                    let delta = &chunk["choices"][0]["delta"];
+                    if let Some(piece) = delta["content"].as_str().filter(|p| !p.is_empty()) {
+                        text.push_str(piece);
+                        if let Some(relay) = &text_relay {
+                            let _ = relay.blocking_send(json!({"type": "text", "text": piece}));
+                        }
+                    }
+                    // Tool calls arrive in pieces, joined by their index.
+                    for part in delta["tool_calls"].as_array().into_iter().flatten() {
+                        let index = part["index"].as_u64().unwrap_or(0) as usize;
+                        while calls.len() <= index {
+                            calls.push(json!({"id": "", "name": "", "arguments": ""}));
+                        }
+                        let call = &mut calls[index];
+                        for (field, piece) in [
+                            ("id", part["id"].as_str()),
+                            ("name", part["function"]["name"].as_str()),
+                            ("arguments", part["function"]["arguments"].as_str()),
+                        ] {
+                            if let Some(piece) = piece {
+                                let joined = format!("{}{piece}", call[field].as_str().unwrap_or(""));
+                                call[field] = json!(joined);
+                            }
+                        }
+                    }
+                },
+            )?;
+            if let Some(message) = failure {
+                bail!("OpenRouter: {message}");
+            }
+            Ok((text, calls))
+        })
+        .await??;
+        if calls.is_empty() {
+            ensure!(!text.trim().is_empty(), "OpenRouter returned no answer");
+            return Ok(text);
+        }
+        messages.push(json!({
+            "role": "assistant",
+            "content": if text.is_empty() { Value::Null } else { json!(text) },
+            "tool_calls": calls.iter().map(|c| json!({"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"]}})).collect::<Vec<_>>(),
+        }));
+        for call in &calls {
+            let args = serde_json::from_str::<Value>(call["arguments"].as_str().unwrap_or(""))
+                .unwrap_or_else(|_| json!({}));
+            let (result, _) =
+                lookup::call_tool(app, call["name"].as_str().unwrap_or(""), &args).await;
+            messages.push(json!({"role": "tool", "tool_call_id": call["id"], "content": result}));
+        }
+        let made = app
+            .ask_grant
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|g| g.calls.clone())
+            .unwrap_or_default();
+        if let Some(relay) = &relay {
+            for call in made.iter().skip(reported) {
+                let _ = relay.send(json!({"type": "lookup", "text": call})).await;
+            }
+        }
+        reported = made.len();
+    }
+    bail!("OpenRouter did not finish its answer")
+}
 /// Requests one non-executing answer and returns it whole.
 /// Model output is never interpreted as a command or automatic draft.
 pub async fn answer(app: &App, body: Value) -> Result<Value> {
     let prepared = prepare(app, &body).await?;
+    let engine = ask_engine(app, &body)?;
     let lookups = open_grant(app, &prepared.base, &prepared.head);
     let _closes = Closes(app);
-    let (executable, model, effort) = (
-        app.options.claude.clone(),
-        app.options.ask_model.clone(),
-        app.options.ask_effort.clone(),
-    );
+    let (executable, model, effort) = match engine {
+        Engine::Claude(executable, model, effort) => (executable, model, effort),
+        Engine::OpenRouter(model, effort) => {
+            lookup::open(app, &prepared.base, &prepared.head);
+            let raw = openrouter_answer(app, &model, effort, &prepared.prompt, None).await?;
+            let answer = split_suggestion(&raw)?;
+            let references = resolve_references(app, &prepared, &answer)
+                .await
+                .unwrap_or_else(|_| json!({}));
+            return Ok(reply(app, &prepared, answer, references, &format!("OpenRouter · {model}")));
+        }
+    };
     let cwd = app.workflow.state.join("ask");
     std::fs::create_dir_all(&cwd)?;
     let first = prepared.prompt.clone();
     let raw = tokio::task::spawn_blocking(move || -> Result<String> {
         let tools = lookup::TOOLS.join(",");
-        let args = provider_args(&model, &effort, lookups.as_deref(), &tools, false);
+        let args = provider_args(model.as_deref(), effort.as_deref(), lookups.as_deref(), &tools, false);
         let pass = |prompt: String| -> Result<String> {
             let output = crate::process::run_for(
                 &executable,
@@ -597,7 +757,7 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
     let references = resolve_references(app, &prepared, &answer)
         .await
         .unwrap_or_else(|_| json!({}));
-    Ok(reply(app, &prepared, answer, references))
+    Ok(reply(app, &prepared, answer, references, "Claude Code"))
 }
 
 /// Streams one answer as events while Claude writes it: `{"type":"text","text"}` pieces,
@@ -607,19 +767,29 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
 pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Value>) {
     let result = async {
         let prepared = prepare(&app, &body).await?;
+        let engine = ask_engine(&app, &body)?;
         let lookups = open_grant(&app, &prepared.base, &prepared.head);
         let _closes = Closes(&app);
-        let (executable, model, effort) = (
-        app.options.claude.clone(),
-        app.options.ask_model.clone(),
-        app.options.ask_effort.clone(),
-    );
+        let (executable, model, effort) = match engine {
+            Engine::Claude(executable, model, effort) => (executable, model, effort),
+            Engine::OpenRouter(model, effort) => {
+                lookup::open(&app, &prepared.base, &prepared.head);
+                let raw =
+                    openrouter_answer(&app, &model, effort, &prepared.prompt, Some(events.clone()))
+                        .await?;
+                let answer = split_suggestion(&raw)?;
+                let references = resolve_references(&app, &prepared, &answer)
+                    .await
+                    .unwrap_or_else(|_| json!({}));
+                return Ok(reply(&app, &prepared, answer, references, &format!("OpenRouter · {model}")));
+            }
+        };
         let cwd = app.workflow.state.join("ask");
         std::fs::create_dir_all(&cwd)?;
         let (first, relay, worker) = (prepared.prompt.clone(), events.clone(), app.clone());
         let raw = tokio::task::spawn_blocking(move || -> Result<String> {
             let tools = lookup::TOOLS.join(",");
-            let args = provider_args(&model, &effort, lookups.as_deref(), &tools, true);
+            let args = provider_args(model.as_deref(), effort.as_deref(), lookups.as_deref(), &tools, true);
             let mut reported = 0;
             let mut pass = |prompt: String| -> Result<String> {
                 let (mut result, mut failed) = (None, false);
@@ -682,7 +852,7 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
         let references = resolve_references(&app, &prepared, &answer)
             .await
             .unwrap_or_else(|_| json!({}));
-        Ok::<Value, anyhow::Error>(reply(&app, &prepared, answer, references))
+        Ok::<Value, anyhow::Error>(reply(&app, &prepared, answer, references, "Claude Code"))
     }
     .await;
     let event = match result {

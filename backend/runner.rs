@@ -83,104 +83,112 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         "--report-run".into(),
         id.into(),
     ];
-    let mut command = if run["agent"] == "codex" {
-        let mut c = Command::new(&store.codex);
-        // This preset already selects workspace-write and automatic approval review.
-        // Codex rejects combining it with the separate --sandbox option.
-        c.args(["exec", "--approve-for-me", "--json", "--color", "never"]);
-        c.arg("-c")
-            .arg(format!("mcp_servers.peekumi.command={}", json!(exe)));
-        c.arg("-c")
-            .arg(format!("mcp_servers.peekumi.args={}", json!(args)));
-        c.arg("-c")
-            .arg("mcp_servers.peekumi.env_vars=[\"PEEKUMI_REPORT_TOKEN\"]");
-        c.arg("-");
-        c
+    // The agent's own command line comes from the agents module; the model and effort are
+    // the ones this task started with.
+    let agent = crate::agents::find(store, run["agent"].as_str().unwrap_or(""))
+        .context("This task's agent is not available on this server")?;
+    let (status, message) = if agent.runs_in_process() {
+        // A provider that is only an API: Peekumi's own agent runs the model here, with its
+        // tools confined to the worktree.
+        let mut out = std::fs::OpenOptions::new()
+            .append(true)
+            .open(dir.join("output.log"))?;
+        store.patch_run(
+            id,
+            json!({"status":"running","supervisorPid":std::process::id(),"worktree":worktree}),
+        )?;
+        let cancelled = || {
+            store
+                .run(id)
+                .map(|r| r["cancelRequested"] == true)
+                .unwrap_or(false)
+        };
+        match crate::task_agent::run(store, id, token, &run, &worktree, &mut out, cancelled) {
+            Ok(done) => done,
+            Err(e) => ("failed", e.to_string()),
+        }
     } else {
-        let mut c = Command::new(&store.claude);
-        c.args([
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--permission-mode",
-            "acceptEdits",
-            "--strict-mcp-config",
-            "--allowedTools",
-            "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment",
-        ]);
-        c.arg("--mcp-config").arg(json!({"mcpServers":{"peekumi":{"command":exe,"args":args,"env":{"PEEKUMI_REPORT_TOKEN":token}}}}).to_string());
-        c
-    };
-    command
-        .current_dir(&worktree)
-        .env("PEEKUMI_REPORT_TOKEN", token)
-        .env_remove("PEEKUMI_TOKEN")
-        .env_remove("STRATA_TOKEN")
-        .env_remove("STRATA_REPORT_TOKEN")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    // Each run owns a process group so cancel/timeout also stop its helper processes.
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    let mut owned = OwnedChild(
+        let (model, effort) = crate::agents::flags(&run);
+        let mut command = agent
+            .task_command(&crate::agents::Launch {
+                model: model.as_deref(),
+                effort: effort.as_deref(),
+                bridge: &exe,
+                args: &args,
+                token,
+            })
+            .context("This task's provider cannot start; check it in Agents (for OpenRouter, the key)")?;
         command
-            .spawn()
-            .context("Cannot launch agent; check the configured executable and sign-in")?,
-    );
-    let child = &mut owned.0;
-    let pid = child.id();
-    repo_lock.set_len(0)?;
-    repo_lock.rewind()?;
-    write!(repo_lock, "{pid}")?;
-    repo_lock.sync_all()?;
-    if let Err(e)=store.patch_run(id,json!({"status":"running","pid":pid,"supervisorPid":std::process::id(),"worktree":worktree})) { stop_group(pid);
-        let _=child.wait();
-        return Err(e);
-    }
-    let mut stdin = child.stdin.take().context("Agent stdin missing")?;
-    let task = run["task"].as_str().unwrap().to_string();
-    std::thread::spawn(move || {
-        let _ = stdin.write_all(task.as_bytes());
-    });
-    let stdout = child.stdout.take().context("Agent stdout missing")?;
-    let stderr = child.stderr.take().context("Agent stderr missing")?;
-    let a = log.clone();
-    let b = log.clone();
-    let secret = token.to_string();
-    let secret2 = secret.clone();
-    std::thread::spawn(move || capture(stdout, a, &secret));
-    std::thread::spawn(move || capture(stderr, b, &secret2));
-    let start = Instant::now();
-    let (status, message) = loop {
-        if let Some(exit) = child.try_wait()? {
-            break (
-                if exit.success() {
-                    "completed"
-                } else {
-                    "failed"
-                },
-                format!("Agent exited with {exit}. Review each report before verification."),
-            );
+            .current_dir(&worktree)
+            .env("PEEKUMI_REPORT_TOKEN", token)
+            .env_remove("PEEKUMI_TOKEN")
+            .env_remove("STRATA_TOKEN")
+            .env_remove("STRATA_REPORT_TOKEN")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        // Each run owns a process group so cancel/timeout also stop its helper processes.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
         }
-        let current = store.run(id)?;
-        if current["cancelRequested"] == true || start.elapsed() > Duration::from_secs(3600) {
-            stop_group(pid);
-            let _ = child.kill();
-            let _ = child.wait();
-            break (
-                "cancelled",
-                "Agent stopped by owner or one-hour time limit.".into(),
-            );
+        let mut owned = OwnedChild(
+            command
+                .spawn()
+                .context("Cannot launch agent; check the configured executable and sign-in")?,
+        );
+        let child = &mut owned.0;
+        let pid = child.id();
+        repo_lock.set_len(0)?;
+        repo_lock.rewind()?;
+        write!(repo_lock, "{pid}")?;
+        repo_lock.sync_all()?;
+        if let Err(e)=store.patch_run(id,json!({"status":"running","pid":pid,"supervisorPid":std::process::id(),"worktree":worktree})) { stop_group(pid);
+            let _=child.wait();
+            return Err(e);
         }
-        std::thread::sleep(Duration::from_millis(300));
+        let mut stdin = child.stdin.take().context("Agent stdin missing")?;
+        let task = run["task"].as_str().unwrap().to_string();
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(task.as_bytes());
+        });
+        let stdout = child.stdout.take().context("Agent stdout missing")?;
+        let stderr = child.stderr.take().context("Agent stderr missing")?;
+        let a = log.clone();
+        let b = log.clone();
+        let secret = token.to_string();
+        let secret2 = secret.clone();
+        std::thread::spawn(move || capture(stdout, a, &secret));
+        std::thread::spawn(move || capture(stderr, b, &secret2));
+        let start = Instant::now();
+        let (status, message) = loop {
+            if let Some(exit) = child.try_wait()? {
+                break (
+                    if exit.success() {
+                        "completed"
+                    } else {
+                        "failed"
+                    },
+                    format!("Agent exited with {exit}. Review each report before verification."),
+                );
+            }
+            let current = store.run(id)?;
+            if current["cancelRequested"] == true || start.elapsed() > Duration::from_secs(3600) {
+                stop_group(pid);
+                let _ = child.kill();
+                let _ = child.wait();
+                break (
+                    "cancelled",
+                    "Agent stopped by owner or one-hour time limit.".into(),
+                );
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        };
+        // Close any helpers left alive after the main CLI process exits.
+        stop_group(pid);
+        (status, message)
     };
-    // Close any helpers left alive after the main CLI process exits.
-    stop_group(pid);
     repo_lock.set_len(0)?;
     let results = store
         .git(&[

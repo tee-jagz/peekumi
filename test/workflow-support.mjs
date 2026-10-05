@@ -4,7 +4,7 @@ import path from "node:path";
 import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
 const root = path.resolve(import.meta.dirname, "..");
-export async function fixture() {
+export async function fixture({ env = {} } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "peekumi-workflow-"));
   const git = (...args) => command("git", ["-C", dir, ...args]);
   await git("init", "-b", "main");
@@ -30,6 +30,7 @@ export async function fixture() {
     stateDirectory: state,
     codex: fake,
     claude: fake,
+    extraEnv: env,
   });
   const req = async (
     route,
@@ -64,6 +65,7 @@ export async function fixture() {
         stateDirectory: state,
         codex: fake,
         claude: fake,
+        extraEnv: env,
       });
     },
     async close() {
