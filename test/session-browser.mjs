@@ -151,11 +151,17 @@ try {
         return s.scrollHeight <= s.clientHeight + 2 || s.scrollTop + s.clientHeight >= s.scrollHeight - 30;
       });
       // The header sits above the scrolling conversation, so scrolling never moves it.
+      // Measured in one step in the page: a redraw replaces the header element between calls.
       await page.locator(".session-head").waitFor();
-      const before = await page.locator(".session-head").boundingBox();
-      await page.locator("#reviewScroll").evaluate((n) => (n.scrollTop = 0));
-      const after = await page.locator(".session-head").boundingBox();
-      const scroller = await page.locator("#reviewScroll").boundingBox();
+      const [before, after, scroller] = await page.evaluate(() => {
+        const box = (selector) => {
+          const r = document.querySelector(selector)?.getBoundingClientRect();
+          return r && r.height ? { y: r.y, height: r.height } : null;
+        };
+        const first = box(".session-head");
+        document.querySelector("#reviewScroll").scrollTop = 0;
+        return [first, box(".session-head"), box("#reviewScroll")];
+      });
       assert.ok(before && after && Math.abs(before.y - after.y) < 1 && after.y + after.height <= scroller.y + 1, "The header stays above the conversation");
       assert.equal(await page.locator("#reviewScroll .session-head").count(), 0);
       // Ending sends the branch to the normal review.
