@@ -3,7 +3,7 @@
  * temporary Peekumi instance on this repository (temporary state, loopback only), drives
  * each interface state in Chromium, overlays numbered markers on the elements the guide
  * describes, and writes docs/guide/*.jpg, docs/guide/icons/*.svg and the README
- * screenshots. Never writes to the inspected checkout. Requires `npm run build:rust`. */
+ * screenshots. The session images use the test agent on a small test repository. Never writes to the inspected checkout. Requires `npm run build:rust`. */
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -150,7 +150,7 @@ try {
     ["#sheetHandle span", "15", "tr"],
     ["#selectionSummary", "16", "tr"],
     ["#tabs", "17"],
-    ["#dockContext", "18", "tr"],
+    ["#dockContext", "18"],
     ["#composerHost textarea", "19"],
     ["#composerHost .icon-action", "20"],
   ]);
@@ -291,6 +291,79 @@ try {
     ["#stage", "2"],
     ["#panel", "3", "tr"],
   ]);
+
+  // 9. The context menu: right-click here; a long press on a phone opens the same menu.
+  await page.keyboard.press("Escape");
+  const home = page.locator(".crumbs .crumb-home");
+  if (await home.isEnabled()) await home.click();
+  await height(page, "Home");
+  await front.locator('.node[data-path="backend"]').click({ button: "right" });
+  await page.locator(".context-menu").waitFor();
+  await shot(page, "15-context-menu", [
+    [".node.menu-target", "1"],
+    [".context-menu-head", "2"],
+    [".context-menu-item", "3"],
+  ]);
+  await page.keyboard.press("Escape");
+
+  // 10. Sessions and agent focus. A session needs an agent, so these two use the test agent
+  // on a small test repository: no real agent runs and nothing leaves this computer.
+  const { fixture } = await import("../test/workflow-support.mjs");
+  const f = await fixture({
+    files: {
+      "backend/lookup.py": "def route():\n    return 1\n\ndef highlight():\n    return 2\n",
+      "backend/graph.py": "def fold():\n    return 3\n",
+      "frontend/app.js": "export function start() {}\n",
+    },
+  });
+  try {
+    const live = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      colorScheme: "light",
+      reducedMotion: "reduce",
+    });
+    // Claude Code asks before commands. Follow is off, so the map stays where the guide puts it.
+    await live.addInitScript(() => {
+      localStorage.setItem("peekumi.agents.default", JSON.stringify({ task: { agent: "claude" } }));
+      localStorage.setItem("peekumi.session.follow", "off");
+    });
+    await live.goto(f.server.url + "/#token=" + f.server.token);
+    const map = live.locator('.sheet[data-front="true"]');
+    await map.locator(".node").first().waitFor();
+    await live.locator('[data-compose="session"]').click();
+    await live.getByLabel("What do you want to work on?").fill("Check route before we change it.\nRUN: npm install left-pad");
+    await live.getByRole("button", { name: "Start session" }).click();
+    await live.locator(".session-approval").waitFor();
+    await shot(live, "16-session", [
+      ["#sessionHead", "1"],
+      [".session-approval .session-command", "2"],
+      [".session-approval-actions", "3"],
+      ["#composerHost textarea", "4"],
+    ]);
+    await live.screenshot({ path: join(readmeShots, "mobile-session.png") });
+    await live.getByRole("button", { name: "Allow npm install in this session" }).click();
+    await live.locator(".session-status", { hasText: "Your turn" }).waitFor();
+    await live.getByLabel("Reply to the agent").fill("Now read fold and route. FOCUS WAIT_FOR_STOP");
+    await live.getByRole("button", { name: "Send to the agent" }).click();
+    await live.locator(".session-step.is-current", { hasText: "route" }).waitFor();
+    await live.getByRole("button", { name: "Back to tasks" }).click();
+    await live.locator("#openTasks").click();
+    await height(live, "Home");
+    // At the top level: backend holds the agent's place and a changed file; the repository
+    // files hold its earlier place and the session's notes.
+    await live.locator('.node.agent-here[data-path="backend"]').waitFor();
+    await shot(live, "17-agent-focus", [
+      [".node.agent-here", "1"],
+      [".node.agent-trail", "2"],
+      [".node.agent-trail.agent-changed", "3", "tr"],
+      ["#agentFocus .follow-pill", "4"],
+      ["#sessionLine", "5"],
+      ["#peekToggle", "6", "tr"],
+    ]);
+  } finally {
+    await f.close();
+  }
 
   // Icon reference images, taken from the running interface so they always match.
   const data = await page.evaluate(async () => {
