@@ -400,7 +400,7 @@ impl Workflow {
                 crate::workflow::event(c, "owner");
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
             v["runs"].as_array_mut().unwrap().push(next.clone());
             Ok(next)
         })?;
@@ -438,9 +438,12 @@ impl Workflow {
         let hash = crate::engine::hash(format!("{head}\n{text}").as_bytes());
         Ok((json!({"files": files, "head": head, "hash": hash}), text))
     }
-    /// Asks Claude for a commit message for the owner's blocking changes. Without Claude, or
-    /// when it fails, a plain message names the files; the owner can edit either.
-    fn commit_draft(&self, id: &str) -> Result<Value> {
+    /// Asks the agent chosen for Ask (`using`, see the agents module) for a commit message for
+    /// the owner's blocking changes. When that agent cannot write one, or fails, a plain
+    /// message names the files; the owner can edit either.
+    fn commit_draft(&self, id: &str, body: &Value) -> Result<Value> {
+        let choice = self.choice(crate::agents::Job::Ask, &body["using"])?;
+        let (model, effort) = crate::agents::flags(&choice);
         let (mut draft, text) = self.blocking_changes(id)?;
         let names: Vec<&str> = draft["files"].as_array().unwrap().iter().filter_map(|f| f["path"].as_str()).collect();
         let fallback = format!("Update {}", names.join(", "));
@@ -455,19 +458,35 @@ impl Workflow {
         }
         let cwd = self.state.join("ask");
         std::fs::create_dir_all(&cwd)?;
-        let written = crate::process::run_for(
-            &self.claude,
-            &[
-                "-p", "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
-                "--setting-sources", "", "--no-session-persistence", "--effort", "low",
-                "--model", "sonnet", "--system-prompt", COMMIT_MESSAGE,
-                "--output-format", "json", "--mcp-config", "{\"mcpServers\":{}}",
-            ],
-            Some(&cwd),
-            clipped.into_bytes(),
-            std::time::Duration::from_secs(60),
-        )
-        .ok()
+        let mut args = vec![
+            "-p", "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
+            "--setting-sources", "", "--no-session-persistence", "--system-prompt", COMMIT_MESSAGE,
+            "--output-format", "json", "--mcp-config", "{\"mcpServers\":{}}",
+        ];
+        if let Some(model) = model.as_deref() {
+            args.extend(["--model", model]);
+        }
+        if let Some(effort) = effort.as_deref() {
+            args.extend(["--effort", effort]);
+        }
+        let written = match choice["agent"].as_str() {
+            Some("claude") => crate::process::run_for(
+                &self.claude,
+                &args,
+                Some(&cwd),
+                clipped.into_bytes(),
+                std::time::Duration::from_secs(60),
+            )
+            .ok(),
+            // OpenRouter returns the message text itself; wrap it in the shape Claude prints.
+            Some("openrouter") => model.as_deref().and_then(|model| {
+                crate::agents::OpenRouter::new(self)
+                    .complete(model, effort.as_deref(), COMMIT_MESSAGE, &clipped)
+                    .ok()
+                    .map(|text| json!({"result": text}).to_string().into_bytes())
+            }),
+            _ => None,
+        }
         .and_then(|out| serde_json::from_slice::<Value>(&out).ok())
         .filter(|r| r["is_error"] != true)
         .and_then(|r| r["result"].as_str().map(|s| s.trim().trim_matches('`').trim().to_string()))
@@ -524,7 +543,7 @@ impl Workflow {
                 }
                 out
             }),
-            ("POST", "commit-draft") => self.commit_draft(id),
+            ("POST", "commit-draft") => self.commit_draft(id, body),
             ("POST", "commit-mine") => self.commit_mine(id, body),
             _ => return None,
         })

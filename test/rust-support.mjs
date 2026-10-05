@@ -45,6 +45,9 @@ export async function startRust(
     {
       env: {
         ...process.env,
+        // Tests never reach the real OpenRouter or use a real key; a test can give its own API.
+        PEEKUMI_OPENROUTER_URL: "http://127.0.0.1:9/api/v1",
+        PEEKUMI_OPENROUTER_KEY: "",
         ...extraEnv,
         [prefix + "TOKEN"]: token,
         [prefix + "PYTHON"]: python,

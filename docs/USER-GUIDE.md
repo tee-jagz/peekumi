@@ -198,6 +198,16 @@ Some names of files and declarations in an answer point to exactly one location.
 
 If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. When you explore the changes of a task, this button shows **Add to requested changes**. The save button of the Instruction box also shows this label. Each of these buttons adds the change, at the location that it is about, to the next round of that task. Then you can continue to explore. Peekumi does this because a new draft starts from main and does not contain the work of the agent.
 
+### Agents
+
+Tap the chip next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. **Agents** in the Tasks view opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
+
+1. Select the provider. For Ask: Claude Code, or OpenRouter (any model, with your API key). For tasks: Claude Code, Codex or OpenRouter. With OpenRouter, Peekumi runs the model itself: it reads, searches, edits and commits files in the worktree of the task, but it cannot run commands or tests. The first time that you select OpenRouter, paste your API key and tap **Test and save**.
+2. Select a model. **Default** is the model that the provider uses on its own. The other models come from the provider. **Other model** lets you type the name of a model.
+3. Select the effort. **Auto** lets the provider decide. The other levels are the ones that the selected model supports. Higher effort works more carefully, but slower.
+
+A provider that is not ready is grey and shows the reason. The choice stays on this device, for this repository. A task keeps the agent, model and effort that it started with, in all its rounds.
+
 The **Back to task** chip shows the number of changes that wait ("2 to send"). The task lists those changes, and you can edit them. The button below the list sends them together, for example **Send 2 changes to Codex**.
 
 One conversation continues for the session. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. Each branch has its own conversation. When you explore the branch of an agent, Ask shows the conversation for that branch. When you go back, Ask shows the conversation for your branch again. Peekumi keeps each conversation, so a reload or an app update does not remove it. **New conversation** clears the conversation for the branch that you see.
@@ -216,7 +226,7 @@ One conversation continues for the session. It stays on the screen while you mov
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Review task | Makes a task from your drafts. Select the drafts, the agent (Codex or Claude Code) and optional extra instructions. Then look at a preview of the exact task before you start it. |
+| 1 | Review task | Makes a task from your drafts. Select the drafts and optional extra instructions. The task uses your choice for tasks in **Agents**; **Change** opens it. Then look at a preview of the exact task before you start it. |
 | 2 | Draft | A saved instruction with its anchor and commit. You can edit or delete it while it is a draft. |
 
 After a task starts, the same view shows the progress of the agent, the checks that the agent reports and the commits that it made. The task first shows its state, then each instruction and the result from the agent. **Explore changes** shows all the work of the agent on the map, compared with the commit that the task started from. **Back to task** takes you back to the task and your previous view. **Agent log** contains the messages of the agent, the raw events and the generated task.

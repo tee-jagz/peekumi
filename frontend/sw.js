@@ -11,6 +11,7 @@ const SHELL = [
   "/select.js",
   "/text.js",
   "/peek.js",
+  "/agents.js",
   "/style.css",
   "/pwa.js",
   "/manifest.webmanifest",

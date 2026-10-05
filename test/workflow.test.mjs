@@ -438,6 +438,160 @@ test("an approved task merges on the owner's action, never over uncommitted work
   assert.equal(await out("rev-parse", "HEAD"), detached.targetSha, "The detached checkout does not move");
 });
 
+test("agents come from the server, and each task runs with the model and effort it started with", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const agents = await f.req("/api/agents");
+  assert.deepEqual(agents.agents.map((a) => [a.id, a.jobs]), [["claude", ["ask", "task"]], ["codex", ["task"]], ["openrouter", ["ask", "task"]]]);
+  // Each provider names its own models and their efforts; nothing is listed in Peekumi.
+  const claude = agents.agents.find((a) => a.id === "claude"),
+    codexInfo = agents.agents.find((a) => a.id === "codex");
+  assert.deepEqual(claude.models.task.map((m) => [m.id, m.label, m.efforts.join()]), [["sonnet", "Sonnet", "low,medium,high,max"], ["opus", "Opus", "low,medium,high,max"]]);
+  assert.deepEqual(codexInfo.models.task.map((m) => [m.id, m.label, m.efforts.join(), m.defaultEffort]), [["fixture-large", "Fixture Large", "low,high,xhigh", "high"], ["fixture-small", "Fixture Small", "low,medium", "low"]]);
+  assert.deepEqual([claude.source, codexInfo.source], ["agent", "agent"]);
+  assert.equal(claude.status.ready && codexInfo.status.ready, true);
+  assert.deepEqual(agents.defaults.ask, { agent: "claude", model: "sonnet", effort: "low" });
+  assert.deepEqual(agents.defaults.task, { agent: "codex", model: null, effort: "auto" });
+  const c = await f.req("/api/comments", { text: "Write the result file", sha: f.sha, anchor: { kind: "repo", path: "" } });
+  // A choice from the device is checked before it is used.
+  for (const [using, error] of [
+    [{ agent: "claude", model: "--dangerous", effort: "high" }, /model name/],
+    [{ agent: "claude", model: "opus", effort: "max --x" }, /Unknown effort/],
+    [{ agent: "nobody" }, /Unknown agent/],
+  ])
+    assert.match((await f.req("/api/runs/preview", { commentIds: [c.id], using })).error, error);
+  const asked = await f.req("/api/ask", { base: f.sha, head: f.sha, sha: f.sha, anchor: { kind: "repo", path: "" }, question: "Hi", using: { agent: "codex" } });
+  assert.match(asked.error, /Codex cannot do this job/);
+  const p = await f.req("/api/runs/preview", { commentIds: [c.id], using: { agent: "claude", model: "opus", effort: "high" } });
+  assert.deepEqual([p.agent, p.model, p.effort], ["claude", "opus", "high"]);
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+  const argv = JSON.parse(await readFile(path.join(f.state, "agent-argv.json"), "utf8"));
+  assert.deepEqual(argv.slice(argv.indexOf("--model"), argv.indexOf("--model") + 4), ["--model", "opus", "--effort", "high"]);
+  // A later round keeps the task's agent, model and effort.
+  const first = await f.req("/api/runs/" + p.id);
+  await f.req("/api/comments", { text: "Once more", sha: first.results.at(-1), anchor: { kind: "repo", path: "" }, forRun: p.id });
+  const next = await f.req(`/api/runs/${p.id}/revise`, { feedback: "Again" });
+  assert.deepEqual([next.agent, next.model, next.effort], ["claude", "opus", "high"]);
+  await waitFor(async () => (await f.req("/api/runs/" + next.id)).status === "completed");
+  // Codex gets its model and reasoning effort as its own options; auto passes none.
+  const d = await f.req("/api/comments", { text: "Another", sha: f.sha, anchor: { kind: "repo", path: "" } });
+  const q = await f.req("/api/runs/preview", { commentIds: [d.id], using: { agent: "codex", model: "a-model", effort: "medium" } });
+  await f.req("/api/runs", { previewId: q.id });
+  await waitFor(async () => (await f.req("/api/runs/" + q.id)).status === "completed");
+  const codex = JSON.parse(await readFile(path.join(f.state, "agent-argv.json"), "utf8"));
+  assert.ok(codex.includes("a-model") && codex.includes('model_reasoning_effort="medium"'), codex.join(" "));
+});
+
+test("OpenRouter answers Ask with Peekumi's lookups, and its key stays on the server", async (t) => {
+  const { createServer } = await import("node:http");
+  const KEY = "sk-or-test-1234567890"; // gitleaks:allow (a fake test key)
+  const seen = [];
+  // A small stand-in for the OpenRouter API: models, key check, and streamed chat answers.
+  const api = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const json = body ? JSON.parse(body) : null;
+    seen.push({ path: req.url, auth: req.headers.authorization, json });
+    const send = (status, value) => {
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(value));
+    };
+    if (req.url === "/api/v1/models")
+      return send(200, { data: [
+        { id: "vendor/tool-model", name: "Tool Model", context_length: 128000, pricing: { prompt: "0.000001", completion: "0.000002" }, supported_parameters: ["tools", "reasoning"] },
+        { id: "vendor/no-tools", name: "No Tools", supported_parameters: ["temperature"] },
+      ] });
+    if (req.authorization !== undefined || req.headers.authorization !== `Bearer ${KEY}`)
+      return send(401, { error: { message: "No auth credentials found" } });
+    if (req.url === "/api/v1/key") return send(200, { data: { label: "test" } });
+    // A task: the model works through Peekumi's tools, one step for each request.
+    if (req.url === "/api/v1/chat/completions" && !json.stream && json.tools) {
+      const step = json.messages.filter((m) => m.role === "assistant").length;
+      const comment = /\[(c[0-9a-f]+)\]/.exec(json.messages[1].content)[1];
+      const results = json.messages.filter((m) => m.role === "tool").map((m) => m.content);
+      const call = (name, args) => ({ id: `call-${step}-${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } });
+      const steps = [
+        [call("list_files", {})],
+        [call("write_file", { path: "../escape.txt", content: "no" }), call("write_file", { path: ".git/hooks/pre-commit", content: "no" }), call("write_file", { path: "agent-result.txt", content: "Written by an OpenRouter model.\n" })],
+        [call("commit", { message: "Write the result file", comment_ids: [comment] })],
+        [call("resolve_comment", { comment_id: comment, commit_sha: results.at(-1), note: "Wrote the file.", checks: "Read the file back. No command can run." })],
+      ];
+      return send(200, { choices: [{ message: step < steps.length ? { content: step ? null : "I will look at the files first.", tool_calls: steps[step] } : { content: "Done: the result file exists." } }] });
+    }
+    if (req.url === "/api/v1/chat/completions" && !json.stream)
+      return send(200, { choices: [{ message: { content: "Record notes from OpenRouter" } }] });
+    res.writeHead(200, { "Content-Type": "text/event-stream" });
+    const event = (delta) => res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`);
+    if (!json.messages.some((m) => m.role === "tool")) {
+      event({ tool_calls: [{ index: 0, id: "call-1", function: { name: "find_declarations", arguments: '{"que' } }] });
+      event({ tool_calls: [{ index: 0, function: { arguments: 'ry":"run"}' } }] });
+    } else for (const piece of ["`run` is defined ", "in `module.py`."]) event({ content: piece });
+    res.end("data: [DONE]\n\n");
+  });
+  await new Promise((done) => api.listen(0, "127.0.0.1", done));
+  t.after(() => api.close());
+  const f = await fixture({ env: { PEEKUMI_OPENROUTER_URL: `http://127.0.0.1:${api.address().port}/api/v1` } });
+  t.after(() => f.close());
+  let agents = await f.req("/api/agents");
+  let router = agents.agents.find((a) => a.id === "openrouter");
+  assert.deepEqual([router.jobs, router.defaultModel, router.status.ready, router.key.set], [["ask", "task"], false, false, false]);
+  assert.match(router.notes.task, /Peekumi runs the model itself/);
+  assert.deepEqual(router.models.ask.map((m) => [m.id, m.label, m.note, m.efforts.join()]), [
+    ["vendor/tool-model", "Tool Model", "128K context · $1.00 in / $2.00 out per million tokens", "low,medium,high"],
+  ], "Only models that can use tools");
+  // A key is tested before it is saved, and only its end ever leaves the server.
+  assert.match((await f.req("/api/agents/openrouter-key", { key: "wrong-key-0000000" }, "PUT")).error, /did not accept this key/);
+  const saved = await f.req("/api/agents/openrouter-key", { key: KEY }, "PUT");
+  router = saved.agents.find((a) => a.id === "openrouter");
+  assert.deepEqual([router.status.ready, router.key], [true, { set: true, end: "7890", fromEnvironment: false }]);
+  assert.ok(!JSON.stringify(saved).includes(KEY));
+  const { stat } = await import("node:fs/promises");
+  assert.equal((await stat(path.join(f.state, "openrouter-key"))).mode & 0o777, 0o600);
+  // Ask: the model asks for a lookup, Peekumi runs it, and the model answers with it.
+  const question = { base: f.sha, head: f.sha, sha: f.sha, anchor: { kind: "repo", path: "" }, question: "Where is run?" };
+  const answer = await f.req("/api/ask", { ...question, using: { agent: "openrouter", model: "vendor/tool-model", effort: "high" } });
+  assert.equal(answer.status, 200, JSON.stringify(answer));
+  assert.match(answer.answer.text, /`run` is defined in `module.py`\./);
+  assert.deepEqual(answer.lookups, ["Searched for “run”"]);
+  assert.equal(answer.provider, "OpenRouter · vendor/tool-model");
+  const chats = seen.filter((s) => s.path === "/api/v1/chat/completions");
+  assert.equal(chats.length, 2);
+  assert.deepEqual([chats[0].json.model, chats[0].json.reasoning, chats[0].json.tools.map((x) => x.function.name).includes("read_file")], ["vendor/tool-model", { effort: "high" }, true]);
+  assert.match(chats[0].json.messages[0].content, /ASD-STE100/);
+  const tool = chats[1].json.messages.find((m) => m.role === "tool");
+  assert.match(tool.content, /module\.py/, "The lookup result goes back to the model");
+  assert.match((await f.req("/api/ask", { ...question, using: { agent: "openrouter" } })).error, /Choose a model for OpenRouter/);
+  // A task runs in Peekumi's own agent: no other program, tools only inside the worktree.
+  const c = await f.req("/api/comments", { text: "Write the result file", sha: f.sha, anchor: { kind: "repo", path: "" } });
+  assert.match((await f.req("/api/runs/preview", { commentIds: [c.id], using: { agent: "openrouter" } })).error, /Choose a model for OpenRouter/);
+  const p = await f.req("/api/runs/preview", { commentIds: [c.id], using: { agent: "openrouter", model: "vendor/tool-model", effort: "high" } });
+  assert.deepEqual([p.agent, p.model, p.effort], ["openrouter", "vendor/tool-model", "high"]);
+  await f.req("/api/runs", { previewId: p.id });
+  const run = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + p.id);
+    return r.status === "completed" && r;
+  });
+  assert.equal(run.results.length, 1, run.message);
+  const result = run.results[0];
+  assert.equal((await f.git("show", `${result}:agent-result.txt`)).toString(), "Written by an OpenRouter model.\n");
+  assert.match((await f.git("show", "-s", "--format=%B", result)).toString(), new RegExp(`Peekumi-Run: ${p.id}\nPeekumi-Comment: ${c.id}\nPeekumi-Agent: openrouter`));
+  const reported = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  assert.deepEqual([reported.status, reported.report.commit, reported.report.agent], ["addressed", result, "openrouter"]);
+  const taskChats = seen.filter((x) => x.path === "/api/v1/chat/completions" && x.json.tools && !x.json.stream);
+  assert.deepEqual([taskChats[0].json.model, taskChats[0].json.reasoning], ["vendor/tool-model", { effort: "high" }]);
+  assert.ok(!taskChats[0].json.tools.some((x) => /run|shell|command/.test(x.function.name)), "No tool runs commands");
+  const refused = taskChats[2].json.messages.filter((m) => m.role === "tool").slice(-3).map((m) => m.content);
+  assert.match(refused[0], /^Error: Use a path inside the repository/);
+  assert.match(refused[1], /^Error: The \.git folder is not allowed/);
+  const { access } = await import("node:fs/promises");
+  await assert.rejects(access(path.join(f.dir, "..", "escape.txt")), "Nothing is written outside the worktree");
+  assert.match(run.output, /"agent_message","text":"I will look at the files first\."/);
+  assert.match(run.output, /"file_change"/);
+  const removed = await f.req("/api/agents/openrouter-key", {}, "DELETE");
+  assert.equal(removed.agents.find((a) => a.id === "openrouter").key.set, false);
+});
+
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
   t.after(() => f.close());

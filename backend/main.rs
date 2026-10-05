@@ -1,5 +1,6 @@
 //! Authenticated HTTP API, embedded frontend and repository worker.
 mod adapters;
+mod agents;
 mod ask;
 mod engine;
 mod index;
@@ -11,6 +12,7 @@ mod relationships;
 mod rules;
 mod runner;
 mod sessions;
+mod task_agent;
 mod workflow;
 use anyhow::{Context, Result, ensure};
 use axum::{
@@ -261,7 +263,7 @@ fn open_repository(
     } else {
         config.head.clone()
     };
-    let workflow = workflow::Workflow::new(
+    let mut workflow = workflow::Workflow::new(
         &repository.directory,
         &config.state_dir,
         if watched.is_empty() {
@@ -272,6 +274,8 @@ fn open_repository(
         &config.codex,
         &config.claude,
     )?;
+    workflow.ask_default = [config.ask_model.clone(), config.ask_effort.clone()];
+    workflow.secrets = shared.options.state_dir.canonicalize()?;
     runner::recover(workflow.clone())?;
     let app = Arc::new(App {
         cookie_name: shared.cookie_name.clone(),
@@ -366,6 +370,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/select.js" => Some(("text/javascript", include_bytes!("../frontend/select.js"))),
         "/text.js" => Some(("text/javascript", include_bytes!("../frontend/text.js"))),
         "/peek.js" => Some(("text/javascript", include_bytes!("../frontend/peek.js"))),
+        "/agents.js" => Some(("text/javascript", include_bytes!("../frontend/agents.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -529,6 +534,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/select.js",
             "/text.js",
             "/peek.js",
+            "/agents.js",
             "/style.css",
             "/pwa.js",
             "/manifest.webmanifest",
@@ -657,6 +663,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         && (request.method() != Method::GET
             || path == "/api/devices"
             || path == "/api/workflow"
+            || path.starts_with("/api/agents")
             || path == "/api/ask/history"
             || path.starts_with("/api/runs")
             || path.starts_with("/api/comments"))
@@ -810,6 +817,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     if path == "/api/ask"
         || path == "/api/ask/history"
         || path == "/api/workflow"
+        || path.starts_with("/api/agents")
         || path == "/api/prs"
         || path.starts_with("/api/prs/")
         || path.starts_with("/api/comments")

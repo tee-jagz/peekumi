@@ -682,6 +682,50 @@ try {
         assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
       await page.getByRole("button", { name: "Follow up", exact: true }).click();
       assert.match(await page.locator("#dockContext").innerText(), /main$/);
+      // Agents: two jobs, each one short list from the server, kept on this device.
+      await page.reload();
+      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page.locator("#openTasks").click();
+      await page.locator(".tasks-uses", { hasText: "New tasks use Codex · Default" }).waitFor();
+      await page.locator("#openAgents").click();
+      const agentsSheet = page.locator("dialog.agents-dialog");
+      await agentsSheet.locator(".agents-row", { hasText: /^Ask/ }).waitFor();
+      assert.match(await agentsSheet.innerText(), /Ask[^]*Claude · Sonnet · low[^]*Tasks[^]*Codex · Default/);
+      await agentsSheet.locator(".agents-row", { hasText: /^Tasks/ }).click();
+      // Provider, then its models as the provider reports them, then that model's efforts.
+      assert.match(await agentsSheet.innerText(), /Provider[^]*Model[^]*Default[^]*Fixture Large[^]*Fixture Small[^]*Other model[^]*Effort/);
+      await agentsSheet.getByRole("button", { name: "Claude Code", exact: true }).click();
+      await agentsSheet.getByText("Opus", { exact: true }).click();
+      assert.deepEqual(
+        await agentsSheet.locator(".agents-effort").allInnerTexts(),
+        ["Auto", "Low", "Medium", "High", "Max"],
+      );
+      await agentsSheet.getByRole("button", { name: "High", exact: true }).click();
+      await agentsSheet.getByText("Other model", { exact: true }).click();
+      await agentsSheet.getByLabel("Model name").fill("--bad");
+      await agentsSheet.getByRole("button", { name: "Use", exact: true }).click();
+      await agentsSheet.getByText("Use only letters", { exact: false }).waitFor();
+      await page.screenshot({ path: `test-results/agents-${viewport.width}.png` });
+      await agentsSheet.getByRole("button", { name: "Back to Agents" }).click();
+      assert.match(await agentsSheet.innerText(), /Tasks[^]*Claude · Opus · high/);
+      await agentsSheet.getByRole("button", { name: "Close" }).click();
+      await page.locator(".tasks-uses", { hasText: "New tasks use Claude · Opus · high" }).waitFor();
+      await page.reload();
+      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      assert.deepEqual(
+        await page.evaluate(() => JSON.parse(localStorage.getItem("peekumi.agents.default")).task),
+        { agent: "claude", model: "opus", effort: "high" },
+        "The choice stays on this device",
+      );
+      // The composer's chip names what the current mode uses and opens that list.
+      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      await page.locator("#dockAgent", { hasText: "Claude · Sonnet · low" }).waitFor();
+      await page.locator("#dockAgent").click();
+      await page.locator("dialog.agents-dialog h2", { hasText: "Ask uses" }).waitFor();
+      await page.screenshot({ path: `test-results/agents-ask-${viewport.width}.png` });
+      await page.keyboard.press("Escape");
+      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
+      await page.locator("#dockAgent", { hasText: "Claude · Opus · high" }).waitFor();
       assert.deepEqual(errors, []);
       console.log(
         `Workflow browser ${viewport.width}: draft → preview → dispatch → MCP report → inspect → verify passed`,

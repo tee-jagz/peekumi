@@ -5,7 +5,7 @@ When you examine a repository, you can collect feedback. You preview this feedba
 ## Using the loop
 
 1. Select a folder, file, declaration or dependency. Then select **Instruction**. If you select nothing, the instruction is for the current folder or repository. **Discussion** shows the saved drafts for that selection, and **Tasks** also shows them. A draft keeps its immutable Git SHA and anchor. Navigation does not move a draft to a different selection.
-2. You can edit or delete drafts with no restriction. **Prepare run** selects the drafts, Codex or Claude Code, and an optional brief. **Preview task** shows the exact task, the start SHA, the new branch and the committed dependency rules.
+2. You can edit or delete drafts with no restriction. **Prepare run** selects the drafts and an optional brief. The task uses the agent, model and effort that you chose for tasks in **Agents** (**Change** opens that list). **Preview task** freezes them in the task, and every round of the task uses them. **Preview task** shows the exact task, the start SHA, the new branch and the committed dependency rules.
 3. **Dispatch run** uses that saved preview, and a preview starts only one run. If the watched branch or a selected draft changed, make a new preview. If you dispatch the same preview again, Peekumi returns the original run. Each repository can have only one active run.
 4. Monitor the progress in **Tasks**. Examine the agent output, the original task and the result commits. **Stop run** stops the agent process group. The maximum time for a run is one hour. Logs keep the first MiB, and Peekumi drains the output that follows.
 5. **Explore changes** opens the agent branch on the map and compares it with the start commit of the run. Thus, the map colours each change that the agent made. **Back to task** restores the previous branch and base. Check results that the agent reports are evidence from the agent. These results do not come from an independent test execution by Peekumi.
@@ -65,7 +65,9 @@ Authenticated owner writes must use same-origin JSON. Untrusted repository text,
 - `GET /api/workflow`: comments, history, run summaries and watched ref.
 - `POST /api/comments`: `{anchor, sha, text, forRun?}`. `forRun` marks the instruction for the next round of that finished task. Peekumi rejects it if the task was revised.
 - `PATCH /api/comments/<id>`: `{action, version, text? , note?}`. The actions are `edit`, `delete`, `reopen`, `verify` and `unverify` (which takes an approved instruction back to review while its task is not applied). When a task is applied to main, `unverify`, `revise` and new instructions with `forRun` for that task are refused.
-- `POST /api/runs/preview`: `{agent, commentIds, brief}`.
+- `PUT /api/agents/openrouter-key`: `{key}`. It tests the key with OpenRouter, then saves it. `DELETE` on the same path removes it. Both return the same body as `GET /api/agents`.
+- `GET /api/agents`: the providers, their jobs and status, the models of each job (each with `efforts` and `defaultEffort`), `source`, and the default choice for each job.
+- `POST /api/runs/preview`: `{commentIds, brief, using?}`. `using` is `{agent, model, effort}`. An older client can send `agent` alone.
 - `POST /api/runs`: `{previewId}`.
 - `GET /api/runs/<id>`: progress, task, output and results.
 - `POST /api/runs/<id>/cancel`: requests termination of the process group.
@@ -94,7 +96,49 @@ To get direct Details, Source, Changes, Relations and Discussion views, drag the
 
 Ask is a contextual conversation that uses the installed, signed-in Claude Code client. All built-in tools, skills and other MCP servers are disabled for Ask. Ask makes no provider call until the owner sends a question. Source and comparison context, static relationships, committed rules and scoped instructions have limits. Ask tells you about all omissions.
 
-Ask runs Claude Code at low effort on a fast model. The default model is Sonnet. For slower and deeper answers, set `--ask-model` or `PEEKUMI_ASK_MODEL` to `opus`. To change the effort, set `--ask-effort` or `PEEKUMI_ASK_EFFORT` to `low`, `medium` or `high`. The interface streams each answer while Claude writes it.
+Ask runs Claude Code. Choose its model and effort in **Agents**. Without a choice on the device, Ask uses the server defaults: Sonnet at low effort. To change these defaults, set `--ask-model` or `PEEKUMI_ASK_MODEL` and `--ask-effort` or `PEEKUMI_ASK_EFFORT`. The interface streams each answer while Claude writes it.
+
+## Agents
+
+**Agents** has one row for each job: **Ask** answers questions, and **Tasks** change code. Open it from the chip next to the composer, which shows what the current mode uses, or from **Agents** in the Tasks view. For each job, select a provider, then one of its models, then an effort:
+
+- **Provider:** for Ask, Claude Code or OpenRouter. For tasks, Claude Code, Codex or OpenRouter. A provider that is not ready is grey and shows the reason, for example "Not signed in. Run codex login on your computer".
+- **Model:** **Default** (the model that the provider uses on its own), the models that the provider reports, or **Other model**, which accepts any model name.
+- **Effort:** **Auto** and the levels of the selected model. Auto lets the provider decide.
+
+Peekumi does not keep its own list of models. Each provider gives them: Codex lists its models, with the effort levels and the default effort of each, in `codex debug models`. Claude Code names its model aliases and effort levels in `claude --help`. OpenRouter lists its models in its public API; Peekumi shows only the models that can use tools, with their context size and price, and reasoning models get Low, Medium and High. The server keeps these lists for ten minutes. If a provider gives no list, the server uses a short built-in list and marks it `source: "built-in"`.
+
+The app keeps the choice on the device, for each repository. It sends the choice with each Ask question, task preview and commit message request as `using: {agent, model, effort}`. The server checks the choice: the provider must exist and be able to do the job, the model name can contain only letters, digits and `._:/@-[]`, and the effort must be one lowercase word. The provider checks the model and the effort when it starts.
+
+### Why Ask has fewer providers than tasks
+
+Ask must only read the repository at the compared revisions. It must not run code or read files that are not committed. Thus Ask uses only a provider whose tools Peekumi controls:
+
+- **Claude Code** runs with every built-in tool off. Its only tools are Peekumi's read-only lookups.
+- **OpenRouter** is an API. The model has no tools of its own, and Peekumi runs each lookup that the model asks for.
+- **Codex** always has a shell. Even in its read-only sandbox, it can run commands and read uncommitted files. Thus Codex does tasks, but it does not answer questions.
+
+Through OpenRouter, Ask can use models from many providers, for example OpenAI, Google and Anthropic.
+
+### Tasks with OpenRouter
+
+OpenRouter is a provider on its own, and it does not need a different program. For an OpenRouter task, Peekumi runs its own task agent (`backend/task_agent.rs`). The agent sends the task to the model with a fixed set of tools, and it runs each tool in the worktree of the task:
+
+- `list_files`, `read_file` and `search` read the worktree.
+- `write_file`, `edit_file` and `delete_file` change files.
+- `commit` commits all changes, with the `Peekumi-Run`, `Peekumi-Comment` and `Peekumi-Agent: openrouter` trailers.
+- `resolve_comment` and `flag_comment` report each instruction, with the same checks as the MCP reporting tools.
+- `finish` ends the task.
+
+No tool runs commands, because Peekumi has no sandbox for commands. Thus the agent cannot run builds or tests, and it says so in its reports. A path must be in the worktree: Peekumi refuses an absolute path, `..`, the `.git` folder and a write through a symbolic link. The task view shows the progress of the agent, and **Stop task** and the one-hour limit work as for the other agents.
+
+### The OpenRouter key
+
+Choose OpenRouter in the Ask list, paste your API key and tap **Test and save**. The server tests the key with OpenRouter. Then it keeps the key in the file `openrouter-key` in its state folder, which only your user account can read. The app shows only the last 4 characters of the key, with **Replace** and **Remove**. You can also set `PEEKUMI_OPENROUTER_KEY` on the host. Peekumi sends requests through `curl`, and the key goes to `curl` on its standard input, never as an argument. `PEEKUMI_OPENROUTER_URL` changes the API address (the tests use this).
+
+When Ask uses OpenRouter, it sends the question, the context and the result of each lookup to OpenRouter. OpenRouter sends them to the provider of the model.
+
+The server module `backend/agents.rs` defines each provider behind one interface (`Agent`): its jobs, how it finds its models, its status check and the command that starts it for a task. Claude Code and Codex are the two agents now. To add an agent, implement this interface and add the agent to the registry. The app gets its lists from `GET /api/agents`.
 
 While an answer runs, Claude can call five read-only lookups that Peekumi itself serves: `find_declarations`, `search_code`, `read_declaration`, `read_file` and `relationships`. `search_code` finds exact text and gives the name of the declaration that contains each match. Thus, it finds references that the static analysis does not find, for example calls in macros. Each lookup reads committed code at the two compared revisions through the repository worker. No lookup runs code, writes state or gets access to a different repository.
 

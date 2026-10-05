@@ -148,6 +148,8 @@ export function renderDiff(host, patch) {
 /** Creates a panel controller; writes are explicit owner actions and poll updates preserve input. */
 export function createWorkflow({
   api,
+  // The agent choice for tasks and Ask on this device (see agents.js).
+  agents,
   context,
   showTab,
   redraw,
@@ -167,8 +169,7 @@ export function createWorkflow({
     editing = null,
     preview = null,
     preparing = false;
-  let agent = "codex",
-    brief = "",
+  let brief = "",
     picks = new Set(),
     runId = null,
     runDetail = null,
@@ -508,7 +509,16 @@ export function createWorkflow({
       return;
     }
     if (overview) {
-      body.append(el("h2", "task-heading", "Tasks"));
+      // The Agents sheet opens from here; the line says what a new task uses.
+      const top = el("div", "tasks-top");
+      top.append(
+        el("h2", "task-heading", "Tasks"),
+        Object.assign(action("Agents", () => agents.open(null, () => redraw())), { id: "openAgents" }),
+      );
+      body.append(top);
+      const uses = agents.describe("task");
+      if (uses) body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));
+      else agents.load().then((c) => c && redraw()).catch(() => {});
       const shown = data.runs
         .filter((r) => r.status !== "preview" && !r.revisedBy)
         .slice()
@@ -684,21 +694,22 @@ export function createWorkflow({
         `The task starts from ${(data.watched || "main").replace("refs/heads/", "")}. Choose the instructions to send; results return here for review.`,
       ),
     );
-    const l = el("label", "workflow-field", "Agent"),
-      select = el("select");
-    for (const a of ["codex", "claude"]) {
-      const o = el("option", "", a === "codex" ? "Codex" : "Claude Code");
-      o.value = a;
-      select.append(o);
-    }
-    select.value = agent;
-    select.onchange = () => {
-      agent = select.value;
-      preview = null;
-      redraw();
-    };
-    l.append(select);
-    body.append(l);
+    // The task uses this device's choice for tasks; Change opens that list.
+    const uses = el("div", "task-uses");
+    uses.append(
+      el("span", "", `Uses ${agents.describe("task") || "the default agent"}`),
+      Object.assign(
+        action("Change", () =>
+          agents.open("task", () => {
+            preview = null;
+            redraw();
+          }),
+        ),
+        { className: "btn link-button" },
+      ),
+    );
+    body.append(uses);
+    if (!agents.describe("task")) agents.load().then((c) => c && redraw()).catch(() => {});
     for (const c of data.comments.filter(sendable)) {
       const l = el("label", "workflow-pick"),
         check = el("input");
@@ -731,7 +742,7 @@ export function createWorkflow({
         "Preview task",
         async () => {
           preview = await write("/api/runs/preview", {
-            agent,
+            using: agents.using("task"),
             commentIds: [...picks],
             brief,
           });
@@ -753,7 +764,7 @@ export function createWorkflow({
         el(
           "p",
           "workflow-text",
-          `${preview.agent === "codex" ? "Codex" : "Claude Code"} will work on ${preview.comments.length} instruction${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
+          `${agents.label(preview.agent)} will work on ${preview.comments.length} instruction${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
         ),
       );
       for (const c of preview.comments)
@@ -885,7 +896,7 @@ export function createWorkflow({
       );
       let draft;
       try {
-        draft = await write(`/api/runs/${r.id}/commit-draft`, {});
+        draft = await write(`/api/runs/${r.id}/commit-draft`, { using: agents.using("ask") });
       } catch (e) {
         box.replaceChildren(el("h2", "merge-title", "Cannot commit now"), el("p", "merge-note", e.message), action("Close", close));
         return;

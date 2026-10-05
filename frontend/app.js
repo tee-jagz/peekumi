@@ -1,5 +1,6 @@
 /** @module Browser controller for repository navigation, committed comparisons and the review panel. */
 import { createAsk } from "./ask.js";
+import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
@@ -199,8 +200,14 @@ async function returnToTask() {
   return back.id;
 }
 $("#taskReturn").onclick = returnToTask;
+// The agent, model and effort for Ask and tasks, kept on this device for each repository.
+const agents = createAgents({
+  api,
+  repo: () => new URL(location.href).searchParams.get("repo"),
+});
 const workflow = createWorkflow({
   api,
+  agents,
   context: reviewContext,
   notice: showNotice,
   showTab(value) {
@@ -233,6 +240,7 @@ const workflow = createWorkflow({
 const ask = createAsk({
   api,
   stream: apiStream,
+  using: () => agents.using("ask"),
   rootSubject: () => (viewingPr ? `PR #${viewingPr}` : null),
   context() {
     return {
@@ -2640,6 +2648,23 @@ function listRow(node, detail, action) {
   return li;
 }
 /** Renders the scoped change inventory, source view or dependency list for the active review tab. */
+/** The chip beside the composer: what Ask, or a new task, uses on this device. A tap opens
+ * that list in Agents. It shows once the agent list has loaded. */
+function showDockAgent() {
+  const chip = $("#dockAgent"),
+    job = primaryTab === "ask" ? "ask" : "task",
+    uses = agents.describe(job);
+  chip.hidden = !uses;
+  if (!uses) {
+    agents.load().then((c) => c && showDockAgent()).catch(() => {});
+    return;
+  }
+  chip.textContent = uses;
+  const what = job === "ask" ? "Ask uses" : "New tasks use";
+  chip.title = `${what} ${uses}. Change`;
+  chip.setAttribute("aria-label", chip.title);
+  chip.onclick = () => agents.open(job, () => renderTab());
+}
 /** Brings the end of the latest message into view: where a conversation resumes. */
 function showLatestMessage() {
   requestAnimationFrame(() => {
@@ -2704,9 +2729,10 @@ function renderTab() {
   }
   const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
   $("#dockContext").replaceChildren(
-    ...(anchor ? [glyph("pin"), document.createTextNode(anchor)] : []),
+    ...(anchor ? [glyph("pin"), element("span", "dock-text", anchor)] : []),
   );
   $("#dockContext").title = anchor || "";
+  showDockAgent();
   $("#selectionDetails").hidden = tab !== "details";
   if (tab === "details") return;
   if (tab === "ask") {

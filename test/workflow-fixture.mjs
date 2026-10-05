@@ -4,6 +4,32 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 let task = "";
 for await (const chunk of process.stdin) task += chunk;
 const values = process.argv.slice(2);
+// The agents module checks that an agent is installed and signed in, and asks it for its
+// models: Claude Code names them in --help, Codex lists them with debug models.
+if (values[0] === "--version" || (values[0] === "login" && values[1] === "status")) {
+  console.log("fixture agent 1.0");
+  process.exit(0);
+}
+if (values[0] === "auth" && values[1] === "status") {
+  console.log(JSON.stringify({ loggedIn: true, authMethod: "fixture" }));
+  process.exit(0);
+}
+if (values[0] === "--help") {
+  console.log(
+    "Options:\n  --effort <level>   Effort level for the current session\n                     (low, medium, high, max)\n" +
+      "  --model <model>    Model for the current session. Provide\n                     an alias for the latest model (e.g.\n                     'sonnet' or 'opus') or a\n                     model's full name.\n  -n, --name <name>  Set a name",
+  );
+  process.exit(0);
+}
+if (values[0] === "debug" && values[1] === "models") {
+  const level = (effort) => ({ effort, description: effort });
+  console.log(JSON.stringify({ models: [
+    { slug: "fixture-hidden", display_name: "Hidden", visibility: "hide", priority: 0, supported_reasoning_levels: [level("low")] },
+    { slug: "fixture-small", display_name: "Fixture Small", description: "Fast", visibility: "list", priority: 2, default_reasoning_level: "low", supported_reasoning_levels: [level("low"), level("medium")] },
+    { slug: "fixture-large", display_name: "Fixture Large", description: "Careful", visibility: "list", priority: 1, default_reasoning_level: "high", supported_reasoning_levels: [level("low"), level("high"), level("xhigh")] },
+  ] }));
+  process.exit(0);
+}
 if (values.includes("--tools")) {
   // A commit message for the owner's own changes: no tools, the diff as input.
   if (values[values.indexOf("--system-prompt") + 1]?.startsWith("You write one Git commit message")) {
@@ -147,6 +173,8 @@ function call(name, arguments_ = {}) {
     ? { error: result.content[0].text }
     : JSON.parse(result.content[0].text);
 }
+// Tests read the exact arguments an agent was started with.
+writeFileSync(args[args.indexOf("--state-dir") + 1] + "/agent-argv.json", JSON.stringify(values));
 const run = call("get_run");
 if (run.task !== task) throw Error("Preview and dispatched task differ");
 const git = (...a) =>
