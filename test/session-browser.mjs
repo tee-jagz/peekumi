@@ -151,6 +151,7 @@ try {
         return s.scrollHeight <= s.clientHeight + 2 || s.scrollTop + s.clientHeight >= s.scrollHeight - 30;
       });
       // The header sits above the scrolling conversation, so scrolling never moves it.
+      await page.locator(".session-head").waitFor();
       const before = await page.locator(".session-head").boundingBox();
       await page.locator("#reviewScroll").evaluate((n) => (n.scrollTop = 0));
       const after = await page.locator(".session-head").boundingBox();
