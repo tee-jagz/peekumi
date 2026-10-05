@@ -388,7 +388,8 @@ impl Workflow {
                 conflicts.join(", ")
             );
             let brief = r["brief"].as_str().unwrap_or("");
-            let task = self.task_text(agent, &id, &branch, &start, &requested, brief, &[], &done, &rules);
+            let graph = r["graph"] == true;
+            let task = self.task_text(agent, &id, &branch, &start, &requested, brief, &[], &done, &rules, graph, "");
             for snapshot in &done {
                 let c = v["comments"].as_array_mut().unwrap().iter_mut().find(|c| c["id"] == snapshot["id"]).unwrap();
                 c["runId"] = json!(id);
@@ -400,7 +401,7 @@ impl Workflow {
                 crate::workflow::event(c, "owner");
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
             v["runs"].as_array_mut().unwrap().push(next.clone());
             Ok(next)
         })?;

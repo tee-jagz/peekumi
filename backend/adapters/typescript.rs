@@ -24,16 +24,18 @@ impl LanguageAdapter for TypeScript {
     }
     /// Probes the installed helper runtime to identify compatible cached syntax.
     /// A failed probe is recorded as unavailable rather than hiding affected files.
+    /// The helper script's hash is part of it, so a changed helper rebuilds cached analysis.
     fn identity(&self, config: &Config) -> String {
         format!(
-            "{}:{}",
+            "{}:{}:{}",
             config.node,
             version(run(
                 &config.node,
                 &[&config.helper().to_string_lossy(), "--version"],
                 None,
                 vec![]
-            ))
+            )),
+            &crate::engine::hash(include_str!("typescript_ast.mjs"))[..12]
         )
     }
     /// Sends committed source batches to the TypeScript helper through JSON stdin.

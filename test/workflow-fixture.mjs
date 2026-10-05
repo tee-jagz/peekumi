@@ -63,6 +63,7 @@ if (values.includes("--tools")) {
   async function lookups() {
     const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
       .mcpServers.peekumi;
+    if (config.alwaysLoad !== true) throw Error("Ask must load its lookups in the first prompt");
     const headers = {
       ...config.headers,
       "Content-Type": "application/json",
@@ -132,6 +133,7 @@ if (values.includes("--mcp-config")) {
     throw Error("Missing scoped reporting tool configuration");
   const config = JSON.parse(values[values.indexOf("--mcp-config") + 1])
     .mcpServers.peekumi;
+  if (config.alwaysLoad !== true) throw Error("Tasks must load the reporting tools in the first prompt");
   command = config.command;
   args = config.args;
 } else {
@@ -175,6 +177,28 @@ function call(name, arguments_ = {}) {
 }
 // Tests read the exact arguments an agent was started with.
 writeFileSync(args[args.indexOf("--state-dir") + 1] + "/agent-argv.json", JSON.stringify(values));
+// The code graph: Claude gets it as an HTTP MCP server in --mcp-config, Codex as -c options
+// with its key in the environment. Record one lookup so tests can check the grant.
+{
+  let graph = null;
+  if (values.includes("--mcp-config")) {
+    const server = JSON.parse(values[values.indexOf("--mcp-config") + 1]).mcpServers.peekumi_graph;
+    if (server && server.alwaysLoad !== true) throw Error("Tasks must load the graph tools in the first prompt");
+    if (server) graph = { url: server.url, auth: server.headers.Authorization };
+  } else {
+    const url = values.find((v) => v.startsWith("mcp_servers.peekumi_graph.url="));
+    if (url) graph = { url: JSON.parse(url.split("=").slice(1).join("=")), auth: `Bearer ${process.env.PEEKUMI_GRAPH_TOKEN}` };
+  }
+  const state = args[args.indexOf("--state-dir") + 1];
+  if (graph) {
+    const reply = await (await fetch(graph.url, {
+      method: "POST",
+      headers: { Authorization: graph.auth, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "find_declarations", arguments: { query: "run" } } }),
+    })).json();
+    writeFileSync(state + "/agent-graph.json", JSON.stringify({ ...graph, text: reply.result?.content?.[0]?.text ?? null, error: !reply.result || reply.result.isError === true }));
+  }
+}
 const run = call("get_run");
 if (run.task !== task) throw Error("Preview and dispatched task differ");
 const git = (...a) =>
@@ -227,6 +251,17 @@ if (
   }).error
 )
   throw Error("Accepted missing trailers");
+// A blank line before a last trailer splits the block, and git sees only that trailer. The
+// error names the missing lines and what git found.
+git(
+  "commit",
+  "--amend",
+  "-m",
+  `Fixture change\n\nPeekumi-Run: ${run.id}\nPeekumi-Comment: ${first.id}\nPeekumi-Agent: ${run.agent}\n\nCo-Authored-By: Fixture <fixture@example.invalid>`,
+);
+const split = call("resolve_comment", { comment_id: first.id, commit_sha: git("rev-parse", "HEAD"), note: "bad", checks: "bad" });
+if (!split.error || !split.error.includes(`Peekumi-Run: ${run.id}`) || !split.error.includes("Git found these trailers: Co-Authored-By: Fixture") || !split.error.includes("last paragraph"))
+  throw Error("Unclear trailer error: " + JSON.stringify(split));
 git(
   "commit",
   "--amend",

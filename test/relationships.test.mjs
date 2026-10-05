@@ -32,6 +32,25 @@ test("relationships retain language evidence, unresolved dispatch and versioned 
     "backend/consumer.rs",
     "use super::provider::{Port,helper as alias};\nstruct Client;\nimpl Port for Client {}\nimpl !Send for Client {}\nfn local() {}\nfn run() { local(); alias(); }\nfn shadow(local:fn()) {local();}\nimpl Client {fn run(&self){ self.unknown(); }}",
   );
+  // Method calls resolve only through written types: self, Self::, typed parameters and
+  // struct fields; macro arguments count; a parameter bound again stays unresolved.
+  await put(
+    "backend/methods.rs",
+    "pub struct Inner;\nimpl Inner { pub fn ping(&self) {} }\npub struct Store { inner: Inner }\nimpl Store {\n    pub fn save(&self) { self.inner.ping(); Self::tidy(); }\n    fn tidy() {}\n}\npub fn use_store(store: &Store) {\n    store.save();\n    println!(\"{:?}\", format!(\"{:?}\", store.inner.ping()));\n}\npub fn rebound(store: &Store) { let store = 1; store.save(); }\n",
+  );
+  await put(
+    "py/methods.py",
+    "class Shop:\n    def pay(self):\n        return 1\n    def buy(self):\n        return self.pay()\n    @classmethod\n    def make(cls):\n        return cls.pay()\n    @staticmethod\n    def tool(self):\n        return self.pay()\n",
+  );
+  // An import inside a function binds its name for that function, and a package
+  // `__init__.py` that imports a name again passes it on.
+  await put("py/pkg/__init__.py", "from .worker import start\n");
+  await put("py/pkg/worker.py", "def start():\n    return 1\n");
+  await put(
+    "py/late.py",
+    "def early():\n    from .pkg import start\n    return start()\ndef twice():\n    from .pkg import start\n    start = 2\n    return start()\n",
+  );
+  await put("web/methods.ts", "export class Shop {\n  pay() { return 1; }\n  buy() { return this.pay(); }\n}\n");
   await put("py/provider.py", "class Base: pass\ndef helper(): return 1");
   await put(
     "py/consumer.py",
@@ -131,6 +150,37 @@ test("relationships retain language evidence, unresolved dispatch and versioned 
       ),
     );
   }
+  const method = (source, target) =>
+    rows.find((r) => r.source.path === "backend/methods.rs" && r.source.symbol === source && r.target === target);
+  for (const [source, target, symbol] of [
+    ["Store.save", "self.inner.ping", "Inner.ping"],
+    ["Store.save", "Self::tidy", "Store.tidy"],
+    ["use_store", "store.save", "Store.save"],
+    ["use_store", "store.inner.ping", "Inner.ping"],
+  ]) {
+    const r = method(source, target);
+    assert.ok(r, `${source} → ${target}`);
+    assert.equal(r.resolution, "resolved", `${source} → ${target}`);
+    assert.deepEqual(r.targets.map((t) => t.symbol), [symbol]);
+  }
+  assert.equal(method("rebound", "store.save").resolution, "unresolved", "A name bound again loses its type");
+  // Python self/cls and TypeScript this reach methods of their own class.
+  for (const [file, source, target, symbol] of [
+    ["py/methods.py", "Shop.buy", "self.pay", "Shop.pay"],
+    ["py/methods.py", "Shop.make", "cls.pay", "Shop.pay"],
+    ["web/methods.ts", "Shop.buy", "this.pay", "Shop.pay"],
+  ]) {
+    const r = rows.find((x) => x.source.path === file && x.source.symbol === source && x.target === target);
+    assert.ok(r, `${file} ${source} → ${target}`);
+    assert.equal(r.resolution, "resolved", `${file} ${target}`);
+    assert.deepEqual(r.targets.map((t) => t.symbol), [symbol]);
+  }
+  const late = (source) => rows.find((x) => x.source.path === "py/late.py" && x.source.symbol === source && x.target === "start");
+  assert.equal(late("early").resolution, "resolved", "A local import resolves through the package");
+  assert.deepEqual(late("early").targets, [{ path: "py/pkg/worker.py", symbol: "start" }]);
+  assert.equal(late("twice").resolution, "unresolved", "A local import bound again stays unresolved");
+  const loose = rows.find((x) => x.source.path === "py/methods.py" && x.source.symbol === "Shop.tool" && x.target === "self.pay");
+  assert.equal(loose.resolution, "unresolved", "A staticmethod has no self");
   assert.ok(
     rows.some(
       (r) =>

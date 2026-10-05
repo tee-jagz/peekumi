@@ -592,6 +592,41 @@ test("OpenRouter answers Ask with Peekumi's lookups, and its key stays on the se
   assert.equal(removed.agents.find((a) => a.id === "openrouter").key.set, false);
 });
 
+test("each task gets the code graph of its start commit, for as long as it runs", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  for (const agent of ["claude", "codex"]) {
+    const c = await f.req("/api/comments", { text: `Graph for ${agent}`, sha: f.sha, anchor: { kind: "repo", path: "" } });
+    const p = await f.req("/api/runs/preview", { commentIds: [c.id], using: { agent } });
+    assert.equal(p.graph, true);
+    assert.match(p.task, /## Repository map\n[^]*```\n[^]*module\.py: run\n[^]*```/);
+    assert.match(p.task, /## Code graph tools\n[^]*highlight[^]*route/);
+    await f.req("/api/runs", { previewId: p.id });
+    await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+    const used = JSON.parse(await readFile(path.join(f.state, "agent-graph.json"), "utf8"));
+    assert.equal(used.error, false, `${agent}: ${used.text}`);
+    assert.match(used.text, /"name":"run"[^]*module\.py|module\.py[^]*"name":"run"/, `${agent} found run() through the graph`);
+    // The grant ends with the run.
+    const after = await (await fetch(used.url, {
+      method: "POST",
+      headers: { Authorization: used.auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "find_declarations", arguments: { query: "run" } } }),
+    })).status;
+    assert.equal(after, 401, `${agent}: the graph grant closes when the run ends`);
+  }
+});
+
+test("a task starts from a names-only map of the repository, and the graph tools open its parts", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const c = await f.req("/api/comments", { text: "Make `run` return 2.", sha: f.sha, anchor: { kind: "repo", path: "" } });
+  const p = await f.req("/api/runs/preview", { commentIds: [c.id], using: { agent: "codex" } });
+  const map = p.task.slice(p.task.indexOf("## Repository map"), p.task.indexOf("## Code graph tools"));
+  assert.match(map, /names only, no code/);
+  assert.match(map, /\.\/\n  module\.py: run\n/);
+  assert.ok(!map.includes("return 1"), "No code in the map");
+});
+
 test("failed executable launches produce a failed run, never leave comments with an agent", async (t) => {
   const f = await fixture();
   t.after(() => f.close());
@@ -829,7 +864,7 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
   const result = await ask("Use the lookup tools.", { kind: "symbol", path: "late.py", symbol: "target" });
   assert.equal(result.status, 200, JSON.stringify(result));
   const used = JSON.parse(result.answer.text);
-  assert.deepEqual(used.tools, ["find_declarations", "search_code", "read_declaration", "read_file", "relationships"]);
+  assert.deepEqual(used.tools, ["find_declarations", "search_code", "read_declaration", "read_file", "relationships", "highlight", "route"]);
   for (const name of used.tools) assert.ok(used.allowed.includes("mcp__peekumi__" + name));
   assert.equal(used.notified, 202);
   assert.match(used.found, /"path":"late.py","name":"target"/);

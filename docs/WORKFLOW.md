@@ -36,7 +36,7 @@ The installed Peekumi binary is also a stdio MCP server. Each agent gets a crede
 | `resolve_comment` | `comment_id`, `commit_sha`, `note`, `checks` | Addressed, with commit and agent-reported check evidence |
 | `flag_comment` | `comment_id`, `reason` | Flagged, with an explanation |
 
-A resolution must refer to a new commit. This commit must be a descendant of the run base, and it must be reachable from the run branch. The commit must have these trailers: `Peekumi-Run: <id>`, `Peekumi-Comment: <comment id>` and `Peekumi-Agent: codex` or `claude`. Peekumi rejects these items: commits without attribution, unrelated commits, comments from other runs and reports after completion. Verification does a second check that the reported commit is still on the run branch. When a run closes, Peekumi revokes its credentials. The owner API does not include these credentials, and Peekumi redacts them from captured output.
+A resolution must refer to a new commit. This commit must be a descendant of the run base, and it must be reachable from the run branch. The commit must have these trailers: `Peekumi-Run: <id>`, `Peekumi-Comment: <comment id>` and `Peekumi-Agent: codex` or `claude`. Git reads trailers only from the last paragraph of the commit message. Thus, the trailers must be one block at the end, with no blank line in it. When a trailer is missing, the error names it and shows the trailers that git found. Peekumi rejects these items: commits without attribution, unrelated commits, comments from other runs and reports after completion. Verification does a second check that the reported commit is still on the run branch. When a run closes, Peekumi revokes its credentials. The owner API does not include these credentials, and Peekumi redacts them from captured output.
 
 ## Runtime and isolation
 
@@ -120,6 +120,26 @@ Ask must only read the repository at the compared revisions. It must not run cod
 
 Through OpenRouter, Ask can use models from many providers, for example OpenAI, Google and Anthropic.
 
+### The code graph in tasks
+
+A task reads code through Peekumi's code graph of its start commit. This is the same graph that Ask uses.
+
+**The map in the task text.** Each task text has the section "Repository map". The map shows every folder, file and declaration name at the start commit. It shows only names. It does not show descriptions or code. The agent reads the map first. Then it opens only the parts that it needs.
+
+The map has a size limit of 12,000 characters (about 3,000 tokens). A larger map costs more than it saves. When a repository does not fit, Peekumi folds parts of the tree into one line each. A part is a whole folder with its subfolders, for example "`frontend/` (folded: 389 files, 4406 declarations; …)", or only the files of one folder. Peekumi does not fold the folders of the files that the instructions are about. A folded folder opens with `highlight`, and a large folder in `highlight` folds in the same way.
+
+**The tools.** Each task gets the graph as tools:
+
+- `highlight` opens one part of the map. For a folder, it gives the tree and the folder description. For a file, it gives each declaration with its signature, its description and what uses it. For a declaration, it gives the signature, the description, the code, the calls that the graph resolved, and each caller with the calling line.
+- `route` shows how code connects in one call. It finds what reaches a declaration, back to the entry points. It lists each entry point with its decorators or attributes, for example `@router.post("/{run_id}/continue")`. Thus, one call shows which HTTP routes or scheduled jobs reach a function. It also finds the paths from one declaration to another. It gives at most 20 paths. With `lines`, it gives the calling line of each step, after the conditions that hold it, for example `if path == "/api/ask" {`. It does not follow callers in test files, unless the agent sets `tests`. It tells how many test callers it did not follow.
+- `highlight` and `route` accept a short name, for example `choice` for `Workflow.choice`, when only one declaration in the file has that name. Otherwise they give an error with the names to choose from.
+- `find_declarations` finds a function, method, class or type by name.
+- `read_declaration`, `relationships`, `search_code` and `read_file` read the same commit.
+
+The task text tells the agent to use the map and these tools before it searches text. When the task starts, Peekumi opens a lookup grant for that task only, with its own key and a limit of 300 calls. The grant closes when the task ends. Claude Code and Codex reach the graph as the MCP server `peekumi_graph` on the Peekumi listener. For Claude Code, Peekumi sets `alwaysLoad` on its MCP servers, for tasks and for Ask. Thus, the tools are in the first prompt. Without it, Claude Code shows only the tool names until the agent loads them, and the agent often searches text first. Codex reads the key from the `PEEKUMI_GRAPH_TOKEN` environment variable. The OpenRouter task agent calls the same endpoint with `highlight`, `route` and `find_declarations`. The graph shows the start commit, not the changes of the agent. `PEEKUMI_TASK_GRAPH` on the server selects the form: not set or `1` gives the map and the tools, `tools` gives only the tools, and `0` gives no graph.
+
+**What the graph resolves.** The graph records static calls, not runtime calls. In Rust, it resolves calls on `self`, `Self::name`, `Type::name`, parameters with a written type, struct fields with a written type, and calls inside macros such as `json!` and `format!`. A call on a `dyn Trait` value goes to each implementation of that trait. In Python, it resolves calls on `self` and `cls`, and calls through an import inside the function. When a package `__init__.py` imports a name again, the graph follows that import to the declaration. In JavaScript and TypeScript, it resolves calls on `this` in a class. Other calls stay unresolved. Calls into libraries also stay unresolved.
+
 ### Tasks with OpenRouter
 
 OpenRouter is a provider on its own, and it does not need a different program. For an OpenRouter task, Peekumi runs its own task agent (`backend/task_agent.rs`). The agent sends the task to the model with a fixed set of tools, and it runs each tool in the worktree of the task:
@@ -140,7 +160,7 @@ When Ask uses OpenRouter, it sends the question, the context and the result of e
 
 The server module `backend/agents.rs` defines each provider behind one interface (`Agent`): its jobs, how it finds its models, its status check and the command that starts it for a task. Claude Code and Codex are the two agents now. To add an agent, implement this interface and add the agent to the registry. The app gets its lists from `GET /api/agents`.
 
-While an answer runs, Claude can call five read-only lookups that Peekumi itself serves: `find_declarations`, `search_code`, `read_declaration`, `read_file` and `relationships`. `search_code` finds exact text and gives the name of the declaration that contains each match. Thus, it finds references that the static analysis does not find, for example calls in macros. Each lookup reads committed code at the two compared revisions through the repository worker. No lookup runs code, writes state or gets access to a different repository.
+While an answer runs, Claude can call seven read-only lookups that Peekumi itself serves: `find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`, `highlight` and `route`. `search_code` finds exact text and gives the name of the declaration that contains each match. Thus, it finds references that the static analysis does not find, for example calls on values with no written type. Each lookup reads committed code at the two compared revisions through the repository worker. No lookup runs code, writes state or gets access to a different repository.
 
 When the answer starts, Peekumi opens a lookup grant with a random key. When the answer ends, with success or failure, Peekumi closes the grant. The key operates only on `/mcp/ask`, and `/mcp/ask` does not accept the owner token. Before Ask answers, it must use the lookups to check each fact that its answer depends on. If a draft answer says that it did not check a fact in the repository, or asks you to confirm one, Peekumi sends the draft back one time. Ask then checks those facts and writes the final answer, which replaces the draft on the screen. Only runtime behaviour and test results can stay unchecked. An answer can make a maximum of 30 lookups, and each result has a size limit. The answer gives a list of the lookups that it made. Each provider call times out after 240 seconds.
 
