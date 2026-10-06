@@ -2236,12 +2236,14 @@ button {
   min-height: 44px;
   cursor: pointer;
 }
+/* An instruction: a plain row under a hairline, not a card. */
 .workflow-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
-  margin: 10px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 .workflow-card h3,
@@ -3552,8 +3554,7 @@ body {
 .panel select,
 .panel .seg,
 .panel .tabs,
-.panel details,
-.panel .workflow-card {
+.panel details {
   background: var(--el-glass);
   border-color: var(--el-line);
   box-shadow: var(--el-shadow);
@@ -3700,8 +3701,6 @@ body {
     .runrow,
     .notice,
     .search-wrap,
-    .workflow-card,
-    .task-link,
     .code-metadata,
     .contract-details,
     .directory-details,
@@ -4737,13 +4736,15 @@ details.p-section[open] > summary::before {
 }
 
 /* After approval: merge on the owner's tap, or what is in the way and the way past it. */
+/* The step after approval: a quiet section after the instructions' hairline, not a tinted
+   card. */
 .apply-step {
-  margin: 4px 0 8px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--el-glass);
-  border: 1px solid var(--el-line);
-  box-shadow: var(--el-shadow);
+  margin: 12px 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
 .apply-step .workflow-group {
   margin: 0 0 4px;
@@ -4755,19 +4756,10 @@ details.p-section[open] > summary::before {
   display: grid;
   gap: 8px;
 }
-.merge-step[data-state="ready"],
-.merge-step[data-state="behind"] {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 7%, var(--el-glass));
-}
-.merge-step[data-state="merged"] {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 7%, var(--el-glass));
-}
-.merge-step[data-state="blocked"],
-.merge-step[data-state="elsewhere"] {
-  border-color: color-mix(in srgb, var(--mod) 45%, transparent);
-  background: color-mix(in srgb, var(--mod) 8%, var(--el-glass));
+/* The state is in the heading's words and Peek; something in the way reads in orange. */
+.merge-step[data-state="blocked"] > .workflow-group,
+.merge-step[data-state="elsewhere"] > .workflow-group {
+  color: var(--mod);
 }
 .merge-step > .btn.primary {
   width: 100%;
@@ -5576,8 +5568,8 @@ details.p-section[open] > summary::before {
   display: none;
 }
 /* Request changes: the owner's feedback leads the next round, and its box sits under the actions. */
-.workflow-card.requested {
-  border-left: 2px solid var(--accent);
+.workflow-card.requested .report-label {
+  color: var(--accent);
 }
 .reply-box {
   margin: 10px 0 4px;
@@ -7277,5 +7269,30 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 /* Under Details: the instructions on this selection, as one quiet link. */
 .instructions-here {
   margin: 4px 0 8px;
+}
+
+/* The agent's report on an instruction: quiet text under it, with no heading. */
+.report-text {
+  color: var(--muted);
+}
+.report-text p {
+  margin: 6px 0 0;
+}
+
+/* A task in a list: a plain row under a hairline, as a conversation is; not a card.
+   (!important: the panel's glass rule for buttons carries an ID in its :not() list.) */
+.panel .task-link {
+  margin: 0;
+  padding: 12px 2px;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.panel .workflow-card {
+  box-shadow: none;
 }
 
