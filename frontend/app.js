@@ -2853,13 +2853,12 @@ function adapterCard() {
     ),
     // Background detail: a one-line note that expands, not a card.
     box = element("details", "adapter-note");
-  const names = { typescript: "TypeScript", python: "Python", rust: "Rust" };
   box.append(
     element(
       "summary",
       "",
       adapter
-        ? (names[adapter.id] || adapter.id) + " adapter"
+        ? (adapter.name || adapter.id) + " adapter"
         : "File-level inspection",
     ),
   );

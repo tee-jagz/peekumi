@@ -145,3 +145,59 @@ fn normalize(path: &str) -> String {
         out.join("/")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The rules of the contract that a new adapter must keep (docs/EXTENDING.md).
+    #[test]
+    fn registered_adapters_keep_the_contract() {
+        let mut ids = BTreeSet::new();
+        let mut extensions = BTreeSet::new();
+        for adapter in all() {
+            assert!(
+                ids.insert(adapter.id()),
+                "Two adapters use the ID {}",
+                adapter.id()
+            );
+            assert!(!adapter.name().is_empty(), "{} has no name", adapter.id());
+            assert!(
+                !adapter.limitations().is_empty(),
+                "{} says no limitations",
+                adapter.id()
+            );
+            assert!(
+                !adapter.extensions().is_empty(),
+                "{} reads no extension",
+                adapter.id()
+            );
+            for extension in adapter.extensions() {
+                assert!(
+                    extensions.insert(*extension),
+                    "Two adapters read .{extension}; for_path would choose only the first"
+                );
+                let path = format!("file.{extension}");
+                assert_eq!(for_path(&path).map(|a| a.id()), Some(adapter.id()));
+            }
+        }
+    }
+
+    /// Each file of an adapter is part of the cache version (engine.rs), so a change to a
+    /// parser makes the index read the files again. Otherwise old results stay in the cache.
+    #[test]
+    fn every_adapter_file_is_in_the_cache_version() {
+        let engine = include_str!("../engine.rs");
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("backend/adapters");
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            if name == "README.md" {
+                continue;
+            }
+            assert!(
+                engine.contains(&format!("adapters/{name}")),
+                "backend/adapters/{name} is not in the cache version in engine.rs"
+            );
+        }
+    }
+}

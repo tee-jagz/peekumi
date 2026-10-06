@@ -538,10 +538,10 @@ fn last_message(log: &str) -> Option<String> {
                     last = Some(text.to_string());
                 }
             }
-        } else if event["item"]["type"] == "agent_message" {
-            if let Some(text) = event["item"]["text"].as_str() {
-                last = Some(text.to_string());
-            }
+        } else if event["item"]["type"] == "agent_message"
+            && let Some(text) = event["item"]["text"].as_str()
+        {
+            last = Some(text.to_string());
         }
     }
     last.map(|t| t.chars().take(12000).collect())

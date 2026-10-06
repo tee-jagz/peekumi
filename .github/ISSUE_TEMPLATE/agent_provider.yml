@@ -1,0 +1,57 @@
+name: Agent provider
+description: Propose a provider for Ask, tasks or sessions
+labels: ["provider", "enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [docs/EXTENDING.md](https://github.com/tee-jagz/peekumi/blob/main/docs/EXTENDING.md#add-an-agent-provider) first. Wait for an agreement on the scope before you write code.
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: Gemini CLI
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - A program on the computer (a CLI)
+        - An API (Peekumi's own task agent uses it)
+    validations:
+      required: true
+  - type: checkboxes
+    id: jobs
+    attributes:
+      label: Jobs
+      options:
+        - label: Ask (read-only answers about the code)
+        - label: Tasks (changes in a separate worktree)
+        - label: Sessions (turn by turn, in a worktree)
+  - type: textarea
+    id: interface
+    attributes:
+      label: How Peekumi starts it and reads it
+      description: The command or the API, how it lists models, how it reports its steps (its output format), how it connects tools (MCP or function calls), and how it continues a conversation.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Commands and permissions
+      description: Can the provider run commands? Can it ask the owner before a command? Where does its key or sign-in stay?
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: The agent works only in the worktree that Peekumi gives it, and it reports through Peekumi's tools.
+          required: true
+        - label: Tests use a fake program or a fake API, never the real paid provider.
+          required: true
+        - label: I will add the tests and the documents that docs/EXTENDING.md lists.
+          required: true

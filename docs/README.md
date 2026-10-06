@@ -7,6 +7,7 @@ This directory records the product scope, the architecture, the validation resul
 - `DEVELOPMENT.md`: The build, how to run a checkout, tests, benchmarks and analysis limits.
 - `MVP.md`: The scope and the interaction contract.
 - `ARCHITECTURE.md`: Runtime components, the API and the read-only boundaries.
+- `EXTENDING.md`: How to add a language adapter or an agent provider: the contract, the steps and the definition of done.
 - `RELATIONSHIPS.md`: The supported static relationships, the configuration of dependency rules and the analysis limits.
 - `WORKFLOW.md`: Comments, runs, reports, verification and operational boundaries.
 - `VALIDATION.md`: The recorded evidence from tests and benchmarks.

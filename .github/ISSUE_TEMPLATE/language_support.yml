@@ -1,0 +1,64 @@
+name: Language support
+description: Propose a language adapter, so the map shows the declarations of a new language
+labels: ["language", "enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [docs/EXTENDING.md](https://github.com/tee-jagz/peekumi/blob/main/docs/EXTENDING.md#add-a-language) first. Wait for an agreement on the scope before you write code.
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: Go
+    validations:
+      required: true
+  - type: input
+    id: extensions
+    attributes:
+      label: File extensions
+      description: Without the dot. Another adapter must not read the same extension.
+      placeholder: go
+    validations:
+      required: true
+  - type: dropdown
+    id: parser
+    attributes:
+      label: Parser
+      description: How the adapter reads the source. It must never run the inspected code.
+      options:
+        - A Rust crate inside the server
+        - A helper program that uses an interpreter or a tool on the computer
+        - I do not know yet
+    validations:
+      required: true
+  - type: textarea
+    id: parser-detail
+    attributes:
+      label: Parser details
+      description: The crate or the program, its licence, and what the owner must install.
+  - type: checkboxes
+    id: extracts
+    attributes:
+      label: What the adapter extracts
+      options:
+        - label: Declarations (functions, types, methods)
+        - label: Documentation comments
+        - label: Explicit types (parameters and results)
+        - label: Imports, resolved to repository files
+        - label: Static calls
+        - label: Implementations and inheritance
+  - type: textarea
+    id: limits
+    attributes:
+      label: Limitations
+      description: What the adapter will not do. Details shows this to users.
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: The parser never imports, compiles or runs the inspected code, and it uses no network.
+          required: true
+        - label: I will add the tests and the documents that docs/EXTENDING.md lists.
+          required: true

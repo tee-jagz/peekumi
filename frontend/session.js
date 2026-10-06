@@ -387,6 +387,8 @@ export function createSession({
   context,
   using,
   sessionAgent = () => Promise.resolve(null),
+  agentName: nameOf = (id) => id,
+  asksBeforeCommands = () => false,
   openTask,
   showOnMap,
   openPlace,
@@ -422,9 +424,8 @@ export function createSession({
     };
     return b;
   };
-  const agentName = (r) =>
-    ({ claude: "Claude", codex: "Codex", openrouter: "OpenRouter" })[r.agent] ||
-    r.agent;
+  // Names and abilities come from the server's agent list (agents.js), never from IDs here.
+  const agentName = (r) => nameOf(r.agent);
   const anchorLabel = (a) =>
     a.kind === "repo"
       ? "Repository"
@@ -729,7 +730,7 @@ export function createSession({
     // How the session treats commands; the next turn starts with the new choice.
     const all = r.permissions === "allow";
     const mode =
-      r.agent === "claude" &&
+      asksBeforeCommands(r.agent) &&
       link(all ? "Commands: all allowed" : "Commands: ask first", async () => {
         await write(`/api/runs/${r.id}/permissions`, {
           mode: all ? "ask" : "allow",
@@ -846,8 +847,8 @@ export function createSession({
     const buttons = el("div", "sel-acts draft-buttons");
     let permissions = savedPermissions();
     if (!current) {
-      // Only Claude Code asks before commands: Codex runs with its own preset, and OpenRouter
-      // runs no commands. So the switch shows only when sessions use Claude Code.
+      // Only a provider that asks before commands (today Claude Code) has the switch: Codex
+      // runs with its own preset, and OpenRouter runs no commands.
       const mode = el("button", "icon-action session-mode", "");
       mode.type = "button";
       mode.hidden = true;
@@ -866,7 +867,9 @@ export function createSession({
         show();
       };
       show();
-      sessionAgent().then((agent) => (mode.hidden = agent !== "claude"));
+      sessionAgent().then(
+        (agent) => (mode.hidden = !asksBeforeCommands(agent)),
+      );
       buttons.append(mode);
     }
     const send = action(

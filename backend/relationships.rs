@@ -14,13 +14,9 @@ pub struct Context {
 /// implementations `Type as Trait.name`. A trait object (`dyn Trait`) reaches every
 /// implementation `… as Trait.name`. A struct that is declared more than once stops the walk.
 fn method_targets(file: &str, method: &Value, context: &Context) -> Vec<Value> {
-    // A method is looked up only in files of the same language as the call.
-    let family = |path: &str| match path.rsplit('.').next().unwrap_or("") {
-        "rs" => "rust",
-        "py" => "python",
-        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "svelte" => "script",
-        _ => "",
-    };
+    // A method is looked up only in files of the same language as the call: the files that
+    // one language adapter reads.
+    let family = |path: &str| crate::adapters::for_path(path).map_or("", |adapter| adapter.id());
     let language = family(file);
     let symbols = || {
         context

@@ -492,112 +492,6 @@ pub async fn relationship_summary(
     }))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn numbered_lines_start_where_asked() {
-        assert_eq!(numbered(&["a", "b"], 14), "   14  a\n   15  b");
-    }
-    #[test]
-    fn descriptions_name_the_target_not_the_whole_path() {
-        assert_eq!(
-            describe("read_declaration", &json!({"path":"a/b/c.py","name":"run"})),
-            "Read run in c.py"
-        );
-        assert_eq!(
-            describe("find_declarations", &json!({"query":"flatten"})),
-            "Searched for “flatten”"
-        );
-    }
-    #[test]
-    fn test_files_are_known_by_folder_and_name() {
-        for path in [
-            "api/tests/test_run.py",
-            "test_x.py",
-            "src/__tests__/a.ts",
-            "web/a.test.ts",
-            "web/a.spec.js",
-            "go/a_test.go",
-            "conftest.py",
-        ] {
-            assert!(is_test(path), "{path}");
-        }
-        for path in [
-            "api/app/routers/evaluation.py",
-            "backend/testing.rs",
-            "latest.py",
-            "contest/a.py",
-        ] {
-            assert!(!is_test(path), "{path}");
-        }
-    }
-    #[test]
-    fn decorators_are_read_from_the_start_of_a_declaration() {
-        let data = json!({
-            "symbols": [{"name": "continue_after_pause", "start": 2}, {"name": "plain", "start": 7}],
-            "after": "x = 1\n@router.post(\n    \"/{run_id}/continue\", status_code=202)\n@login_required\ndef continue_after_pause():\n    pass\ndef plain():\n    pass\n"
-        });
-        assert_eq!(
-            decorators(&data, "continue_after_pause"),
-            [
-                "@router.post( \"/{run_id}/continue\", status_code=202)",
-                "@login_required"
-            ]
-        );
-        assert!(decorators(&data, "plain").is_empty());
-    }
-    #[test]
-    fn a_short_name_finds_its_only_declaration() {
-        let data = json!({"symbols": [{"name": "Workflow.choice"}, {"name": "run"}, {"name": "A.go"}, {"name": "B as T.go"}]});
-        assert_eq!(
-            declared_name(&data, "a.rs", "choice").unwrap(),
-            "Workflow.choice"
-        );
-        assert_eq!(
-            declared_name(&data, "a.rs", "Workflow::choice").unwrap(),
-            "Workflow.choice"
-        );
-        assert_eq!(declared_name(&data, "a.rs", "run").unwrap(), "run");
-        assert_eq!(declared_name(&data, "a.rs", "B::go").unwrap(), "B as T.go");
-        assert!(
-            declared_name(&data, "a.rs", "go")
-                .unwrap_err()
-                .to_string()
-                .contains("A.go, B as T.go")
-        );
-        assert!(
-            declared_name(&data, "a.rs", "missing")
-                .unwrap_err()
-                .to_string()
-                .contains("Workflow.choice")
-        );
-    }
-    #[test]
-    fn guards_are_the_conditions_around_a_call() {
-        let data = json!({
-            "symbols": [{"name": "handle", "start": 1}],
-            "after": "async fn handle() {\n    let x = 1;\n    if path == \"/api/ask\" {\n        log();\n        if body[\"stream\"] == true {\n            tokio::spawn(async move {\n                answer_stream();\n            });\n        }\n        return answer();\n    }\n}\n"
-        });
-        assert_eq!(
-            guards(&data, "handle", 7),
-            [
-                "    3  if path == \"/api/ask\" {",
-                "    5  if body[\"stream\"] == true {"
-            ]
-        );
-        assert_eq!(
-            guards(&data, "handle", 10),
-            ["    3  if path == \"/api/ask\" {"]
-        );
-        assert!(guards(&data, "handle", 2).is_empty());
-    }
-    #[test]
-    fn bounded_output_says_what_was_cut() {
-        assert!(bounded(&"x".repeat(20), 10).ends_with("10 more bytes not shown"));
-    }
-}
-
 /// The names-only tree of files and declarations under `prefix` ("" for the whole
 /// repository): one line per folder, then one line per file with its declaration names.
 /// Files without declarations are counted on their folder's line.
@@ -1223,4 +1117,110 @@ fn decorators(data: &Value, name: &str) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn numbered_lines_start_where_asked() {
+        assert_eq!(numbered(&["a", "b"], 14), "   14  a\n   15  b");
+    }
+    #[test]
+    fn descriptions_name_the_target_not_the_whole_path() {
+        assert_eq!(
+            describe("read_declaration", &json!({"path":"a/b/c.py","name":"run"})),
+            "Read run in c.py"
+        );
+        assert_eq!(
+            describe("find_declarations", &json!({"query":"flatten"})),
+            "Searched for “flatten”"
+        );
+    }
+    #[test]
+    fn test_files_are_known_by_folder_and_name() {
+        for path in [
+            "api/tests/test_run.py",
+            "test_x.py",
+            "src/__tests__/a.ts",
+            "web/a.test.ts",
+            "web/a.spec.js",
+            "go/a_test.go",
+            "conftest.py",
+        ] {
+            assert!(is_test(path), "{path}");
+        }
+        for path in [
+            "api/app/routers/evaluation.py",
+            "backend/testing.rs",
+            "latest.py",
+            "contest/a.py",
+        ] {
+            assert!(!is_test(path), "{path}");
+        }
+    }
+    #[test]
+    fn decorators_are_read_from_the_start_of_a_declaration() {
+        let data = json!({
+            "symbols": [{"name": "continue_after_pause", "start": 2}, {"name": "plain", "start": 7}],
+            "after": "x = 1\n@router.post(\n    \"/{run_id}/continue\", status_code=202)\n@login_required\ndef continue_after_pause():\n    pass\ndef plain():\n    pass\n"
+        });
+        assert_eq!(
+            decorators(&data, "continue_after_pause"),
+            [
+                "@router.post( \"/{run_id}/continue\", status_code=202)",
+                "@login_required"
+            ]
+        );
+        assert!(decorators(&data, "plain").is_empty());
+    }
+    #[test]
+    fn a_short_name_finds_its_only_declaration() {
+        let data = json!({"symbols": [{"name": "Workflow.choice"}, {"name": "run"}, {"name": "A.go"}, {"name": "B as T.go"}]});
+        assert_eq!(
+            declared_name(&data, "a.rs", "choice").unwrap(),
+            "Workflow.choice"
+        );
+        assert_eq!(
+            declared_name(&data, "a.rs", "Workflow::choice").unwrap(),
+            "Workflow.choice"
+        );
+        assert_eq!(declared_name(&data, "a.rs", "run").unwrap(), "run");
+        assert_eq!(declared_name(&data, "a.rs", "B::go").unwrap(), "B as T.go");
+        assert!(
+            declared_name(&data, "a.rs", "go")
+                .unwrap_err()
+                .to_string()
+                .contains("A.go, B as T.go")
+        );
+        assert!(
+            declared_name(&data, "a.rs", "missing")
+                .unwrap_err()
+                .to_string()
+                .contains("Workflow.choice")
+        );
+    }
+    #[test]
+    fn guards_are_the_conditions_around_a_call() {
+        let data = json!({
+            "symbols": [{"name": "handle", "start": 1}],
+            "after": "async fn handle() {\n    let x = 1;\n    if path == \"/api/ask\" {\n        log();\n        if body[\"stream\"] == true {\n            tokio::spawn(async move {\n                answer_stream();\n            });\n        }\n        return answer();\n    }\n}\n"
+        });
+        assert_eq!(
+            guards(&data, "handle", 7),
+            [
+                "    3  if path == \"/api/ask\" {",
+                "    5  if body[\"stream\"] == true {"
+            ]
+        );
+        assert_eq!(
+            guards(&data, "handle", 10),
+            ["    3  if path == \"/api/ask\" {"]
+        );
+        assert!(guards(&data, "handle", 2).is_empty());
+    }
+    #[test]
+    fn bounded_output_says_what_was_cut() {
+        assert!(bounded(&"x".repeat(20), 10).ends_with("10 more bytes not shown"));
+    }
 }

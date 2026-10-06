@@ -2,6 +2,21 @@
 
 This file records the changes in each release of Peekumi. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The one-line installer downloads a public release without a token. Before, it got the file's description in place of the file, and the checksum check failed.
+
+### Contributing
+
+- `CONTRIBUTING.md`, and `docs/EXTENDING.md` with the steps to add a language adapter or an agent provider. Issue forms for both, and a pull request template.
+- Contract tests for language adapters and agent providers. The app takes provider names and the "Commands" switch from the server's agent list, so a new provider needs no change in the app.
+- Release notes come from this changelog. `npm run release -- X.Y.Z` prepares a release, and [RELEASING.md](RELEASING.md) gives the steps.
+- One layout for all code (Prettier and rustfmt), `clippy` with warnings as errors, and a check of the writing rules in the documents. CI runs them with a secret scan and a vulnerability audit on each pull request, and a pull request merges only when CI passes.
+- A code of conduct, a support page, GitHub Discussions, review by the maintainer for each pull request (CODEOWNERS), weekly dependency updates, and triage labels.
+- `docs/EXTENDING.md` also covers tunnel providers, and `test/README.md` tells how to write a browser test.
+
 ## [0.2.0] - 2026-10-06
 
 This is the first public release. Peekumi was called Repo Strata during its development, and the former `strata` command and `STRATA_*` settings still work.

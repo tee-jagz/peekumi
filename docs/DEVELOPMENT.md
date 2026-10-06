@@ -8,10 +8,17 @@ Peekumi uses a Rust backend (Axum/Tokio and SQLite). This backend reads committe
 
 - [frontend/](../frontend/README.md): the browser map, navigation and the review panel.
 - [backend/](../backend/README.md): the API, Git analysis and the persistent cache.
-- [backend/adapters/](../backend/adapters/README.md): the shared language contract and the parser implementations.
+- [backend/adapters/](../backend/adapters/README.md): the shared language contract and the parser implementations. To add a language or an agent provider, see [EXTENDING.md](EXTENDING.md).
 - [scripts/](../scripts/README.md): tools to build, launch, package and benchmark.
 - [test/](../test/README.md): regression tests and browser tests.
 - [docs/](README.md): the product, the architecture and the original design context.
+
+## Layout and lint
+
+- `npm run format` makes the layout of the JavaScript, the CSS, the HTML and the YAML files (Prettier), and of the Rust code (rustfmt). `npm run format:check` only checks it.
+- `npm run lint` runs `clippy` with warnings as errors, and it checks the writing rules of the documents (`scripts/lint-docs.mjs`).
+
+CI runs both on each pull request. The settings are in `.prettierrc.json`, `.prettierignore`, `rustfmt.toml` and `.editorconfig`.
 
 ## Run from a checkout
 
