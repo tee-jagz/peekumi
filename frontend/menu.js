@@ -48,7 +48,8 @@ export function showMenu(target, x, y, spec) {
   const name = document.createElement("strong");
   name.textContent = spec.title;
   head.append(name);
-  if (spec.subtitle) head.append(document.createTextNode(" · " + spec.subtitle));
+  if (spec.subtitle)
+    head.append(document.createTextNode(" · " + spec.subtitle));
   popover.append(head);
   const buttons = [];
   const keys = new Map();
@@ -93,7 +94,10 @@ export function showMenu(target, x, y, spec) {
   const box = popover.getBoundingClientRect(),
     margin = 8;
   const left = Math.min(Math.max(margin, x), innerWidth - box.width - margin);
-  const top = y + box.height + margin <= innerHeight ? y : Math.max(margin, y - box.height);
+  const top =
+    y + box.height + margin <= innerHeight
+      ? y
+      : Math.max(margin, y - box.height);
   popover.style.left = left + "px";
   popover.style.top = top + "px";
   target.classList.add("menu-target");
@@ -114,7 +118,10 @@ export function showMenu(target, x, y, spec) {
       move(-1);
     } else if (event.key === "Tab") closeMenu({ restore: false });
     else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-      const key = event.key === "Enter" && !buttons.includes(document.activeElement) ? "enter" : event.key.toLowerCase();
+      const key =
+        event.key === "Enter" && !buttons.includes(document.activeElement)
+          ? "enter"
+          : event.key.toLowerCase();
       const button = keys.get(key);
       if (button) {
         event.preventDefault();
@@ -180,7 +187,11 @@ export function installContextMenus(menuFor) {
   document.addEventListener(
     "pointermove",
     (event) => {
-      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > SLOP) cancel();
+      if (
+        start &&
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > SLOP
+      )
+        cancel();
     },
     { passive: true },
   );
@@ -217,7 +228,11 @@ export function installContextMenus(menuFor) {
   });
   // The context-menu key, or Shift+F10, on a focused item.
   document.addEventListener("keydown", (event) => {
-    if (open || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+    if (
+      open ||
+      !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
+    )
+      return;
     const element = document.activeElement;
     if (!element || !menuFor(element)) return;
     event.preventDefault();

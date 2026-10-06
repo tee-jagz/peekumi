@@ -20,7 +20,9 @@
 export const THREADS = new Set(["ask", "run"]);
 
 const same = (a, b) =>
-  a.name === b.name && (a.id ?? null) === (b.id ?? null) && (a.explore?.id ?? null) === (b.explore?.id ?? null);
+  a.name === b.name &&
+  (a.id ?? null) === (b.id ?? null) &&
+  (a.explore?.id ?? null) === (b.explore?.id ?? null);
 
 /**
  * Creates the stack.
@@ -40,7 +42,8 @@ export function createNav({ changed }) {
     /** Shows `view`: on top of the stack, or in place of an equal view on top. */
     go(view) {
       const previous = top();
-      if (same(previous, view)) stack[stack.length - 1] = { ...previous, ...view };
+      if (same(previous, view))
+        stack[stack.length - 1] = { ...previous, ...view };
       else stack.push(view);
       after(previous);
     },
@@ -48,7 +51,8 @@ export function createNav({ changed }) {
     back() {
       const previous = top();
       if (stack.length > 1) stack.pop();
-      else if (previous.aspect !== "details") stack[0] = { ...previous, aspect: "details" };
+      else if (previous.aspect !== "details")
+        stack[0] = { ...previous, aspect: "details" };
       else return false;
       after(previous);
       return true;

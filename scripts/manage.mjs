@@ -371,11 +371,14 @@ async function doctor() {
  * Signals cancel download/startup and close the child before returning.
  */
 async function shareCloudflare(c) {
-  console.error("Warning: the Cloudflare URL is PUBLIC and reachable from the internet. Peekumi still requires pairing; keep pairing links private. Traffic passes through Cloudflare.");
+  console.error(
+    "Warning: the Cloudflare URL is PUBLIC and reachable from the internet. Peekumi still requires pairing; keep pairing links private. Traffic passes through Cloudflare.",
+  );
   const controller = new AbortController();
   const cancel = () => controller.abort();
   const provider = createCloudflareProvider({ state });
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, cancel);
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
+    process.on(signal, cancel);
   try {
     const token = (await readFile(join(state, "access-token"), "utf8")).trim();
     if (!c.secureCookie) {
@@ -388,20 +391,33 @@ async function shareCloudflare(c) {
     const status = provider.status();
     await provider.expose(c.port, status, { signal: controller.signal });
     const url = provider.url(status);
-    console.log(`Public phone URL: ${url}/\nPrivate pairing link: ${url}/#token=${token}\nKeep this command running. Ctrl+C closes the tunnel; the next run gets a new URL.`);
+    console.log(
+      `Public phone URL: ${url}/\nPrivate pairing link: ${url}/#token=${token}\nKeep this command running. Ctrl+C closes the tunnel; the next run gets a new URL.`,
+    );
     const result = await status.done;
     if (!controller.signal.aborted)
-      throw result.error || new Error(`cloudflared exited (${result.code ?? result.signal}); run peekumi share --tunnel cloudflare again`);
+      throw (
+        result.error ||
+        new Error(
+          `cloudflared exited (${result.code ?? result.signal}); run peekumi share --tunnel cloudflare again`,
+        )
+      );
   } catch (error) {
     if (!controller.signal.aborted) throw error;
   } finally {
     await provider.close();
-    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.off(signal, cancel);
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
+      process.off(signal, cancel);
   }
 }
 async function main() {
   const [command = "help", sub, ...args] = process.argv.slice(2);
-  if (command !== "share" && process.argv.slice(3).some((arg) => arg === "--tunnel" || arg.startsWith("--tunnel=")))
+  if (
+    command !== "share" &&
+    process.argv
+      .slice(3)
+      .some((arg) => arg === "--tunnel" || arg.startsWith("--tunnel="))
+  )
     throw new Error("--tunnel is supported only by peekumi share");
   if (command === "doctor") return doctor();
   if (command === "repo") {

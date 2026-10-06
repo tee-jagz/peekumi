@@ -25,7 +25,10 @@ if (start < 0) {
 let end = lines.findIndex((line, i) => i > start && line.startsWith("## "));
 if (end < 0) end = lines.length;
 // The section's own heading is the release title; the notes start after it.
-const section = lines.slice(start + 1, end).join("\n").trim();
+const section = lines
+  .slice(start + 1, end)
+  .join("\n")
+  .trim();
 
 process.stdout.write(`## Install
 

@@ -39,7 +39,9 @@ pub fn type_name(ty: &syn::Type) -> Option<String> {
         _ => None,
     }
 }
-fn trait_bound(bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>) -> Option<String> {
+fn trait_bound(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Option<String> {
     bounds.iter().find_map(|b| match b {
         syn::TypeParamBound::Trait(t) => t.path.segments.last().map(|s| format!("dyn {}", s.ident)),
         _ => None,
@@ -47,7 +49,10 @@ fn trait_bound(bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::to
 }
 /// [`type_name`] for a type written as text, such as a struct field's type.
 pub fn type_name_of(written: &str) -> Option<String> {
-    syn::parse_str::<syn::Type>(written).ok().as_ref().and_then(type_name)
+    syn::parse_str::<syn::Type>(written)
+        .ok()
+        .as_ref()
+        .and_then(type_name)
 }
 /// The expressions in a macro's arguments: split at top-level commas and semicolons, with
 /// a leading `"key":` or `key:` removed (JSON-like and struct-like macros), and braces or
@@ -79,7 +84,9 @@ fn macro_exprs(tokens: TokenStream, out: &mut Vec<syn::Expr>) {
     };
     for tree in tokens {
         match &tree {
-            TokenTree::Punct(p) if p.as_char() == ',' || p.as_char() == ';' => flush(&mut piece, out),
+            TokenTree::Punct(p) if p.as_char() == ',' || p.as_char() == ';' => {
+                flush(&mut piece, out)
+            }
             _ => piece.push(tree),
         }
     }
@@ -163,9 +170,18 @@ impl Calls<'_> {
         }
     }
     /// A call to method `name` of `ty`, after walking `fields`; the resolver finds it.
-    fn record_method(&mut self, target: String, ty: String, fields: Vec<String>, name: String, line: usize) {
-        self.out.push(json!({"source":self.owner,"target":target,"kind":"calls","line":line,
-            "lookup":{"method":{"type":ty,"fields":fields,"name":name}}}));
+    fn record_method(
+        &mut self,
+        target: String,
+        ty: String,
+        fields: Vec<String>,
+        name: String,
+        line: usize,
+    ) {
+        self.out.push(
+            json!({"source":self.owner,"target":target,"kind":"calls","line":line,
+            "lookup":{"method":{"type":ty,"fields":fields,"name":name}}}),
+        );
     }
     fn record(&mut self, target: String, kind: &str, line: usize, dynamic: bool) {
         let root = target.split("::").next().unwrap_or("");
@@ -210,7 +226,12 @@ impl<'ast> Visit<'ast> for Calls<'_> {
         // `Self::method(...)` and `Type::method(...)` for a type declared elsewhere.
         let method = match &*node.func {
             syn::Expr::Path(p) if p.qself.is_none() && p.path.segments.len() >= 2 => {
-                let segments: Vec<String> = p.path.segments.iter().map(|s| s.ident.to_string()).collect();
+                let segments: Vec<String> = p
+                    .path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.to_string())
+                    .collect();
                 let (owner, name) = (&segments[segments.len() - 2], &segments[segments.len() - 1]);
                 let local = format!("{}{}", self.prefix, target.replace("::", "."));
                 if owner == "Self" && segments.len() == 2 {
@@ -238,7 +259,9 @@ impl<'ast> Visit<'ast> for Calls<'_> {
         let target = format!("{}.{}", compact(&node.receiver), node.method);
         let line = node.span().start().line;
         match self.receiver(&node.receiver) {
-            Some((ty, fields)) => self.record_method(target, ty, fields, node.method.to_string(), line),
+            Some((ty, fields)) => {
+                self.record_method(target, ty, fields, node.method.to_string(), line)
+            }
             None => self.record(target, "calls", line, true),
         }
         visit::visit_expr_method_call(self, node);

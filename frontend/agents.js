@@ -17,14 +17,17 @@ const JOBS = {
   task: { title: "Tasks", note: "Changes code", heading: "Tasks use" },
 };
 /** A typed model name: the same rule the server checks. */
-const validModel = (name) => /^[A-Za-z0-9._:/@[\]][A-Za-z0-9._:/@[\]-]{0,99}$/.test(name);
+const validModel = (name) =>
+  /^[A-Za-z0-9._:/@[\]][A-Za-z0-9._:/@[\]-]{0,99}$/.test(name);
 /** An effort level as a label: "high" → "High", "xhigh" → "Extra high". */
 const title = (word) =>
   word === "xhigh" ? "Extra high" : word[0].toUpperCase() + word.slice(1);
 /** Effort levels from least to most, so a list joined from several models reads in order. */
 const ORDER = ["auto", "minimal", "low", "medium", "high", "xhigh", "max"];
 const inOrder = (levels) =>
-  [...new Set(levels)].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
+  [...new Set(levels)].sort(
+    (a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99),
+  );
 /** A provider's models for `job`, after one "Default" row for the model it uses on its own
  * (none for a provider without a default model, such as OpenRouter). */
 function modelsOf(agent, job) {
@@ -86,10 +89,14 @@ export function createAgents({ api, repo }) {
     const choice = current(job),
       agent = catalog?.agents.find((a) => a.id === choice?.agent);
     if (!agent) return null;
-    const model = modelsOf(agent, job).find((m) => m.id === (choice.model ?? null));
+    const model = modelsOf(agent, job).find(
+      (m) => m.id === (choice.model ?? null),
+    );
     // A provider with no model yet (none saved, or an old choice) says so, never "null".
     const name = `${agent.short} · ${model ? model.label : choice.model || "choose a model"}`;
-    return choice.effort && choice.effort !== "auto" ? `${name} · ${choice.effort}` : name;
+    return choice.effort && choice.effort !== "auto"
+      ? `${name} · ${choice.effort}`
+      : name;
   }
   /** The full name of the agent with `id`, such as "Claude Code". */
   const label = (id) => catalog?.agents.find((a) => a.id === id)?.label || id;
@@ -156,17 +163,26 @@ export function createAgents({ api, repo }) {
         row.type = "button";
         const text = el("span", "agents-text");
         text.append(el("strong", "", job.title), el("small", "", job.note));
-        row.append(text, el("span", "agents-value", describe(id) || ""), el("span", "agents-chevron", "›"));
+        row.append(
+          text,
+          el("span", "agents-value", describe(id) || ""),
+          el("span", "agents-chevron", "›"),
+        );
         row.onclick = () => list(id);
         rows.append(row);
       }
-      box.replaceChildren(head("Agents"), rows, el("p", "read-note", "Saved on this device, for this repository."));
+      box.replaceChildren(
+        head("Agents"),
+        rows,
+        el("p", "read-note", "Saved on this device, for this repository."),
+      );
     };
     // One job's choice: the provider, then one of its models, then that model's effort.
     const list = (job) => {
       const choice = current(job),
         agents = catalog.agents.filter((a) => a.jobs.includes(job)),
-        agent = agents.find((a) => a.id === (trying || choice?.agent)) || agents[0];
+        agent =
+          agents.find((a) => a.id === (trying || choice?.agent)) || agents[0];
       const section = (text) => el("p", "agents-label", text);
       // Provider: one button each, with its problem when it is not ready.
       const providers = el("div", "seg agents-providers");
@@ -190,7 +206,8 @@ export function createAgents({ api, repo }) {
           }
           trying = null;
           // Without a default model, start on the provider's first model.
-          const first = a.defaultModel === false ? modelsOf(a, job)[0]?.id ?? null : null;
+          const first =
+            a.defaultModel === false ? (modelsOf(a, job)[0]?.id ?? null) : null;
           set(job, { agent: a.id, model: first, effort: "auto" });
           list(job);
         };
@@ -198,10 +215,17 @@ export function createAgents({ api, repo }) {
       }
       const problems = agents
         .filter((a) => !a.status.ready && !a.key)
-        .map((a) => el("small", "agents-problem", `${a.label}: ${a.status.reason}`));
+        .map((a) =>
+          el("small", "agents-problem", `${a.label}: ${a.status.reason}`),
+        );
       // A provider with an API key: the key form until a key is saved, then its key row.
       if (agent.key && (!agent.key.set || keying)) {
-        box.replaceChildren(head(JOBS[job].heading, main), section("Provider"), providers, ...keyForm(agent, job));
+        box.replaceChildren(
+          head(JOBS[job].heading, main),
+          section("Provider"),
+          providers,
+          ...keyForm(agent, job),
+        );
         box.querySelector(".agents-key input")?.focus();
         return;
       }
@@ -210,7 +234,10 @@ export function createAgents({ api, repo }) {
         group = el("div", "agents-rows");
       group.setAttribute("role", "radiogroup");
       group.setAttribute("aria-label", "Model");
-      const chosen = models.find((m) => m.id === (choice?.agent === agent.id ? choice.model ?? null : null));
+      const chosen = models.find(
+        (m) =>
+          m.id === (choice?.agent === agent.id ? (choice.model ?? null) : null),
+      );
       const option = (title, note, checked, pick) => {
         const row = el("label", "agents-option");
         const radio = el("input");
@@ -230,7 +257,10 @@ export function createAgents({ api, repo }) {
       search.setAttribute("aria-label", "Search models");
       search.value = query;
       const shown = (m) =>
-        !query || `${m.label} ${m.id} ${m.note}`.toLowerCase().includes(query.toLowerCase());
+        !query ||
+        `${m.label} ${m.id} ${m.note}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
       search.oninput = () => {
         query = search.value;
         for (const row of group.querySelectorAll(".agents-option[data-model]"))
@@ -247,7 +277,9 @@ export function createAgents({ api, repo }) {
             { hidden: !shown(model) },
           ),
         );
-      group.querySelectorAll(".agents-option").forEach((row, i) => (row.dataset.model = i));
+      group
+        .querySelectorAll(".agents-option")
+        .forEach((row, i) => (row.dataset.model = i));
       group.append(
         option("Other model", "Type its name", typing || !chosen, () => {
           typing = true;
@@ -269,11 +301,16 @@ export function createAgents({ api, repo }) {
       use.onclick = () => {
         const typed = name.value.trim();
         if (!validModel(typed)) {
-          problem.textContent = "Use only letters, digits and ._:/@-[] in a model name.";
+          problem.textContent =
+            "Use only letters, digits and ._:/@-[] in a model name.";
           return;
         }
         typing = false;
-        set(job, { agent: agent.id, model: typed, effort: choice?.effort || "auto" });
+        set(job, {
+          agent: agent.id,
+          model: typed,
+          effort: choice?.effort || "auto",
+        });
         list(job);
       };
       const line = el("div", "agents-custom-line");
@@ -289,9 +326,16 @@ export function createAgents({ api, repo }) {
       for (const effort of ["auto", ...levels]) {
         const b = el("button", "agents-effort", title(effort));
         b.type = "button";
-        b.setAttribute("aria-pressed", String((choice?.effort || "auto") === effort));
+        b.setAttribute(
+          "aria-pressed",
+          String((choice?.effort || "auto") === effort),
+        );
         b.onclick = () => {
-          set(job, { agent: agent.id, model: choice?.agent === agent.id ? choice.model ?? null : null, effort });
+          set(job, {
+            agent: agent.id,
+            model: choice?.agent === agent.id ? (choice.model ?? null) : null,
+            effort,
+          });
           list(job);
         };
         efforts.append(b);
@@ -303,7 +347,8 @@ export function createAgents({ api, repo }) {
       if (agent.key?.set) {
         const row = el("div", "agents-keyrow");
         row.append(el("span", "", `API key •••• ${agent.key.end}`));
-        if (agent.key.fromEnvironment) row.append(el("small", "", "From PEEKUMI_OPENROUTER_KEY"));
+        if (agent.key.fromEnvironment)
+          row.append(el("small", "", "From PEEKUMI_OPENROUTER_KEY"));
         else {
           const replace = el("button", "btn link-button", "Replace");
           replace.type = "button";
@@ -311,7 +356,11 @@ export function createAgents({ api, repo }) {
             keying = true;
             list(job);
           };
-          const remove = el("button", "btn link-button agents-remove", "Remove");
+          const remove = el(
+            "button",
+            "btn link-button agents-remove",
+            "Remove",
+          );
           remove.type = "button";
           remove.onclick = async () => {
             catalog = await api("/api/agents/openrouter-key", {
@@ -334,7 +383,8 @@ export function createAgents({ api, repo }) {
           ),
         );
       }
-      if (agent.notes?.[job]) keyRow.unshift(el("p", "read-note", agent.notes[job]));
+      if (agent.notes?.[job])
+        keyRow.unshift(el("p", "read-note", agent.notes[job]));
       box.replaceChildren(
         head(JOBS[job].heading, main),
         section("Provider"),
@@ -351,7 +401,9 @@ export function createAgents({ api, repo }) {
           "p",
           "read-note",
           `${auto} Higher effort works more carefully, but slower.` +
-            (job === "task" ? " A new task uses this; each task keeps the choice it started with." : ""),
+            (job === "task"
+              ? " A new task uses this; each task keeps the choice it started with."
+              : ""),
         ),
       );
     };
@@ -380,7 +432,10 @@ export function createAgents({ api, repo }) {
           const fresh = catalog.agents.find((a) => a.id === agent.id);
           const first = modelsOf(fresh, job)[0]?.id ?? null;
           // The key works: now the provider becomes the choice, on its first model.
-          if (trying === agent.id || (current(job)?.agent === agent.id && !current(job).model))
+          if (
+            trying === agent.id ||
+            (current(job)?.agent === agent.id && !current(job).model)
+          )
             set(job, { agent: agent.id, model: first, effort: "auto" });
           trying = null;
           list(job);
@@ -415,7 +470,9 @@ export function createAgents({ api, repo }) {
   const problem = (job) => {
     const choice = current(job),
       agent = catalog?.agents.find((a) => a.id === choice?.agent);
-    return agent && !agent.status.ready ? `${agent.label}: ${agent.status.reason}` : null;
+    return agent && !agent.status.ready
+      ? `${agent.label}: ${agent.status.reason}`
+      : null;
   };
   return { load, using, current, describe, label, problem, open };
 }

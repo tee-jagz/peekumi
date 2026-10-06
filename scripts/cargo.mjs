@@ -10,7 +10,9 @@ const installed = path.join(
   process.platform === "win32" ? "cargo.exe" : "cargo",
 );
 const cargo =
-  process.env.PEEKUMI_CARGO || process.env.STRATA_CARGO || (existsSync(installed) ? installed : "cargo");
+  process.env.PEEKUMI_CARGO ||
+  process.env.STRATA_CARGO ||
+  (existsSync(installed) ? installed : "cargo");
 const proc = spawn(cargo, process.argv.slice(2), {
   cwd: path.resolve(import.meta.dirname, ".."),
   stdio: "inherit",

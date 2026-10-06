@@ -71,7 +71,11 @@ function show(select, trigger) {
       heading.className = "frost-group";
       heading.setAttribute("role", "presentation");
       heading.textContent = group.label;
-      headings.push({ heading, from: items.length, to: items.length + group.children.length });
+      headings.push({
+        heading,
+        from: items.length,
+        to: items.length + group.children.length,
+      });
       menu.append(heading);
     }
     const item = document.createElement("div");

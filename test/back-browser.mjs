@@ -10,14 +10,18 @@ try {
     { width: 390, height: 844 },
     { width: 1366, height: 768 },
   ]) {
-    const f = await fixture({ files: { "backend/lookup.py": "def route():\n    return 1\n" } });
+    const f = await fixture({
+      files: { "backend/lookup.py": "def route():\n    return 1\n" },
+    });
     const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     try {
       await page.goto("about:blank");
       await page.goto(f.server.url + "/#token=" + f.server.token);
-      const backend = page.locator('.sheet[data-front="true"] .node[data-path="backend"]');
+      const backend = page.locator(
+        '.sheet[data-front="true"] .node[data-path="backend"]',
+      );
       await backend.waitFor();
       const crumbs = () => page.locator(".crumbs").textContent();
       const back = async () => {
@@ -27,18 +31,36 @@ try {
       // Into backend, Conversations open, and a context menu on a card.
       await backend.click();
       await backend.click();
-      await page.waitForFunction(() => /backend/.test(document.querySelector(".crumbs")?.textContent || ""));
+      await page.waitForFunction(() =>
+        /backend/.test(document.querySelector(".crumbs")?.textContent || ""),
+      );
       await page.locator("#openConversations").click();
-      await page.waitForFunction(() => document.querySelector("#panel").dataset.view === "conversations");
-      await page.locator('.sheet[data-front="true"] .node[data-path="backend/lookup.py"]').click({ button: "right" });
+      await page.waitForFunction(
+        () => document.querySelector("#panel").dataset.view === "conversations",
+      );
+      await page
+        .locator(
+          '.sheet[data-front="true"] .node[data-path="backend/lookup.py"]',
+        )
+        .click({ button: "right" });
       await page.locator(".context-menu").waitFor();
       // Back: the menu closes; nothing else changes.
       await back();
       assert.equal(await page.locator(".context-menu").count(), 0);
-      assert.equal(await page.evaluate(() => document.querySelector("#panel").dataset.view), "conversations");
+      assert.equal(
+        await page.evaluate(
+          () => document.querySelector("#panel").dataset.view,
+        ),
+        "conversations",
+      );
       // Back: the page gives way to the map's details.
       await back();
-      assert.equal(await page.evaluate(() => document.querySelector("#panel").dataset.view), "details");
+      assert.equal(
+        await page.evaluate(
+          () => document.querySelector("#panel").dataset.view,
+        ),
+        "details",
+      );
       assert.match(await crumbs(), /backend/);
       // Back: one map level up.
       await back();

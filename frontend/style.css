@@ -1382,7 +1382,8 @@ button {
 :root[data-theme="dark"] .p-sent {
   color: var(--mid);
 }
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .app {
     grid-template-columns: minmax(0, 1fr) 400px;
     grid-template-rows: auto minmax(0, 1fr);
@@ -1758,7 +1759,8 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel {
     height: auto;
   }
@@ -2085,7 +2087,8 @@ button {
   line-height: 1.5;
   opacity: 0.75;
 }
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel {
     border-radius: 20px;
     border: 1px solid var(--glass-line);
@@ -2510,7 +2513,9 @@ button {
 #reviewScroll {
   padding-bottom: 12px;
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel {
     height: calc(var(--viewer-height, 100dvh) * 0.4);
     max-height: none;
@@ -2530,7 +2535,9 @@ button {
     height: calc(var(--viewer-height, 100dvh) - 100px);
   }
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .top {
     grid-row: 1;
   }
@@ -2773,7 +2780,9 @@ select option {
   font-size: 11px;
   padding: 6px 9px;
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel {
     height: 232px;
     max-height: calc(var(--viewer-height, 100dvh) - 54px);
@@ -2804,7 +2813,8 @@ select option {
     height: calc(var(--viewer-height, 100dvh) - 68px);
   }
 }
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   #sheetHandle {
     display: none;
   }
@@ -2815,7 +2825,9 @@ select option {
 .deck {
   inset: auto;
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel[data-height="peek"] {
     height: auto;
   }
@@ -2903,7 +2915,9 @@ select option {
 .legend-line.violation {
   border-color: var(--del);
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel[data-dragging] #reviewScroll,
   .panel[data-settling] #reviewScroll {
     display: block;
@@ -2952,7 +2966,9 @@ select option {
   width: min(320px, 100%);
   max-height: min(340px, 35dvh);
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .canvas-controls {
     gap: 2px;
   }
@@ -2977,24 +2993,30 @@ select option {
 }
 
 /* Expanded Details contains the complete contract; do not repeat the compact copy. */
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   #selectionContract {
     display: none;
   }
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel:not([data-height="peek"]) #selectionContract,
   .panel[data-inspection="true"] #selectionContract {
     display: none;
   }
 }
 
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel[data-view="details"] #selectionSummary {
     display: none;
   }
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel[data-view="details"]:not([data-height="peek"]) #selectionSummary {
     display: none;
   }
@@ -3176,7 +3198,6 @@ select option {
   max-width: 100%;
 }
 
-
 /* The branch picker changes the viewed Git ref, never the working checkout. */
 .top > div:first-child {
   min-width: 0;
@@ -3198,7 +3219,9 @@ select option {
   border-color: var(--accent);
   color: var(--accent);
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   #branchPicker {
     max-width: 180px;
   }
@@ -3260,7 +3283,8 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-}.top-actions {
+}
+.top-actions {
   gap: 6px;
 }
 .icon-seg button {
@@ -3878,7 +3902,9 @@ select.visually-hidden {
 /* Smooth sheet motion: the sheet slides over a map that keeps its size (see
    freezeStage), and only top-level glass surfaces blur. A blur nested inside
    another frosted surface only re-blurs that surface and costs a pass per frame. */
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel {
     position: relative;
     z-index: 20;
@@ -3900,7 +3926,9 @@ select.visually-hidden {
   padding: 2px 12px 10px;
   border: 0;
 }
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel[data-height="peek"] #helperTools,
   .panel[data-dragging] #helperTools,
   .panel[data-settling][data-height="peek"] #helperTools,
@@ -4223,7 +4251,9 @@ details.p-section[open] > summary::before {
   border-radius: 0;
 }
 /* Expanded views show the full content, so the peek summary would only repeat it. */
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .panel:not([data-height="peek"]):not([data-dragging]) #selectionSummary,
   .panel:not([data-height="peek"]):not([data-dragging]) #selectionContract {
     display: none;
@@ -4251,7 +4281,7 @@ details.p-section[open] > summary::before {
   background: none;
   border: 0;
   box-shadow: none;
-}/* The run cue belongs to the overview; inspection views keep their space for content. */
+} /* The run cue belongs to the overview; inspection views keep their space for content. */
 .panel:not([data-view="details"]) #runBar {
   display: none;
 }
@@ -4328,7 +4358,9 @@ details.p-section[open] > summary::before {
 
 /* While typing at peek the sheet keeps its own size, so the map stays readable above it.
    Map controls and the commit strip step aside until the keyboard closes. */
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .keyboard-open .panel[data-height="peek"] {
     height: auto;
     max-height: calc(var(--viewer-height, 100dvh) - 96px);
@@ -4367,7 +4399,11 @@ details.p-section[open] > summary::before {
   display: none;
 }
 .contract-lines dd.contract-line[data-more="true"] {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 28px),
+    transparent
+  );
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 .contract-token {
@@ -4821,7 +4857,8 @@ details.p-section[open] > summary::before {
   color: var(--ink);
   overflow: auto;
 }
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .merge-dialog {
     margin: auto;
   }
@@ -4963,50 +5000,127 @@ details.p-section[open] > summary::before {
   animation: peek-look 5s ease-in-out infinite;
 }
 @keyframes peek-blink {
-  0%, 90%, 100% { transform: scaleY(0); }
-  94% { transform: scaleY(1); }
+  0%,
+  90%,
+  100% {
+    transform: scaleY(0);
+  }
+  94% {
+    transform: scaleY(1);
+  }
 }
 @keyframes peek-glance {
-  0%, 38%, 100% { transform: translate(0, 0); }
-  46%, 60% { transform: translate(-10px, 2px); }
-  70%, 86% { transform: translate(2px, -2px); }
+  0%,
+  38%,
+  100% {
+    transform: translate(0, 0);
+  }
+  46%,
+  60% {
+    transform: translate(-10px, 2px);
+  }
+  70%,
+  86% {
+    transform: translate(2px, -2px);
+  }
 }
 @keyframes peek-bob {
-  0%, 100% { transform: translateY(7px); }
-  50% { transform: translateY(-3px); }
+  0%,
+  100% {
+    transform: translateY(7px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
 }
 @keyframes peek-scan {
-  0%, 100% { transform: translateX(-10px); }
-  50% { transform: translateX(3px); }
+  0%,
+  100% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
 }
 @keyframes peek-dot {
-  0%, 100% { opacity: 0.25; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 @keyframes peek-hop {
-  0%, 55%, 100% { transform: translateY(0); }
-  20% { transform: translateY(-14px) scaleY(1.03); }
-  38% { transform: translateY(0) scaleY(0.96); }
+  0%,
+  55%,
+  100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-14px) scaleY(1.03);
+  }
+  38% {
+    transform: translateY(0) scaleY(0.96);
+  }
 }
 @keyframes peek-twinkle {
-  0%, 100% { transform: scale(0.4); opacity: 0.2; }
-  25% { transform: scale(1); opacity: 1; }
-  55% { transform: scale(0.5); opacity: 0.3; }
+  0%,
+  100% {
+    transform: scale(0.4);
+    opacity: 0.2;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.5);
+    opacity: 0.3;
+  }
 }
 @keyframes peek-sway {
-  0%, 100% { transform: translate(-6px, 4px); }
-  50% { transform: translate(2px, 5px); }
+  0%,
+  100% {
+    transform: translate(-6px, 4px);
+  }
+  50% {
+    transform: translate(2px, 5px);
+  }
 }
 @keyframes peek-up {
-  0%, 8% { transform: translateY(64px); }
-  22%, 78% { transform: translateY(0); }
-  92%, 100% { transform: translateY(64px); }
+  0%,
+  8% {
+    transform: translateY(64px);
+  }
+  22%,
+  78% {
+    transform: translateY(0);
+  }
+  92%,
+  100% {
+    transform: translateY(64px);
+  }
 }
 @keyframes peek-look {
-  0%, 26% { transform: translate(0, 0); }
-  36%, 46% { transform: translate(-10px, 1px); }
-  56%, 66% { transform: translate(4px, 0); }
-  76%, 100% { transform: translate(0, 0); }
+  0%,
+  26% {
+    transform: translate(0, 0);
+  }
+  36%,
+  46% {
+    transform: translate(-10px, 1px);
+  }
+  56%,
+  66% {
+    transform: translate(4px, 0);
+  }
+  76%,
+  100% {
+    transform: translate(0, 0);
+  }
 }
 /* Working: reading, while its layers lift and settle in turn. */
 .peek.is-working .lid {
@@ -5088,54 +5202,141 @@ details.p-section[open] > summary::before {
   transform: translateX(-6px) rotate(-3deg);
 }
 @keyframes peek-read {
-  0%, 100% { transform: translate(-9px, 9px); }
-  50% { transform: translate(6px, 9px); }
+  0%,
+  100% {
+    transform: translate(-9px, 9px);
+  }
+  50% {
+    transform: translate(6px, 9px);
+  }
 }
 @keyframes peek-place {
-  0%, 45%, 100% { transform: translateY(0) scaleX(1); }
-  15% { transform: translateY(-6px) scaleX(0.94); }
-  28% { transform: translateY(1px) scaleX(1.02); }
+  0%,
+  45%,
+  100% {
+    transform: translateY(0) scaleX(1);
+  }
+  15% {
+    transform: translateY(-6px) scaleX(0.94);
+  }
+  28% {
+    transform: translateY(1px) scaleX(1.02);
+  }
 }
 @keyframes peek-dive {
-  0%, 12% { transform: translateY(0); }
-  24%, 40% { transform: translateY(50px); }
-  54%, 100% { transform: translateY(0); }
+  0%,
+  12% {
+    transform: translateY(0);
+  }
+  24%,
+  40% {
+    transform: translateY(50px);
+  }
+  54%,
+  100% {
+    transform: translateY(0);
+  }
 }
 @keyframes peek-dart {
-  0%, 54% { transform: translate(0, 0); }
-  62%, 72% { transform: translate(-10px, 1px); }
-  80%, 92% { transform: translate(5px, 0); }
-  100% { transform: translate(0, 0); }
+  0%,
+  54% {
+    transform: translate(0, 0);
+  }
+  62%,
+  72% {
+    transform: translate(-10px, 1px);
+  }
+  80%,
+  92% {
+    transform: translate(5px, 0);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
 }
 @keyframes peek-perk {
-  0%, 30%, 100% { transform: translateY(0); }
-  10% { transform: translateY(-12px) scaleY(1.03); }
-  20% { transform: translateY(0) scaleY(0.97); }
+  0%,
+  30%,
+  100% {
+    transform: translateY(0);
+  }
+  10% {
+    transform: translateY(-12px) scaleY(1.03);
+  }
+  20% {
+    transform: translateY(0) scaleY(0.97);
+  }
 }
 @keyframes peek-merge2 {
-  0%, 15%, 92%, 100% { transform: none; opacity: 1; }
-  40%, 80% { transform: translateY(-23px) scaleX(1.27); opacity: 0; }
+  0%,
+  15%,
+  92%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+  40%,
+  80% {
+    transform: translateY(-23px) scaleX(1.27);
+    opacity: 0;
+  }
 }
 @keyframes peek-merge3 {
-  0%, 22%, 92%, 100% { transform: none; opacity: 1; }
-  47%, 80% { transform: translateY(-44px) scaleX(1.81); opacity: 0; }
+  0%,
+  22%,
+  92%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+  47%,
+  80% {
+    transform: translateY(-44px) scaleX(1.81);
+    opacity: 0;
+  }
 }
 @keyframes peek-shine {
-  0%, 45%, 86%, 100% { opacity: 0; }
-  56%, 76% { opacity: 1; }
+  0%,
+  45%,
+  86%,
+  100% {
+    opacity: 0;
+  }
+  56%,
+  76% {
+    opacity: 1;
+  }
 }
 @keyframes peek-breathe {
-  0%, 100% { transform: translateY(12px) scaleY(1); }
-  50% { transform: translateY(12px) scaleY(1.035); }
+  0%,
+  100% {
+    transform: translateY(12px) scaleY(1);
+  }
+  50% {
+    transform: translateY(12px) scaleY(1.035);
+  }
 }
 @keyframes peek-drift {
-  0% { opacity: 0; transform: translate(0, 0); }
-  30% { opacity: 0.9; }
-  100% { opacity: 0; transform: translate(12px, -26px); }
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(12px, -26px);
+  }
 }
 @keyframes peek-down {
-  0%, 100% { transform: translate(-6px, 8px); }
-  50% { transform: translate(1px, 8px); }
+  0%,
+  100% {
+    transform: translate(-6px, 8px);
+  }
+  50% {
+    transform: translate(1px, 8px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .peek * {
@@ -5216,7 +5417,8 @@ details.p-section[open] > summary::before {
   cursor: pointer;
 }
 .panel .ask-message .code-link code {
-  text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+  text-decoration: underline dotted
+    color-mix(in srgb, var(--accent) 70%, transparent);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
@@ -6492,7 +6694,8 @@ a.pr-link .glyph {
   cursor: pointer;
 }
 .panel .session-log .code-link code {
-  text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+  text-decoration: underline dotted
+    color-mix(in srgb, var(--accent) 70%, transparent);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
@@ -6919,7 +7122,9 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 /* A phone's header: the name and the buttons share the first row, and the comparison line has
    the second row to itself, so the branch name never shrinks to a letter. (Its popover is
    placed from the comparison line, so it moves with it.) */
-@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
+@media (max-width: 639px),
+  (max-width: 899px) and (min-height: 501px),
+  (max-width: 899px) and (orientation: portrait) {
   .top {
     flex-wrap: wrap;
     row-gap: 0;
@@ -7038,7 +7243,8 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 }
 /* On a wide screen the name has the first row, and the comparison and the notes share the
    second, as on a phone. */
-@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+@media (min-width: 900px),
+  (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .title-block {
     flex-direction: row;
     flex-wrap: wrap;
@@ -7374,7 +7580,6 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 #reviewActions {
   min-height: 30px;
 }
-
 
 /* A small phone (360 pixels): the level and tool groups keep one row at the bottom of the
    map, with 32px buttons, so they cover less of it. */

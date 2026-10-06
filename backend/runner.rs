@@ -112,7 +112,9 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
                 .map(|r| r["cancelRequested"] == true)
                 .unwrap_or(false)
         };
-        match crate::task_agent::run(store, id, token, &run, &worktree, &mut out, cancelled, graph) {
+        match crate::task_agent::run(
+            store, id, token, &run, &worktree, &mut out, cancelled, graph,
+        ) {
             Ok(done) => done,
             Err(e) => ("failed", e.to_string()),
         }
@@ -128,7 +130,9 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
                 graph,
                 session: None,
             })
-            .context("This task's provider cannot start; check it in Agents (for OpenRouter, the key)")?;
+            .context(
+                "This task's provider cannot start; check it in Agents (for OpenRouter, the key)",
+            )?;
         command
             .current_dir(&worktree)
             .env("PEEKUMI_REPORT_TOKEN", token)
@@ -145,7 +149,16 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
             command.process_group(0);
         }
         let task = run["task"].as_str().unwrap().to_string();
-        supervise(store, id, &mut repo_lock, &mut command, task, log, token, json!({"worktree": worktree}))?
+        supervise(
+            store,
+            id,
+            &mut repo_lock,
+            &mut command,
+            task,
+            log,
+            token,
+            json!({"worktree": worktree}),
+        )?
     };
     repo_lock.set_len(0)?;
     let results = store
@@ -217,7 +230,11 @@ fn supervise(
     let (status, message) = loop {
         if let Some(exit) = child.try_wait()? {
             break (
-                if exit.success() { "completed" } else { "failed" },
+                if exit.success() {
+                    "completed"
+                } else {
+                    "failed"
+                },
                 if exit.success() {
                     format!("Agent exited with {exit}. Review each report before verification.")
                 } else {
@@ -230,7 +247,10 @@ fn supervise(
             stop_group(pid);
             let _ = child.kill();
             let _ = child.wait();
-            break ("cancelled", "Agent stopped by owner or one-hour time limit.".into());
+            break (
+                "cancelled",
+                "Agent stopped by owner or one-hour time limit.".into(),
+            );
         }
         std::thread::sleep(Duration::from_millis(300));
     };
@@ -250,8 +270,18 @@ pub fn launch_session(store: Workflow, id: String) {
                 Ok(true) => continue,
                 Ok(false) => break,
                 Err(e) => {
-                    let _ = append(&store, &id, json!({"type": "peekumi.error", "message": e.to_string()}));
-                    let _ = store.close_turn(&id, current_results(&store, &id), None, None, Some(e.to_string()));
+                    let _ = append(
+                        &store,
+                        &id,
+                        json!({"type": "peekumi.error", "message": e.to_string()}),
+                    );
+                    let _ = store.close_turn(
+                        &id,
+                        current_results(&store, &id),
+                        None,
+                        None,
+                        Some(e.to_string()),
+                    );
                     // Messages sent during a failed turn wait for the owner's next message.
                     let _ = store.update(|v| {
                         let r = crate::workflow::find_mut(v, "runs", &id)?;
@@ -270,7 +300,9 @@ pub fn launch_session(store: Workflow, id: String) {
 /// runs the agent so that it continues its conversation, and closes the turn. Returns true
 /// when more messages wait.
 fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
-    let common = store.repo.join(store.git(&["rev-parse", "--git-common-dir"])?);
+    let common = store
+        .repo
+        .join(store.git(&["rev-parse", "--git-common-dir"])?);
     let mut repo_lock = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -283,10 +315,15 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     let mut prior = String::new();
     repo_lock.read_to_string(&mut prior)?;
     if let Ok(pid) = prior.trim().parse::<u32>() {
-        ensure!(!alive(pid), "An agent from an interrupted Peekumi instance is still running");
+        ensure!(
+            !alive(pid),
+            "An agent from an interrupted Peekumi instance is still running"
+        );
     }
     let token = crate::random_token();
-    let Some((turn, messages, run)) = store.take_turn(id, &crate::engine::hash(token.as_bytes()))? else {
+    let Some((turn, messages, run)) =
+        store.take_turn(id, &crate::engine::hash(token.as_bytes()))?
+    else {
         return Ok(false);
     };
     let dir = store.state.join("runs").join(id);
@@ -323,18 +360,32 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
                 })
                 .collect();
             let text = m["text"].as_str().unwrap_or("");
-            if parts.is_empty() { text.to_string() } else { format!("{text}\n(About: {})", parts.join("; ")) }
+            if parts.is_empty() {
+                text.to_string()
+            } else {
+                format!("{text}\n(About: {})", parts.join("; "))
+            }
         })
         .collect::<Vec<_>>()
         .join("\n\n");
     let prompt = if turn == 1 {
-        format!("{}\n## The owner's first message\n{said}\n", run["task"].as_str().unwrap_or(""))
+        format!(
+            "{}\n## The owner's first message\n{said}\n",
+            run["task"].as_str().unwrap_or("")
+        )
     } else {
         format!("The owner's message:\n{said}\n")
     };
-    append(store, id, json!({"type": "peekumi.owner", "turn": turn, "at": crate::workflow::now(), "messages": messages}))?;
+    append(
+        store,
+        id,
+        json!({"type": "peekumi.owner", "turn": turn, "at": crate::workflow::now(), "messages": messages}),
+    )?;
     let path = dir.join("output.log");
-    let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     let used = file.metadata().map(|m| m.len() as usize).unwrap_or(0);
     let log = Arc::new(Mutex::new((file, SESSION_LOG.saturating_sub(used))));
     let agent = crate::agents::find(store, run["agent"].as_str().unwrap_or(""))
@@ -345,10 +396,20 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     let graph = graph_url.as_deref().zip(graph_key.as_deref());
     let (status, message) = if agent.runs_in_process() {
         let mut out = std::fs::OpenOptions::new().append(true).open(&path)?;
-        store.patch_run(id, json!({"supervisorPid": std::process::id(), "worktree": worktree}))?;
-        let cancelled = || store.run(id).map(|r| r["cancelRequested"] == true).unwrap_or(false);
+        store.patch_run(
+            id,
+            json!({"supervisorPid": std::process::id(), "worktree": worktree}),
+        )?;
+        let cancelled = || {
+            store
+                .run(id)
+                .map(|r| r["cancelRequested"] == true)
+                .unwrap_or(false)
+        };
         let saved = dir.join("conversation.json");
-        match crate::task_agent::session_turn(store, &run, &worktree, &saved, &prompt, &mut out, cancelled, graph) {
+        match crate::task_agent::session_turn(
+            store, &run, &worktree, &saved, &prompt, &mut out, cancelled, graph,
+        ) {
             Ok(done) => done,
             Err(e) => ("failed", e.to_string()),
         }
@@ -391,22 +452,38 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
-        supervise(store, id, &mut repo_lock, &mut command, prompt, log, &token, json!({"worktree": worktree}))?
+        supervise(
+            store,
+            id,
+            &mut repo_lock,
+            &mut command,
+            prompt,
+            log,
+            &token,
+            json!({"worktree": worktree}),
+        )?
     };
     repo_lock.set_len(0)?;
     let output = String::from_utf8_lossy(&std::fs::read(&path).unwrap_or_default()).into_owned();
-    let turn_output = output.rsplit_once("\"type\":\"peekumi.owner\"").map_or(output.as_str(), |(_, after)| after);
+    let turn_output = output
+        .rsplit_once("\"type\":\"peekumi.owner\"")
+        .map_or(output.as_str(), |(_, after)| after);
     let summary = last_message(turn_output);
     // Codex names its thread on the first turn; later turns resume it.
     let conversation = if run["conversation"].is_null() {
         turn_output.lines().rev().find_map(|line| {
             let event: Value = serde_json::from_str(line).ok()?;
-            (event["type"] == "thread.started").then(|| event["thread_id"].as_str().map(str::to_string))?
+            (event["type"] == "thread.started")
+                .then(|| event["thread_id"].as_str().map(str::to_string))?
         })
     } else {
         None
     };
-    append(store, id, json!({"type": "peekumi.turn", "turn": turn, "status": status, "at": crate::workflow::now()}))?;
+    append(
+        store,
+        id,
+        json!({"type": "peekumi.turn", "turn": turn, "status": status, "at": crate::workflow::now()}),
+    )?;
     let note = match status {
         "completed" => None,
         "cancelled" => Some("Stopped. Send a message to continue.".to_string()),
@@ -418,18 +495,27 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
 fn append(store: &Workflow, id: &str, event: Value) -> Result<()> {
     let dir = store.state.join("runs").join(id);
     std::fs::create_dir_all(&dir)?;
-    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("output.log"))?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("output.log"))?;
     writeln!(file, "{event}")?;
     Ok(())
 }
 /// The commits on a run's branch after its start commit, oldest first.
 fn current_results(store: &Workflow, id: &str) -> Value {
-    let Ok(run) = store.run(id) else { return json!([]) };
+    let Ok(run) = store.run(id) else {
+        return json!([]);
+    };
     let commits = store
         .git(&[
             "rev-list",
             "--reverse",
-            &format!("{}..refs/heads/{}", run["base"].as_str().unwrap_or("HEAD"), run["branch"].as_str().unwrap_or("HEAD")),
+            &format!(
+                "{}..refs/heads/{}",
+                run["base"].as_str().unwrap_or("HEAD"),
+                run["branch"].as_str().unwrap_or("HEAD")
+            ),
         ])
         .unwrap_or_default();
     json!(commits.lines().collect::<Vec<_>>())
@@ -439,7 +525,9 @@ fn current_results(store: &Workflow, id: &str) -> Value {
 fn last_message(log: &str) -> Option<String> {
     let mut last = None;
     for line in log.lines() {
-        let Ok(event) = serde_json::from_str::<Value>(line) else { continue };
+        let Ok(event) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
         if event["type"] == "result" && event["is_error"] != true {
             if let Some(text) = event["result"].as_str().filter(|t| !t.trim().is_empty()) {
                 last = Some(text.to_string());
@@ -463,15 +551,19 @@ struct GraphGrant<'a>(&'a Workflow, Option<String>);
 impl<'a> GraphGrant<'a> {
     fn open(store: &'a Workflow, key: Option<String>, base: &Value) -> Self {
         if let Some(key) = &key {
-            store.grants.lock().unwrap_or_else(|e| e.into_inner()).insert(
-                key.clone(),
-                crate::lookup::Grant::with_limit(
+            store
+                .grants
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(
                     key.clone(),
-                    base.clone(),
-                    base.clone(),
-                    crate::lookup::TASK_CALLS,
-                ),
-            );
+                    crate::lookup::Grant::with_limit(
+                        key.clone(),
+                        base.clone(),
+                        base.clone(),
+                        crate::lookup::TASK_CALLS,
+                    ),
+                );
         }
         Self(store, key)
     }
@@ -583,7 +675,16 @@ pub fn recover(store: Workflow) -> Result<()> {
             }
             let r = store.run(&id).unwrap_or_default();
             if r["kind"] == "session" {
-                let _ = store.close_turn(&id, current_results(&store, &id), None, None, Some("Service restarted, and the last turn stopped. Send a message to continue.".into()));
+                let _ = store.close_turn(
+                    &id,
+                    current_results(&store, &id),
+                    None,
+                    None,
+                    Some(
+                        "Service restarted, and the last turn stopped. Send a message to continue."
+                            .into(),
+                    ),
+                );
                 let _ = store.patch_run(&id, json!({"status": "waiting"}));
                 store.wake_sessions();
                 return;
@@ -629,10 +730,12 @@ pub fn mcp(store: Workflow, id: &str) -> Result<()> {
                 json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"peekumi","version":"0.3.0"}}),
             ),
             "ping" => Ok(json!({})),
-            "tools/list" if store.run(id).is_ok_and(|r| r["kind"] == "session") => Ok(json!({"tools":[
-            {"name":"get_run","description":"Read this session: its context, the owner's messages and rules.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
-            {"name":"approve","description":"Asks the owner whether a tool may run. Peekumi calls this for permission prompts.","inputSchema":{"type":"object","properties":{"tool_name":{"type":"string"},"input":{"type":"object"},"tool_use_id":{"type":"string"}},"required":["tool_name","input"]}}
-            ]})),
+            "tools/list" if store.run(id).is_ok_and(|r| r["kind"] == "session") => {
+                Ok(json!({"tools":[
+                {"name":"get_run","description":"Read this session: its context, the owner's messages and rules.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+                {"name":"approve","description":"Asks the owner whether a tool may run. Peekumi calls this for permission prompts.","inputSchema":{"type":"object","properties":{"tool_name":{"type":"string"},"input":{"type":"object"},"tool_use_id":{"type":"string"}},"required":["tool_name","input"]}}
+                ]}))
+            }
             "tools/list" => Ok(json!({"tools":[
             {"name":"get_run","description":"Read this run's frozen task, comments and rules.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
             {"name":"resolve_comment","description":"Report an addressed comment with a new attributed commit and check results; never verifies it.","inputSchema":{"type":"object","properties":{"comment_id":{"type":"string"},"commit_sha":{"type":"string"},"note":{"type":"string"},"checks":{"type":"string"}},"required":["comment_id","commit_sha","note","checks"],"additionalProperties":false}},
@@ -642,7 +745,9 @@ pub fn mcp(store: Workflow, id: &str) -> Result<()> {
                 let outcome = store.request_approval(id, &token, &request["params"]["arguments"]);
                 Ok(match outcome {
                     Ok(value) => json!({"content":[{"type":"text","text":value.to_string()}]}),
-                    Err(e) => json!({"isError":true,"content":[{"type":"text","text":e.to_string()}]}),
+                    Err(e) => {
+                        json!({"isError":true,"content":[{"type":"text","text":e.to_string()}]})
+                    }
                 })
             }
             "tools/call" => {

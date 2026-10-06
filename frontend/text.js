@@ -26,7 +26,8 @@ function appendInline(parent, text, links, onLink) {
     const edge = tag === "em" || tag === "code" ? 1 : 2;
     node.textContent = part.slice(edge, -edge);
     const key = node.textContent.trim();
-    const target = tag === "code" && onLink && Object.hasOwn(links, key) ? links[key] : null;
+    const target =
+      tag === "code" && onLink && Object.hasOwn(links, key) ? links[key] : null;
     if (target) {
       const link = document.createElement("button");
       link.type = "button";
@@ -43,10 +44,16 @@ function appendInline(parent, text, links, onLink) {
 
 /** Returns a `div.md` element rendering `text`; `className` adds classes for context.
  * `links` maps a code span's exact text to a target that `onLink` receives when it is tapped. */
-export function richText(text, className = "", { links = {}, onLink = null } = {}) {
+export function richText(
+  text,
+  className = "",
+  { links = {}, onLink = null } = {},
+) {
   const box = document.createElement("div");
   box.className = ("md " + className).trim();
-  const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
   let paragraph = [],
     list = null,
     item = null;

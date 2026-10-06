@@ -76,17 +76,22 @@ try {
             // A line never passes through a card, its own two included: it leaves one
             // edge and arrives at another.
             if (
-              p.x > r.left + 3 && p.x < r.right - 3 &&
-              p.y > r.top + 3 && p.y < r.bottom - 3
+              p.x > r.left + 3 &&
+              p.x < r.right - 3 &&
+              p.y > r.top + 3 &&
+              p.y < r.bottom - 3
             )
-              crossings.push(`${line.dataset.from} → ${line.dataset.to} crosses ${key}`);
+              crossings.push(
+                `${line.dataset.from} → ${line.dataset.to} crosses ${key}`,
+              );
         }
         // A line that leaves a card's side leaves at that card's mid height.
         const start = at(0),
           source = cards.find((c) => c.key === line.dataset.from)?.r;
         if (
           source &&
-          (Math.abs(start.x - source.left) < 3 || Math.abs(start.x - source.right) < 3) &&
+          (Math.abs(start.x - source.left) < 3 ||
+            Math.abs(start.x - source.right) < 3) &&
           Math.abs(start.y - (source.top + source.bottom) / 2) > 5
         )
           offCentre.push(`${line.dataset.from} → ${line.dataset.to}`);
@@ -101,39 +106,75 @@ try {
       const stacked = [];
       for (const [key, points] of ends)
         for (let i = 0; i < points.length; i++)
-          for (let j = i + 1; j < points.length; j++)
-            {
-              // Lines merged into one trunk share an arrowhead exactly; others keep apart.
-              const apart = Math.hypot(points[i][0] - points[j][0], points[i][1] - points[j][1]);
-              if (apart > 0.5 && apart < 6) stacked.push(key);
-            }
-      return { lines: lines.length, crossings: [...new Set(crossings)], stacked, bent, offCentre };
+          for (let j = i + 1; j < points.length; j++) {
+            // Lines merged into one trunk share an arrowhead exactly; others keep apart.
+            const apart = Math.hypot(
+              points[i][0] - points[j][0],
+              points[i][1] - points[j][1],
+            );
+            if (apart > 0.5 && apart < 6) stacked.push(key);
+          }
+      return {
+        lines: lines.length,
+        crossings: [...new Set(crossings)],
+        stacked,
+        bent,
+        offCentre,
+      };
     });
     assert.ok(report.lines >= 3, "Every import of a.mjs is drawn");
-    assert.deepEqual(report.crossings, [], "No line passes through an unrelated card");
-    assert.deepEqual(report.stacked, [], "Arrowheads into the same card do not overlap");
-    assert.deepEqual(report.bent, [], "Every line meets its arrowhead straight on");
-    assert.deepEqual(report.offCentre, [], "Arrows across leave the middle of a card's side");
+    assert.deepEqual(
+      report.crossings,
+      [],
+      "No line passes through an unrelated card",
+    );
+    assert.deepEqual(
+      report.stacked,
+      [],
+      "Arrowheads into the same card do not overlap",
+    );
+    assert.deepEqual(
+      report.bent,
+      [],
+      "Every line meets its arrowhead straight on",
+    );
+    assert.deepEqual(
+      report.offCentre,
+      [],
+      "Arrows across leave the middle of a card's side",
+    );
     await page.screenshot({ path: `test-results/edges-${viewport.width}.png` });
     if (viewport.width < 900) {
       const file = front.locator('.node[data-path="lib/wide.mjs"]');
       await file.click();
       await file.click();
       await front.locator('.node[data-key="symbol:wide"]').click();
-      assert.equal(await page.locator("#panel").getAttribute("data-height"), "peek");
+      assert.equal(
+        await page.locator("#panel").getAttribute("data-height"),
+        "peek",
+      );
       const line = page.locator("#selectionContract dd.contract-line").first();
       await line.waitFor();
       const scrolled = await line.evaluate((el) => {
         el.scrollLeft = 60;
-        return { overflow: getComputedStyle(el).overflowX, left: el.scrollLeft, wider: el.scrollWidth > el.clientWidth };
+        return {
+          overflow: getComputedStyle(el).overflowX,
+          left: el.scrollLeft,
+          wider: el.scrollWidth > el.clientWidth,
+        };
       });
       assert.ok(scrolled.wider, "The inputs are wider than the sheet");
       assert.equal(scrolled.overflow, "auto");
-      assert.ok(scrolled.left > 0, "The inputs scroll sideways while the sheet is minimal");
+      assert.ok(
+        scrolled.left > 0,
+        "The inputs scroll sideways while the sheet is minimal",
+      );
     }
     assert.deepEqual(errors, []);
     await page.close();
-    console.log(`PASS ${viewport.width}: dependency lines avoid cards and land separately`);
+    console.log(
+      `PASS ${viewport.width}: dependency lines avoid cards and land separately`,
+    );
   }
 } finally {
   await browser?.close();

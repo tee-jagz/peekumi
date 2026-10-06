@@ -34,7 +34,12 @@ fn method_targets(file: &str, method: &Value, context: &Context) -> Vec<Value> {
     };
     for field in method["fields"].as_array().into_iter().flatten() {
         let found: Vec<&Value> = symbols()
-            .filter(|(_, s)| s["kind"] == "struct" && s["name"].as_str().is_some_and(|n| n.rsplit("::").next() == Some(ty.as_str())))
+            .filter(|(_, s)| {
+                s["kind"] == "struct"
+                    && s["name"]
+                        .as_str()
+                        .is_some_and(|n| n.rsplit("::").next() == Some(ty.as_str()))
+            })
             .map(|(_, s)| s)
             .collect();
         let [one] = found.as_slice() else {
@@ -59,7 +64,8 @@ fn method_targets(file: &str, method: &Value, context: &Context) -> Vec<Value> {
                 Some(tr) => symbol.ends_with(&format!(" as {tr}.{name}")),
                 None => {
                     symbol == format!("{ty}.{name}")
-                        || (symbol.starts_with(&format!("{ty} as ")) && symbol.ends_with(&format!(".{name}")))
+                        || (symbol.starts_with(&format!("{ty} as "))
+                            && symbol.ends_with(&format!(".{name}")))
                 }
             }
         })
@@ -100,11 +106,20 @@ pub fn resolve<A: LanguageAdapter + ?Sized>(
         for _ in 0..3 {
             let mut next = vec![];
             for path in frontier {
-                if context.symbols.get(&path).into_iter().flatten().any(|s| s["name"] == name) {
+                if context
+                    .symbols
+                    .get(&path)
+                    .into_iter()
+                    .flatten()
+                    .any(|s| s["name"] == name)
+                {
                     continue;
                 }
                 for import in context.imports.get(&path).into_iter().flatten() {
-                    if import["names"].as_array().is_some_and(|n| n.iter().any(|n| n == name)) {
+                    if import["names"]
+                        .as_array()
+                        .is_some_and(|n| n.iter().any(|n| n == name))
+                    {
                         for found in adapter.resolve(&path, import, &context.paths) {
                             if paths.insert(found.clone()) {
                                 next.push(found);

@@ -201,7 +201,10 @@ mod tests {
         let mut before = Sessions::load(path.clone(), "owner", "strata_session_abc").unwrap();
         before.insert("phone-secret").unwrap();
         let after = Sessions::load(path.clone(), "owner", "peekumi_session_abc").unwrap();
-        assert!(after.contains("phone-secret"), "Renaming must not sign devices out");
+        assert!(
+            after.contains("phone-secret"),
+            "Renaming must not sign devices out"
+        );
         assert!(
             !Sessions::load(path, "rotated", "peekumi_session_abc")
                 .unwrap()

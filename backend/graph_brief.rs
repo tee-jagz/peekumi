@@ -29,7 +29,10 @@ pub fn names(comments: &[Value]) -> Vec<String> {
             .to_string();
         let identifier = name.len() > 1
             && name.len() <= 80
-            && name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+            && name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
             && name.chars().all(|c| c.is_alphanumeric() || c == '_');
         if identifier && !out.contains(&name) {
             out.push(name);
@@ -66,11 +69,16 @@ pub fn names(comments: &[Value]) -> Vec<String> {
 /// folder stays, and a `focus` folder keeps its files. Each step takes the smallest fold that
 /// is enough, or else the fold that saves most. Returns the tree and the number of folds.
 pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (String, usize) {
-    let inside = |folder: &str, root: &str| folder == root || folder.starts_with(&format!("{root}/"));
+    let inside =
+        |folder: &str, root: &str| folder == root || folder.starts_with(&format!("{root}/"));
     // Each entry: folder, text, and whether it is a fold.
-    let mut entries: Vec<(String, String, bool)> =
-        crate::lookup::names_tree(files, prefix).into_iter().map(|(f, t)| (f, t, false)).collect();
-    let size = |entries: &[(String, String, bool)]| entries.iter().map(|(_, t, _)| t.len() + 1).sum::<usize>();
+    let mut entries: Vec<(String, String, bool)> = crate::lookup::names_tree(files, prefix)
+        .into_iter()
+        .map(|(f, t)| (f, t, false))
+        .collect();
+    let size = |entries: &[(String, String, bool)]| {
+        entries.iter().map(|(_, t, _)| t.len() + 1).sum::<usize>()
+    };
     // Every folder under `prefix` and each of its parents is a subtree that can fold.
     let top = prefix.trim_end_matches('/');
     let mut roots: std::collections::BTreeSet<String> = Default::default();
@@ -82,8 +90,14 @@ pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (
         }
     }
     let count = |keep: &dyn Fn(&str) -> bool| {
-        let under: Vec<&Value> = files.iter().filter(|f| keep(folder_of(f["path"].as_str().unwrap_or("")))).collect();
-        let declarations: usize = under.iter().map(|f| f["symbols"].as_array().map_or(0, Vec::len)).sum();
+        let under: Vec<&Value> = files
+            .iter()
+            .filter(|f| keep(folder_of(f["path"].as_str().unwrap_or(""))))
+            .collect();
+        let declarations: usize = under
+            .iter()
+            .map(|f| f["symbols"].as_array().map_or(0, Vec::len))
+            .sum();
         (under.len(), declarations)
     };
     let mut folded = 0;
@@ -95,27 +109,54 @@ pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (
         // Candidates: (saving, root, line, whole subtree?).
         let mut candidates: Vec<(usize, String, String, bool)> = vec![];
         for root in roots.iter().filter(|r| !focus.iter().any(|f| inside(f, r))) {
-            let held: usize = entries.iter().filter(|(f, _, _)| inside(f, root)).map(|(_, t, _)| t.len() + 1).sum();
+            let held: usize = entries
+                .iter()
+                .filter(|(f, _, _)| inside(f, root))
+                .map(|(_, t, _)| t.len() + 1)
+                .sum();
             let (n, d) = count(&|f| inside(f, root));
-            let line = format!("{root}/ (folded: {n} files, {d} declarations; highlight this folder to open it)");
-            candidates.push((held.saturating_sub(line.len() + 1), root.clone(), line, true));
+            let line = format!(
+                "{root}/ (folded: {n} files, {d} declarations; highlight this folder to open it)"
+            );
+            candidates.push((
+                held.saturating_sub(line.len() + 1),
+                root.clone(),
+                line,
+                true,
+            ));
         }
         for (folder, text, is_fold) in &entries {
             if *is_fold || folder.is_empty() || focus.contains(folder) || !text.contains('\n') {
                 continue;
             }
             let (n, d) = count(&|f| f == folder);
-            let line = format!("{folder}/ (files folded: {n} files, {d} declarations; highlight this folder to open it)");
-            candidates.push((text.len().saturating_sub(line.len()), folder.clone(), line, false));
+            let line = format!(
+                "{folder}/ (files folded: {n} files, {d} declarations; highlight this folder to open it)"
+            );
+            candidates.push((
+                text.len().saturating_sub(line.len()),
+                folder.clone(),
+                line,
+                false,
+            ));
         }
         candidates.retain(|c| c.0 > 0);
-        let enough = candidates.iter().filter(|c| c.0 >= over).min_by_key(|c| c.0);
-        let Some((_, root, line, whole)) = enough.or_else(|| candidates.iter().max_by_key(|c| c.0)).cloned() else {
+        let enough = candidates
+            .iter()
+            .filter(|c| c.0 >= over)
+            .min_by_key(|c| c.0);
+        let Some((_, root, line, whole)) = enough
+            .or_else(|| candidates.iter().max_by_key(|c| c.0))
+            .cloned()
+        else {
             break;
         };
         if whole {
             // Folds inside this subtree are now part of the one line.
-            folded -= entries.iter().filter(|(f, _, is_fold)| *is_fold && inside(f, &root)).count();
+            folded -= entries
+                .iter()
+                .filter(|(f, _, is_fold)| *is_fold && inside(f, &root))
+                .count();
             entries.retain(|(f, _, _)| !inside(f, &root));
             roots.remove(&root);
         } else {
@@ -125,7 +166,14 @@ pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (
         folded += 1;
     }
     entries.sort();
-    (entries.into_iter().map(|(_, t, _)| t).collect::<Vec<_>>().join("\n"), folded)
+    (
+        entries
+            .into_iter()
+            .map(|(_, t, _)| t)
+            .collect::<Vec<_>>()
+            .join("\n"),
+        folded,
+    )
 }
 
 /// The folder of a path ("" at the top).
@@ -137,7 +185,11 @@ fn folder_of(path: &str) -> &str {
 /// is not available.
 pub async fn map(app: &App, comments: &[Value], base: &str) -> String {
     let revision = json!(base);
-    let Ok(full) = app.engine.call("compare", json!([revision, revision])).await else {
+    let Ok(full) = app
+        .engine
+        .call("compare", json!([revision, revision]))
+        .await
+    else {
         return String::new();
     };
     let files = full["files"].as_array().cloned().unwrap_or_default();
@@ -151,7 +203,9 @@ pub async fn map(app: &App, comments: &[Value], base: &str) -> String {
     for file in &files {
         let declares = file["symbols"].as_array().into_iter().flatten().any(|s| {
             let name = s["name"].as_str().unwrap_or("");
-            wanted.iter().any(|w| name.rsplit(['.', ':']).next() == Some(w.as_str()))
+            wanted
+                .iter()
+                .any(|w| name.rsplit(['.', ':']).next() == Some(w.as_str()))
         });
         if declares {
             focus.push(folder_of(file["path"].as_str().unwrap_or("")).to_string());
@@ -163,7 +217,11 @@ pub async fn map(app: &App, comments: &[Value], base: &str) -> String {
         (tree, folded) = fold(&files, "", &[], BUDGET);
     }
     let note = if folded > 0 {
-        let parts = if folded == 1 { "1 part is".to_string() } else { format!("{folded} parts are") };
+        let parts = if folded == 1 {
+            "1 part is".to_string()
+        } else {
+            format!("{folded} parts are")
+        };
         format!(" {parts} folded to fit; highlight a folded folder to open it.")
     } else {
         String::new()
@@ -182,7 +240,10 @@ mod tests {
             "anchor": {"symbol": "Workflow::choice"},
             "text": "Which functions call `merge_status` or `lookup::open()`? Also check renderPrRows, the run step and http://x/a_b."
         })];
-        assert_eq!(names(&comments), ["choice", "merge_status", "open", "renderPrRows"]);
+        assert_eq!(
+            names(&comments),
+            ["choice", "merge_status", "open", "renderPrRows"]
+        );
     }
     #[test]
     fn a_large_tree_folds_whole_subtrees_but_not_the_focus() {
@@ -199,8 +260,16 @@ mod tests {
         let (tree, folded) = fold(&files, "", &["api/x".to_string()], 2_500);
         assert!(tree.len() <= 2_500, "{tree}");
         assert!(folded >= 1);
-        assert!(tree.contains("web/ (folded: 9 files, 180 declarations; highlight this folder to open it)"), "{tree}");
-        assert!(tree.contains("api/x/\n  f0.py: function_number_0"), "The focus stays open: {tree}");
+        assert!(
+            tree.contains(
+                "web/ (folded: 9 files, 180 declarations; highlight this folder to open it)"
+            ),
+            "{tree}"
+        );
+        assert!(
+            tree.contains("api/x/\n  f0.py: function_number_0"),
+            "The focus stays open: {tree}"
+        );
         assert!(tree.starts_with("./\n  main.py"), "{tree}");
         // A folder highlight folds inside that folder only.
         let (inner, _) = fold(&files, "web/", &[], 1_200);

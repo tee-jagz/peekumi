@@ -96,7 +96,9 @@ try {
     if (!(await page.locator("#helperTools").isVisible()))
       await page.locator("#sheetHandle").click();
     await page.locator('[data-tab="dependencies"]').click();
-    await page.locator('select[aria-label="Relationship kind"]').selectOption("calls");
+    await page
+      .locator('select[aria-label="Relationship kind"]')
+      .selectOption("calls");
     assert.ok(await front.locator("path.e.calls.violation").count());
     await page.locator(".unresolved-relations summary").click();
     assert.match(

@@ -139,8 +139,11 @@ pub async fn call_tool(app: &App, name: &str, args: &Value) -> (String, bool) {
 
 /// Opens a lookup grant for an Ask engine that calls the tools itself (no MCP address needed).
 pub fn open(app: &App, base: &Value, head: &Value) {
-    *app.ask_grant.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some(Grant::new(crate::random_token(), base.clone(), head.clone()));
+    *app.ask_grant.lock().unwrap_or_else(|e| e.into_inner()) = Some(Grant::new(
+        crate::random_token(),
+        base.clone(),
+        head.clone(),
+    ));
 }
 
 fn tool_error(message: &str) -> Value {
@@ -191,7 +194,11 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
 /// A short, human description of a call, shown under the answer.
 /// The place a lookup reads, for the map: its file and, when it names one, its declaration.
 fn place_of(args: &Value) -> Value {
-    let target = if args["to"].is_object() { &args["to"] } else { args };
+    let target = if args["to"].is_object() {
+        &args["to"]
+    } else {
+        args
+    };
     match target["path"].as_str().filter(|p| !p.is_empty()) {
         Some(path) => match target["name"].as_str().filter(|n| !n.is_empty()) {
             Some(name) => json!({"path": path, "symbol": name}),
@@ -505,10 +512,23 @@ mod tests {
     }
     #[test]
     fn test_files_are_known_by_folder_and_name() {
-        for path in ["api/tests/test_run.py", "test_x.py", "src/__tests__/a.ts", "web/a.test.ts", "web/a.spec.js", "go/a_test.go", "conftest.py"] {
+        for path in [
+            "api/tests/test_run.py",
+            "test_x.py",
+            "src/__tests__/a.ts",
+            "web/a.test.ts",
+            "web/a.spec.js",
+            "go/a_test.go",
+            "conftest.py",
+        ] {
             assert!(is_test(path), "{path}");
         }
-        for path in ["api/app/routers/evaluation.py", "backend/testing.rs", "latest.py", "contest/a.py"] {
+        for path in [
+            "api/app/routers/evaluation.py",
+            "backend/testing.rs",
+            "latest.py",
+            "contest/a.py",
+        ] {
             assert!(!is_test(path), "{path}");
         }
     }
@@ -520,19 +540,38 @@ mod tests {
         });
         assert_eq!(
             decorators(&data, "continue_after_pause"),
-            ["@router.post( \"/{run_id}/continue\", status_code=202)", "@login_required"]
+            [
+                "@router.post( \"/{run_id}/continue\", status_code=202)",
+                "@login_required"
+            ]
         );
         assert!(decorators(&data, "plain").is_empty());
     }
     #[test]
     fn a_short_name_finds_its_only_declaration() {
         let data = json!({"symbols": [{"name": "Workflow.choice"}, {"name": "run"}, {"name": "A.go"}, {"name": "B as T.go"}]});
-        assert_eq!(declared_name(&data, "a.rs", "choice").unwrap(), "Workflow.choice");
-        assert_eq!(declared_name(&data, "a.rs", "Workflow::choice").unwrap(), "Workflow.choice");
+        assert_eq!(
+            declared_name(&data, "a.rs", "choice").unwrap(),
+            "Workflow.choice"
+        );
+        assert_eq!(
+            declared_name(&data, "a.rs", "Workflow::choice").unwrap(),
+            "Workflow.choice"
+        );
         assert_eq!(declared_name(&data, "a.rs", "run").unwrap(), "run");
         assert_eq!(declared_name(&data, "a.rs", "B::go").unwrap(), "B as T.go");
-        assert!(declared_name(&data, "a.rs", "go").unwrap_err().to_string().contains("A.go, B as T.go"));
-        assert!(declared_name(&data, "a.rs", "missing").unwrap_err().to_string().contains("Workflow.choice"));
+        assert!(
+            declared_name(&data, "a.rs", "go")
+                .unwrap_err()
+                .to_string()
+                .contains("A.go, B as T.go")
+        );
+        assert!(
+            declared_name(&data, "a.rs", "missing")
+                .unwrap_err()
+                .to_string()
+                .contains("Workflow.choice")
+        );
     }
     #[test]
     fn guards_are_the_conditions_around_a_call() {
@@ -540,8 +579,17 @@ mod tests {
             "symbols": [{"name": "handle", "start": 1}],
             "after": "async fn handle() {\n    let x = 1;\n    if path == \"/api/ask\" {\n        log();\n        if body[\"stream\"] == true {\n            tokio::spawn(async move {\n                answer_stream();\n            });\n        }\n        return answer();\n    }\n}\n"
         });
-        assert_eq!(guards(&data, "handle", 7), ["    3  if path == \"/api/ask\" {", "    5  if body[\"stream\"] == true {"]);
-        assert_eq!(guards(&data, "handle", 10), ["    3  if path == \"/api/ask\" {"]);
+        assert_eq!(
+            guards(&data, "handle", 7),
+            [
+                "    3  if path == \"/api/ask\" {",
+                "    5  if body[\"stream\"] == true {"
+            ]
+        );
+        assert_eq!(
+            guards(&data, "handle", 10),
+            ["    3  if path == \"/api/ask\" {"]
+        );
         assert!(guards(&data, "handle", 2).is_empty());
     }
     #[test]
@@ -579,20 +627,38 @@ pub fn names_tree(files: &[Value], prefix: &str) -> Vec<(String, String)> {
         .map(|(folder, (lines, others))| {
             let mut head = format!("{}/", if folder.is_empty() { "." } else { &folder });
             if others > 0 {
-                head.push_str(&format!(" ({others} file{} without declarations)", if others == 1 { "" } else { "s" }));
+                head.push_str(&format!(
+                    " ({others} file{} without declarations)",
+                    if others == 1 { "" } else { "s" }
+                ));
             }
-            (folder, std::iter::once(head).chain(lines).collect::<Vec<_>>().join("\n"))
+            (
+                folder,
+                std::iter::once(head)
+                    .chain(lines)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
         })
         .collect()
 }
 
 /// Line `number` of a file's source data, numbered as in the other results.
 fn line_at(data: &Value, number: u64) -> Option<String> {
-    let text = data["after"].as_str()?.lines().nth(number.checked_sub(1)? as usize)?;
+    let text = data["after"]
+        .as_str()?
+        .lines()
+        .nth(number.checked_sub(1)? as usize)?;
     Some(format!("{number:>5}  {}", text.trim()))
 }
 /// The resolved calls into `path` · `name`: each caller's file, declaration and call lines.
-async fn calls_into(app: &App, base: &Value, head: &Value, path: &str, name: &str) -> Result<Vec<(String, String, Vec<u64>)>> {
+async fn calls_into(
+    app: &App,
+    base: &Value,
+    head: &Value,
+    path: &str,
+    name: &str,
+) -> Result<Vec<(String, String, Vec<u64>)>> {
     let data = app
         .engine
         .call("relationships", json!([base, head, path]))
@@ -600,7 +666,11 @@ async fn calls_into(app: &App, base: &Value, head: &Value, path: &str, name: &st
         .map_err(anyhow::Error::msg)?;
     let mut out: Vec<(String, String, Vec<u64>)> = vec![];
     for edge in data["relationships"].as_array().into_iter().flatten() {
-        let into_target = edge["targets"].as_array().into_iter().flatten().any(|t| t["path"] == path && t["symbol"] == name);
+        let into_target = edge["targets"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|t| t["path"] == path && t["symbol"] == name);
         if edge["kind"] != "calls" || !into_target {
             continue;
         }
@@ -608,7 +678,12 @@ async fn calls_into(app: &App, base: &Value, head: &Value, path: &str, name: &st
             edge["source"]["path"].as_str().unwrap_or("").to_string(),
             edge["source"]["symbol"].as_str().unwrap_or("").to_string(),
         );
-        let sites: Vec<u64> = edge["sites"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+        let sites: Vec<u64> = edge["sites"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .collect();
         match out.iter_mut().find(|(f, s, _)| *f == file && *s == symbol) {
             Some(entry) => entry.2.extend(sites),
             None => out.push((file, symbol, sites)),
@@ -618,7 +693,10 @@ async fn calls_into(app: &App, base: &Value, head: &Value, path: &str, name: &st
 }
 /// The numbered lines of declaration `symbol` in a file's source data.
 fn declaration_lines(data: &Value, symbol: &str) -> Vec<String> {
-    let Some(found) = data["symbols"].as_array().and_then(|s| s.iter().find(|s| s["name"] == symbol)) else {
+    let Some(found) = data["symbols"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["name"] == symbol))
+    else {
         return vec![];
     };
     let (start, end) = (
@@ -645,23 +723,36 @@ async fn highlight(app: &App, args: &Value, base: &Value, head: &Value) -> Resul
         .unwrap_or_default();
     let want = |what: &str| wanted.is_empty() || wanted.contains(&what);
     let engine = |method: &'static str, call_args: Value| async move {
-        app.engine.call(method, call_args).await.map_err(anyhow::Error::msg)
+        app.engine
+            .call(method, call_args)
+            .await
+            .map_err(anyhow::Error::msg)
     };
     let full = engine("compare", json!([base, head])).await?;
     let files = full["files"].as_array().cloned().unwrap_or_default();
     let is_file = files.iter().any(|f| f["path"] == path.as_str());
     if !is_file {
         // A folder: its whole tree, and its description.
-        let prefix = if path.is_empty() || path == "." { String::new() } else { format!("{path}/") };
+        let prefix = if path.is_empty() || path == "." {
+            String::new()
+        } else {
+            format!("{path}/")
+        };
         // A large folder folds its biggest subfolders; highlight one of them to go deeper.
-        let (tree, folded) = crate::graph_brief::fold(&files, &prefix, &[], crate::graph_brief::BUDGET);
-        ensure!(!tree.is_empty(), "No folder or file {path} at this revision");
+        let (tree, folded) =
+            crate::graph_brief::fold(&files, &prefix, &[], crate::graph_brief::BUDGET);
+        ensure!(
+            !tree.is_empty(),
+            "No folder or file {path} at this revision"
+        );
         let mut out = json!({"folder": path, "tree": tree});
         if folded > 0 {
             out["folded"] = json!(folded);
         }
         if want("description") {
-            let directories = engine("directories", json!([base, head])).await.unwrap_or_default();
+            let directories = engine("directories", json!([base, head]))
+                .await
+                .unwrap_or_default();
             out["description"] = directories["after"][path.as_str()]["description"].clone();
         }
         return Ok(out);
@@ -675,23 +766,34 @@ async fn highlight(app: &App, args: &Value, base: &Value, head: &Value) -> Resul
             .into_iter()
             .flatten()
             .map(|s| {
-                let info = details["symbols"].as_array().and_then(|d| d.iter().find(|d| d["name"] == s["name"]));
+                let info = details["symbols"]
+                    .as_array()
+                    .and_then(|d| d.iter().find(|d| d["name"] == s["name"]));
                 let mut row = json!({"name": s["name"], "kind": s["kind"], "line": s["start"]});
                 if let Some(info) = info {
                     row["signature"] = info["signature"].clone();
                     if want("description") {
-                        row["description"] = json!(info["description"].as_str().unwrap_or("").lines().next().unwrap_or(""));
+                        row["description"] = json!(
+                            info["description"]
+                                .as_str()
+                                .unwrap_or("")
+                                .lines()
+                                .next()
+                                .unwrap_or("")
+                        );
                     }
                 }
                 row
             })
             .collect();
-        let mut out = json!({"file": path, "analysis": data["analysis"], "declarations": declarations});
+        let mut out =
+            json!({"file": path, "analysis": data["analysis"], "declarations": declarations});
         if want("description") {
             out["description"] = details["description"].clone();
         }
         if want("callers") {
-            out["usedBy"] = relationship_summary(app, base, head, &path, None).await?["incoming"].clone();
+            out["usedBy"] =
+                relationship_summary(app, base, head, &path, None).await?["incoming"].clone();
         }
         return Ok(out);
     };
@@ -699,9 +801,15 @@ async fn highlight(app: &App, args: &Value, base: &Value, head: &Value) -> Resul
     let name = &declared_name(&data, &path, name)?;
     let name = name.as_str();
     let lines = declaration_lines(&data, name);
-    ensure!(!lines.is_empty(), "No declaration {name} in {path}; use the name as the map shows it");
+    ensure!(
+        !lines.is_empty(),
+        "No declaration {name} in {path}; use the name as the map shows it"
+    );
     let mut out = json!({"file": path, "name": name});
-    if let Some(info) = details["symbols"].as_array().and_then(|d| d.iter().find(|d| d["name"] == name)) {
+    if let Some(info) = details["symbols"]
+        .as_array()
+        .and_then(|d| d.iter().find(|d| d["name"] == name))
+    {
         out["signature"] = info["signature"].clone();
         if want("description") {
             out["description"] = info["description"].clone();
@@ -713,18 +821,30 @@ async fn highlight(app: &App, args: &Value, base: &Value, head: &Value) -> Resul
     if want("callers") || want("calls") {
         let summary = relationship_summary(app, base, head, &path, Some(name)).await?;
         if want("calls") {
-            out["calls"] = json!(summary["outgoing"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|l| !l.as_str().unwrap_or("").contains("→ unresolved"))
-                .collect::<Vec<_>>());
+            out["calls"] = json!(
+                summary["outgoing"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|l| !l.as_str().unwrap_or("").contains("→ unresolved"))
+                    .collect::<Vec<_>>()
+            );
         }
         if want("callers") {
             let mut callers = vec![];
-            for (file, symbol, sites) in calls_into(app, base, head, &path, name).await?.into_iter().take(20) {
-                let source = engine("source", json!([base, head, file])).await.unwrap_or_default();
-                let lines: Vec<String> = sites.iter().take(3).filter_map(|n| line_at(&source, *n)).collect();
+            for (file, symbol, sites) in calls_into(app, base, head, &path, name)
+                .await?
+                .into_iter()
+                .take(20)
+            {
+                let source = engine("source", json!([base, head, file]))
+                    .await
+                    .unwrap_or_default();
+                let lines: Vec<String> = sites
+                    .iter()
+                    .take(3)
+                    .filter_map(|n| line_at(&source, *n))
+                    .collect();
                 callers.push(json!({"file": file, "name": symbol, "lines": lines}));
             }
             out["callers"] = json!(callers);
@@ -741,7 +861,11 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
     let key = async |node: &Value| -> Result<String> {
         let path = node["path"].as_str().context("Missing path")?;
         let name = node["name"].as_str().context("Missing name")?;
-        let data = app.engine.call("source", json!([base, head, path])).await.map_err(anyhow::Error::msg)?;
+        let data = app
+            .engine
+            .call("source", json!([base, head, path]))
+            .await
+            .map_err(anyhow::Error::msg)?;
         Ok(format!("{path}#{}", declared_name(&data, path, name)?))
     };
     let to = key(&args["to"]).await?;
@@ -754,7 +878,8 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
     // Call edges between declarations, with the calling lines. Callers in tests stay out
     // unless they are asked for.
     let tests = args["tests"] == true;
-    let mut test_into: std::collections::HashMap<String, std::collections::BTreeSet<String>> = Default::default();
+    let mut test_into: std::collections::HashMap<String, std::collections::BTreeSet<String>> =
+        Default::default();
     let mut into: std::collections::HashMap<String, Vec<(String, String)>> = Default::default();
     let mut from_map: std::collections::HashMap<String, Vec<(String, String)>> = Default::default();
     for edge in all["relationships"].as_array().into_iter().flatten() {
@@ -767,17 +892,37 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
             edge["source"]["symbol"].as_str().unwrap_or("")
         );
         let in_test = !tests && is_test(edge["source"]["path"].as_str().unwrap_or(""));
-        let lines = edge["sites"].as_array().into_iter().flatten().filter_map(Value::as_u64).map(|l| l.to_string()).collect::<Vec<_>>().join(", ");
+        let lines = edge["sites"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .map(|l| l.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
         let lines = lines.as_str();
-        let note = if edge["resolution"] == "ambiguous" { format!("line {lines}, ambiguous") } else { format!("line {lines}") };
+        let note = if edge["resolution"] == "ambiguous" {
+            format!("line {lines}, ambiguous")
+        } else {
+            format!("line {lines}")
+        };
         for target in edge["targets"].as_array().into_iter().flatten() {
-            let target = format!("{}#{}", target["path"].as_str().unwrap_or(""), target["symbol"].as_str().unwrap_or(""));
+            let target = format!(
+                "{}#{}",
+                target["path"].as_str().unwrap_or(""),
+                target["symbol"].as_str().unwrap_or("")
+            );
             if in_test {
                 test_into.entry(target).or_default().insert(source.clone());
                 continue;
             }
-            into.entry(target.clone()).or_default().push((source.clone(), note.clone()));
-            from_map.entry(source.clone()).or_default().push((target, note.clone()));
+            into.entry(target.clone())
+                .or_default()
+                .push((source.clone(), note.clone()));
+            from_map
+                .entry(source.clone())
+                .or_default()
+                .push((target, note.clone()));
         }
     }
     const PATHS: usize = 20;
@@ -845,7 +990,11 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
             let (file, name) = node.split_once('#').unwrap_or((node, ""));
             let mut step = format!("{file} · {name}");
             // In a reaching chain the note sits on the callee; in a forward path, on the step.
-            let call = if args["from"].is_object() { note.clone() } else { chain.get(i + 1).map(|(_, n)| n.clone()).unwrap_or_default() };
+            let call = if args["from"].is_object() {
+                note.clone()
+            } else {
+                chain.get(i + 1).map(|(_, n)| n.clone()).unwrap_or_default()
+            };
             if !call.is_empty() && i + 1 < chain.len() {
                 step.push_str(&format!(" ({call})"));
             }
@@ -854,10 +1003,15 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
                 .strip_prefix("line ")
                 .and_then(|rest| rest.split([',', ' ']).next())
                 .and_then(|n| n.parse::<u64>().ok());
-            if with_lines && i + 1 < chain.len()
+            if with_lines
+                && i + 1 < chain.len()
                 && let Some(number) = first_site
             {
-                let source = app.engine.call("source", json!([base, head, file])).await.unwrap_or_default();
+                let source = app
+                    .engine
+                    .call("source", json!([base, head, file]))
+                    .await
+                    .unwrap_or_default();
                 // The conditions that hold the call (`if path == "/api/ask" {`), then the call.
                 for guard in guards(&source, name, number) {
                     step.push_str(&format!("\n      {guard}"));
@@ -872,8 +1026,13 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
     }
     let mut out = json!({"routes": text, "count": chains.len(), "more": chains.len() >= PATHS});
     // Test callers of the declarations on these chains, which the chains leave out.
-    let on_chains: std::collections::HashSet<&String> = chains.iter().flatten().map(|(n, _)| n).collect();
-    let skipped: std::collections::BTreeSet<&String> = on_chains.iter().filter_map(|n| test_into.get(*n)).flatten().collect();
+    let on_chains: std::collections::HashSet<&String> =
+        chains.iter().flatten().map(|(n, _)| n).collect();
+    let skipped: std::collections::BTreeSet<&String> = on_chains
+        .iter()
+        .filter_map(|n| test_into.get(*n))
+        .flatten()
+        .collect();
     if !args["from"].is_object() {
         // Every entry point that reaches `to` (not only those in the chains above): a
         // declaration with no callers, or one at the depth limit.
@@ -902,7 +1061,11 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
         for (node, deeper) in entries.iter().take(ENTRIES) {
             let (file, name) = node.split_once('#').unwrap_or((node, ""));
             if !sources.contains_key(file) {
-                let data = app.engine.call("source", json!([base, head, file])).await.unwrap_or_default();
+                let data = app
+                    .engine
+                    .call("source", json!([base, head, file]))
+                    .await
+                    .unwrap_or_default();
                 sources.insert(file.to_string(), data);
             }
             let marks = decorators(&sources[file], name);
@@ -930,25 +1093,44 @@ async fn route(app: &App, args: &Value, base: &Value, head: &Value) -> Result<Va
 /// declaration whose name ends in it (`choice` or `Workflow::choice` for `Workflow.choice`).
 /// No match or several matches is an error that lists the names to choose from.
 fn declared_name(data: &Value, path: &str, name: &str) -> Result<String> {
-    let names: Vec<&str> = data["symbols"].as_array().into_iter().flatten().filter_map(|s| s["name"].as_str()).collect();
+    let names: Vec<&str> = data["symbols"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s["name"].as_str())
+        .collect();
     let dotted = name.replace("::", ".");
     if let Some(found) = names.iter().find(|n| **n == name || **n == dotted) {
         return Ok(found.to_string());
     }
     let short = dotted.rsplit('.').next().unwrap_or(&dotted);
-    let mut matches: Vec<&str> = names.iter().copied().filter(|n| n.ends_with(&format!(".{short}"))).collect();
+    let mut matches: Vec<&str> = names
+        .iter()
+        .copied()
+        .filter(|n| n.ends_with(&format!(".{short}")))
+        .collect();
     if matches.len() > 1 && dotted.contains('.') {
         // "Workflow.choice" narrows "Workflow as Agent.choice" and "Other.choice" by its owner.
         let owner = dotted.rsplit_once('.').map(|(o, _)| o).unwrap_or("");
-        matches.retain(|n| n.starts_with(&format!("{owner}.")) || n.starts_with(&format!("{owner} as ")));
+        matches.retain(|n| {
+            n.starts_with(&format!("{owner}.")) || n.starts_with(&format!("{owner} as "))
+        });
     }
     match matches.as_slice() {
         [one] => Ok(one.to_string()),
         [] => anyhow::bail!(
             "No declaration {name} in {path}. Its declarations: {}",
-            names.iter().take(60).copied().collect::<Vec<_>>().join(", ")
+            names
+                .iter()
+                .take(60)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
-        several => anyhow::bail!("{name} matches several declarations in {path}: {}. Use one of these names", several.join(", ")),
+        several => anyhow::bail!(
+            "{name} matches several declarations in {path}: {}. Use one of these names",
+            several.join(", ")
+        ),
     }
 }
 
@@ -956,7 +1138,10 @@ fn declared_name(data: &Value, path: &str, name: &str) -> Result<String> {
 /// enclosing line with less indentation that starts with `if`, `else`, `elif`, `match`,
 /// `switch`, `case` or `when`, or that is a match arm (`… =>`). At most four, numbered.
 fn guards(data: &Value, name: &str, number: u64) -> Vec<String> {
-    let Some(found) = data["symbols"].as_array().and_then(|s| s.iter().find(|s| s["name"] == name)) else {
+    let Some(found) = data["symbols"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["name"] == name))
+    else {
         return vec![];
     };
     let start = found["start"].as_u64().unwrap_or(1) as usize;
@@ -974,7 +1159,11 @@ fn guards(data: &Value, name: &str, number: u64) -> Vec<String> {
             continue;
         }
         level = indent(line);
-        let keyword = ["if ", "if(", "} else", "else", "elif ", "match ", "switch", "case ", "when "].iter().any(|k| text.starts_with(k));
+        let keyword = [
+            "if ", "if(", "} else", "else", "elif ", "match ", "switch", "case ", "when ",
+        ]
+        .iter()
+        .any(|k| text.starts_with(k));
         if keyword || text.contains("=>") {
             out.push(format!("{:>5}  {text}", index + 1));
             if out.len() == 4 {
@@ -1006,12 +1195,21 @@ fn is_test(path: &str) -> bool {
 /// The decorator or attribute lines at the start of `name` in a source response, such as
 /// `@router.post("/{run_id}/continue")` or `#[tokio::main]`, joined when one spans lines.
 fn decorators(data: &Value, name: &str) -> Vec<String> {
-    let Some(found) = data["symbols"].as_array().and_then(|s| s.iter().find(|s| s["name"] == name)) else {
+    let Some(found) = data["symbols"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["name"] == name))
+    else {
         return vec![];
     };
     let start = found["start"].as_u64().unwrap_or(1) as usize;
     let mut out: Vec<String> = vec![];
-    for line in data["after"].as_str().unwrap_or("").lines().skip(start.saturating_sub(1)).take(12) {
+    for line in data["after"]
+        .as_str()
+        .unwrap_or("")
+        .lines()
+        .skip(start.saturating_sub(1))
+        .take(12)
+    {
         let text = line.trim();
         if text.starts_with('@') || text.starts_with("#[") {
             out.push(text.to_string());

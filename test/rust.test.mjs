@@ -148,11 +148,14 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
 });
 test("a long history loads 80 commits at a time, back to the root commit", async (t) => {
   const f = await fixture(t);
-  for (let i = 0; i < 170; i++) await f.git("commit", "-q", "--allow-empty", "-m", `Step ${i}`);
+  for (let i = 0; i < 170; i++)
+    await f.git("commit", "-q", "--allow-empty", "-m", `Step ${i}`);
   const server = await startRust(f.directory, { base: f.base });
   t.after(() => server.close());
   const get = async (route) => {
-    const r = await fetch(server.url + route, { headers: { Authorization: "Bearer " + server.token } });
+    const r = await fetch(server.url + route, {
+      headers: { Authorization: "Bearer " + server.token },
+    });
     return [r.status, await r.json()];
   };
   const [, metadata] = await get("/api/repo");
@@ -163,13 +166,28 @@ test("a long history loads 80 commits at a time, back to the root commit", async
   while (more) {
     const [status, page] = await get("/api/commits?before=" + all.at(-1).sha);
     assert.equal(status, 200);
-    assert.equal(page.commits[0]?.sha, all.at(-1).parent, "A page starts at the first parent");
+    assert.equal(
+      page.commits[0]?.sha,
+      all.at(-1).parent,
+      "A page starts at the first parent",
+    );
     all.push(...page.commits);
     more = page.more;
   }
-  const log = (await f.git("rev-list", "--first-parent", "HEAD")).toString().trim().split("\n");
-  assert.deepEqual(all.map((c) => c.sha), log, "Every first-parent commit, once, in order");
-  assert.equal(all.at(-1).parent, null, "The last page ends at the root commit");
+  const log = (await f.git("rev-list", "--first-parent", "HEAD"))
+    .toString()
+    .trim()
+    .split("\n");
+  assert.deepEqual(
+    all.map((c) => c.sha),
+    log,
+    "Every first-parent commit, once, in order",
+  );
+  assert.equal(
+    all.at(-1).parent,
+    null,
+    "The last page ends at the root commit",
+  );
   assert.equal((await get("/api/commits?before=--output=x"))[0], 400);
 });
 

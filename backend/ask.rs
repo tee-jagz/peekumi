@@ -281,7 +281,11 @@ async fn prepare(app: &App, body: &Value) -> Result<Prepared> {
     let head_sha = head.as_str().context("Head did not resolve to a commit")?;
     let rules = crate::rules::CONFIG_FILES
         .iter()
-        .find_map(|name| app.workflow.git(&["show", &format!("{head_sha}:{name}")]).ok())
+        .find_map(|name| {
+            app.workflow
+                .git(&["show", &format!("{head_sha}:{name}")])
+                .ok()
+        })
         .unwrap_or_else(|| "No rule configuration".into());
     let rules = clipped(&rules, 4000, "Rules", &mut omitted);
     let history = body["history"].as_array().cloned().unwrap_or_default();
@@ -433,13 +437,26 @@ async fn resolve_references(app: &App, prepared: &Prepared, answer: &Value) -> R
         text.push('\n');
         text.push_str(suggestion);
     }
-    references_for(app, &prepared.base, &prepared.head, text_of(&prepared.anchor["path"]), &text).await
+    references_for(
+        app,
+        &prepared.base,
+        &prepared.head,
+        text_of(&prepared.anchor["path"]),
+        &text,
+    )
+    .await
 }
 /// The places that the code spans of `text` name, in the comparison `base`..`head`, keyed by
 /// the span as written (see [`resolve_references`]). `about` is the path that a bare name may
 /// also mean, when it is declared more than once. A dotted name (`Workflow.route` or
 /// `Workflow::route`) names a method by its type. Ask and the session view use this.
-pub async fn references_for(app: &App, base: &Value, head: &Value, about: &str, text: &str) -> Result<Value> {
+pub async fn references_for(
+    app: &App,
+    base: &Value,
+    head: &Value,
+    about: &str,
+    text: &str,
+) -> Result<Value> {
     let spans = code_spans(text);
     if spans.is_empty() {
         return Ok(json!({}));
@@ -480,15 +497,30 @@ pub async fn references_for(app: &App, base: &Value, head: &Value, about: &str, 
         if dotted.contains('.') {
             let methods: Vec<(&Value, &Value)> = files
                 .iter()
-                .flat_map(|f| f["symbols"].as_array().into_iter().flatten().map(move |s| (f, s)))
+                .flat_map(|f| {
+                    f["symbols"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(move |s| (f, s))
+                })
                 .filter(|(_, s)| {
                     let symbol = text_of(&s["name"]);
-                    symbol == dotted || symbol.ends_with(&format!(" as {}", dotted.rsplit_once('.').map(|(_, m)| m).unwrap_or(""))) && symbol.starts_with(&format!("{} as ", dotted.split('.').next().unwrap_or("")))
+                    symbol == dotted
+                        || symbol.ends_with(&format!(
+                            " as {}",
+                            dotted.rsplit_once('.').map(|(_, m)| m).unwrap_or("")
+                        )) && symbol
+                            .starts_with(&format!("{} as ", dotted.split('.').next().unwrap_or("")))
                 })
                 .collect();
             if let [(file, symbol)] = methods.as_slice() {
                 let removed = symbol["status"] == "removed";
-                let line = if removed { &symbol["before"]["start"] } else { &symbol["start"] };
+                let line = if removed {
+                    &symbol["before"]["start"]
+                } else {
+                    &symbol["start"]
+                };
                 found.insert(span.clone(), json!({"kind":"symbol","path":file["path"],"symbol":symbol["name"],"line":line,"side":side(removed)}));
             }
             continue;
@@ -547,7 +579,13 @@ fn left_unchecked(text: &str) -> bool {
         "please confirm",
         "verify that",
     ];
-    let runtime = ["runtime", "run time", "test result", "run the test", "at run"];
+    let runtime = [
+        "runtime",
+        "run time",
+        "test result",
+        "run the test",
+        "at run",
+    ];
     text.split(['.', '\n', '!', '?']).any(|sentence| {
         open.iter().any(|phrase| sentence.contains(phrase))
             && !runtime.iter().any(|word| sentence.contains(word))
@@ -570,7 +608,13 @@ fn recheck_prompt(prompt: &str, draft: &str) -> Result<String> {
 }
 /// The reply body: the answer, the places its code spans name, the lookups it made and what
 /// the context left out.
-fn reply(app: &App, prepared: &Prepared, answer: Value, references: Value, provider: &str) -> Value {
+fn reply(
+    app: &App,
+    prepared: &Prepared,
+    answer: Value,
+    references: Value,
+    provider: &str,
+) -> Value {
     let lookups = app
         .ask_grant
         .lock()
@@ -590,7 +634,9 @@ enum Engine {
 }
 /// The owner's choice for Ask from this device (`using`, see the agents module).
 fn ask_engine(app: &App, body: &Value) -> Result<Engine> {
-    let choice = app.workflow.choice(crate::agents::Job::Ask, &body["using"])?;
+    let choice = app
+        .workflow
+        .choice(crate::agents::Job::Ask, &body["using"])?;
     let (model, effort) = crate::agents::flags(&choice);
     match choice["agent"].as_str() {
         Some("claude") => Ok(Engine::Claude(app.options.claude.clone(), model, effort)),
@@ -685,7 +731,8 @@ async fn openrouter_pass(
                             ("arguments", part["function"]["arguments"].as_str()),
                         ] {
                             if let Some(piece) = piece {
-                                let joined = format!("{}{piece}", call[field].as_str().unwrap_or(""));
+                                let joined =
+                                    format!("{}{piece}", call[field].as_str().unwrap_or(""));
                                 call[field] = json!(joined);
                             }
                         }
@@ -723,7 +770,9 @@ async fn openrouter_pass(
             .unwrap_or_default();
         if let Some(relay) = &relay {
             for (i, call) in made.iter().enumerate().skip(reported) {
-                let _ = relay.send(json!({"type": "lookup", "text": call, "place": places.get(i)})).await;
+                let _ = relay
+                    .send(json!({"type": "lookup", "text": call, "place": places.get(i)}))
+                    .await;
             }
         }
         reported = made.len();
@@ -740,35 +789,55 @@ pub fn plain_error(e: &anyhow::Error) -> String {
     let Some((program, detail)) = text.split_once(": ").filter(|(p, _)| p.starts_with('/')) else {
         if let Some(program) = text.strip_prefix("Cannot start ") {
             let name = program.rsplit('/').next().unwrap_or(program);
-            return format!("The agent ({name}) cannot start on this computer. Check that it is installed and signed in, then try again. peekumi doctor shows its state.");
+            return format!(
+                "The agent ({name}) cannot start on this computer. Check that it is installed and signed in, then try again. peekumi doctor shows its state."
+            );
         }
         if text.starts_with('/') && text.ends_with(" timed out") {
-            return "The agent took too long to answer. Ask again, perhaps about a smaller part.".into();
+            return "The agent took too long to answer. Ask again, perhaps about a smaller part."
+                .into();
         }
         return text;
     };
     let name = program.rsplit('/').next().unwrap_or(program);
     // The most telling line: an error line if there is one, else the last line that is not
     // part of a stack. Paths shrink to their file name.
-    let lines: Vec<&str> = detail.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = detail
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
     let line = lines
         .iter()
         .find(|l| l.contains("Error:") || l.starts_with("error"))
-        .or_else(|| lines.iter().rev().find(|l| !l.starts_with("at ") && !l.starts_with('^')))
+        .or_else(|| {
+            lines
+                .iter()
+                .rev()
+                .find(|l| !l.starts_with("at ") && !l.starts_with('^'))
+        })
         .copied()
         .unwrap_or("");
     // "Error: " says nothing that "stopped with an error" does not.
     let line = line.trim_start_matches("Error:").trim();
     let line: String = line
         .split_whitespace()
-        .map(|w| if w.contains('/') && w.len() > 1 { w.rsplit('/').next().unwrap_or(w) } else { w })
+        .map(|w| {
+            if w.contains('/') && w.len() > 1 {
+                w.rsplit('/').next().unwrap_or(w)
+            } else {
+                w
+            }
+        })
         .collect::<Vec<_>>()
         .join(" ")
         .chars()
         .take(240)
         .collect();
     if line.is_empty() {
-        format!("The agent ({name}) stopped with an error. Try again, or choose another model in Agents.")
+        format!(
+            "The agent ({name}) stopped with an error. Try again, or choose another model in Agents."
+        )
     } else {
         format!("The agent ({name}) stopped with an error: {line}")
     }
@@ -788,7 +857,13 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
             let references = resolve_references(app, &prepared, &answer)
                 .await
                 .unwrap_or_else(|_| json!({}));
-            return Ok(reply(app, &prepared, answer, references, &format!("OpenRouter · {model}")));
+            return Ok(reply(
+                app,
+                &prepared,
+                answer,
+                references,
+                &format!("OpenRouter · {model}"),
+            ));
         }
     };
     let cwd = app.workflow.state.join("ask");
@@ -796,7 +871,13 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
     let first = prepared.prompt.clone();
     let raw = tokio::task::spawn_blocking(move || -> Result<String> {
         let tools = lookup::TOOLS.join(",");
-        let args = provider_args(model.as_deref(), effort.as_deref(), lookups.as_deref(), &tools, false);
+        let args = provider_args(
+            model.as_deref(),
+            effort.as_deref(),
+            lookups.as_deref(),
+            &tools,
+            false,
+        );
         let pass = |prompt: String| -> Result<String> {
             let output = crate::process::run_for(
                 &executable,
@@ -807,7 +888,10 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
             )?;
             let response: Value =
                 serde_json::from_slice(&output).context("Ask provider returned invalid JSON")?;
-            ensure!(response["is_error"] != true, "Ask provider could not answer");
+            ensure!(
+                response["is_error"] != true,
+                "Ask provider could not answer"
+            );
             Ok(response["result"]
                 .as_str()
                 .context("Ask provider returned no answer")?
@@ -850,7 +934,13 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
                 let references = resolve_references(&app, &prepared, &answer)
                     .await
                     .unwrap_or_else(|_| json!({}));
-                return Ok(reply(&app, &prepared, answer, references, &format!("OpenRouter · {model}")));
+                return Ok(reply(
+                    &app,
+                    &prepared,
+                    answer,
+                    references,
+                    &format!("OpenRouter · {model}"),
+                ));
             }
         };
         let cwd = app.workflow.state.join("ask");
@@ -858,7 +948,13 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
         let (first, relay, worker) = (prepared.prompt.clone(), events.clone(), app.clone());
         let raw = tokio::task::spawn_blocking(move || -> Result<String> {
             let tools = lookup::TOOLS.join(",");
-            let args = provider_args(model.as_deref(), effort.as_deref(), lookups.as_deref(), &tools, true);
+            let args = provider_args(
+                model.as_deref(),
+                effort.as_deref(),
+                lookups.as_deref(),
+                &tools,
+                true,
+            );
             let mut reported = 0;
             let mut pass = |prompt: String| -> Result<String> {
                 let (mut result, mut failed) = (None, false);
@@ -900,7 +996,9 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
                             .unwrap_or_default();
                         // Each lookup with the place it read, so the map can show it.
                         for (i, call) in calls.iter().enumerate().skip(reported) {
-                            let _ = relay.blocking_send(json!({"type":"lookup","text":call,"place":places.get(i)}));
+                            let _ = relay.blocking_send(
+                                json!({"type":"lookup","text":call,"place":places.get(i)}),
+                            );
                         }
                         reported = calls.len();
                     },
@@ -940,27 +1038,46 @@ mod tests {
     use super::*;
     #[test]
     fn ask_errors_are_plain_sentences_without_host_paths() {
-        let raw = anyhow::anyhow!("/var/folders/x/T/state/agent: file:///var/folders/x/T/state/agent:12\n    throw Error(\"Unsupported model\");\n    ^\n\nError: Unsupported model\n    at process.processTicks (node:internal)");
+        let raw = anyhow::anyhow!(
+            "/var/folders/x/T/state/agent: file:///var/folders/x/T/state/agent:12\n    throw Error(\"Unsupported model\");\n    ^\n\nError: Unsupported model\n    at process.processTicks (node:internal)"
+        );
         let plain = plain_error(&raw);
-        assert_eq!(plain, "The agent (agent) stopped with an error: Unsupported model");
+        assert_eq!(
+            plain,
+            "The agent (agent) stopped with an error: Unsupported model"
+        );
         let missing = plain_error(&anyhow::anyhow!("Cannot start /opt/bin/claude"));
-        assert!(missing.starts_with("The agent (claude) cannot start") && !missing.contains("/opt"));
-        assert_eq!(plain_error(&anyhow::anyhow!("Select a part of the map first")), "Select a part of the map first");
+        assert!(
+            missing.starts_with("The agent (claude) cannot start") && !missing.contains("/opt")
+        );
+        assert_eq!(
+            plain_error(&anyhow::anyhow!("Select a part of the map first")),
+            "Select a part of the map first"
+        );
     }
     #[test]
     fn drafts_that_leave_checks_open_get_another_pass() {
-        assert!(left_unchecked("I did not check where that import comes from."));
+        assert!(left_unchecked(
+            "I did not check where that import comes from."
+        ));
         assert!(left_unchecked(
             "I did not read those files to confirm the code was cleaned out. Run the tests to confirm."
         ));
         assert!(left_unchecked("I didn’t read those files."));
-        assert!(!left_unchecked("`quality.py` now has `required_model_ids`."));
-        assert!(!left_unchecked("I did not run the tests, so runtime errors are unchecked."));
-        assert!(!left_unchecked("I did not check runtime behavior or test results."));
+        assert!(!left_unchecked(
+            "`quality.py` now has `required_model_ids`."
+        ));
+        assert!(!left_unchecked(
+            "I did not run the tests, so runtime errors are unchecked."
+        ));
+        assert!(!left_unchecked(
+            "I did not check runtime behavior or test results."
+        ));
     }
     #[test]
     fn the_second_pass_carries_the_question_and_the_draft() {
-        let first = json!({"repositoryContext":{},"conversation":[],"question":"Where did it go?"}).to_string();
+        let first = json!({"repositoryContext":{},"conversation":[],"question":"Where did it go?"})
+            .to_string();
         let again: Value =
             serde_json::from_str(&recheck_prompt(&first, "I did not check it.").unwrap()).unwrap();
         assert_eq!(again["question"], CHECK_AGAIN);

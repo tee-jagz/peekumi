@@ -61,7 +61,8 @@ function relationships(tree, symbols) {
       binding = bindings.get(root);
     // this.method() in a class member: a method of that class (or unresolved).
     const own = klass && /^this\.([A-Za-z_$][\w$]*)$/.exec(target);
-    if (own) entry.lookup = { method: { type: klass, fields: [], name: own[1] } };
+    if (own)
+      entry.lookup = { method: { type: klass, fields: [], name: own[1] } };
     else if (blocked.has(root) || writes.has(root))
       entry.reason = "Name is shadowed or assigned in this scope";
     else if (binding && names.has(root))
@@ -134,7 +135,11 @@ function relationships(tree, symbols) {
           ts.isGetAccessor(m) ||
           ts.isSetAccessor(m)
         )
-          calls(owner + "." + (m.name?.getText(tree) || "constructor"), m, owner);
+          calls(
+            owner + "." + (m.name?.getText(tree) || "constructor"),
+            m,
+            owner,
+          );
     }
   }
   return result;
@@ -283,7 +288,9 @@ function jsAnalyze(file, source) {
     if (ts.isClassDeclaration(node))
       return node.members
         .filter((member) => !ts.isPropertyDeclaration(member))
-        .map((member) => printer.printNode(ts.EmitHint.Unspecified, member, tree))
+        .map((member) =>
+          printer.printNode(ts.EmitHint.Unspecified, member, tree),
+        )
         .join("\n");
     const part = ts.isVariableDeclaration(node)
       ? node.initializer

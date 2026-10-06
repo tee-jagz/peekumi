@@ -23,7 +23,9 @@ export async function fixture({ env = {}, files = {} } = {}) {
   await git("add", ".");
   await git("commit", "-m", "Initial");
   const sha = (await git("rev-parse", "HEAD")).toString().trim();
-  const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-workflow-state-"));
+  const state = await mkdtemp(
+    path.join(os.tmpdir(), "peekumi-workflow-state-"),
+  );
   const fake = path.join(state, "agent");
   await writeFile(
     fake,

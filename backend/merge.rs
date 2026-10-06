@@ -122,11 +122,15 @@ impl Workflow {
             .find(|r| r["id"] == id)
             .context("Not found")?
             .clone();
-        let branch = format!("refs/heads/{}", run["branch"].as_str().context("Missing branch")?);
+        let branch = format!(
+            "refs/heads/{}",
+            run["branch"].as_str().context("Missing branch")?
+        );
         let target_sha = self.resolve(&target)?;
         let head = self.resolve(&branch).ok();
         let name = target.trim_start_matches("refs/heads/");
-        let mut status = json!({"target": name, "targetSha": target_sha, "head": head, "merge": run["merge"]});
+        let mut status =
+            json!({"target": name, "targetSha": target_sha, "head": head, "merge": run["merge"]});
         if let Some(record) = run["merge"].as_object() {
             let to = record["to"].as_str().unwrap_or("");
             let from = record["from"].as_str().unwrap_or("");
@@ -199,7 +203,11 @@ impl Workflow {
                 status["checkedOut"] = json!(true);
                 status["uncommitted"] = json!(dirty.len());
                 status["blocking"] = json!(blocking);
-                status["state"] = json!(if blocking.is_empty() { "ready" } else { "blocked" });
+                status["state"] = json!(if blocking.is_empty() {
+                    "ready"
+                } else {
+                    "blocked"
+                });
             }
             None => {
                 status["checkedOut"] = json!(false);
@@ -236,7 +244,14 @@ impl Workflow {
             // Git updates the working files and refuses to overwrite uncommitted work.
             self.git(&["merge", "--ff-only", "--no-edit", &head])?;
         } else {
-            self.git(&["update-ref", "-m", "peekumi: merge task", &target, &head, &from])?;
+            self.git(&[
+                "update-ref",
+                "-m",
+                "peekumi: merge task",
+                &target,
+                &head,
+                &from,
+            ])?;
         }
         self.update(|v| {
             let r = v["runs"]
@@ -245,13 +260,17 @@ impl Workflow {
                 .iter_mut()
                 .find(|r| r["id"] == id)
                 .context("Not found")?;
-            r["merge"] = json!({"from": from, "to": head, "at": now(), "checkedOut": status["checkedOut"]});
+            r["merge"] =
+                json!({"from": from, "to": head, "at": now(), "checkedOut": status["checkedOut"]});
             // The merge closes the task. Instructions that the agent flagged or did not finish
             // stay open: they become drafts again, at their place, for a later task.
             for c in v["comments"].as_array_mut().unwrap().iter_mut() {
-                if c["runId"] == id && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or("")) {
+                if c["runId"] == id
+                    && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or(""))
+                {
                     // Undo merge puts it back as it was (see unmerge).
-                    c["reopenedFrom"] = json!({"run": id, "status": c["status"], "report": c["report"]});
+                    c["reopenedFrom"] =
+                        json!({"run": id, "status": c["status"], "report": c["report"]});
                     c["status"] = json!("draft");
                     c["report"] = Value::Null;
                     c["runId"] = Value::Null;
@@ -266,19 +285,35 @@ impl Workflow {
     /// while the branch is still at the merged commit and no uncommitted file would change.
     fn unmerge(&self, id: &str) -> Result<Value> {
         let status = self.merge_status(id)?;
-        ensure!(status["state"] == "merged", "This task was not merged by Peekumi");
+        ensure!(
+            status["state"] == "merged",
+            "This task was not merged by Peekumi"
+        );
         ensure!(
             status["undoable"] == true,
             "The branch changed after the merge, or uncommitted files would change; Undo is not possible"
         );
         let target = self.target_ref()?;
-        let from = status["merge"]["from"].as_str().context("Missing merge record")?.to_string();
-        let to = status["merge"]["to"].as_str().context("Missing merge record")?.to_string();
+        let from = status["merge"]["from"]
+            .as_str()
+            .context("Missing merge record")?
+            .to_string();
+        let to = status["merge"]["to"]
+            .as_str()
+            .context("Missing merge record")?
+            .to_string();
         if self.checked_out(&target)? == Some(None) {
             // Keeps uncommitted work; refuses if a changed file would be overwritten.
             self.git(&["reset", "--keep", &from])?;
         } else {
-            self.git(&["update-ref", "-m", "peekumi: undo merge", &target, &from, &to])?;
+            self.git(&[
+                "update-ref",
+                "-m",
+                "peekumi: undo merge",
+                &target,
+                &from,
+                &to,
+            ])?;
         }
         self.update(|v| {
             let r = v["runs"]
@@ -316,7 +351,10 @@ impl Workflow {
     /// Returns `{"merged": status}` or `{"round": run, "token": …}`.
     fn update_with_target(&self, id: &str) -> Result<Value> {
         let status = self.merge_status(id)?;
-        ensure!(status["state"] == "behind", "The task is not behind the target branch");
+        ensure!(
+            status["state"] == "behind",
+            "The task is not behind the target branch"
+        );
         let run = self.run(id)?;
         let branch = format!("refs/heads/{}", run["branch"].as_str().unwrap());
         let (target_sha, head) = (
@@ -341,7 +379,14 @@ impl Workflow {
                     run["branch"].as_str().unwrap()
                 );
                 let commit = self.git(&[
-                    "commit-tree", &tree, "-p", &head, "-p", &target_sha, "-m", &message,
+                    "commit-tree",
+                    &tree,
+                    "-p",
+                    &head,
+                    "-p",
+                    &target_sha,
+                    "-m",
+                    &message,
                 ])?;
                 self.git(&["update-ref", &branch, &commit, &head])?;
                 self.update(|v| {
@@ -351,11 +396,17 @@ impl Workflow {
                         .iter_mut()
                         .find(|r| r["id"] == id)
                         .context("Not found")?;
-                    r["results"].as_array_mut().context("Missing results")?.push(json!(commit));
+                    r["results"]
+                        .as_array_mut()
+                        .context("Missing results")?
+                        .push(json!(commit));
                     if !r["updates"].is_array() {
                         r["updates"] = json!([]);
                     }
-                    r["updates"].as_array_mut().unwrap().push(json!({"target": target_sha, "commit": commit, "at": now()}));
+                    r["updates"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(json!({"target": target_sha, "commit": commit, "at": now()}));
                     Ok(Value::Null)
                 })?;
                 Ok(json!({"merged": self.merge_status(id)?}))
@@ -374,7 +425,12 @@ impl Workflow {
     }
     /// Starts the round that merges the target into the task branch and resolves
     /// `conflicts`. Instructions the owner approved go back to review, because the code changes.
-    fn update_round(&self, previous: &str, target_sha: &str, conflicts: &[String]) -> Result<(Value, String)> {
+    fn update_round(
+        &self,
+        previous: &str,
+        target_sha: &str,
+        conflicts: &[String],
+    ) -> Result<(Value, String)> {
         let earlier = self.run(previous)?;
         let base = self.resolve(&format!(
             "refs/heads/{}",
@@ -450,7 +506,10 @@ impl Workflow {
     /// takes only what the owner saw.
     fn blocking_changes(&self, id: &str) -> Result<(Value, String)> {
         let status = self.merge_status(id)?;
-        ensure!(status["state"] == "blocked", "No uncommitted files are in the way");
+        ensure!(
+            status["state"] == "blocked",
+            "No uncommitted files are in the way"
+        );
         let head = self.git(&["rev-parse", "HEAD"])?;
         let untracked: BTreeSet<String> = self
             .uncommitted()?
@@ -460,17 +519,30 @@ impl Workflow {
             .collect();
         let mut files = vec![];
         let mut text = String::new();
-        for path in status["blocking"].as_array().unwrap().iter().filter_map(Value::as_str) {
+        for path in status["blocking"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+        {
             if untracked.contains(path) {
                 let content = std::fs::read(self.repo.join(path)).unwrap_or_default();
                 let content = String::from_utf8_lossy(&content);
                 files.push(json!({"path": path, "added": content.lines().count(), "removed": 0, "new": true}));
                 text.push_str(&format!("New file {path}:\n{content}\n"));
             } else {
-                let numstat = self.git(&["diff", "--no-renames", "--numstat", "HEAD", "--", path])?;
+                let numstat =
+                    self.git(&["diff", "--no-renames", "--numstat", "HEAD", "--", path])?;
                 let mut parts = numstat.split('\t');
                 files.push(json!({"path": path, "added": parts.next().and_then(|n| n.parse::<u64>().ok()), "removed": parts.next().and_then(|n| n.parse::<u64>().ok())}));
-                text.push_str(&self.git(&["diff", "--no-renames", "--no-ext-diff", "HEAD", "--", path])?);
+                text.push_str(&self.git(&[
+                    "diff",
+                    "--no-renames",
+                    "--no-ext-diff",
+                    "HEAD",
+                    "--",
+                    path,
+                ])?);
                 text.push('\n');
             }
         }
@@ -484,7 +556,12 @@ impl Workflow {
         let choice = self.choice(crate::agents::Job::Ask, &body["using"])?;
         let (model, effort) = crate::agents::flags(&choice);
         let (mut draft, text) = self.blocking_changes(id)?;
-        let names: Vec<&str> = draft["files"].as_array().unwrap().iter().filter_map(|f| f["path"].as_str()).collect();
+        let names: Vec<&str> = draft["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|f| f["path"].as_str())
+            .collect();
         let fallback = format!("Update {}", names.join(", "));
         let mut clipped = text;
         if clipped.len() > DRAFT_LIMIT {
@@ -498,9 +575,20 @@ impl Workflow {
         let cwd = self.state.join("ask");
         std::fs::create_dir_all(&cwd)?;
         let mut args = vec![
-            "-p", "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
-            "--setting-sources", "", "--no-session-persistence", "--system-prompt", COMMIT_MESSAGE,
-            "--output-format", "json", "--mcp-config", "{\"mcpServers\":{}}",
+            "-p",
+            "--tools",
+            "",
+            "--disable-slash-commands",
+            "--strict-mcp-config",
+            "--setting-sources",
+            "",
+            "--no-session-persistence",
+            "--system-prompt",
+            COMMIT_MESSAGE,
+            "--output-format",
+            "json",
+            "--mcp-config",
+            "{\"mcpServers\":{}}",
         ];
         if let Some(model) = model.as_deref() {
             args.extend(["--model", model]);
@@ -528,7 +616,11 @@ impl Workflow {
         }
         .and_then(|out| serde_json::from_slice::<Value>(&out).ok())
         .filter(|r| r["is_error"] != true)
-        .and_then(|r| r["result"].as_str().map(|s| s.trim().trim_matches('`').trim().to_string()))
+        .and_then(|r| {
+            r["result"]
+                .as_str()
+                .map(|s| s.trim().trim_matches('`').trim().to_string())
+        })
         .filter(|s| !s.is_empty() && s.len() <= 5000);
         draft["agent"] = json!(written.is_some());
         draft["message"] = json!(written.unwrap_or(fallback));
@@ -537,14 +629,27 @@ impl Workflow {
     /// Commits exactly the blocking files the owner checked, with the owner's message, in the
     /// inspected folder. Other uncommitted and staged changes stay as they are.
     fn commit_mine(&self, id: &str, body: &Value) -> Result<Value> {
-        let message = crate::workflow::text(body, "message", 5000)?.trim().to_string();
+        let message = crate::workflow::text(body, "message", 5000)?
+            .trim()
+            .to_string();
         let (current, _) = self.blocking_changes(id)?;
         ensure!(
             body["head"] == current["head"] && body["hash"] == current["hash"],
             "Your changes changed; check them again"
         );
-        let paths: Vec<String> = current["files"].as_array().unwrap().iter().filter_map(|f| f["path"].as_str().map(str::to_string)).collect();
-        let new: Vec<&str> = current["files"].as_array().unwrap().iter().filter(|f| f["new"] == true).filter_map(|f| f["path"].as_str()).collect();
+        let paths: Vec<String> = current["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|f| f["path"].as_str().map(str::to_string))
+            .collect();
+        let new: Vec<&str> = current["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["new"] == true)
+            .filter_map(|f| f["path"].as_str())
+            .collect();
         if !new.is_empty() {
             let mut args = vec!["add", "--"];
             args.extend(new);
@@ -555,11 +660,19 @@ impl Workflow {
         self.git(&args)?;
         let commit = self.git(&["rev-parse", "HEAD"])?;
         self.update(|v| {
-            let r = v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == id).context("Not found")?;
+            let r = v["runs"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|r| r["id"] == id)
+                .context("Not found")?;
             if !r["ownerCommits"].is_array() {
                 r["ownerCommits"] = json!([]);
             }
-            r["ownerCommits"].as_array_mut().unwrap().push(json!({"commit": commit, "files": paths, "at": now()}));
+            r["ownerCommits"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"commit": commit, "files": paths, "at": now()}));
             Ok(Value::Null)
         })?;
         Ok(json!({"commit": commit, "status": self.merge_status(id)?}))

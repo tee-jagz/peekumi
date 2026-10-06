@@ -1,0 +1,2 @@
+# Rust layout: the defaults of the 2024 style edition. Run `npm run format`.
+style_edition = "2024"

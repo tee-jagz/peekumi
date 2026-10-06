@@ -36,7 +36,8 @@ export function createAsk({
   // state, so a reload, an app update or another device picks it up where it left off.
   let branch = null;
   const threads = new Map();
-  const historyRoute = (key) => "/api/ask/history?branch=" + encodeURIComponent(key);
+  const historyRoute = (key) =>
+    "/api/ask/history?branch=" + encodeURIComponent(key);
   /** Saves branch `key`'s conversation (the one shown, unless an answer finished elsewhere). */
   function save(key = branch, thread = chat.messages) {
     if (!key) return;
@@ -84,7 +85,10 @@ export function createAsk({
     const waiting = el("article");
     waiting.className = "ask-message from-assistant is-pending";
     waiting.setAttribute("aria-live", "polite");
-    const text = chat.partial.replace(/\n?Suggested (instruction|comment):[^]*$/, "");
+    const text = chat.partial.replace(
+      /\n?Suggested (instruction|comment):[^]*$/,
+      "",
+    );
     if (text.trim()) {
       waiting.classList.add("is-streaming");
       waiting.append(richText(text, "ask-text"));
@@ -95,10 +99,16 @@ export function createAsk({
       // reply is redrawn on every event, so the same Peek carries on rather than restarting.
       const mood = chat.live.length ? "peeking" : "thinking",
         current = document.querySelector(".ask-message.is-pending .peek-mark");
-      waiting.append(current?.dataset.state === mood ? current : peek(mood), label);
+      waiting.append(
+        current?.dataset.state === mood ? current : peek(mood),
+        label,
+      );
     }
     if (chat.live.length) {
-      const read = el("p", "Looking up: " + [...new Set(chat.live)].join(" · "));
+      const read = el(
+        "p",
+        "Looking up: " + [...new Set(chat.live)].join(" · "),
+      );
       read.className = "read-note ask-lookups";
       waiting.append(read);
     }
@@ -126,7 +136,9 @@ export function createAsk({
         thread = [];
         threads.set(key, thread);
         chat.messages = thread;
-        const saved = await api(historyRoute(key)).catch(() => ({ messages: [] }));
+        const saved = await api(historyRoute(key)).catch(() => ({
+          messages: [],
+        }));
         // Keep anything asked while it loaded after what was saved before.
         thread.unshift(...(saved.messages || []));
       }
@@ -136,7 +148,8 @@ export function createAsk({
     /** True when this branch's conversation has messages (New conversation can clear it). */
     hasMessages: () => Boolean(chat.messages.length && !chat.pending),
     /** The last question of this branch's conversation, for the Conversations list. */
-    lastQuestion: () => chat.messages.filter((m) => m.role === "user").at(-1)?.text || "",
+    lastQuestion: () =>
+      chat.messages.filter((m) => m.role === "user").at(-1)?.text || "",
     /** Starts a new conversation on this branch. */
     clear() {
       if (chat.pending) return;
@@ -171,11 +184,17 @@ export function createAsk({
         }
         const bubble = el("article");
         bubble.className = "ask-message from-" + message.role;
-        const links = { links: message.references || {}, onLink: openReference };
+        const links = {
+          links: message.references || {},
+          onLink: openReference,
+        };
         bubble.append(richText(message.text, "ask-text", links));
         if (message.lookups?.length) {
           // Show what the answer read beyond the selection, so it can be judged.
-          const read = el("p", "Looked up: " + [...new Set(message.lookups)].join(" · "));
+          const read = el(
+            "p",
+            "Looked up: " + [...new Set(message.lookups)].join(" · "),
+          );
           read.className = "read-note ask-lookups";
           bubble.append(read);
         }
@@ -195,40 +214,45 @@ export function createAsk({
             // While exploring a task's changes, a suggestion belongs with that task's next
             // round, which builds on the agent's work; a draft would start again from main.
             message.added
-              ? Object.assign(el("p", "Added to requested changes"), { className: "read-note" })
-              : message.saved
-              ? Object.assign(el("p", "Saved as a draft instruction"), { className: "read-note" })
-              : changeTarget()
-              ? btn("Add to requested changes", async () => {
-                  await addToChanges(message);
-                  message.added = true;
-                  redraw();
+              ? Object.assign(el("p", "Added to requested changes"), {
+                  className: "read-note",
                 })
-              : btn("Save as draft instruction", async () => {
-                  // Once only: the button gives way to a note, so a second tap adds nothing.
-                  if (message.saved) return;
-                  message.saved = true;
-                  try {
-                    await makeDraft({
-                      anchor: message.asked.anchor,
-                      sha: message.asked.sha,
-                      text: message.suggestion,
-                    });
-                    save();
-                  } catch (e) {
-                    message.saved = false;
-                    throw e;
-                  } finally {
-                    redraw();
-                  }
-                }),
+              : message.saved
+                ? Object.assign(el("p", "Saved as a draft instruction"), {
+                    className: "read-note",
+                  })
+                : changeTarget()
+                  ? btn("Add to requested changes", async () => {
+                      await addToChanges(message);
+                      message.added = true;
+                      redraw();
+                    })
+                  : btn("Save as draft instruction", async () => {
+                      // Once only: the button gives way to a note, so a second tap adds nothing.
+                      if (message.saved) return;
+                      message.saved = true;
+                      try {
+                        await makeDraft({
+                          anchor: message.asked.anchor,
+                          sha: message.asked.sha,
+                          text: message.suggestion,
+                        });
+                        save();
+                      } catch (e) {
+                        message.saved = false;
+                        throw e;
+                      } finally {
+                        redraw();
+                      }
+                    }),
           );
           bubble.append(proposal);
         }
         thread.append(bubble);
       }
       // An answer still running for another branch's conversation shows there, not here.
-      if (chat.pending && chat.pendingFor === branch) thread.append(pendingBubble(chat));
+      if (chat.pending && chat.pendingFor === branch)
+        thread.append(pendingBubble(chat));
       body.append(thread);
       if (chat.reveal) {
         chat.reveal = false;
@@ -272,10 +296,15 @@ export function createAsk({
         const question = chat.question,
           asked = context();
         // Earlier questions carry their subject, so follow-ups across selections make sense.
-        const history = chat.messages.slice(-12).map(({ role, text, subject }) => ({
-          role,
-          text: (role === "user" ? `[About ${subject}] ${text}` : text).slice(0, 8000),
-        }));
+        const history = chat.messages
+          .slice(-12)
+          .map(({ role, text, subject }) => ({
+            role,
+            text: (role === "user" ? `[About ${subject}] ${text}` : text).slice(
+              0,
+              8000,
+            ),
+          }));
         // Bound prior dialogue separately from server-built source context.
         while (JSON.stringify(history).length > 11000) history.shift();
         // Show the question at once; the answer can take several seconds. The answer joins
@@ -283,7 +312,11 @@ export function createAsk({
         const thread = chat.messages,
           key = branch;
         chat.pendingFor = key;
-        thread.push({ role: "user", text: question, subject: subjectOf(asked.anchor) });
+        thread.push({
+          role: "user",
+          text: question,
+          subject: subjectOf(asked.anchor),
+        });
         // Kept at once, so a reload during the answer does not lose the question.
         save(key, thread);
         chat.question = "";
@@ -299,21 +332,25 @@ export function createAsk({
         try {
           let response = null;
           // The answer streams in; each new model turn replaces earlier working text.
-          await stream("/api/ask", { ...asked, question, history, stream: true, using: using() }, (event) => {
-            if (event.type === "text") chat.partial += event.text;
-            else if (event.type === "turn") chat.partial = "";
-            else if (event.type === "lookup") {
-              chat.live.push(event.text);
-              if (event.place?.path) {
-                places.push(event.place);
-                lookedAt(places, true);
-              }
-            }
-            else if (event.type === "error") throw new Error(event.message);
-            else if (event.type === "done") response = event;
-            paint();
-          });
-          if (!response) throw new Error("The answer stopped before it finished.");
+          await stream(
+            "/api/ask",
+            { ...asked, question, history, stream: true, using: using() },
+            (event) => {
+              if (event.type === "text") chat.partial += event.text;
+              else if (event.type === "turn") chat.partial = "";
+              else if (event.type === "lookup") {
+                chat.live.push(event.text);
+                if (event.place?.path) {
+                  places.push(event.place);
+                  lookedAt(places, true);
+                }
+              } else if (event.type === "error") throw new Error(event.message);
+              else if (event.type === "done") response = event;
+              paint();
+            },
+          );
+          if (!response)
+            throw new Error("The answer stopped before it finished.");
           thread.push({
             role: "assistant",
             asked,

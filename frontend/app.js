@@ -83,7 +83,10 @@ let metadata,
   comparison,
   scope = rootScope(),
   selected = null,
-  mode = new URL(location.href).searchParams.get("mode") === "time" ? "time" : "diff",
+  mode =
+    new URL(location.href).searchParams.get("mode") === "time"
+      ? "time"
+      : "diff",
   lens = "changes",
   before = false;
 let viewingBranch = new URL(location.href).searchParams.get("branch"),
@@ -146,7 +149,8 @@ let held = null;
 /** Captures the selected declaration or dependency at its displayed immutable revision, or
  * the owner's anchor that Follow holds. */
 function reviewContext() {
-  if (held && held.base === baseRef && held.head === headRef) return held.context;
+  if (held && held.base === baseRef && held.head === headRef)
+    return held.context;
   return currentContext();
 }
 function currentContext() {
@@ -187,7 +191,12 @@ function currentContext() {
 /** Compares `base` with `head` (a ref or commit) on the map and opens `anchor` there:
  * a file or folder path, an optional declaration, or the repository root. The map opens as
  * a view over the current one (Back returns to it); `explore` marks a task's branch. */
-async function inspectRevision(base, head, anchor, { explore = null, aspect = null } = {}) {
+async function inspectRevision(
+  base,
+  head,
+  anchor,
+  { explore = null, aspect = null } = {},
+) {
   // Back returns to the comparison and the place on the map from before.
   explore ??= here(null);
   leavePr();
@@ -207,7 +216,10 @@ async function inspectRevision(base, head, anchor, { explore = null, aspect = nu
     // The view comes last, from this function; the map moves without changing it.
     if (anchor.path) {
       await navigate(
-        { kind: anchor.kind === "folder" ? "folder" : "file", path: anchor.path },
+        {
+          kind: anchor.kind === "folder" ? "folder" : "file",
+          path: anchor.path,
+        },
         "",
         { keepTab: true },
       );
@@ -218,7 +230,9 @@ async function inspectRevision(base, head, anchor, { explore = null, aspect = nu
     sourceView = base === head ? "after" : "diff";
     nav.go({
       name: "inspect",
-      aspect: aspect || (anchor.path && anchor.kind !== "folder" ? "source" : "changes"),
+      aspect:
+        aspect ||
+        (anchor.path && anchor.kind !== "folder" ? "source" : "changes"),
       ...(explore ? { explore } : {}),
     });
   } finally {
@@ -234,7 +248,9 @@ const exploring = () => nav.find((v) => v.explore)?.explore || null;
  * is then the subject of its next message, and the conversation stays in view. */
 const onThread = () => {
   const view = nav.view();
-  return view.name === "ask" || (view.name === "run" && workflow.isLive(view.id));
+  return (
+    view.name === "ask" || (view.name === "run" && workflow.isLive(view.id))
+  );
 };
 /** The comparison that an exploration left, while its views are still on the stack. */
 let explored = null;
@@ -290,7 +306,12 @@ const workflow = createWorkflow({
   /** Shows everything a task's agent did on the map: its branch against where the task
    * started. The sheet drops to peek so the map leads, and a chip leads back to the task. */
   async explore(base, branch, id) {
-    await inspectRevision(base, "refs/heads/" + branch, { kind: "repo" }, { explore: here(id) });
+    await inspectRevision(
+      base,
+      "refs/heads/" + branch,
+      { kind: "repo" },
+      { explore: here(id) },
+    );
     setSheetHeight("peek");
   },
   inspect: inspectRevision,
@@ -298,9 +319,14 @@ const workflow = createWorkflow({
   /** Shows a session's branch on the map, at a file when `path` is given; the chip leads back
    * to the session. */
   async showOnMap(r, path) {
-    await inspectRevision(r.base, "refs/heads/" + r.branch, path ? { kind: "file", path } : { kind: "repo" }, {
-      explore: exploring()?.id === r.id ? exploring() : here(r.id),
-    });
+    await inspectRevision(
+      r.base,
+      "refs/heads/" + r.branch,
+      path ? { kind: "file", path } : { kind: "repo" },
+      {
+        explore: exploring()?.id === r.id ? exploring() : here(r.id),
+      },
+    );
     setSheetHeight(path ? "half" : "peek");
   },
   /** The task being explored, when it can still collect changes for a next round. */
@@ -314,7 +340,13 @@ const workflow = createWorkflow({
   },
 });
 /** A way back for task `id` (or null): the branch, base, mode and place on the map now. */
-const here = (id) => ({ id, branch: viewingBranch, base: diffBase, mode, place: placeOf() });
+const here = (id) => ({
+  id,
+  branch: viewingBranch,
+  base: diffBase,
+  mode,
+  place: placeOf(),
+});
 const ask = createAsk({
   api,
   stream: apiStream,
@@ -323,8 +355,16 @@ const ask = createAsk({
   lookedAt(places, running) {
     const recent = [];
     for (const place of places.slice().reverse())
-      if (!recent.some((p) => p.path === place.path && p.symbol === place.symbol)) recent.push(place);
-    focus.set("ask", running || recent.length ? { running, current: recent[0] || null, trail: recent.slice(1, 5) } : null);
+      if (
+        !recent.some((p) => p.path === place.path && p.symbol === place.symbol)
+      )
+        recent.push(place);
+    focus.set(
+      "ask",
+      running || recent.length
+        ? { running, current: recent[0] || null, trail: recent.slice(1, 5) }
+        : null,
+    );
   },
   using: () => agents.using("ask"),
   rootSubject: () => (viewingPr ? `PR #${viewingPr}` : null),
@@ -388,7 +428,9 @@ function showNotice(message, error = false) {
   // Errors get Peek's sunken face; progress notices stay plain text.
   $("#notice").replaceChildren(
     // An unreachable server sends Peek to sleep; other errors get its sunken face.
-    ...(error && message ? [peek(message === UNREACHABLE ? "asleep" : "error")] : []),
+    ...(error && message
+      ? [peek(message === UNREACHABLE ? "asleep" : "error")]
+      : []),
     document.createTextNode(message),
   );
   $("#notice").classList.toggle("error", error);
@@ -447,7 +489,7 @@ async function apiStream(route, body, onEvent) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    for (let end; (end = buffer.indexOf("\n")) >= 0; ) {
+    for (let end; (end = buffer.indexOf("\n")) >= 0;) {
       const line = buffer.slice(0, end).trim();
       buffer = buffer.slice(end + 1);
       if (line) onEvent(JSON.parse(line));
@@ -457,7 +499,10 @@ async function apiStream(route, body, onEvent) {
 }
 // The header's height, for the sheet's full height (style.css): one row or two, by width.
 new ResizeObserver(([entry]) =>
-  document.documentElement.style.setProperty("--top-height", `${Math.ceil(entry.target.getBoundingClientRect().height)}px`),
+  document.documentElement.style.setProperty(
+    "--top-height",
+    `${Math.ceil(entry.target.getBoundingClientRect().height)}px`,
+  ),
 ).observe($("header.top"));
 /** Exchanges a private access token for a session cookie and initializes the viewer on success. */
 async function pair(token) {
@@ -506,7 +551,8 @@ async function boot(refresh = false, branch = viewingBranch) {
   busy = true;
   $("#branchPicker").disabled = true;
   $("#refresh").disabled = true;
-  if (!startStep("Connecting to your repository…")) showNotice("Loading branch…");
+  if (!startStep("Connecting to your repository…"))
+    showNotice("Loading branch…");
   try {
     await setupRepositories();
     startStep("Reading the branches…");
@@ -526,7 +572,9 @@ async function boot(refresh = false, branch = viewingBranch) {
     // branches of agent tasks (the Tasks view shows those) stay out of the list, unless
     // one of them is on view.
     const picker = $("#branchPicker"),
-      local = new Set(metadata.branches.filter((b) => !b.remote).map((b) => b.name)),
+      local = new Set(
+        metadata.branches.filter((b) => !b.remote).map((b) => b.name),
+      ),
       internal = /^(worktree-agent-|peekumi\/(run|session)-|strata\/run-)/;
     picker.replaceChildren();
     if (viewingPr && !metadata.selectedBranch) {
@@ -537,7 +585,10 @@ async function boot(refresh = false, branch = viewingBranch) {
     }
     for (const b of metadata.branches) {
       const copy = b.remote && local.has(b.name.replace(/^[^/]+\//, ""));
-      if ((copy || internal.test(b.name)) && b.ref !== metadata.selectedBranch?.ref)
+      if (
+        (copy || internal.test(b.name)) &&
+        b.ref !== metadata.selectedBranch?.ref
+      )
         continue;
       const option = element(
         "option",
@@ -671,10 +722,15 @@ function renderPrRows() {
               month: "short",
             }),
         ]
-          .filter((part) => part !== undefined && part !== null && part !== false)
+          .filter(
+            (part) => part !== undefined && part !== null && part !== false,
+          )
           .join(" · "),
       );
-      text.append(element("span", "pr-pick-title", `#${pr.number} ${pr.title}`), meta);
+      text.append(
+        element("span", "pr-pick-title", `#${pr.number} ${pr.title}`),
+        meta,
+      );
       row.append(text);
       if (current) row.append(glyph("check"));
       row.setAttribute("aria-pressed", String(current));
@@ -778,7 +834,9 @@ async function setupRepositories() {
   // ways: an owner link opened in a read-only tab brings them back.
   const reader = data.role === "reader";
   if (reader && !$(".access-note"))
-    $(".title-block")?.append(element("span", "access-note", "Read-only device"));
+    $(".title-block")?.append(
+      element("span", "access-note", "Read-only device"),
+    );
   if (!reader) $(".access-note")?.remove();
   $("#openTasks").hidden = reader;
   $("#openConversations").hidden = reader;
@@ -964,7 +1022,8 @@ function renderDeck() {
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
   // A card with the keyboard focus keeps it across the redraw (a new element, same key).
-  const focusedKey = document.activeElement?.closest?.("#deck .node")?.dataset.key;
+  const focusedKey =
+    document.activeElement?.closest?.("#deck .node")?.dataset.key;
   const mapLegend = $("#mapLegend"),
     sides = $("#baSeg"),
     crumbHost = $("#crumbHost");
@@ -986,7 +1045,9 @@ function renderDeck() {
   body.append(sides);
   body.scrollTop = oldScroll;
   const cards = [...body.querySelectorAll(".node")];
-  const again = focusFirstCard ? cards[0] : focusedKey && cards.find((n) => n.dataset.key === focusedKey);
+  const again = focusFirstCard
+    ? cards[0]
+    : focusedKey && cards.find((n) => n.dataset.key === focusedKey);
   focusFirstCard = false;
   again?.focus({ preventScroll: true });
 }
@@ -1112,7 +1173,8 @@ function renderGraph(body) {
         ...(root ? [] : outgoing.map((n) => n.key)),
         "boundary",
       ]),
-      rowFor = (key) => (rowOf.has(key) ? rowOf.get(key) : above.has(key) ? -1 : Infinity),
+      rowFor = (key) =>
+        rowOf.has(key) ? rowOf.get(key) : above.has(key) ? -1 : Infinity,
       roomy = new Set(),
       room = (key, row) => roomy.add(colOf.get(key) + ":" + row);
     let across = false;
@@ -1120,7 +1182,8 @@ function renderGraph(body) {
       const a = rowFor(e.from.key),
         b = rowFor(e.to.key);
       if (a === b) {
-        if (Math.abs(colOf.get(e.from.key) - colOf.get(e.to.key)) === 1) across = true;
+        if (Math.abs(colOf.get(e.from.key) - colOf.get(e.to.key)) === 1)
+          across = true;
         else {
           // Further apart in a row: the line dips under both cards.
           room(e.from.key, a);
@@ -1129,10 +1192,16 @@ function renderGraph(body) {
         continue;
       }
       const down = b > a;
-      for (const [key, leaving] of [[e.from.key, true], [e.to.key, false]])
+      for (const [key, leaving] of [
+        [e.from.key, true],
+        [e.to.key, false],
+      ])
         if (rowOf.has(key))
           // Leaving downwards or arriving from below uses the gap under the card.
-          room(key, (leaving ? down : !down) ? rowOf.get(key) : rowOf.get(key) - 1);
+          room(
+            key,
+            (leaving ? down : !down) ? rowOf.get(key) : rowOf.get(key) - 1,
+          );
     }
     // Connected neighbours need room for an S between their middles plus a straight tail.
     const colGap = across ? 32 : GAP,
@@ -1142,7 +1211,13 @@ function renderGraph(body) {
       rows = Math.ceil(list.length / cols);
     for (let row = 0; row < rows; row++)
       list.slice(row * cols, row * cols + cols).forEach((node, c) => {
-        positions.set(node.key, { node, x: left + c * (w + colGap), y: next[c], w, h });
+        positions.set(node.key, {
+          node,
+          x: left + c * (w + colGap),
+          y: next[c],
+          w,
+          h,
+        });
         next[c] += h + (roomy.has(c + ":" + row) ? ROOM : GAP);
       });
     return Math.max(top, ...next.map((y) => y - GAP));
@@ -1168,7 +1243,14 @@ function renderGraph(body) {
   }
   if (root) {
     const cols = Math.min(current.length || 1, graphWidth < 540 ? 2 : 3);
-    y = placeGrid(current, { cols, left: 16, span: graphWidth - 32, h: 108, top: y }) + 20;
+    y =
+      placeGrid(current, {
+        cols,
+        left: 16,
+        span: graphWidth - 32,
+        h: 108,
+        top: y,
+      }) + 20;
   } else {
     const isFile = scope.kind === "file",
       cols = isFile
@@ -1203,12 +1285,12 @@ function renderGraph(body) {
       fileWithheld()
         ? fileWithheld()
         : scope.kind === "file" && !sourceData
-        ? "Loading symbols…"
-        : changesOnly
-          ? "No changed symbols or items here. Open Source for file-level changes, or turn off Changes only."
-          : scope.kind === "file"
-            ? "No extracted symbols. Open Source to inspect the complete file."
-            : "No items in this revision.",
+          ? "Loading symbols…"
+          : changesOnly
+            ? "No changed symbols or items here. Open Source for file-level changes, or turn off Changes only."
+            : scope.kind === "file"
+              ? "No extracted symbols. Open Source to inspect the complete file."
+              : "No items in this revision.",
     );
     message.prepend(
       peek(scope.kind === "file" && !sourceData ? "loading" : "empty"),
@@ -1242,7 +1324,9 @@ function renderGraph(body) {
   canvas.style.height = height + "px";
   drawEdges(canvas, positions, graphWidth, height, false);
   // A method's card drops its class's name when that class has a card on this level.
-  const owners = new Set(current.filter((n) => n.kind === "symbol").map((n) => n.name));
+  const owners = new Set(
+    current.filter((n) => n.kind === "symbol").map((n) => n.name),
+  );
   for (const p of positions.values()) canvas.append(graphNode(p, owners));
   const controls = element("div", "canvas-controls"),
     tools = element("div", "map-tools");
@@ -1332,8 +1416,12 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
   card.style.setProperty("--tone", tone(node));
   const top = element("div", "n-top");
   top.append(objectTypeIcon(node));
-  const owner = node.kind === "symbol" ? node.name.slice(0, node.name.lastIndexOf(".")) : "";
-  const shown = owner && owners.has(owner) ? node.name.slice(owner.length + 1) : node.name;
+  const owner =
+    node.kind === "symbol"
+      ? node.name.slice(0, node.name.lastIndexOf("."))
+      : "";
+  const shown =
+    owner && owners.has(owner) ? node.name.slice(owner.length + 1) : node.name;
   top.append(
     breakable(
       element("span", "n-name"),
@@ -1480,12 +1568,19 @@ function routeEdges(list, positions, width) {
     channels.push({ x: Math.max(4, lanes[0].x / 2), room: lanes[0].x });
     const last = lanes.at(-1),
       right = last.x + last.w;
-    channels.push({ x: Math.min(width - 4, (right + width) / 2), room: width - right });
+    channels.push({
+      x: Math.min(width - 4, (right + width) / 2),
+      room: width - right,
+    });
   }
   const bezier = ([p0, p1, p2, p3], t) => {
     const u = 1 - t;
     return [0, 1].map(
-      (i) => u * u * u * p0[i] + 3 * u * u * t * p1[i] + 3 * u * t * t * p2[i] + t * t * t * p3[i],
+      (i) =>
+        u * u * u * p0[i] +
+        3 * u * u * t * p1[i] +
+        3 * u * t * t * p2[i] +
+        t * t * t * p3[i],
     );
   };
   const crosses = (from, to, points) =>
@@ -1494,7 +1589,11 @@ function routeEdges(list, positions, width) {
         r.key !== from &&
         r.key !== to &&
         points.some(
-          ([x, y]) => x > r.x + 2 && x < r.x + r.w - 2 && y > r.y + 2 && y < r.y + r.h - 2,
+          ([x, y]) =>
+            x > r.x + 2 &&
+            x < r.x + r.w - 2 &&
+            y > r.y + 2 &&
+            y < r.y + r.h - 2,
         ),
     );
   const edgeY = (e, arriving) => {
@@ -1504,7 +1603,9 @@ function routeEdges(list, positions, width) {
   };
   const rounded = (points, radius) => {
     const pts = points.filter(
-      (p, i) => i === 0 || Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) > 0.5,
+      (p, i) =>
+        i === 0 ||
+        Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) > 0.5,
     );
     let d = `M${pts[0]}`;
     for (let i = 1; i < pts.length - 1; i++) {
@@ -1512,8 +1613,14 @@ function routeEdges(list, positions, width) {
       const l1 = Math.hypot(c[0] - p[0], c[1] - p[1]),
         l2 = Math.hypot(n[0] - c[0], n[1] - c[1]),
         r = Math.min(radius, l1 / 2, l2 / 2);
-      const into = [c[0] + ((p[0] - c[0]) * r) / l1, c[1] + ((p[1] - c[1]) * r) / l1],
-        out = [c[0] + ((n[0] - c[0]) * r) / l2, c[1] + ((n[1] - c[1]) * r) / l2];
+      const into = [
+          c[0] + ((p[0] - c[0]) * r) / l1,
+          c[1] + ((p[1] - c[1]) * r) / l1,
+        ],
+        out = [
+          c[0] + ((n[0] - c[0]) * r) / l2,
+          c[1] + ((n[1] - c[1]) * r) / l2,
+        ];
       d += ` L${into} Q${c} ${out}`;
     }
     return d + ` L${pts.at(-1)}`;
@@ -1542,7 +1649,14 @@ function routeEdges(list, positions, width) {
       ys = y + dir * Math.min(g - 3, g * 0.3 + Math.abs(offset) * 0.4);
     const room = gap(to.r, !plan.down),
       yt = y2 - dir * Math.min(room - 3, Math.max(room * 0.6, TAIL + 5));
-    return [[x, y], [x, ys], [gx, ys], [gx, yt], [x2, yt], [x2, y2]];
+    return [
+      [x, y],
+      [x, ys],
+      [gx, ys],
+      [gx, yt],
+      [x2, yt],
+      [x2, y2],
+    ];
   };
   const end = (key, r, side, toward) => ({ key, r, side, toward });
   // Plan each line's shape and which card edges it uses; ports are placed afterwards.
@@ -1561,8 +1675,12 @@ function routeEdges(list, positions, width) {
         from = right ? a.x + a.w : a.x,
         to = right ? b.x : b.x + b.w,
         // Opposite arrows between the same two cards sit just apart; a lone one is centred.
-        apart = list.some((o) => o.from.key === edge.to.key && o.to.key === edge.from.key)
-          ? (right ? -4 : 4)
+        apart = list.some(
+          (o) => o.from.key === edge.to.key && o.to.key === edge.from.key,
+        )
+          ? right
+            ? -4
+            : 4
           : 0,
         y1 = a.y + a.h / 2 + apart,
         y2 = b.y + b.h / 2 + apart,
@@ -1574,11 +1692,21 @@ function routeEdges(list, positions, width) {
             c.x + c.w > Math.min(from, to),
         );
       if (!between && Math.abs(to - from) >= 20)
-        return { kind: "across", from, to: to + (right ? -CLEAR : CLEAR), y1, y2, ends: [] };
+        return {
+          kind: "across",
+          from,
+          to: to + (right ? -CLEAR : CLEAR),
+          y1,
+          y2,
+          ends: [],
+        };
       // Otherwise a short dip through the gap below both cards.
       return {
         kind: "row",
-        ends: [end(edge.from.key, a, "bottom", mid(b)), end(edge.to.key, b, "bottom", mid(a))],
+        ends: [
+          end(edge.from.key, a, "bottom", mid(b)),
+          end(edge.to.key, b, "bottom", mid(a)),
+        ],
       };
     }
     const down = b.y > a.y;
@@ -1617,9 +1745,12 @@ function routeEdges(list, positions, width) {
       group.sort((p, q) => p.toward - q.toward);
       const n = group.length,
         step = n > 1 ? Math.min(0.16, 0.64 / (n - 1)) : 0;
-      group.forEach((e, i) => (e.at = e.r.x + e.r.w * (0.5 + (i - (n - 1) / 2) * step)));
+      group.forEach(
+        (e, i) => (e.at = e.r.x + e.r.w * (0.5 + (i - (n - 1) / 2) * step)),
+      );
     }
-    for (const plan of plans) for (const e of plan.ends) if (e.port) e.at = e.port.at;
+    for (const plan of plans)
+      for (const e of plan.ends) if (e.port) e.at = e.port.at;
   }
   /** Sends a line around the cards between its ends, through the cheapest channel whose
    * route crosses no card; the cheapest overall when none is clear. */
@@ -1627,12 +1758,16 @@ function routeEdges(list, positions, width) {
     const [ax, bx] = [mid(plan.a), mid(plan.b)];
     const ranked = [...channels].sort(
       (p, q) =>
-        Math.abs(p.x - ax) + Math.abs(p.x - bx) - (Math.abs(q.x - ax) + Math.abs(q.x - bx)),
+        Math.abs(p.x - ax) +
+        Math.abs(p.x - bx) -
+        (Math.abs(q.x - ax) + Math.abs(q.x - bx)),
     );
     const [from, to] = plan.ends;
     plan.kind = "lane";
     plan.lane =
-      ranked.find((c) => !crosses(from.key, to.key, along(lanePoints(plan, c.x)))) || ranked[0];
+      ranked.find(
+        (c) => !crosses(from.key, to.key, along(lanePoints(plan, c.x))),
+      ) || ranked[0];
     for (const e of plan.ends) e.toward = plan.lane.x;
   }
   // Check each straight route with its real ports (a wide card spreads them far apart); a
@@ -1646,8 +1781,15 @@ function routeEdges(list, positions, width) {
         y = edgeY(from, false),
         y2 = edgeY(to, true),
         half = (y + y2) / 2;
-      const curve = [[from.at, y], [from.at, half], [to.at, half], [to.at, y2]];
-      const sample = Array.from({ length: 31 }, (_, i) => bezier(curve, (i + 1) / 32));
+      const curve = [
+        [from.at, y],
+        [from.at, half],
+        [to.at, half],
+        [to.at, y2],
+      ];
+      const sample = Array.from({ length: 31 }, (_, i) =>
+        bezier(curve, (i + 1) / 32),
+      );
       if (crosses(from.key, to.key, sample)) {
         goAround(plan);
         moved = true;
@@ -1706,7 +1848,10 @@ function routeEdges(list, positions, width) {
     }
     // Into the row gap beside each end, then along the channel between them, with wide
     // curves at the turns: a curved line is easier to follow than a sharp elbow.
-    return rounded(lanePoints(plan, plan.lane.x + plan.offset, plan.offset), 14);
+    return rounded(
+      lanePoints(plan, plan.lane.x + plan.offset, plan.offset),
+      14,
+    );
   });
 }
 /** Draws selectable static import connections between positioned cards; these are not runtime call edges. */
@@ -1880,7 +2025,9 @@ function markSelection(node) {
   const sheet = document.querySelector('.sheet[data-front="true"]');
   const lines = sheet?.querySelectorAll("path[data-from]").length || 0;
   if (!sheet || lines || visibleEdges(() => true).length) return false;
-  const card = [...sheet.querySelectorAll(".node[data-key]")].find((n) => n.dataset.key === node.key);
+  const card = [...sheet.querySelectorAll(".node[data-key]")].find(
+    (n) => n.dataset.key === node.key,
+  );
   if (!card) return false;
   sheet.querySelectorAll(".node.sel").forEach((n) => n.classList.remove("sel"));
   card.classList.add("sel");
@@ -1898,7 +2045,8 @@ async function followTo(place) {
   if (isFile && place.symbol) next = { kind: "file", path };
   else {
     let dir = isFile ? path.split("/").slice(0, -1).join("/") : path;
-    while (dir && !files.some((f) => f.path.startsWith(dir + "/"))) dir = dir.split("/").slice(0, -1).join("/");
+    while (dir && !files.some((f) => f.path.startsWith(dir + "/")))
+      dir = dir.split("/").slice(0, -1).join("/");
     next = dir ? { kind: "folder", path: dir } : rootScope();
   }
   if (next.kind === scope.kind && next.path === scope.path) return;
@@ -1909,7 +2057,9 @@ async function followTo(place) {
 async function openPlace(target, { keepTab = false } = {}) {
   if (busy) return;
   if (mode === "diff") before = target.side === "before";
-  await navigate({ kind: "file", path: target.path }, "file:" + target.path, { keepTab });
+  await navigate({ kind: "file", path: target.path }, "file:" + target.path, {
+    keepTab,
+  });
   if (target.kind === "symbol") {
     refreshModel();
     selected =
@@ -1928,7 +2078,9 @@ async function openPlace(target, { keepTab = false } = {}) {
  * name in a conversation. Each action uses the same path as the app's own controls. */
 /** Brings the dock's input into focus, for an action that starts a message. */
 function focusComposer() {
-  requestAnimationFrame(() => $("#composerHost textarea")?.focus({ preventScroll: true }));
+  requestAnimationFrame(() =>
+    $("#composerHost textarea")?.focus({ preventScroll: true }),
+  );
 }
 /** Copies `text`, and says so. */
 function copyText(text) {
@@ -1949,7 +2101,10 @@ function composeAbout(node, mode) {
   // of its next message (Ask's question, or the session's reply). Anything else writes from
   // the map's dock.
   const view = nav.view();
-  const stays = mode === "ask" ? view.name === "ask" : mode === "session" && view.name === "run" && workflow.isLive(view.id);
+  const stays =
+    mode === "ask"
+      ? view.name === "ask"
+      : mode === "session" && view.name === "run" && workflow.isLive(view.id);
   if (!stays) nav.toMap();
   renderPanel();
   focusComposer();
@@ -1960,87 +2115,206 @@ function cardMenu(node) {
   const files = node.files || [];
   const items = [
     symbol
-      ? { label: "Source", icon: "source", key: "Enter", run: () => (selectNode(node), openNode(node)) }
-      : { label: "Open", icon: "forward", key: "Enter", run: () => openNode(node) },
+      ? {
+          label: "Source",
+          icon: "source",
+          key: "Enter",
+          run: () => (selectNode(node), openNode(node)),
+        }
+      : {
+          label: "Open",
+          icon: "forward",
+          key: "Enter",
+          run: () => openNode(node),
+        },
     // Ask, instructions and sessions belong to owner devices.
     ...(isOwner()
       ? [
-          { label: "Ask about this", icon: "ask", key: "A", run: () => composeAbout(node, "ask") },
-          { label: "Add instruction", icon: "comment", key: "I", run: () => composeAbout(node, "comments") },
+          {
+            label: "Ask about this",
+            icon: "ask",
+            key: "A",
+            run: () => composeAbout(node, "ask"),
+          },
+          {
+            label: "Add instruction",
+            icon: "comment",
+            key: "I",
+            run: () => composeAbout(node, "comments"),
+          },
           workflow.hasLiveSession()
-            ? { label: "Point the agent here", icon: "pin", key: "S", accent: true, run: () => composeAbout(node, "session") }
-            : { label: "Start a session here", icon: "session", key: "S", run: () => composeAbout(node, "session") },
+            ? {
+                label: "Point the agent here",
+                icon: "pin",
+                key: "S",
+                accent: true,
+                run: () => composeAbout(node, "session"),
+              }
+            : {
+                label: "Start a session here",
+                icon: "session",
+                key: "S",
+                run: () => composeAbout(node, "session"),
+              },
         ]
       : []),
     "rule",
   ];
   const relations = node.kind === "rootfiles" ? 0 : nodeRelations(node).length;
   if (relations)
-    items.push({ label: "Relations", icon: "relations", hint: String(relations), run: () => {
-      selectNode(node);
-      nav.toMap("dependencies");
-      expandSheet();
-    } });
+    items.push({
+      label: "Relations",
+      icon: "relations",
+      hint: String(relations),
+      run: () => {
+        selectNode(node);
+        nav.toMap("dependencies");
+        expandSheet();
+      },
+    });
   if (node.status && node.status !== "unchanged") {
     const changed = files.filter((f) => f.status !== "unchanged").length;
-    items.push({ label: "Changes", icon: "changes", hint: files.length ? `${changed} file${changed === 1 ? "" : "s"}` : node.status, run: () => {
-      selectNode(node);
-      nav.toMap("changes");
-      expandSheet();
-    } });
+    items.push({
+      label: "Changes",
+      icon: "changes",
+      hint: files.length
+        ? `${changed} file${changed === 1 ? "" : "s"}`
+        : node.status,
+      run: () => {
+        selectNode(node);
+        nav.toMap("changes");
+        expandSheet();
+      },
+    });
   }
   if (node.path)
-    items.push(symbol
-      ? { label: "Copy name", icon: "copy", hint: node.name, key: "C", run: () => copyText(node.name) }
-      : { label: "Copy path", icon: "copy", key: "C", run: () => copyText(node.path) });
-  const kind = symbol ? node.symbolKind || "declaration" : node.kind === "rootfiles" ? "files at the root" : node.kind;
-  const line = symbol && node.start ? `${node.path.split("/").pop()}:${node.start}` : "";
-  return { title: node.name || node.path || "Repository", subtitle: [kind, line, !symbol && node.status && node.status !== "unchanged" ? node.status : ""].filter(Boolean).join(" · "), items };
+    items.push(
+      symbol
+        ? {
+            label: "Copy name",
+            icon: "copy",
+            hint: node.name,
+            key: "C",
+            run: () => copyText(node.name),
+          }
+        : {
+            label: "Copy path",
+            icon: "copy",
+            key: "C",
+            run: () => copyText(node.path),
+          },
+    );
+  const kind = symbol
+    ? node.symbolKind || "declaration"
+    : node.kind === "rootfiles"
+      ? "files at the root"
+      : node.kind;
+  const line =
+    symbol && node.start ? `${node.path.split("/").pop()}:${node.start}` : "";
+  return {
+    title: node.name || node.path || "Repository",
+    subtitle: [
+      kind,
+      line,
+      !symbol && node.status && node.status !== "unchanged" ? node.status : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    items,
+  };
 }
 /** The menu for a name in a conversation that names place `place` (a code link). */
 function nameMenu(place, link) {
   const file = place.path.split("/").pop();
   const inSession = nav.view().name === "run" && workflow.isLive(nav.view().id);
   const items = [
-    { label: "Show on the map", icon: "pin", key: "Enter", run: () => link.click() },
-    { label: "Source", icon: "source", run: async () => {
-      await openPlace(place);
-      nav.toMap("source");
-      expandSheet();
-      if (!sourceData) loadSource();
-    } },
-    { label: "Ask about this", icon: "ask", key: "A", run: async () => {
-      await openPlace(place, { keepTab: true });
-      dockMode = "ask";
-      nav.toMap();
-      focusComposer();
-    } },
+    {
+      label: "Show on the map",
+      icon: "pin",
+      key: "Enter",
+      run: () => link.click(),
+    },
+    {
+      label: "Source",
+      icon: "source",
+      run: async () => {
+        await openPlace(place);
+        nav.toMap("source");
+        expandSheet();
+        if (!sourceData) loadSource();
+      },
+    },
+    {
+      label: "Ask about this",
+      icon: "ask",
+      key: "A",
+      run: async () => {
+        await openPlace(place, { keepTab: true });
+        dockMode = "ask";
+        nav.toMap();
+        focusComposer();
+      },
+    },
   ];
   // In a session: the place goes with the next reply, as a pointer.
   if (inSession)
-    items.push({ label: "Reply about this", icon: "comment", key: "R", accent: true, run: async () => {
-      await openPlace(place, { keepTab: true });
-      focusComposer();
-    } });
-  items.push("rule", place.symbol
-    ? { label: "Copy name", icon: "copy", hint: place.symbol, key: "C", run: () => copyText(place.symbol) }
-    : { label: "Copy path", icon: "copy", key: "C", run: () => copyText(place.path) });
-  const folder = place.path.includes("/") ? place.path.slice(0, place.path.lastIndexOf("/") + 1) : "";
-  return { title: place.symbol || file, subtitle: place.symbol ? `${file}${place.line ? ":" + place.line : ""}` : folder ? `file in ${folder}` : "file", items };
+    items.push({
+      label: "Reply about this",
+      icon: "comment",
+      key: "R",
+      accent: true,
+      run: async () => {
+        await openPlace(place, { keepTab: true });
+        focusComposer();
+      },
+    });
+  items.push(
+    "rule",
+    place.symbol
+      ? {
+          label: "Copy name",
+          icon: "copy",
+          hint: place.symbol,
+          key: "C",
+          run: () => copyText(place.symbol),
+        }
+      : {
+          label: "Copy path",
+          icon: "copy",
+          key: "C",
+          run: () => copyText(place.path),
+        },
+  );
+  const folder = place.path.includes("/")
+    ? place.path.slice(0, place.path.lastIndexOf("/") + 1)
+    : "";
+  return {
+    title: place.symbol || file,
+    subtitle: place.symbol
+      ? `${file}${place.line ? ":" + place.line : ""}`
+      : folder
+        ? `file in ${folder}`
+        : "file",
+    items,
+  };
 }
 /** What a long press or a right-click on `element` opens: a map card or a name. */
 function menuFor(element) {
   const link = element?.closest?.(".code-link[data-target]");
   if (link) {
     try {
-      return { target: link, spec: nameMenu(JSON.parse(link.dataset.target), link) };
+      return {
+        target: link,
+        spec: nameMenu(JSON.parse(link.dataset.target), link),
+      };
     } catch {
       return null;
     }
   }
   const card = element?.closest?.('.sheet[data-front="true"] .node[data-key]');
   const node = card && nodes.find((n) => n.key === card.dataset.key);
-  if (!node || !["folder", "file", "rootfiles", "symbol"].includes(node.kind)) return null;
+  if (!node || !["folder", "file", "rootfiles", "symbol"].includes(node.kind))
+    return null;
   return { target: card, spec: cardMenu(node) };
 }
 installContextMenus(menuFor);
@@ -2062,13 +2336,19 @@ function openNode(node) {
   navigate(nodeScope(node), node.key);
 }
 /** Animates a scope change, clears stale selection and source state, and loads file details after entering a file. */
-async function navigate(next, originKey, { keepTab = false, follow = false } = {}) {
+async function navigate(
+  next,
+  originKey,
+  { keepTab = false, follow = false } = {},
+) {
   if (busy) return;
   // Follow's moves keep the owner's anchor; the owner's own moves end it.
-  if (follow) held ??= { context: currentContext(), base: baseRef, head: headRef };
+  if (follow)
+    held ??= { context: currentContext(), base: baseRef, head: headRef };
   else held = null;
   // Opened with the keyboard from a card: the focus goes to the new level's first card.
-  if (!follow && document.activeElement?.closest?.("#deck .node")) focusFirstCard = true;
+  if (!follow && document.activeElement?.closest?.("#deck .node"))
+    focusFirstCard = true;
   // The owner moved the map: Follow pauses (its own moves are ignored there).
   workflow.ownerMoved();
   const graph = $(".sheet:not(.peek) .graph-inner");
@@ -2125,7 +2405,12 @@ let placeRestored = false;
 function placeOf() {
   return {
     at: scope.kind === "repo" ? null : `${scope.kind}:${scope.path}`,
-    item: !selected || selected.kind === "edge" ? null : selected.kind === "symbol" ? selected.name : selected.path,
+    item:
+      !selected || selected.kind === "edge"
+        ? null
+        : selected.kind === "symbol"
+          ? selected.name
+          : selected.path,
   };
 }
 /** Keeps the map's place and comparison in the address, so a reload, an app update or a
@@ -2141,7 +2426,12 @@ function rememberPlace() {
   const values = [
     ["at", at],
     ["item", item],
-    ["head", metadata && !viewingPr && headRef && headRef !== metadata.initialHead ? headRef : null],
+    [
+      "head",
+      metadata && !viewingPr && headRef && headRef !== metadata.initialHead
+        ? headRef
+        : null,
+    ],
     ["mode", mode === "time" ? "time" : null],
     ["explore", away ? away.id || "-" : null],
     ["from", away ? away.branch || "HEAD" : null],
@@ -2159,13 +2449,20 @@ async function goToPlace(place) {
   if (at) {
     const [kind, ...rest] = at.split(":"),
       path = rest.join(":");
-    const exists = (comparison.files || []).some((f) => f.path === path || f.path.startsWith(path + "/"));
-    if (!["folder", "file", "rootfiles"].includes(kind) || (kind !== "rootfiles" && !exists)) return;
+    const exists = (comparison.files || []).some(
+      (f) => f.path === path || f.path.startsWith(path + "/"),
+    );
+    if (
+      !["folder", "file", "rootfiles"].includes(kind) ||
+      (kind !== "rootfiles" && !exists)
+    )
+      return;
     await navigate({ kind, path }, "", { keepTab: true });
   }
   if (!item) return;
   refreshModel();
-  selected = nodes.find((n) => (n.kind === "symbol" ? n.name : n.path) === item) || null;
+  selected =
+    nodes.find((n) => (n.kind === "symbol" ? n.name : n.path) === item) || null;
   render();
 }
 /** Opens what the address keeps (see `rememberPlace`), once, after the first map: the place,
@@ -2178,15 +2475,34 @@ async function restorePlace() {
   const id = url.searchParams.get("explore");
   if (id) {
     // The map still shows a task's branch: Back returns to the branch it came from.
-    nav.go({ name: "inspect", aspect: "details", explore: { id: id === "-" ? null : id, branch: url.searchParams.get("from"), base: null, mode: "diff", place: null } });
+    nav.go({
+      name: "inspect",
+      aspect: "details",
+      explore: {
+        id: id === "-" ? null : id,
+        branch: url.searchParams.get("from"),
+        base: null,
+        mode: "diff",
+        place: null,
+      },
+    });
   }
-  await goToPlace({ at: url.searchParams.get("at"), item: url.searchParams.get("item") });
+  await goToPlace({
+    at: url.searchParams.get("at"),
+    item: url.searchParams.get("item"),
+  });
 }
 function renderPanel() {
   rememberPlace();
   const name = nav.view().name;
-  $("#openTasks").setAttribute("aria-pressed", String(["tasks", "history", "prepare"].includes(name)));
-  $("#openConversations").setAttribute("aria-pressed", String(name === "conversations"));
+  $("#openTasks").setAttribute(
+    "aria-pressed",
+    String(["tasks", "history", "prepare"].includes(name)),
+  );
+  $("#openConversations").setAttribute(
+    "aria-pressed",
+    String(name === "conversations"),
+  );
   taskReturnChip.hidden = !nav.view().explore?.id;
   const view = viewKey();
   // An error belongs to its view; a short note belongs to its page (Tasks, a task, the map).
@@ -2194,13 +2510,12 @@ function renderPanel() {
   const text = $("#notice").textContent;
   if (
     text !== UNREACHABLE &&
-    ((view !== noticeView && $("#notice").classList.contains("error")) || name !== noticeName)
+    ((view !== noticeView && $("#notice").classList.contains("error")) ||
+      name !== noticeName)
   )
     showNotice("");
   noticeView = view;
   noticeName = name;
-
-
 
   const scopeBar = $("#reviewScope");
   scopeBar.replaceChildren(
@@ -2211,7 +2526,13 @@ function renderPanel() {
     ),
   );
   // Plain words for the kinds that the map names internally.
-  const kindWords = { repo: "Repository", rootfiles: "Repository files", edge: "Relationship", stub: "Outside this folder", boundary: "Outside this folder" };
+  const kindWords = {
+    repo: "Repository",
+    rootfiles: "Repository files",
+    edge: "Relationship",
+    stub: "Outside this folder",
+    boundary: "Outside this folder",
+  };
   const kind = selected?.kind || scope.kind;
   const caption =
     selected?.kind === "symbol"
@@ -2263,7 +2584,11 @@ function dockKind() {
   if (view.name === "ask") return "ask";
   if (view.name === "instructions") return "comments";
   if (view.name === "run")
-    return workflow.isLive(view.id) ? "session" : workflow.revisable(view.id) ? "comments" : null;
+    return workflow.isLive(view.id)
+      ? "session"
+      : workflow.revisable(view.id)
+        ? "comments"
+        : null;
   return null;
 }
 /** The last option of a commit picker while older commits exist: it loads them. */
@@ -2306,7 +2631,10 @@ function renderCommits() {
   // The oldest loaded commit is at the left end; older ones load from there.
   if (metadata.moreCommits) {
     const earlier = button("chip earlier", "", () => loadEarlier());
-    earlier.append(element("b", "", "Earlier"), element("span", "subject", "Load older commits"));
+    earlier.append(
+      element("b", "", "Earlier"),
+      element("span", "subject", "Load older commits"),
+    );
     earlier.setAttribute("aria-label", "Load older commits");
     strip.append(earlier);
   }
@@ -2334,7 +2662,10 @@ function renderCommits() {
     if (chosen && rail.dataset.centered !== headRef) {
       rail.dataset.centered = headRef;
       requestAnimationFrame(() => {
-        const at = chosen.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft;
+        const at =
+          chosen.getBoundingClientRect().left -
+          strip.getBoundingClientRect().left +
+          strip.scrollLeft;
         strip.scrollLeft = at - (strip.clientWidth - chosen.offsetWidth) / 2;
       });
     } else strip.scrollLeft = scrolled;
@@ -2356,7 +2687,9 @@ function renderCommits() {
     if (metadata.moreCommits) headPicker.append(earlierOption());
     headPicker.value = headRef;
     headPicker.onchange = () =>
-      headPicker.value === EARLIER ? loadEarlier() : chooseHead(headPicker.value);
+      headPicker.value === EARLIER
+        ? loadEarlier()
+        : chooseHead(headPicker.value);
     headRow.append(headPicker);
     bar.append(headRow);
     const row = element("label", "cmp", "Compare with");
@@ -2424,7 +2757,11 @@ function renderCommits() {
   $("#revisionSummary").replaceChildren(
     branchName,
     // Both commits use the same short form, whichever list they come from.
-    element("span", "rev-compare", ` · ${baseRef.slice(0, 7)} → ${c.sha.slice(0, 7)}`),
+    element(
+      "span",
+      "rev-compare",
+      ` · ${baseRef.slice(0, 7)} → ${c.sha.slice(0, 7)}`,
+    ),
   );
   if (viewingPr && !metadata.selectedBranch) {
     // The way out of a pull request sits beside its name.
@@ -2478,11 +2815,15 @@ function directoryCard(path, removed = false) {
     return box;
   }
   box.append(element("p", "code-description", info.description));
-  const read = button("documentation-link link-button", `Read ${leaf(info.path)}`, async () => {
+  const read = button(
+    "documentation-link link-button",
+    `Read ${leaf(info.path)}`,
+    async () => {
       await navigate({ kind: "file", path: info.path });
       sourceView = before || removed ? "before" : "after";
       nav.toMap("source");
-  });
+    },
+  );
   read.title = `${info.provenance} · ${info.path} · ${info.revision.slice(0, 7)}`;
   box.append(read);
   return box;
@@ -2491,9 +2832,15 @@ function directoryCard(path, removed = false) {
  * the file is readable. Every such file stays on the map with this explicit label. */
 function withheld(analysis = "") {
   const reasons = [
-    ["restricted", "Source hidden. The name of this file often holds secrets (passwords, keys or tokens), so Peekumi does not show it or send it to Ask."],
+    [
+      "restricted",
+      "Source hidden. The name of this file often holds secrets (passwords, keys or tokens), so Peekumi does not show it or send it to Ask.",
+    ],
     ["binary", "Binary file. Peekumi shows no source for it."],
-    ["large file", "Large file. Peekumi does not show the source of files this large."],
+    [
+      "large file",
+      "Large file. Peekumi does not show the source of files this large.",
+    ],
     ["symlink", "Symbolic link. Peekumi does not follow links."],
     ["submodule", "Submodule. Peekumi does not open the other repository."],
   ];
@@ -2540,16 +2887,20 @@ function adapterCard() {
 }
 /** Explains what the current scope offers when nothing is selected. */
 function scopeHint() {
-  return fileWithheld() ||
+  return (
+    fileWithheld() ||
     (scope.kind === "file"
-    ? "Select a declaration to inspect it, or open Source for the whole file."
-    : "Select a card to review it; tap it again to open.");
+      ? "Select a declaration to inspect it, or open Source for the whole file."
+      : "Select a card to review it; tap it again to open.")
+  );
 }
 /** Why the open file has no source (restricted, binary, large, a link or a submodule), from
  * the comparison, or null for a readable file or another scope. */
 function fileWithheld() {
   if (scope.kind !== "file") return null;
-  return withheld(comparison?.files?.find((f) => f.path === scope.path)?.analysis);
+  return withheld(
+    comparison?.files?.find((f) => f.path === scope.path)?.analysis,
+  );
 }
 /** The sheet's top for an open pull request: its state and branches, its title, and who
  * made it, when, and how large it is. */
@@ -2581,7 +2932,12 @@ function prHead() {
       })
     : "";
   meta.append(
-    [pr.author?.login, date && `${word} ${date}`, pr.changedFiles != null && `${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}`]
+    [
+      pr.author?.login,
+      date && `${word} ${date}`,
+      pr.changedFiles != null &&
+        `${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}`,
+    ]
       .filter(Boolean)
       .join(" · "),
   );
@@ -2592,7 +2948,11 @@ function prHead() {
       " ",
       element("span", "pr-del", `−${(pr.deletions || 0).toLocaleString()}`),
     );
-  head.append(top, element("strong", "pr-title", pr.title || `PR #${viewingPr}`), meta);
+  head.append(
+    top,
+    element("strong", "pr-title", pr.title || `PR #${viewingPr}`),
+    meta,
+  );
   return head;
 }
 /** One quiet row of the PR sheet. With `items` it opens to list them; otherwise it only
@@ -2617,30 +2977,49 @@ function prCard() {
     body
       .split(/\n\s*\n/)
       .map((part) => part.trim())
-      .find((part) => part && !/^(#|[-*+] |\d+\. |```|<)/.test(part) && part.length > 30) ||
+      .find(
+        (part) =>
+          part && !/^(#|[-*+] |\d+\. |```|<)/.test(part) && part.length > 30,
+      ) ||
     body.split(/\n\s*\n/)[0] ||
     "";
   if (!body) box.append(element("p", "pr-summary empty", "No description."));
   else if (prExpanded) box.append(richText(body, "pr-body"));
   else
     box.append(
-      element("p", "pr-summary", first.replace(/\*\*|__|`/g, "").replace(/^#+\s*/, "")),
+      element(
+        "p",
+        "pr-summary",
+        first.replace(/\*\*|__|`/g, "").replace(/^#+\s*/, ""),
+      ),
     );
   if (body && body !== first)
     box.append(
-      button("pr-more link-button", prExpanded ? "Show less" : "Read full description", () => {
-        prExpanded = !prExpanded;
-        renderSelection();
-      }),
+      button(
+        "pr-more link-button",
+        prExpanded ? "Show less" : "Read full description",
+        () => {
+          prExpanded = !prExpanded;
+          renderSelection();
+        },
+      ),
     );
   // Checks: one line that says what matters most; the list opens on request.
   const checks = pr.statusCheckRollup || [],
     result = (c) => (c.conclusion || c.state || c.status || "").toUpperCase(),
     failing = checks.filter((c) =>
-      ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(result(c)),
+      [
+        "FAILURE",
+        "ERROR",
+        "CANCELLED",
+        "TIMED_OUT",
+        "ACTION_REQUIRED",
+      ].includes(result(c)),
     ).length,
     running = checks.filter((c) =>
-      ["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING"].includes(result(c)),
+      ["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING"].includes(
+        result(c),
+      ),
     ).length;
   box.append(
     prRow(
@@ -2654,7 +3033,11 @@ function prCard() {
             : `All ${checks.length} passed`,
       !checks.length ? "" : failing ? "bad" : running ? "wait" : "good",
       checks.map((c) =>
-        element("p", "pr-entry", `${c.name || c.context}: ${(result(c) || "unknown").toLowerCase()}`),
+        element(
+          "p",
+          "pr-entry",
+          `${c.name || c.context}: ${(result(c) || "unknown").toLowerCase()}`,
+        ),
       ),
     ),
   );
@@ -2681,7 +3064,11 @@ function prCard() {
     prRow(
       "Reviews",
       summary || "None",
-      decisions.includes("CHANGES_REQUESTED") ? "wait" : approvals ? "good" : "",
+      decisions.includes("CHANGES_REQUESTED")
+        ? "wait"
+        : approvals
+          ? "good"
+          : "",
       [...reviews, ...comments]
         .filter((entry) => entry.body?.trim() || entry.state)
         .map((entry) => {
@@ -2818,7 +3205,10 @@ function fillContract(list, detail) {
   } else if (detail?.fields?.length) {
     row(
       "Fields",
-      detail.fields.map((f) => [f.name + (f.optional ? "?" : ""), f.type || ""]),
+      detail.fields.map((f) => [
+        f.name + (f.optional ? "?" : ""),
+        f.type || "",
+      ]),
     );
   }
 }
@@ -2981,7 +3371,10 @@ function metadataCard() {
   if (notes.length) {
     const list = element("dl", "metadata-parameters");
     for (const param of notes)
-      list.append(element("dt", "", param.name), element("dd", "", param.description));
+      list.append(
+        element("dt", "", param.name),
+        element("dd", "", param.description),
+      );
     box.append(list);
   }
   // Where the description came from matters only for a file's own documentation.
@@ -3015,7 +3408,12 @@ function renderMapLegend() {
   host.replaceChildren();
   // While a session is open, its agent's marks on the map lead the key.
   // The agent's marks, while any agent's focus shows: a session, a task at work, or Ask.
-  if (document.querySelector(".node.agent-here, .node.agent-trail, .node.agent-changed") || workflow.hasLiveSession()) {
+  if (
+    document.querySelector(
+      ".node.agent-here, .node.agent-trail, .node.agent-changed",
+    ) ||
+    workflow.hasLiveSession()
+  ) {
     const marks = element("div", "legend-inline");
     for (const [kind, label] of [
       ["here", "Agent is here"],
@@ -3023,7 +3421,10 @@ function renderMapLegend() {
       ["changed", "Changed"],
     ]) {
       const item = element("span");
-      item.append(element("i", "agent-swatch " + kind), document.createTextNode(label));
+      item.append(
+        element("i", "agent-swatch " + kind),
+        document.createTextNode(label),
+      );
       marks.append(item);
     }
     host.append(element("strong", "", "Agent"), marks);
@@ -3144,16 +3545,26 @@ function showDockAgent() {
   // Sessions use the agent chosen for tasks.
   chip.hidden = !uses;
   if (!uses) {
-    agents.load().then((c) => c && showDockAgent()).catch(() => {});
+    agents
+      .load()
+      .then((c) => c && showDockAgent())
+      .catch(() => {});
     return;
   }
   // The agent's name stays; its model and effort shorten first.
   const [agent, ...detail] = uses.split(" · ");
   chip.replaceChildren(
     element("span", "chip-agent", agent),
-    ...(detail.length ? [element("span", "chip-detail", "\u00a0· " + detail.join(" · "))] : []),
+    ...(detail.length
+      ? [element("span", "chip-detail", "\u00a0· " + detail.join(" · "))]
+      : []),
   );
-  const what = job === "ask" ? "Ask uses" : kind === "session" ? "Sessions use" : "New tasks use";
+  const what =
+    job === "ask"
+      ? "Ask uses"
+      : kind === "session"
+        ? "Sessions use"
+        : "New tasks use";
   chip.title = `${what} ${uses}. Change`;
   chip.setAttribute("aria-label", chip.title);
   chip.onclick = () => agents.open(job, () => renderTab());
@@ -3168,43 +3579,53 @@ const reading = { key: "", top: 0, atEnd: true };
 /** What the review sheet shows, as a key: the same key is the same view. */
 function viewKey() {
   const view = nav.view();
-  if (view.name === "inspect") return `${view.aspect}:${scope.kind}:${scope.path}:${selected?.key || ""}`;
+  if (view.name === "inspect")
+    return `${view.aspect}:${scope.kind}:${scope.path}:${selected?.key || ""}`;
   if (view.name === "ask") return `ask:${viewingBranch || ""}`;
-  if (view.name === "run") return `run:${view.id}:${workflow.runShape(view.id)}`;
+  if (view.name === "run")
+    return `run:${view.id}:${workflow.runShape(view.id)}`;
   return view.name;
 }
 /** True for a view whose newest part is at its end: Ask, and an open session. */
 const conversationView = () => {
   const view = nav.view();
-  return view.name === "ask" || (view.name === "run" && workflow.isLive(view.id));
+  return (
+    view.name === "ask" || (view.name === "run" && workflow.isLive(view.id))
+  );
 };
 /** Remembers the reader's place in the current view, while the sheet shows it. */
 function rememberReading() {
   const scroller = $("#reviewScroll");
   if (!scroller.clientHeight) return;
   reading.top = scroller.scrollTop;
-  reading.atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 24;
+  reading.atEnd =
+    scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 24;
 }
 /** Puts the reader where the rule says, after the view is drawn. */
 function placeReader() {
   const scroller = $("#reviewScroll"),
     key = viewKey(),
     same = key === reading.key;
-  if (same) scroller.scrollTop = reading.atEnd && conversationView() ? scroller.scrollHeight : reading.top;
+  if (same)
+    scroller.scrollTop =
+      reading.atEnd && conversationView() ? scroller.scrollHeight : reading.top;
   else scroller.scrollTop = conversationView() ? scroller.scrollHeight : 0;
   reading.key = key;
   // A view that is shown for the first time starts from the rule, not from an old place.
   if (!same) reading.atEnd = conversationView();
   reading.top = scroller.scrollTop;
 }
-$("#reviewScroll").addEventListener("scroll", rememberReading, { passive: true });
+$("#reviewScroll").addEventListener("scroll", rememberReading, {
+  passive: true,
+});
 function renderTab() {
   drawTab();
   // After the title rows are drawn: the live line, and the way back to an explored task, go
   // into the one on screen.
   workflow.cueLive();
   const title = $("#reviewScope");
-  if (title && taskReturnChip.parentElement !== title) title.append(taskReturnChip);
+  if (title && taskReturnChip.parentElement !== title)
+    title.append(taskReturnChip);
   placeReader();
 }
 /** The header row of a page: Back, the title, an optional quiet line, and the page's few
@@ -3241,21 +3662,35 @@ function renderConversations(body) {
   if (sessions.length)
     body.append(
       element("h3", "workflow-group", "Sessions"),
-      ...sessions.map((s) => row(s.title, s.line, () => workflow.openTask(s.id), peek(s.mood, { className: "conversation-peek" }))),
+      ...sessions.map((s) =>
+        row(
+          s.title,
+          s.line,
+          () => workflow.openTask(s.id),
+          peek(s.mood, { className: "conversation-peek" }),
+        ),
+      ),
     );
   const askMark = element("span", "conversation-icon");
   askMark.append(glyph("ask"));
   body.append(
     element("h3", "workflow-group", "Ask"),
-    row(`Ask · ${branchName()}`, ask.lastQuestion() || "No questions yet", () => nav.go({ name: "ask" }), askMark),
+    row(
+      `Ask · ${branchName()}`,
+      ask.lastQuestion() || "No questions yet",
+      () => nav.go({ name: "ask" }),
+      askMark,
+    ),
   );
 }
 /** Under Details: the instructions left on this selection, as one quiet link to them. */
 function renderInstructionsHere(body) {
   const count = isOwner() ? workflow.instructionsHere() : 0;
   if (!count) return;
-  const link = button("link-button instructions-here", `${count} instruction${count === 1 ? "" : "s"} here ›`, () =>
-    nav.go({ name: "instructions" }),
+  const link = button(
+    "link-button instructions-here",
+    `${count} instruction${count === 1 ? "" : "s"} here ›`,
+    () => nav.go({ name: "instructions" }),
   );
   body.append(link);
 }
@@ -3267,21 +3702,30 @@ function drawTab() {
   const away = view.explore?.id,
     waiting = away ? workflow.collected(away) : 0,
     what = away && workflow.runKind(away) === "session" ? "session" : "task";
-  taskReturnChip.textContent = waiting ? `‹ Back to ${what} · ${waiting} to send` : `‹ Back to ${what}`;
+  taskReturnChip.textContent = waiting
+    ? `‹ Back to ${what} · ${waiting} to send`
+    : `‹ Back to ${what}`;
   // A page (a list, a task, a conversation) takes the whole sheet, under its header row; the
   // map's own views keep the selection's header and the aspect buttons.
   panel.dataset.view = page ? view.name : view.aspect;
   panel.dataset.sheet = page ? "page" : "inspect";
   document
     .querySelectorAll("button[data-tab]")
-    .forEach((b) => b.setAttribute("aria-pressed", String(!page && b.dataset.tab === view.aspect)));
+    .forEach((b) =>
+      b.setAttribute(
+        "aria-pressed",
+        String(!page && b.dataset.tab === view.aspect),
+      ),
+    );
   // The dock follows the view: its modes on the map, a conversation's own box elsewhere.
   const kind = dockKind();
   $("#conversationDock").hidden = !kind;
   $("#tabs").hidden = page;
   document
     .querySelectorAll("[data-compose]")
-    .forEach((b) => b.setAttribute("aria-selected", String(b.dataset.compose === kind)));
+    .forEach((b) =>
+      b.setAttribute("aria-selected", String(b.dataset.compose === kind)),
+    );
   const body = $("#tabBody");
   body.replaceChildren();
   $("#viewHead").replaceChildren();
@@ -3293,7 +3737,10 @@ function drawTab() {
   const conversation = element("div", "conversation");
   if (kind === "ask") ask.render(conversation, composerHost);
   else if (kind === "session")
-    workflow.renderSessionComposer(composerHost, view.name === "run" ? view.id : null);
+    workflow.renderSessionComposer(
+      composerHost,
+      view.name === "run" ? view.id : null,
+    );
   else if (kind === "comments") workflow.renderComposer(composerHost);
   const box = composerHost.querySelector("textarea");
   if (box) {
@@ -3311,17 +3758,28 @@ function drawTab() {
   }
   const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
   // The place's name stays readable on a phone: the commit after it shortens first.
-  const [, place = anchor, commit] = anchor?.match(/^(.*?)( · [0-9a-f]{7,}| · [^·]+\/[^·]+)?$/) || [];
+  const [, place = anchor, commit] =
+    anchor?.match(/^(.*?)( · [0-9a-f]{7,}| · [^·]+\/[^·]+)?$/) || [];
   $("#dockContext").replaceChildren(
     ...(anchor
-      ? [glyph("pin"), element("span", "dock-text", place), ...(commit ? [element("span", "dock-commit", commit.replace(/^ /, "\u00a0"))] : [])]
+      ? [
+          glyph("pin"),
+          element("span", "dock-text", place),
+          ...(commit
+            ? [element("span", "dock-commit", commit.replace(/^ /, "\u00a0"))]
+            : []),
+        ]
       : []),
   );
   $("#dockContext").title = anchor || "";
   showDockAgent();
   $("#selectionDetails").hidden = page || view.aspect !== "details";
   if (view.name === "ask") {
-    const fresh = iconButton(element("button", "view-action"), "add", "New conversation");
+    const fresh = iconButton(
+      element("button", "view-action"),
+      "add",
+      "New conversation",
+    );
     fresh.type = "button";
     fresh.disabled = !ask.hasMessages();
     fresh.onclick = () => ask.clear();
@@ -3395,7 +3853,9 @@ function drawTab() {
           node.kind === "symbol"
             ? [
                 node.symbolKind,
-                node.changes?.length ? partWords(node.changes) + " changed" : "",
+                node.changes?.length
+                  ? partWords(node.changes) + " changed"
+                  : "",
                 `lines ${node.start}–${node.end}`,
               ]
                 .filter(Boolean)
@@ -3418,8 +3878,8 @@ function drawTab() {
             : fileWithheld()
               ? fileWithheld()
               : scope.kind === "file" && changed.length
-              ? "This file changed without a symbol change. Open Source for the complete diff."
-              : "No changes in this scope.",
+                ? "This file changed without a symbol change. Open Source for the complete diff."
+                : "No changes in this scope.",
         ),
       );
   };
@@ -3758,9 +4218,17 @@ function renderSource(body) {
       ? withheld(sourceData.analysis)
       : null;
   if (reason) {
-    const status = comparison?.files?.find((f) => f.path === scope.path)?.status;
-    const changed = { added: "Added in this comparison.", changed: "Changed in this comparison.", removed: "Removed in this comparison." }[status];
-    code.append(element("div", "empty", changed ? `${reason} ${changed}` : reason));
+    const status = comparison?.files?.find(
+      (f) => f.path === scope.path,
+    )?.status;
+    const changed = {
+      added: "Added in this comparison.",
+      changed: "Changed in this comparison.",
+      removed: "Removed in this comparison.",
+    }[status];
+    code.append(
+      element("div", "empty", changed ? `${reason} ${changed}` : reason),
+    );
     return;
   }
   if (!value) {
@@ -3864,7 +4332,8 @@ document.querySelectorAll("button[data-tab]").forEach(
     (b.onclick = () => {
       expandSheet();
       nav.toMap(b.dataset.tab);
-      if (b.dataset.tab === "source" && scope.kind === "file" && !sourceData) loadSource();
+      if (b.dataset.tab === "source" && scope.kind === "file" && !sourceData)
+        loadSource();
     }),
 );
 // The dock's modes on the map: what the next message is. Only a preference: the view stays.
@@ -3897,7 +4366,9 @@ function goBack() {
     if (dialog.open) dialog.close();
     return true;
   }
-  const popover = document.querySelector("#mapLegend[open], #revisionDetails[open]");
+  const popover = document.querySelector(
+    "#mapLegend[open], #revisionDetails[open]",
+  );
   if (popover) {
     popover.open = false;
     popover.querySelector("summary")?.focus();
@@ -3939,7 +4410,8 @@ function toggle(name) {
   // A header page with its own pages (History, the task form) counts as that page.
   const family = name === "tasks" ? ["tasks", "history", "prepare"] : [name];
   const header = ["tasks", "history", "prepare", "conversations"];
-  if (family.includes(nav.view().name)) return nav.backWhile((v) => family.includes(v.name));
+  if (family.includes(nav.view().name))
+    return nav.backWhile((v) => family.includes(v.name));
   // One header page at a time: the other one gives way, so they do not pile up.
   nav.backWhile((v) => header.includes(v.name));
   nav.go({ name });
@@ -4140,11 +4612,13 @@ document.addEventListener("keydown", (event) => {
   const inMap = Boolean(event.target.closest?.("#deck"));
   goBack();
   requestAnimationFrame(() => {
-    if (document.activeElement && document.activeElement !== document.body) return;
+    if (document.activeElement && document.activeElement !== document.body)
+      return;
     const map = document.querySelector('.sheet[data-front="true"]');
     const target = inMap
       ? map?.querySelector(".node.sel") || map?.querySelector(".map-canvas")
-      : document.querySelector("#viewHead:not([hidden]) button") || map?.querySelector(".map-canvas");
+      : document.querySelector("#viewHead:not([hidden]) button") ||
+        map?.querySelector(".map-canvas");
     target?.focus({ preventScroll: true });
   });
 });
@@ -4177,7 +4651,8 @@ $("#mapLegend").addEventListener("toggle", () => {
     requestAnimationFrame(() => {
       const over = map.top + 8 - popover.getBoundingClientRect().top;
       if (over > 0)
-        popover.style.maxHeight = Math.max(120, parseFloat(popover.style.maxHeight) - over) + "px";
+        popover.style.maxHeight =
+          Math.max(120, parseFloat(popover.style.maxHeight) - over) + "px";
     });
   }
 });
@@ -4246,11 +4721,13 @@ $("#stage").addEventListener("click", (event) => {
     stagePress &&
     event.detail !== 0 &&
     // A drag, or a long press, is not a tap.
-    (Math.hypot(event.clientX - stagePress.x, event.clientY - stagePress.y) > 5 ||
+    (Math.hypot(event.clientX - stagePress.x, event.clientY - stagePress.y) >
+      5 ||
       performance.now() - stagePress.at > 450);
   // The path from when the tap began: a control that redrew itself during its own click
   // (the Follow eye) is no longer the target's ancestor, but it is still in the path.
-  const control = '.node, [role="button"], button, a, summary, details, input, select';
+  const control =
+    '.node, [role="button"], button, a, summary, details, input, select';
   if (dragged || event.composedPath().some((n) => n.matches?.(control))) return;
   // A list or a task gives way to the map; on the map, the selection clears.
   if (nav.view().name !== "inspect" && !onThread()) nav.back();

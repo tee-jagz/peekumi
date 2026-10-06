@@ -4,7 +4,12 @@
     "frontend": ["frontend/**"],
     "backend": ["backend/**"],
     "engine": ["backend/engine.rs"],
-    "concrete-adapters": ["backend/adapters/python.rs", "backend/adapters/typescript.rs", "backend/adapters/rust.rs", "backend/adapters/rust_relationships.rs"]
+    "concrete-adapters": [
+      "backend/adapters/python.rs",
+      "backend/adapters/typescript.rs",
+      "backend/adapters/rust.rs",
+      "backend/adapters/rust_relationships.rs"
+    ]
   },
   "rules": [
     {

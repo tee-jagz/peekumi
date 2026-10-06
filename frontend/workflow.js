@@ -35,7 +35,9 @@ const label = (a) =>
 const plainError = (line = "") =>
   String(line)
     .replace(/^\s*(error|Error):\s*/, "")
-    .replace(/(?:~|[A-Za-z]:)?(?:\/[^\s'"`/]+){2,}\/?/g, (path) => path.replace(/\/$/, "").split("/").pop())
+    .replace(/(?:~|[A-Za-z]:)?(?:\/[^\s'"`/]+){2,}\/?/g, (path) =>
+      path.replace(/\/$/, "").split("/").pop(),
+    )
     .slice(0, 300);
 /** Extracts only user-facing agent messages and activity labels from JSONL.
  * Partial lines and tool payloads stay in diagnostics, never in the conversation. */
@@ -238,7 +240,8 @@ export function createWorkflow({
     context,
     using: (job) => agents.using(job),
     // The agent that sessions use (the choice for tasks), once the agent list has loaded.
-    sessionAgent: () => agents.load().then(() => agents.current("task")?.agent || null),
+    sessionAgent: () =>
+      agents.load().then(() => agents.current("task")?.agent || null),
     openTask: (id) => openTask(id),
     showOnMap: (r, path) => showOnMap(r, path),
     openPlace: (target) => openPlace(target),
@@ -251,7 +254,10 @@ export function createWorkflow({
    * open), else the newest still open. */
   let lastSession = null;
   function liveSession() {
-    const shown = runDetail && runDetail.id === runId() && live(runDetail) ? runDetail : null;
+    const shown =
+      runDetail && runDetail.id === runId() && live(runDetail)
+        ? runDetail
+        : null;
     if (shown) lastSession = shown.id;
     const last = data.runs.find((r) => r.id === lastSession && live(r));
     return shown || last || data.runs.slice().reverse().find(live) || null;
@@ -260,7 +266,14 @@ export function createWorkflow({
   function viewedTask() {
     const r = runDetail;
     if (!r || r.id !== runId()) return null;
-    return !active(r) && !live(r) && !endedSession(r) && r.status !== "preview" && !r.revisedBy && !r.applied ? r.id : null;
+    return !active(r) &&
+      !live(r) &&
+      !endedSession(r) &&
+      r.status !== "preview" &&
+      !r.revisedBy &&
+      !r.applied
+      ? r.id
+      : null;
   }
   /** A session that the owner ended without review: a closed record, not a failed task. */
   const endedSession = (r) => r?.kind === "session" && r.status === "cancelled";
@@ -281,12 +294,21 @@ export function createWorkflow({
         if (shown) runDetail = await api("/api/runs/" + shown);
         // A running run or an open session outside its view: only the end of its log, for
         // the sheet's line and the map's agent focus.
-        const open = data.runs.slice().reverse().find((r) => active(r) || live(r));
-        sessionTail = open && open.id !== shown ? await api(`/api/runs/${open.id}/tail`).catch(() => null) : null;
+        const open = data.runs
+          .slice()
+          .reverse()
+          .find((r) => active(r) || live(r));
+        sessionTail =
+          open && open.id !== shown
+            ? await api(`/api/runs/${open.id}/tail`).catch(() => null)
+            : null;
         // An approved or merged task shows what a merge would do now.
         const r = shown && runDetail?.id === shown && runDetail;
         mergeInfo =
-          r && r.status === "completed" && !r.revisedBy && (reviewed(r) || r.merge)
+          r &&
+          r.status === "completed" &&
+          !r.revisedBy &&
+          (reviewed(r) || r.merge)
             ? await api(`/api/runs/${r.id}/merge`).catch(() => null)
             : null;
         bar();
@@ -295,7 +317,15 @@ export function createWorkflow({
         lastSignature = signature;
         // A poll redraws only a page that shows this data (never the map's own views).
         if (render === "poll")
-          render = changed && ["tasks", "history", "instructions", "run", "conversations"].includes(nav.view().name);
+          render =
+            changed &&
+            [
+              "tasks",
+              "history",
+              "instructions",
+              "run",
+              "conversations",
+            ].includes(nav.view().name);
         if (render) {
           const focused = document.activeElement;
           const focusLabel = focused?.matches("textarea,input,select")
@@ -336,7 +366,9 @@ export function createWorkflow({
     settle = 0;
   /** A task stopped partway with instructions still open: it waits for the owner. */
   const stalled = (r) =>
-    ["failed", "interrupted"].includes(r.status) && !r.revisedBy && open(r).length > 0;
+    ["failed", "interrupted"].includes(r.status) &&
+    !r.revisedBy &&
+    open(r).length > 0;
   /** The task the Tasks button opens directly: one running, else one that stopped. */
   function focusRun() {
     return (data.runs.find(active) || data.runs.find(stalled))?.id || null;
@@ -350,8 +382,17 @@ export function createWorkflow({
     // Tasks only: an open session shows in the sheet's live line (see cueLive).
     const running = data.runs.find((r) => active(r) && r.kind !== "session"),
       stuck = !running && data.runs.find(stalled);
-    const next = running ? "working" : stuck ? "attention" : ready.length ? "ready" : "";
-    const agent = (r) => ({ claude: "Claude Code", codex: "Codex", openrouter: "OpenRouter" })[r.agent] || r.agent;
+    const next = running
+      ? "working"
+      : stuck
+        ? "attention"
+        : ready.length
+          ? "ready"
+          : "";
+    const agent = (r) =>
+      ({ claude: "Claude Code", codex: "Codex", openrouter: "OpenRouter" })[
+        r.agent
+      ] || r.agent;
     const label = running
       ? `${agent(running)} is working on a task`
       : stuck
@@ -360,11 +401,12 @@ export function createWorkflow({
           ? `Tasks, ${ready.length} ready to review`
           : "Tasks";
     button.setAttribute("aria-label", label);
-    button.title = running || stuck
-      ? label
-      : ready.length
-        ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
-        : "Open tasks";
+    button.title =
+      running || stuck
+        ? label
+        : ready.length
+          ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
+          : "Open tasks";
     if (next === cue) return;
     const finished = cue === "working" && next !== "working";
     cue = next;
@@ -376,7 +418,10 @@ export function createWorkflow({
     else if (finished && next === "ready") {
       // One short hop as the agent finishes, then the usual accent icon.
       button.replaceChildren(peek("ready"));
-      settle = setTimeout(() => cue === "ready" && button.replaceChildren(tasksIcon), 2600);
+      settle = setTimeout(
+        () => cue === "ready" && button.replaceChildren(tasksIcon),
+        2600,
+      );
     } else button.replaceChildren(tasksIcon);
   }
   /** The sheet's live line: a small Peek and one state word at the right of the sheet's title
@@ -393,7 +438,12 @@ export function createWorkflow({
     liveLine ??= document.querySelector("#liveLine");
     const line = liveLine;
     if (!line) return;
-    const row = nav.view().name === "inspect" ? document.querySelector("#reviewScope") : document.querySelector("#viewHead .view-head, #viewHead .session-head");
+    const row =
+      nav.view().name === "inspect"
+        ? document.querySelector("#reviewScope")
+        : document.querySelector(
+            "#viewHead .view-head, #viewHead .session-head",
+          );
     if (row && line.parentElement !== row) row.append(line);
     const view = nav.view(),
       runs = data.runs.slice().reverse();
@@ -406,8 +456,15 @@ export function createWorkflow({
     if (line.hidden) return;
     const session = r.kind === "session";
     // What the agent does now, from the end of its log.
-    const full = runDetail?.id === r.id ? runDetail : sessionTail?.id === r.id ? sessionTail : r;
-    const now = session ? activity(full) : { state: "running", title: "Working", label: taskTitle(r), code: "" };
+    const full =
+      runDetail?.id === r.id
+        ? runDetail
+        : sessionTail?.id === r.id
+          ? sessionTail
+          : r;
+    const now = session
+      ? activity(full)
+      : { state: "running", title: "Working", label: taskTitle(r), code: "" };
     const name = session ? r.title || "Session" : taskTitle(r);
     // Just out of a running session's view: fetch the end of its log now, not at the next poll.
     if (session && r.status === "running" && full === r && !tailLoading) {
@@ -421,7 +478,11 @@ export function createWorkflow({
         });
     }
     const plain = (t) => t.replace(/[`*#>]/g, "").trim();
-    const what = `${now.title}${now.label ? ": " + plain(now.label) : ""}${now.code ? " " + now.code : ""}`.replace(/[.\s]+$/, "");
+    const what =
+      `${now.title}${now.label ? ": " + plain(now.label) : ""}${now.code ? " " + now.code : ""}`.replace(
+        /[.\s]+$/,
+        "",
+      );
     const label = `${session ? "Session" : "Task"} ${name} · ${what}. Open it`;
     line.setAttribute("aria-label", label);
     line.title = label;
@@ -431,7 +492,14 @@ export function createWorkflow({
     line.dataset.key = key;
     line.dataset.state = now.state;
     line.replaceChildren(
-      peek(now.state === "running" ? "working" : now.state === "needs" ? "thinking" : "ready", { className: "live-peek" }),
+      peek(
+        now.state === "running"
+          ? "working"
+          : now.state === "needs"
+            ? "thinking"
+            : "ready",
+        { className: "live-peek" },
+      ),
       el("span", "live-state", now.title),
     );
   }
@@ -443,18 +511,39 @@ export function createWorkflow({
   function markedRun() {
     const shown = runDetail?.id === runId() ? runDetail : null;
     // The run on screen comes from a later read than the list: its copy is the newer one.
-    const all = data.runs.slice().reverse().map((r) => (r.id === shown?.id ? shown : r));
+    const all = data.runs
+      .slice()
+      .reverse()
+      .map((r) => (r.id === shown?.id ? shown : r));
     if (shown && active(shown)) return shown;
-    return all.find(active) || (shown && live(shown) ? shown : null) || all.find(live) || null;
+    return (
+      all.find(active) ||
+      (shown && live(shown) ? shown : null) ||
+      all.find(live) ||
+      null
+    );
   }
   /** Gives the map's agent focus where the marked run's agent is, from the fullest copy of
    * its log at hand: the open run, the end of its log, or nothing yet. */
   function runFocus() {
     const r = markedRun();
     if (!r) return focus.set("run", null);
-    const full = r.output !== undefined ? r : runDetail?.id === r.id ? runDetail : sessionTail?.id === r.id ? sessionTail : r;
+    const full =
+      r.output !== undefined
+        ? r
+        : runDetail?.id === r.id
+          ? runDetail
+          : sessionTail?.id === r.id
+            ? sessionTail
+            : r;
     const where = focusOf(timeline(full.output || ""));
-    focus.set("run", { running: r.status === "running", live: live(r), current: where.current, trail: where.trail, changed: full.changed || [] });
+    focus.set("run", {
+      running: r.status === "running",
+      live: live(r),
+      current: where.current,
+      trail: where.trail,
+      changed: full.changed || [],
+    });
   }
   function bar() {
     cueLive();
@@ -509,7 +598,8 @@ export function createWorkflow({
   }
   /** Renders the persistent draft input independently of the current inspection view. */
   function renderComposer(composerHost) {
-    if (!composer || (!draft && !editing && !composer.pinned)) composer = context();
+    if (!composer || (!draft && !editing && !composer.pinned))
+      composer = context();
     if (composer) {
       const box = el("section", "composer");
       box.append(
@@ -532,7 +622,11 @@ export function createWorkflow({
         async () => {
           if (target) {
             // Collected for the explored task's next round; exploring carries on.
-            await write("/api/comments", { ...composer, text: draft, forRun: target });
+            await write("/api/comments", {
+              ...composer,
+              text: draft,
+              forRun: target,
+            });
             composer = null;
             draft = "";
             notice("Added to this task's requested changes");
@@ -570,13 +664,20 @@ export function createWorkflow({
         redraw();
       });
       iconButton(cancel, "close", "Cancel");
-      iconButton(save, "check", target ? "Add to requested changes" : "Save draft");
+      iconButton(
+        save,
+        "check",
+        target ? "Add to requested changes" : "Save draft",
+      );
       for (const b of [cancel, save]) b.classList.add("icon-action");
       buttons.append(cancel, save);
       const input = box.querySelector("textarea");
       // Nothing to save until something is written.
       save.disabled = !draft.trim();
-      input.addEventListener("input", () => (save.disabled = !input.value.trim()));
+      input.addEventListener(
+        "input",
+        () => (save.disabled = !input.value.trim()),
+      );
       input.placeholder = target
         ? "What should change in this work?"
         : "What should change, and why?";
@@ -595,7 +696,9 @@ export function createWorkflow({
     const here = !task && name === "instructions";
     if (here) {
       head(`Instructions · ${label(context().anchor)}`);
-      body.append(el("p", "read-note", "Drafts wait here until you send them as a task."));
+      body.append(
+        el("p", "read-note", "Drafts wait here until you send them as a task."),
+      );
     }
     const overview = !task && name === "tasks";
     if (!task && name === "history") {
@@ -605,14 +708,23 @@ export function createWorkflow({
     if (overview) {
       // The Agents sheet opens from here; the line says what a new task uses.
       // Agents is a quiet icon in the header row, as the back arrow is.
-      const choose = iconButton(el("button", "view-action"), "agents", "Agents");
+      const choose = iconButton(
+        el("button", "view-action"),
+        "agents",
+        "Agents",
+      );
       choose.type = "button";
       choose.id = "openAgents";
       choose.onclick = () => agents.open(null, () => redraw());
       head("Tasks", { actions: [choose] });
       const uses = agents.describe("task");
-      if (uses) body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));
-      else agents.load().then((c) => c && redraw()).catch(() => {});
+      if (uses)
+        body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));
+      else
+        agents
+          .load()
+          .then((c) => c && redraw())
+          .catch(() => {});
       const shown = data.runs
         .filter((r) => r.status !== "preview" && !r.revisedBy)
         .slice()
@@ -620,7 +732,8 @@ export function createWorkflow({
       // Open sessions are conversations (see Conversations); a session sent to review is work.
       const drafts = data.comments.filter(sendable);
       const needs = shown.filter((r) => stageOf(r) === "needs");
-      if (drafts.length || needs.length) body.append(el("h3", "workflow-group", "Needs you"));
+      if (drafts.length || needs.length)
+        body.append(el("h3", "workflow-group", "Needs you"));
       if (drafts.length)
         body.append(
           action(
@@ -640,7 +753,10 @@ export function createWorkflow({
       body.append(...needs.map(taskCard));
       const working = shown.filter((r) => stageOf(r) === "working");
       if (working.length)
-        body.append(el("h3", "workflow-group", "Working"), ...working.map(taskCard));
+        body.append(
+          el("h3", "workflow-group", "Working"),
+          ...working.map(taskCard),
+        );
       const done = shown.filter((r) => stageOf(r) === "done");
       if (done.length)
         body.append(
@@ -668,40 +784,52 @@ export function createWorkflow({
       );
       empty.prepend(peek(loaded ? "empty" : "loading"));
       body.append(empty);
-    }
-    else if (
+    } else if (
       overview &&
       !data.comments.some(sendable) &&
-      !data.runs.some((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) !== "history")
+      !data.runs.some(
+        (r) =>
+          r.status !== "preview" && !r.revisedBy && stageOf(r) !== "history",
+      )
     )
       body.append(
         el(
           "p",
           "empty",
-          loaded ? "No tasks yet. Write an instruction on the map to start one." : "Loading tasks…",
+          loaded
+            ? "No tasks yet. Write an instruction on the map to start one."
+            : "Loading tasks…",
         ),
       );
     // On a selection, finished instructions (approved, or in an applied task) collapse into
     // one line, so drafts and open instructions stay in front.
     const settled = (c) =>
-      c.status === "verified" || data.runs.find((r) => r.id === c.runId)?.applied;
+      c.status === "verified" ||
+      data.runs.find((r) => r.id === c.runId)?.applied;
     const earlier = here ? items.filter(settled) : [];
     renderCards(body, here ? items.filter((c) => !settled(c)) : items, task);
     if (earlier.length) {
       const fold = el("details", "workflow-evidence earlier-instructions");
       fold.dataset.key = "earlier-instructions";
       fold.append(
-        el("summary", "", `${earlier.length} earlier instruction${earlier.length === 1 ? "" : "s"}`),
+        el(
+          "summary",
+          "",
+          `${earlier.length} earlier instruction${earlier.length === 1 ? "" : "s"}`,
+        ),
       );
       renderCards(fold, earlier);
       body.append(fold);
     }
     if (overview) {
       const past = data.runs.filter(
-        (r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history",
+        (r) =>
+          r.status !== "preview" && !r.revisedBy && stageOf(r) === "history",
       ).length;
       if (past) {
-        const link = action(`History · ${past}`, () => nav.go({ name: "history" }));
+        const link = action(`History · ${past}`, () =>
+          nav.go({ name: "history" }),
+        );
         link.classList.add("link-button", "history-link");
         body.append(link);
       }
@@ -736,14 +864,19 @@ export function createWorkflow({
                 ? "Not reviewed"
                 : states[c.status],
           );
-          state.dataset.state = endedSession(task) && c.status === "unreported" ? "ended" : c.status;
+          state.dataset.state =
+            endedSession(task) && c.status === "unreported"
+              ? "ended"
+              : c.status;
           foot.append(state);
         }
         card.append(richText(c.text, "workflow-text"), foot);
         const report = c.report;
         if (report) {
           // What the agent says about it, quietly under the instruction; no heading.
-          card.append(richText(report.note || report.reason, "workflow-text report-text"));
+          card.append(
+            richText(report.note || report.reason, "workflow-text report-text"),
+          );
           if (report.checks) {
             const d = el("details", "workflow-evidence");
             d.append(
@@ -805,7 +938,11 @@ export function createWorkflow({
       ),
     );
     body.append(uses);
-    if (!agents.describe("task")) agents.load().then((c) => c && redraw()).catch(() => {});
+    if (!agents.describe("task"))
+      agents
+        .load()
+        .then((c) => c && redraw())
+        .catch(() => {});
     for (const c of data.comments.filter(sendable)) {
       const l = el("label", "workflow-pick"),
         check = el("input");
@@ -860,7 +997,15 @@ export function createWorkflow({
       const blocked = agents.problem("task");
       summary.append(
         el("h3", "", blocked ? "Not ready" : "Ready to start"),
-        ...(blocked ? [el("p", "read-note warn-note", `${blocked}. Change it in Agents, or fix it on your computer.`)] : []),
+        ...(blocked
+          ? [
+              el(
+                "p",
+                "read-note warn-note",
+                `${blocked}. Change it in Agents, or fix it on your computer.`,
+              ),
+            ]
+          : []),
         el(
           "p",
           "workflow-text",
@@ -902,8 +1047,10 @@ export function createWorkflow({
       const row = el("li");
       row.append(el("code", "", f.path));
       const counts = el("span", "merge-counts");
-      if (f.added != null) counts.append(el("span", "merge-add", `+${f.added}`));
-      if (f.removed) counts.append(" ", el("span", "merge-del", `−${f.removed}`));
+      if (f.added != null)
+        counts.append(el("span", "merge-add", `+${f.added}`));
+      if (f.removed)
+        counts.append(" ", el("span", "merge-del", `−${f.removed}`));
       row.append(counts);
       list.append(row);
     }
@@ -933,7 +1080,9 @@ export function createWorkflow({
   async function updateTask(r) {
     const out = await write(`/api/runs/${r.id}/update`, {});
     if (out.round) {
-      notice(`The task and ${mergeInfo?.target || "main"} conflict. The agent resolves it in round ${out.round.round}.`);
+      notice(
+        `The task and ${mergeInfo?.target || "main"} conflict. The agent resolves it in round ${out.round.round}.`,
+      );
       setTimeout(() => notice(""), 5000);
       await openTask(out.round.id);
     } else {
@@ -959,7 +1108,10 @@ export function createWorkflow({
             "Merge",
             async () => {
               try {
-                await write(`/api/runs/${r.id}/merge`, { target: m.targetSha, head: m.head });
+                await write(`/api/runs/${r.id}/merge`, {
+                  target: m.targetSha,
+                  head: m.head,
+                });
               } catch (e) {
                 // Something changed since the sheet opened: show what is in the way now.
                 close();
@@ -978,12 +1130,24 @@ export function createWorkflow({
         ),
       );
       box.append(
-        el("h2", "merge-title", `Merge ${plural(m.commits, "commit")} into ${m.target}?`),
-        el("p", "read-note", `From ${r.branch} · fast-forward to ${m.head.slice(0, 7)}`),
+        el(
+          "h2",
+          "merge-title",
+          `Merge ${plural(m.commits, "commit")} into ${m.target}?`,
+        ),
+        el(
+          "p",
+          "read-note",
+          `From ${r.branch} · fast-forward to ${m.head.slice(0, 7)}`,
+        ),
         fileList(m.files || []),
         el("p", "merge-note", note),
         buttons,
-        el("p", "read-note merge-foot", `Nothing is pushed. You can undo until ${m.target} changes.`),
+        el(
+          "p",
+          "read-note merge-foot",
+          `Nothing is pushed. You can undo until ${m.target} changes.`,
+        ),
       );
     });
   }
@@ -997,9 +1161,15 @@ export function createWorkflow({
       );
       let draft;
       try {
-        draft = await write(`/api/runs/${r.id}/commit-draft`, { using: agents.using("ask") });
+        draft = await write(`/api/runs/${r.id}/commit-draft`, {
+          using: agents.using("ask"),
+        });
       } catch (e) {
-        box.replaceChildren(el("h2", "merge-title", "Cannot commit now"), el("p", "merge-note", e.message), action("Close", close));
+        box.replaceChildren(
+          el("h2", "merge-title", "Cannot commit now"),
+          el("p", "merge-note", e.message),
+          action("Close", close),
+        );
         return;
       }
       let message = draft.message;
@@ -1011,7 +1181,11 @@ export function createWorkflow({
           action(
             "Commit",
             async () => {
-              await write(`/api/runs/${r.id}/commit-mine`, { message, head: draft.head, hash: draft.hash });
+              await write(`/api/runs/${r.id}/commit-mine`, {
+                message,
+                head: draft.head,
+                hash: draft.hash,
+              });
               close();
               moved();
               await updateTask(r);
@@ -1027,16 +1201,24 @@ export function createWorkflow({
           "p",
           "read-note",
           `Only the ${plural(draft.files.length, "file")} in the way.` +
-            (others > 0 ? ` Your other ${plural(others, "change")} stay uncommitted.` : ""),
+            (others > 0
+              ? ` Your other ${plural(others, "change")} stay uncommitted.`
+              : ""),
         ),
         fileList(draft.files),
         field(
-          draft.agent ? "Commit message · written by the agent, you can edit it" : "Commit message · you can edit it",
+          draft.agent
+            ? "Commit message · written by the agent, you can edit it"
+            : "Commit message · you can edit it",
           message,
           (value) => (message = value),
         ),
         buttons,
-        el("p", "read-note merge-foot", `The commit is yours, on ${m.target}. Nothing is pushed.`),
+        el(
+          "p",
+          "read-note merge-foot",
+          `The commit is yours, on ${m.target}. Nothing is pushed.`,
+        ),
       );
     });
   }
@@ -1055,7 +1237,11 @@ export function createWorkflow({
     const size = () => {
       const added = (m.files || []).reduce((n, f) => n + (f.added || 0), 0),
         removed = (m.files || []).reduce((n, f) => n + (f.removed || 0), 0),
-        line = el("p", "merge-size", `${plural(m.commits, "commit")} · ${plural(m.files.length, "file")} `);
+        line = el(
+          "p",
+          "merge-size",
+          `${plural(m.commits, "commit")} · ${plural(m.files.length, "file")} `,
+        );
       line.append(el("span", "merge-add", `+${added}`));
       if (removed) line.append(" ", el("span", "merge-del", `−${removed}`));
       return line;
@@ -1065,12 +1251,29 @@ export function createWorkflow({
       step.append(
         heading("success", `Ready to merge into ${m.target}`),
         size(),
-        Object.assign(action(`Merge into ${m.target}`, () => confirmMerge(r, m), true), { id: "mergeTask" }),
-        el("p", "read-note", "Fast-forward only. Peekumi does not push to GitHub."),
+        Object.assign(
+          action(`Merge into ${m.target}`, () => confirmMerge(r, m), true),
+          { id: "mergeTask" },
+        ),
+        el(
+          "p",
+          "read-note",
+          "Fast-forward only. Peekumi does not push to GitHub.",
+        ),
       );
     } else if (m.state === "merged") {
-      const when = new Date(m.merge.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-      step.append(heading("merged", `Merged into ${m.target}`), el("p", "merge-size", `${when} · ${m.target} is at ${m.merge.to.slice(0, 7)}`));
+      const when = new Date(m.merge.at).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      step.append(
+        heading("merged", `Merged into ${m.target}`),
+        el(
+          "p",
+          "merge-size",
+          `${when} · ${m.target} is at ${m.merge.to.slice(0, 7)}`,
+        ),
+      );
       if (m.undoable)
         step.append(
           Object.assign(
@@ -1085,8 +1288,21 @@ export function createWorkflow({
           ),
           el("p", "read-note", `Undo works until ${m.target} changes.`),
         );
-      else step.append(el("p", "read-note", `Undo is not possible: ${m.target} or the merged files changed after the merge.`));
-      step.append(el("p", "read-note", "Peekumi does not push. Push from your terminal when you are ready."));
+      else
+        step.append(
+          el(
+            "p",
+            "read-note",
+            `Undo is not possible: ${m.target} or the merged files changed after the merge.`,
+          ),
+        );
+      step.append(
+        el(
+          "p",
+          "read-note",
+          "Peekumi does not push. Push from your terminal when you are ready.",
+        ),
+      );
     } else if (m.state === "blocked") {
       const n = m.blocking.length,
         files = el("ul", "merge-files");
@@ -1094,10 +1310,20 @@ export function createWorkflow({
       const row = el("div", "merge-buttons");
       row.append(check());
       step.append(
-        heading("", `${n === 1 ? "1 of your files is" : `${n} of your files are`} in the way`),
-        el("p", "merge-note", "You have uncommitted changes in these files, and the merge changes them too:"),
+        heading(
+          "",
+          `${n === 1 ? "1 of your files is" : `${n} of your files are`} in the way`,
+        ),
+        el(
+          "p",
+          "merge-note",
+          "You have uncommitted changes in these files, and the merge changes them too:",
+        ),
         files,
-        Object.assign(action("Commit my changes, then merge", () => commitMine(r, m), true), { id: "commitFirst" }),
+        Object.assign(
+          action("Commit my changes, then merge", () => commitMine(r, m), true),
+          { id: "commitFirst" },
+        ),
         el(
           "p",
           "read-note",
@@ -1108,8 +1334,15 @@ export function createWorkflow({
     } else if (m.state === "behind") {
       step.append(
         heading("", `${m.target} has ${plural(m.behind, "new commit")}`),
-        el("p", "merge-note", `${m.target} changed after this task ran, so a fast-forward merge is not possible yet.`),
-        Object.assign(action(`Update with ${m.target}`, () => updateTask(r), true), { id: "updateTask" }),
+        el(
+          "p",
+          "merge-note",
+          `${m.target} changed after this task ran, so a fast-forward merge is not possible yet.`,
+        ),
+        Object.assign(
+          action(`Update with ${m.target}`, () => updateTask(r), true),
+          { id: "updateTask" },
+        ),
         el(
           "p",
           "read-note",
@@ -1120,7 +1353,11 @@ export function createWorkflow({
       step.append(
         heading("", `${m.target} is checked out in another folder`),
         el("p", "merge-note", m.folder),
-        el("p", "read-note", `Merge there, or check out another branch in that folder. Then check again.`),
+        el(
+          "p",
+          "read-note",
+          `Merge there, or check out another branch in that folder. Then check again.`,
+        ),
         check(),
       );
     }
@@ -1129,14 +1366,23 @@ export function createWorkflow({
   /** Every instruction in a task round: its work and any finished ones carried along. */
   /** A round's instructions: its work, the finished work it carries, and (in an update round)
    * the instructions that stay open for the owner's decision. */
-  const instructionsOf = (r) => [...(r.comments || []), ...(r.done || []), ...(r.open || [])];
+  const instructionsOf = (r) => [
+    ...(r.comments || []),
+    ...(r.done || []),
+    ...(r.open || []),
+  ];
   /** A task in words: its first instruction (one line, shortened), how many more, and the
    * round after the first. A session is its title. */
   function taskTitle(r) {
     if (r.kind === "session") return r.title || "Session";
     const list = instructionsOf(r);
-    const first = (list[0]?.text || "").split("\n")[0].replace(/[`*#>]/g, "").trim() || "Task";
-    const words = first.length > 64 ? first.slice(0, 61).trimEnd() + "…" : first;
+    const first =
+      (list[0]?.text || "")
+        .split("\n")[0]
+        .replace(/[`*#>]/g, "")
+        .trim() || "Task";
+    const words =
+      first.length > 64 ? first.slice(0, 61).trimEnd() + "…" : first;
     const more = list.length > 1 ? ` + ${list.length - 1} more` : "";
     const round = r.round > 1 ? ` · round ${r.round}` : "";
     return `${words}${more}${round}`;
@@ -1163,7 +1409,9 @@ export function createWorkflow({
   /** Instructions of a round that still need the owner's decision: flagged by the agent, or
    * not done. Approve and Merge do not close them. */
   function undecided(r) {
-    return data.comments.filter((c) => c.runId === r.id && ["flagged", "unreported"].includes(c.status));
+    return data.comments.filter(
+      (c) => c.runId === r.id && ["flagged", "unreported"].includes(c.status),
+    );
   }
   /** Where a task belongs in the Tasks list: "working" while an agent runs, "needs" while
    * it has instructions or changes waiting for you, "done" once approved but not yet merged,
@@ -1189,7 +1437,11 @@ export function createWorkflow({
     card.classList.add("task-link");
     if (quiet) card.classList.add("quiet");
     card.append(
-      el("span", "rd", `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`),
+      el(
+        "span",
+        "rd",
+        `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`,
+      ),
     );
     return card;
   }
@@ -1197,17 +1449,28 @@ export function createWorkflow({
   function history(body) {
     head("History");
     const past = data.runs
-      .filter((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history")
+      .filter(
+        (r) =>
+          r.status !== "preview" && !r.revisedBy && stageOf(r) === "history",
+      )
       .slice()
       .reverse();
-    if (!past.length) body.append(el("p", "empty", "No applied or closed tasks yet."));
+    if (!past.length)
+      body.append(el("p", "empty", "No applied or closed tasks yet."));
     body.append(...past.map((r) => taskCard(r, true)));
   }
   function runStatus(r) {
     const target = r.targetBranch || "main";
-    if (live(r)) return r.approval ? "Needs you" : r.status === "running" ? "Working" : "Your turn";
-    if (r.kind === "session" && r.status === "cancelled") return "Ended without review";
-    if (r.applied) return r.merge ? `Merged into ${target}` : `Applied to ${target}`;
+    if (live(r))
+      return r.approval
+        ? "Needs you"
+        : r.status === "running"
+          ? "Working"
+          : "Your turn";
+    if (r.kind === "session" && r.status === "cancelled")
+      return "Ended without review";
+    if (r.applied)
+      return r.merge ? `Merged into ${target}` : `Applied to ${target}`;
     if (r.revisedBy) return "Changes requested";
     if (r.status === "completed" && !reviewed(r) && !open(r).length)
       return "Nothing left to review";
@@ -1252,7 +1515,8 @@ export function createWorkflow({
     if (r.applied) return "merged";
     if (r.revisedBy) return "";
     if (reviewed(r)) return "success";
-    if (["failed", "interrupted", "cancelled"].includes(r.status)) return "stopped";
+    if (["failed", "interrupted", "cancelled"].includes(r.status))
+      return "stopped";
     return runStatus(r) === "Ready for review" ? "ready" : "";
   }
   function activityView(r) {
@@ -1261,13 +1525,16 @@ export function createWorkflow({
     if (active(r)) live.append(el("p", "workflow-text", progress.activity));
     if (["failed", "interrupted", "cancelled"].includes(r.status)) {
       // Say what happened and what to do next, in the owner's words, not the agent's log.
-      const again = "Instructions that the agent did not answer show “Not done”. To try again, use Request changes: the next round includes them.";
+      const again =
+        "Instructions that the agent did not answer show “Not done”. To try again, use Request changes: the next round includes them.";
       const ended = r.kind === "session" && r.status === "cancelled";
       const why = ended
         ? "You ended this session without review. Its branch stays, and nothing was merged."
         : r.status === "cancelled"
           ? "This task stopped: you stopped it, or it reached the one-hour limit."
-          : progress.errors.join("\n") || r.message || "This task stopped before it finished.";
+          : progress.errors.join("\n") ||
+            r.message ||
+            "This task stopped before it finished.";
       live.append(el("p", "workflow-text", why));
       if (!ended) live.append(el("p", "read-note", again));
     }
@@ -1297,7 +1564,10 @@ export function createWorkflow({
     if (r.kind === "session") {
       const record = el("details", "workflow-evidence session-record");
       record.dataset.key = "session-record";
-      record.append(el("summary", "", "Session conversation"), session.conversation(r));
+      record.append(
+        el("summary", "", "Session conversation"),
+        session.conversation(r),
+      );
       body.append(record);
     }
     if (runStatus(r) === "Nothing left to review")
@@ -1363,15 +1633,18 @@ export function createWorkflow({
       // The list and the button that sends it to the agent, as the next round, sit together.
       body.append(
         el("h3", "workflow-group", "Requested changes"),
-        Object.assign(action(
-          `Send ${batch.length} change${batch.length === 1 ? "" : "s"} to ${agentName}`,
-          async () => {
-            const next = await write(`/api/runs/${r.id}/revise`, {});
-            reply = null;
-            await openTask(next.id);
-          },
-          true,
-        ), { id: "sendChanges" }),
+        Object.assign(
+          action(
+            `Send ${batch.length} change${batch.length === 1 ? "" : "s"} to ${agentName}`,
+            async () => {
+              const next = await write(`/api/runs/${r.id}/revise`, {});
+              reply = null;
+              await openTask(next.id);
+            },
+            true,
+          ),
+          { id: "sendChanges" },
+        ),
         el(
           "p",
           "read-note",
@@ -1382,7 +1655,9 @@ export function createWorkflow({
         const card = el("article", "workflow-card");
         card.dataset.commentId = c.id;
         const foot = el("div", "cm-top");
-        const place = action(label(c.anchor), () => inspect(c.sha, c.sha, c.anchor));
+        const place = action(label(c.anchor), () =>
+          inspect(c.sha, c.sha, c.anchor),
+        );
         place.classList.add("link-button");
         foot.append(place);
         const controls = el("div", "sel-acts");
@@ -1411,26 +1686,34 @@ export function createWorkflow({
       );
     if (decide && ready.length)
       actions.append(
-        action("Approve", async () => {
-          try {
-            for (const c of ready)
-              await write(
-                "/api/comments/" + c.id,
-                { action: "verify", version: c.version, note: verificationNote },
-                "PATCH",
-              );
-            verificationNote = "";
-            reply = null;
-          } finally {
-            await refresh();
-          }
-          // The next step appears below the instructions; bring it into view.
-          requestAnimationFrame(() =>
-            document
-              .querySelector(".apply-step")
-              ?.scrollIntoView({ block: "start", behavior: "smooth" }),
-          );
-        }, true),
+        action(
+          "Approve",
+          async () => {
+            try {
+              for (const c of ready)
+                await write(
+                  "/api/comments/" + c.id,
+                  {
+                    action: "verify",
+                    version: c.version,
+                    note: verificationNote,
+                  },
+                  "PATCH",
+                );
+              verificationNote = "";
+              reply = null;
+            } finally {
+              await refresh();
+            }
+            // The next step appears below the instructions; bring it into view.
+            requestAnimationFrame(() =>
+              document
+                .querySelector(".apply-step")
+                ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+            );
+          },
+          true,
+        ),
       );
     // What should change is written in the box at the bottom, which adds it to this task's
     // list; the list's own button sends it to the agent as the next round.
@@ -1533,11 +1816,20 @@ export function createWorkflow({
   }, 3000);
   // A session on screen that is working updates faster, so its steps appear as they happen.
   setInterval(() => {
-    if (document.hidden || !loaded || !runId() || runDetail?.id !== runId() || !live(runDetail) || runDetail.status !== "running") return;
+    if (
+      document.hidden ||
+      !loaded ||
+      !runId() ||
+      runDetail?.id !== runId() ||
+      !live(runDetail) ||
+      runDetail.status !== "running"
+    )
+      return;
     refresh("poll").catch((e) => notice(e.message, true));
   }, 1200);
   /** A run by `id`: the full copy on screen, else the list's summary. */
-  const runOf = (id) => (runDetail?.id === id ? runDetail : data.runs.find((r) => r.id === id));
+  const runOf = (id) =>
+    runDetail?.id === id ? runDetail : data.runs.find((r) => r.id === id);
   return {
     refresh,
     openTask,
@@ -1546,7 +1838,15 @@ export function createWorkflow({
     /** True when a finished task, not yet continued, can collect changes for a next round. */
     revisable(id) {
       const r = data.runs.find((x) => x.id === id);
-      return Boolean(r && !active(r) && !live(r) && !endedSession(r) && r.status !== "preview" && !r.revisedBy && !r.applied);
+      return Boolean(
+        r &&
+        !active(r) &&
+        !live(r) &&
+        !endedSession(r) &&
+        r.status !== "preview" &&
+        !r.revisedBy &&
+        !r.applied,
+      );
     },
     /** How many instructions are waiting to go back with task `id`. */
     collected: (id) => collected(id).length,
@@ -1560,13 +1860,16 @@ export function createWorkflow({
     renderComposer,
     /** The dock's Session box: a reply to run `id` (or the open session), or a new session. */
     renderSessionComposer: (host, id = null) =>
-      session.renderComposer(host, id ? runOf(id) : liveSession(), { named: data.runs.filter(live).length > 1 }),
+      session.renderComposer(host, id ? runOf(id) : liveSession(), {
+        named: data.runs.filter(live).length > 1,
+      }),
     /** "session" or "task": what run `id` is. */
     runKind: (id) => (runOf(id)?.kind === "session" ? "session" : "task"),
     /** True when run `id` is an open session (a conversation, not a task). */
     isLive: (id) => Boolean(runOf(id) && live(runOf(id))),
     /** How run `id` shows, for the sheet's scroll rule: "loading", "session" or "task". */
-    runShape: (id) => (runDetail?.id === id ? (live(runDetail) ? "session" : "task") : "loading"),
+    runShape: (id) =>
+      runDetail?.id === id ? (live(runDetail) ? "session" : "task") : "loading",
     /** True when an open session exists (the dock then offers a reply to it). */
     hasLiveSession: () => Boolean(liveSession()),
     /** The open sessions, newest first, for Conversations: `{id, title, line, mood}`. */
@@ -1578,7 +1881,11 @@ export function createWorkflow({
           id: r.id,
           title: r.title || "Session",
           line: runStatus(r),
-          mood: r.approval ? "thinking" : r.status === "running" ? "working" : "ready",
+          mood: r.approval
+            ? "thinking"
+            : r.status === "running"
+              ? "working"
+              : "ready",
         })),
     /** How many instructions are on the map's selection (or inside it). */
     instructionsHere: () => data.comments.filter(visible).length,
@@ -1592,7 +1899,16 @@ export function createWorkflow({
     },
     /** The view changed (nav.js): a page that shows this data reads it again. */
     viewChanged(view) {
-      if (["tasks", "history", "instructions", "conversations", "run", "prepare"].includes(view.name))
+      if (
+        [
+          "tasks",
+          "history",
+          "instructions",
+          "conversations",
+          "run",
+          "prepare",
+        ].includes(view.name)
+      )
         refresh().catch((e) => notice(e.message, true));
     },
     /** The ID of the open session, or null. */
