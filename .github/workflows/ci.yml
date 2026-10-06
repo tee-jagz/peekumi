@@ -1,9 +1,12 @@
 name: CI
-# Runs every test suite on each push to main. Pull requests and v* tags also run the full
-# platform build in distribution.yml.
+# Runs on each push to main and on each pull request. `checks` is fast: layout, lint, the
+# writing rules, secrets and known vulnerabilities. `test` runs every test suite. Both must
+# pass before a pull request merges (the ruleset on main). Pull requests and v* tags also run
+# the full platform build in distribution.yml.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,20 +14,51 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  checks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      # The secret scan reads the whole history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: npm ci
+      - name: Layout (Prettier and rustfmt)
+        run: npm run format:check
+      - name: Lint (clippy) and the writing rules of the documents
+        run: npm run lint
+      - name: Secrets in the history
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Known vulnerabilities in npm packages
+        run: npm audit --audit-level=high
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Known vulnerabilities in Rust crates
+        run: cargo audit
   test:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       # The browser tests compare HEAD with its parent, so they need the history.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: npm ci
@@ -34,7 +68,7 @@ jobs:
       - run: npm run test:browser
       # The browser suites write their screenshots here; keep them when a suite fails.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results/

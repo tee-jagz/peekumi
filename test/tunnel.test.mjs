@@ -98,3 +98,44 @@ test("Tailscale sharing propagates command and malformed JSON failures", () => {
     (error) => error === failure,
   );
 });
+
+// The contract of a tunnel provider (docs/EXTENDING.md): the factory makes the operations
+// and runs nothing; a public provider also has `close`.
+test("every tunnel provider keeps the contract and runs nothing when it is made", async (t) => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { createCloudflareProvider } =
+    await import("../scripts/tunnel/cloudflare.mjs");
+  const state = await mkdtemp(join(tmpdir(), "peekumi-tunnel-"));
+  t.after(() => rm(state, { recursive: true, force: true }));
+  const never = () => {
+    throw new Error("A provider ran something when it was made");
+  };
+  const providers = {
+    tailscale: [createTailscaleProvider(never), false],
+    cloudflare: [
+      createCloudflareProvider({
+        state,
+        fetcher: never,
+        spawnProcess: never,
+        extract: never,
+      }),
+      true,
+    ],
+  };
+  for (const [name, [provider, isPublic]] of Object.entries(providers)) {
+    for (const operation of ["available", "status", "expose", "url"])
+      assert.equal(
+        typeof provider[operation],
+        "function",
+        `${name}.${operation}`,
+      );
+    if (isPublic)
+      assert.equal(
+        typeof provider.close,
+        "function",
+        `${name} is public, so it closes`,
+      );
+  }
+});

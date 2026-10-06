@@ -1,7 +1,7 @@
 ---
 name: Bug report
 about: Tell us about a problem in Peekumi
-labels: bug
+labels: [bug, needs-triage]
 ---
 
 <!-- Do not report a security problem here. Use the private form on the Security tab (see SECURITY.md). Do not paste pairing links, tokens or private code. -->

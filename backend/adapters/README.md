@@ -10,6 +10,6 @@ Language adapters change source syntax into a shared model. This model contains 
 
 Each implementation declares its supported extensions, limitations and parser identity. It also declares batch analysis, import resolution and declaration-target resolution. Adapter batches contain typed relationship candidates, source lines, and lookup evidence or an unresolved reason.
 
-Register each new implementation in `all()`. Adapters never expand or execute the inspected code. Missing interpreters and parse failures stay as explicit results for each file.
+Register each new implementation in `all()`, and add each of its files to the cache version in `engine.rs`. The contract tests in `mod.rs` check both. [docs/EXTENDING.md](../../docs/EXTENDING.md#add-a-language) gives all the steps. Adapters never expand or execute the inspected code. Missing interpreters and parse failures stay as explicit results for each file.
 
 The frontend shows the selected adapter and its capabilities under Details. The adapters extract documentation; they do not generate it. They do not infer types.

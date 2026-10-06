@@ -100,6 +100,16 @@ export function createAgents({ api, repo }) {
   }
   /** The full name of the agent with `id`, such as "Claude Code". */
   const label = (id) => catalog?.agents.find((a) => a.id === id)?.label || id;
+  /** The short name of the agent with `id`, such as "Claude". */
+  const short = (id) => catalog?.agents.find((a) => a.id === id)?.short || id;
+  /** True when the agent with `id` asks the owner before commands in a session (the server's
+   * `asksBeforeCommands`). Until the list loads it is false, and the list starts to load. */
+  const asksBeforeCommands = (id) => {
+    if (!catalog) load().catch(() => {});
+    return Boolean(
+      catalog?.agents.find((a) => a.id === id)?.asksBeforeCommands,
+    );
+  };
 
   /** Opens the Agents sheet: one row for each job, each opening its list. `job` opens that
    * list directly. `closed` runs when the sheet closes, so the caller can show the new choice. */
@@ -474,5 +484,15 @@ export function createAgents({ api, repo }) {
       ? `${agent.label}: ${agent.status.reason}`
       : null;
   };
-  return { load, using, current, describe, label, problem, open };
+  return {
+    load,
+    using,
+    current,
+    describe,
+    label,
+    short,
+    asksBeforeCommands,
+    problem,
+    open,
+  };
 }

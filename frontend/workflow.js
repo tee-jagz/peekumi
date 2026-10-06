@@ -242,6 +242,8 @@ export function createWorkflow({
     // The agent that sessions use (the choice for tasks), once the agent list has loaded.
     sessionAgent: () =>
       agents.load().then(() => agents.current("task")?.agent || null),
+    agentName: (id) => agents.short(id),
+    asksBeforeCommands: (id) => agents.asksBeforeCommands(id),
     openTask: (id) => openTask(id),
     showOnMap: (r, path) => showOnMap(r, path),
     openPlace: (target) => openPlace(target),
@@ -389,10 +391,7 @@ export function createWorkflow({
         : ready.length
           ? "ready"
           : "";
-    const agent = (r) =>
-      ({ claude: "Claude Code", codex: "Codex", openrouter: "OpenRouter" })[
-        r.agent
-      ] || r.agent;
+    const agent = (r) => agents.label(r.agent);
     const label = running
       ? `${agent(running)} is working on a task`
       : stuck

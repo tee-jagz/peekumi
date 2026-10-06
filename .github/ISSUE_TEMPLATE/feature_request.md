@@ -1,7 +1,7 @@
 ---
 name: Feature request
 about: Suggest a change to Peekumi
-labels: enhancement
+labels: [enhancement, needs-triage]
 ---
 
 ## The problem

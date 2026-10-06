@@ -157,6 +157,11 @@ pub trait Agent: Send + Sync {
     fn key(&self) -> Option<Value> {
         None
     }
+    /// True for a provider whose session asks the owner before a command outside its rules
+    /// (the session's approval bridge). The app then shows the "Commands" switch.
+    fn asks_before_commands(&self) -> bool {
+        false
+    }
 }
 
 /// Runs a provider's own command with a short time limit; `None` when it fails.
@@ -166,9 +171,11 @@ fn ask_provider(executable: &str, args: &[&str]) -> Option<String> {
         .map(|out| String::from_utf8_lossy(&out).into_owned())
 }
 
+/// Model lists by agent and executable, with the time each one was found.
+type ModelCache = HashMap<String, (Instant, Vec<Model>)>;
 /// Discovered model lists for ten minutes, by agent and executable.
 fn cached(key: String, find: impl FnOnce() -> Option<Vec<Model>>) -> Option<Vec<Model>> {
-    static CACHE: Mutex<Option<HashMap<String, (Instant, Vec<Model>)>>> = Mutex::new(None);
+    static CACHE: Mutex<Option<ModelCache>> = Mutex::new(None);
     if let Some((at, models)) = CACHE
         .lock()
         .ok()?
@@ -244,6 +251,9 @@ impl Agent for ClaudeCode {
     }
     fn jobs(&self) -> &'static [Job] {
         &[Job::Ask, Job::Task]
+    }
+    fn asks_before_commands(&self) -> bool {
+        true
     }
     /// The model aliases and effort levels that `claude --help` names. Claude Code has no
     /// command that lists models; an alias always means the latest model of that family.
@@ -923,6 +933,7 @@ impl Workflow {
                     "defaultModel": a.has_default_model(),
                     "notes": {"ask": a.note(Job::Ask), "task": a.note(Job::Task)},
                     "key": a.key(),
+                    "asksBeforeCommands": a.asks_before_commands(),
                     "models": models,
                     "source": if discovered { "agent" } else { "built-in" },
                     "status": {"ready": status.ready, "reason": status.reason},
@@ -960,5 +971,53 @@ mod tests {
         assert_eq!(help_aliases(help), ["fable", "opus", "sonnet"]);
         assert!(help_efforts("no flag here").is_empty());
         assert!(valid_model("claude-opus-4[1m]") && !valid_model("--bad") && !valid_model("a b"));
+    }
+
+    /// The rules of the contract that a new provider must keep (docs/EXTENDING.md). It reads
+    /// only what each provider declares: no provider command runs and no network is used.
+    #[test]
+    fn registered_agents_keep_the_contract() {
+        let state = std::env::temp_dir().join(format!("peekumi-agents-{}", std::process::id()));
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let store = Workflow::new(
+            repo,
+            &state,
+            "HEAD",
+            "codex-not-installed",
+            "claude-not-installed",
+        )
+        .unwrap();
+        let agents = registry(&store);
+        let mut ids = std::collections::BTreeSet::new();
+        for agent in &agents {
+            let id = agent.id();
+            assert!(ids.insert(id), "Two providers use the ID {id}");
+            assert!(
+                !id.is_empty()
+                    && id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                "{id}: an ID is saved in choices and runs, so it is lower case, digits and -"
+            );
+            assert!(
+                !agent.label().is_empty() && !agent.short().is_empty(),
+                "{id} has no name"
+            );
+            assert!(!agent.jobs().is_empty(), "{id} does no job");
+            assert_eq!(find(&store, id).map(|a| a.id()), Some(id));
+        }
+        // The server's defaults name a provider that can do that job.
+        for job in [Job::Ask, Job::Task] {
+            let default = store.default_choice(job);
+            let id = default["agent"].as_str().unwrap();
+            let agent = find(&store, id)
+                .unwrap_or_else(|| panic!("The {} default {id} is not registered", job.key()));
+            assert!(
+                agent.jobs().contains(&job),
+                "The {} default {id} cannot do that job",
+                job.key()
+            );
+        }
+        let _ = std::fs::remove_dir_all(state);
     }
 }
