@@ -35,6 +35,19 @@ try {
   await side.screenshot({ path: "test-results/platform-landscape.png" });
   await side.close();
 
+  // A phone that cannot reach the server: the header keeps the name on one line, and the
+  // waiting text has its own row.
+  const away = await open({ viewport: { width: 390, height: 844 } });
+  await away.goto(link);
+  await front(away).locator(".node").first().waitFor();
+  await away.route("**/api/**", (r) => r.abort());
+  await away.reload();
+  await away.waitForTimeout(1500);
+  const name = await away.locator("#repo-name").boundingBox();
+  assert.ok(name.height < 32, `The name stays on one line: ${name.height}px`);
+  await away.screenshot({ path: "test-results/platform-unreachable.png" });
+  await away.close();
+
   const page = await open({ viewport: { width: 1366, height: 768 } });
   await page.goto(link);
   await front(page).locator(".node").first().waitFor();
