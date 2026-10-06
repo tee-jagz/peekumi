@@ -410,13 +410,14 @@ try {
       await page.screenshot({
         path: `test-results/workflow-verified-${viewport.width}.png`,
       });
-      // In the Tasks list an approved task is quiet, under Done, not with work that needs you.
+      // Approve covered the finished instruction only: the agent flagged the other one, so the
+      // task stays under Needs you until the owner decides it.
       await page.locator("#openTasks").click();
       if ((await page.locator("#openTasks").getAttribute("aria-pressed")) !== "true")
         await page.locator("#openTasks").click();
-      await page.getByText("Done · waiting to merge", { exact: true }).waitFor();
-      assert.equal(await page.locator(".task-link.quiet").count(), 1);
-      assert.equal(await page.getByText("Needs you", { exact: true }).count(), 0);
+      await page.getByText("Needs you", { exact: true }).waitFor();
+      assert.equal(await page.getByText("Done · waiting to merge", { exact: true }).count(), 0);
+      assert.equal(await page.locator(".task-link:not(.quiet)").count(), 1);
       if (viewport.width < 900) {
         await page.locator("#sheetHandle").focus();
         await page.keyboard.press("Home");

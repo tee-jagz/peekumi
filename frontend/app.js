@@ -36,6 +36,8 @@ function replaceUrl(url) {
   history.replaceState(history.state, "", url);
   shownUrl = location.href;
 }
+/** True on an owner device; a read-only device can read the map and the source only. */
+const isOwner = () => document.documentElement.dataset.access !== "reader";
 const element = (tag, className, text) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -130,8 +132,17 @@ const commit = (sha) =>
     short: sha?.slice(0, 7),
     subject: "Selected revision",
   };
-/** Captures the selected declaration or dependency at its displayed immutable revision. */
+/** The owner's anchor while Follow moves the map for an agent: `{context, base, head}`.
+ * Follow never chooses for the owner, so the dock keeps what they selected until they select,
+ * move the map or change the comparison themselves. */
+let held = null;
+/** Captures the selected declaration or dependency at its displayed immutable revision, or
+ * the owner's anchor that Follow holds. */
 function reviewContext() {
+  if (held && held.base === baseRef && held.head === headRef) return held.context;
+  return currentContext();
+}
+function currentContext() {
   const n = selected;
   const useBefore =
     (scope.kind === "file" && sourceView !== "diff"
@@ -406,6 +417,7 @@ async function pair(token) {
     body: JSON.stringify({ token, name: navigator.userAgent.slice(0, 100) }),
   });
   await boot();
+  await restorePlace();
 }
 $("#login").onsubmit = (event) => {
   event.preventDefault();
@@ -465,7 +477,7 @@ async function boot(refresh = false, branch = viewingBranch) {
     // one of them is on view.
     const picker = $("#branchPicker"),
       local = new Set(metadata.branches.filter((b) => !b.remote).map((b) => b.name)),
-      internal = /^(worktree-agent-|peekumi\/run-|strata\/run-)/;
+      internal = /^(worktree-agent-|peekumi\/(run|session)-|strata\/run-)/;
     picker.replaceChildren();
     if (viewingPr && !metadata.selectedBranch) {
       const option = element("option", "", "Select a branch");
@@ -709,6 +721,9 @@ async function setupRepositories() {
   const data = await api("/api/repositories");
   document.documentElement.dataset.access = data.role;
   if (data.role === "reader") {
+    // Say once, quietly, why the dock and Tasks are absent.
+    if (!$(".access-note"))
+      $(".title-block")?.append(element("span", "access-note", "Read-only device"));
     $("#openTasks").hidden = true;
     $("#conversationDock").hidden = true;
     // Opening a PR fetches refs, which a read-only device cannot do.
@@ -885,10 +900,15 @@ function breadcrumbs() {
   return nav;
 }
 /** Renders the active map with its floating controls: level navigation and tools along the bottom, Before/After in the top-left corner. */
+/** True when the next map drawing should give the keyboard focus to its first card: the
+ * owner opened a level with the keyboard. */
+let focusFirstCard = false;
 function renderDeck() {
   const deck = $("#deck"),
     oldScroll =
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
+  // A card with the keyboard focus keeps it across the redraw (a new element, same key).
+  const focusedKey = document.activeElement?.closest?.("#deck .node")?.dataset.key;
   const mapLegend = $("#mapLegend"),
     sides = $("#baSeg"),
     crumbHost = $("#crumbHost");
@@ -909,6 +929,10 @@ function renderDeck() {
   // Before/After belongs to the comparison, not navigation: it sits in the top-left corner.
   body.append(sides);
   body.scrollTop = oldScroll;
+  const cards = [...body.querySelectorAll(".node")];
+  const again = focusFirstCard ? cards[0] : focusedKey && cards.find((n) => n.dataset.key === focusedKey);
+  focusFirstCard = false;
+  again?.focus({ preventScroll: true });
 }
 /** Chooses a node colour from its Git status, or the neutral Structure accent. */
 function tone(node) {
@@ -1760,6 +1784,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
 /** Selects a card or dependency for review and loads file details when needed. */
 function selectNode(node) {
   selected = node;
+  held = null;
   workflow.showSelection();
   workflow.ownerMoved();
   if (["comments", "runs"].includes(tab)) tab = "details";
@@ -1785,7 +1810,7 @@ async function followTo(place) {
     next = dir ? { kind: "folder", path: dir } : rootScope();
   }
   if (next.kind === scope.kind && next.path === scope.path) return;
-  await navigate(next, "", { keepTab: true });
+  await navigate(next, "", { keepTab: true, follow: true });
 }
 /** Shows a place that a message names: the map moves there and selects it, while the
  * conversation stays in view. `keepAsk` keeps Ask's thread; `keepTab` keeps the panel's view
@@ -1842,11 +1867,16 @@ function cardMenu(node) {
     symbol
       ? { label: "Source", icon: "source", key: "Enter", run: () => (selectNode(node), openNode(node)) }
       : { label: "Open", icon: "forward", key: "Enter", run: () => openNode(node) },
-    { label: "Ask about this", icon: "ask", key: "A", run: () => composeAbout(node, "ask") },
-    { label: "Add instruction", icon: "comment", key: "I", run: () => composeAbout(node, "comments") },
-    workflow.hasLiveSession()
-      ? { label: "Point the agent here", icon: "pin", key: "S", accent: true, run: () => composeAbout(node, "session") }
-      : { label: "Start a session here", icon: "session", key: "S", run: () => composeAbout(node, "session") },
+    // Ask, instructions and sessions belong to owner devices.
+    ...(isOwner()
+      ? [
+          { label: "Ask about this", icon: "ask", key: "A", run: () => composeAbout(node, "ask") },
+          { label: "Add instruction", icon: "comment", key: "I", run: () => composeAbout(node, "comments") },
+          workflow.hasLiveSession()
+            ? { label: "Point the agent here", icon: "pin", key: "S", accent: true, run: () => composeAbout(node, "session") }
+            : { label: "Start a session here", icon: "session", key: "S", run: () => composeAbout(node, "session") },
+        ]
+      : []),
     "rule",
   ];
   const relations = node.kind === "rootfiles" ? 0 : nodeRelations(node).length;
@@ -1943,8 +1973,13 @@ function openNode(node) {
   navigate(nodeScope(node), node.key);
 }
 /** Animates a scope change, clears stale selection and source state, and loads file details after entering a file. */
-async function navigate(next, originKey, { keepAsk = false, keepTab = false } = {}) {
+async function navigate(next, originKey, { keepAsk = false, keepTab = false, follow = false } = {}) {
   if (busy) return;
+  // Follow's moves keep the owner's anchor; the owner's own moves end it.
+  if (follow) held ??= { context: currentContext(), base: baseRef, head: headRef };
+  else held = null;
+  // Opened with the keyboard from a card: the focus goes to the new level's first card.
+  if (!follow && document.activeElement?.closest?.("#deck .node")) focusFirstCard = true;
   // The owner moved the map: Follow pauses (its own moves are ignored there).
   workflow.ownerMoved();
   const graph = $(".sheet:not(.peek) .graph-inner");
@@ -1994,7 +2029,42 @@ function goUp() {
   navigate(path ? { kind: "folder", path } : rootScope());
 }
 /** Synchronizes review tabs and rebuilds revision controls, selection details and the active tab. */
+let placeRestored = false;
+/** Keeps the map's place in the address (`at` is the open folder or file, `item` the
+ * selection), so a reload, an app update or a phone that closed the tab opens it again. */
+function rememberPlace() {
+  // Until the first map has opened the kept place, the address still holds it.
+  if (!placeRestored) return;
+  const url = new URL(location.href);
+  const at = scope.kind === "repo" ? null : `${scope.kind}:${scope.path}`;
+  const item = !selected || selected.kind === "edge" ? null : selected.kind === "symbol" ? selected.name : selected.path;
+  for (const [key, value] of [["at", at], ["item", item]])
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  if (url.href !== location.href) replaceUrl(url);
+}
+/** Opens the place that the address keeps (see `rememberPlace`), once, after the first map.
+ * A place that is not in this comparison leaves the map at the repository root. */
+async function restorePlace() {
+  if (placeRestored) return;
+  placeRestored = true;
+  if (!comparison) return;
+  const url = new URL(location.href),
+    at = url.searchParams.get("at"),
+    item = url.searchParams.get("item");
+  if (!at) return;
+  const [kind, ...rest] = at.split(":"),
+    path = rest.join(":");
+  const exists = (comparison.files || []).some((f) => f.path === path || f.path.startsWith(path + "/"));
+  if (!["folder", "file", "rootfiles"].includes(kind) || (kind !== "rootfiles" && !exists)) return;
+  await navigate({ kind, path }, "", { keepTab: true });
+  if (!item) return;
+  refreshModel();
+  selected = nodes.find((n) => (n.kind === "symbol" ? n.name : n.path) === item) || null;
+  render();
+}
 function renderPanel() {
+  rememberPlace();
   $("#openTasks").setAttribute("aria-pressed", String(inTasks()));
   $("#taskReturn").hidden = !taskReturn || inTasks();
   const view = [tab, scope.path, selected?.id || selected?.name || ""].join("|");
@@ -2012,10 +2082,13 @@ function renderPanel() {
       selected?.name || scope.path || metadata?.name || "Repository",
     ),
   );
+  // Plain words for the kinds that the map names internally.
+  const kindWords = { repo: "Repository", rootfiles: "Repository files", edge: "Relationship", stub: "Outside this folder", boundary: "Outside this folder" };
+  const kind = selected?.kind || scope.kind;
   const caption =
     selected?.kind === "symbol"
       ? `${selected.symbolKind} · ${scope.path}`
-      : selected?.kind || scope.kind;
+      : kindWords[kind] || kind;
   scopeBar.append(element("span", "review-kind", caption));
   if (selected?.changes?.length) {
     // Say what changed inside a modified declaration, so the reader knows what to inspect.
@@ -2037,6 +2110,7 @@ function renderPanel() {
   if (selected) {
     const clear = button("x", "×", () => {
       selected = null;
+      held = null;
       render();
     });
     clear.setAttribute("aria-label", "Clear selection");
@@ -2235,6 +2309,18 @@ function directoryCard(path, removed = false) {
   box.append(read);
   return box;
 }
+/** Why Peekumi shows no source for a file, from the engine's analysis label, or null when
+ * the file is readable. Every such file stays on the map with this explicit label. */
+function withheld(analysis = "") {
+  const reasons = [
+    ["restricted", "Source hidden. The name of this file often holds secrets (passwords, keys or tokens), so Peekumi does not show it or send it to Ask."],
+    ["binary", "Binary file. Peekumi shows no source for it."],
+    ["large file", "Large file. Peekumi does not show the source of files this large."],
+    ["symlink", "Symbolic link. Peekumi does not follow links."],
+    ["submodule", "Submodule. Peekumi does not open the other repository."],
+  ];
+  return reasons.find(([key]) => analysis.startsWith(key))?.[1] || null;
+}
 /** Builds a disclosure identifying the selected file's language adapter, capabilities, analysis status and limitations. */
 function adapterCard() {
   const adapter = comparison?.directoryMetadata?.adapters?.find((a) =>
@@ -2260,14 +2346,18 @@ function adapterCard() {
       element("p", "", adapter.capabilities.join(" · ")),
       element("p", "metadata-muted", adapter.limitations),
     );
-  } else
+  } else {
+    // A file without source says why, open, so the label is never hidden.
+    const reason = withheld(sourceData?.analysis);
+    box.open = Boolean(reason);
     box.append(
       element(
         "p",
         "metadata-muted",
-        "Symbol extraction is not supported for this file type.",
+        reason || "Symbol extraction is not supported for this file type.",
       ),
     );
+  }
   return box;
 }
 /** Explains what the current scope offers when nothing is selected. */
@@ -2306,7 +2396,7 @@ function prHead() {
       })
     : "";
   meta.append(
-    [pr.author?.login, date && `${word} ${date}`, pr.changedFiles != null && `${pr.changedFiles} files`]
+    [pr.author?.login, date && `${word} ${date}`, pr.changedFiles != null && `${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}`]
       .filter(Boolean)
       .join(" · "),
   );
@@ -2851,6 +2941,8 @@ function listRow(node, detail, action) {
 /** The chip beside the composer: what Ask, or a new task, uses on this device. A tap opens
  * that list in Agents. It shows once the agent list has loaded. */
 function showDockAgent() {
+  // A read-only device has no dock and may not read the agent list.
+  if (!isOwner()) return;
   const chip = $("#dockAgent"),
     job = primaryTab === "ask" ? "ask" : "task",
     uses = agents.describe(job);
@@ -3397,6 +3489,17 @@ function renderSource(body) {
           selected?.kind === "symbol" ? selected : null,
         )
       : sourceData[sourceView];
+  // A file that Peekumi does not read says why, in every view, and whether Git changed it.
+  const reason =
+    sourceData.before == null && sourceData.after == null
+      ? withheld(sourceData.analysis)
+      : null;
+  if (reason) {
+    const status = comparison?.files?.find((f) => f.path === scope.path)?.status;
+    const changed = { added: "Added in this comparison.", changed: "Changed in this comparison.", removed: "Removed in this comparison." }[status];
+    code.append(element("div", "empty", changed ? `${reason} ${changed}` : reason));
+    return;
+  }
   if (!value) {
     code.append(
       element(
@@ -3445,11 +3548,16 @@ function renderSource(body) {
     fragment.append(row);
   });
   code.append(fragment);
-  requestAnimationFrame(() => {
+  // Bring the declaration into view once the code box has its size: on a phone the sheet may
+  // still open (from peek to half), and a box with no height cannot scroll yet.
+  const reveal = (frames = 0) => {
     const highlighted = code.querySelector(".highlight");
-    if (highlighted)
-      code.scrollTop = highlighted.offsetTop - code.offsetTop - 28;
-  });
+    if (!highlighted || !code.isConnected) return;
+    if ((!code.clientHeight || $("#panel").dataset.settling) && frames < 60)
+      return requestAnimationFrame(() => reveal(frames + 1));
+    code.scrollTop = highlighted.offsetTop - code.offsetTop - 28;
+  };
+  requestAnimationFrame(() => reveal());
 }
 /** Changes the commit under review and reloads the appropriate Time or Diff comparison. */
 function chooseHead(sha) {
@@ -3556,6 +3664,7 @@ function goBack() {
   }
   if (selected) {
     selected = null;
+    held = null;
     render();
     return true;
   }
@@ -3797,6 +3906,7 @@ document.addEventListener("keydown", (event) => {
     }
   if (selected) {
     selected = null;
+    held = null;
     renderDeck();
     renderPanel();
   } else goUp();
@@ -3837,15 +3947,21 @@ $("#mapLegend").addEventListener("toggle", () => {
 $("#revisionDetails").addEventListener("toggle", () => {
   if ($("#revisionDetails").open) $("#mapLegend").open = false;
 });
-const token = new URLSearchParams(location.hash.slice(1)).get("token");
-if (token) {
+/** Pairs with the access link in the address, if any: on load, and when a second link opens
+ * in the same tab (only the part after # changes, so the page does not load again). */
+function pairFromLink() {
+  const token = new URLSearchParams(location.hash.slice(1)).get("token");
+  if (!token) return false;
   replaceUrl(location.pathname + location.search);
   pair(token).catch((error) => {
     showNotice(error.message, true);
     $("#connect").hidden = false;
     $("#login-error").textContent = error.message;
   });
-} else boot();
+  return true;
+}
+addEventListener("hashchange", pairFromLink);
+if (!pairFromLink()) boot().then(restorePlace);
 
 /** Fits the app to the area above a phone keyboard. With Chrome's resizes-content keyboard
  * mode the layout itself shrinks; elsewhere the app follows the visual viewport. Because the
@@ -3893,16 +4009,14 @@ $("#stage").addEventListener("click", (event) => {
     stagePress &&
     event.detail !== 0 &&
     Math.hypot(event.clientX - stagePress.x, event.clientY - stagePress.y) > 5;
-  if (
-    dragged ||
-    event.target.closest(
-      '.node, [role="button"], button, a, summary, details, input, select',
-    )
-  )
-    return;
+  // The path from when the tap began: a control that redrew itself during its own click
+  // (the Follow eye) is no longer the target's ancestor, but it is still in the path.
+  const control = '.node, [role="button"], button, a, summary, details, input, select';
+  if (dragged || event.composedPath().some((n) => n.matches?.(control))) return;
   if (inTasks()) closeTasks();
   else if (selected) {
     selected = null;
+    held = null;
     renderDeck();
     renderPanel();
   }

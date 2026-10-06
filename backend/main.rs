@@ -969,7 +969,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             let _ask_guard = ask_guard;
             return match ask::answer(&app, body).await {
                 Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
-                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &ask::plain_error(&e), gzip).await,
             };
         }
         let store = app.workflow.clone();

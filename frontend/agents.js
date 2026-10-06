@@ -83,7 +83,8 @@ export function createAgents({ api, repo }) {
       agent = catalog?.agents.find((a) => a.id === choice?.agent);
     if (!agent) return null;
     const model = modelsOf(agent, job).find((m) => m.id === (choice.model ?? null));
-    const name = `${agent.short} · ${model ? model.label : choice.model}`;
+    // A provider with no model yet (none saved, or an old choice) says so, never "null".
+    const name = `${agent.short} · ${model ? model.label : choice.model || "choose a model"}`;
     return choice.effort && choice.effort !== "auto" ? `${name} · ${choice.effort}` : name;
   }
   /** The full name of the agent with `id`, such as "Claude Code". */
@@ -115,7 +116,10 @@ export function createAgents({ api, repo }) {
     let typing = false,
       // The model search text, and true while the owner enters a new API key.
       query = "",
-      keying = false;
+      keying = false,
+      // A provider that the owner looks at but cannot choose yet (it needs a key first): the
+      // working choice stays until the key is saved.
+      trying = null;
     try {
       await load(true);
     } catch (e) {
@@ -158,7 +162,7 @@ export function createAgents({ api, repo }) {
     const list = (job) => {
       const choice = current(job),
         agents = catalog.agents.filter((a) => a.jobs.includes(job)),
-        agent = agents.find((a) => a.id === choice?.agent) || agents[0];
+        agent = agents.find((a) => a.id === (trying || choice?.agent)) || agents[0];
       const section = (text) => el("p", "agents-label", text);
       // Provider: one button each, with its problem when it is not ready.
       const providers = el("div", "seg agents-providers");
@@ -175,6 +179,12 @@ export function createAgents({ api, repo }) {
           typing = false;
           query = "";
           keying = false;
+          // A provider without its key is shown with the key form, but not chosen.
+          if (a.key && !a.key.set) {
+            trying = a.id;
+            return list(job);
+          }
+          trying = null;
           // Without a default model, start on the provider's first model.
           const first = a.defaultModel === false ? modelsOf(a, job)[0]?.id ?? null : null;
           set(job, { agent: a.id, model: first, effort: "auto" });
@@ -365,8 +375,10 @@ export function createAgents({ api, repo }) {
           keying = false;
           const fresh = catalog.agents.find((a) => a.id === agent.id);
           const first = modelsOf(fresh, job)[0]?.id ?? null;
-          if (current(job)?.agent === agent.id && !current(job).model)
+          // The key works: now the provider becomes the choice, on its first model.
+          if (trying === agent.id || (current(job)?.agent === agent.id && !current(job).model))
             set(job, { agent: agent.id, model: first, effort: "auto" });
+          trying = null;
           list(job);
         } catch (e) {
           problem.textContent = e.message;
@@ -395,5 +407,5 @@ export function createAgents({ api, repo }) {
     if (job) list(job);
     else main();
   }
-  return { load, using, describe, label, open };
+  return { load, using, current, describe, label, open };
 }

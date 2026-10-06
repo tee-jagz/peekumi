@@ -28,18 +28,33 @@ fn text(v: &Value) -> &str {
 fn array(v: &Value) -> Vec<Value> {
     v.as_array().cloned().unwrap_or_default()
 }
-/// Identifies common secret-bearing filenames whose source must be hidden.
+/// Identifies common secret-bearing filenames whose source must be hidden: environment files,
+/// private keys and keystores, and the credential files of common tools (npm, netrc, AWS,
+/// PostgreSQL, Docker, Git, PyPI, cloud service accounts, Terraform state).
 /// Example environment templates remain readable; this is a filename policy, not a content secret scanner.
+/// The engine keeps no source for these files, so Source, Ask and code search all omit it.
 pub fn restricted(file: &str) -> bool {
     let name = file.rsplit('/').next().unwrap_or(file).to_lowercase();
-    ((name == ".env" || name.starts_with(".env."))
-        && ![".example", ".sample", ".template"]
-            .iter()
-            .any(|s| name.ends_with(s)))
-        || [".pem", ".key", ".p12", ".pfx"]
-            .iter()
-            .any(|s| name.ends_with(s))
-        || ["id_rsa", "id_ed25519", "credentials.json"].contains(&name.as_str())
+    let template = [".example", ".sample", ".template", ".dist"]
+        .iter()
+        .any(|s| name.ends_with(s));
+    let env = name == ".env" || name.starts_with(".env.") || name.ends_with(".env");
+    let key_file = [
+        ".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".ppk", ".kdbx", ".tfstate",
+    ]
+    .iter()
+    .any(|s| name.ends_with(s));
+    let ssh_key = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk"]
+        .contains(&name.as_str());
+    let credentials = [
+        "credentials", "credentials.json", ".npmrc", ".netrc", "_netrc", ".pgpass", ".pypirc",
+        ".git-credentials", ".dockercfg", ".htpasswd", "terraform.tfstate.backup",
+    ]
+    .contains(&name.as_str());
+    let service_account = name.ends_with(".json")
+        && (name.contains("service-account") || name.contains("service_account") || name.contains("serviceaccount"));
+    let docker_auth = file.to_lowercase().ends_with(".docker/config.json");
+    ((env || key_file) && !template) || ssh_key || credentials || service_account || docker_auth
 }
 #[derive(Clone, Default)]
 /// One tracked Git entry and its optional syntax analysis.
@@ -890,11 +905,32 @@ mod tests {
             "secret.KEY",
             "a/id_rsa",
             "credentials.json",
+            "home/.npmrc",
+            ".netrc",
+            ".aws/credentials",
+            "keys/id_ecdsa",
+            "id_dsa",
+            ".pgpass",
+            "release.jks",
+            "gcp/service-account-prod.json",
+            ".docker/config.json",
+            "infra/terraform.tfstate",
+            "production.env",
         ] {
-            assert!(restricted(path));
+            assert!(restricted(path), "{path}");
         }
-        for path in [".env.example", ".env.local.template", "env.py", "key.ts"] {
-            assert!(!restricted(path));
+        for path in [
+            ".env.example",
+            ".env.local.template",
+            "env.py",
+            "key.ts",
+            "id_rsa.pub",
+            "credentials.py",
+            "package.json",
+            "docker/config.json",
+            "keyboard.rs",
+        ] {
+            assert!(!restricted(path), "{path}");
         }
     }
     #[test]

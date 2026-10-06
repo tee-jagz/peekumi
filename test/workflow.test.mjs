@@ -345,6 +345,30 @@ test("requesting changes starts a next round that builds on the agent's own comm
   ];
   for (const r of locked) assert.match(r.error, /applied to main; start a new task/);
 });
+test("a merge closes the task; instructions that the agent flagged become drafts again", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const anchor = { kind: "repo", path: "" };
+  const a = await f.req("/api/comments", { text: "Write the result file", sha: f.sha, anchor });
+  const b = await f.req("/api/comments", { text: "Decide this later", sha: f.sha, anchor });
+  const p = await f.req("/api/runs/preview", { agent: "codex", commentIds: [a.id, b.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+  let state = await f.req("/api/workflow");
+  assert.equal(state.comments.find((x) => x.id === b.id).status, "flagged");
+  const done = state.comments.find((x) => x.id === a.id);
+  await f.req("/api/comments/" + a.id, { action: "verify", version: done.version }, "PATCH");
+  const status = await f.req(`/api/runs/${p.id}/merge`);
+  assert.equal(status.state, "ready");
+  const merged = await f.req(`/api/runs/${p.id}/merge`, { target: status.targetSha, head: status.head });
+  assert.equal(merged.error, undefined, merged.error);
+  state = await f.req("/api/workflow");
+  const flagged = state.comments.find((x) => x.id === b.id);
+  assert.equal(flagged.status, "draft", "The flagged instruction is open again");
+  assert.equal(flagged.runId ?? null, null);
+  assert.equal(state.comments.find((x) => x.id === a.id).status, "verified");
+});
+
 test("an approved task merges on the owner's action, never over uncommitted work, and can be undone", async (t) => {
   const f = await fixture();
   t.after(() => f.close());
@@ -663,7 +687,9 @@ test("a session continues one conversation over turns, asks before commands, and
   run = await waiting(2);
   const second = JSON.parse(await readFile(path.join(f.state, "session-turn-2.json"), "utf8"));
   assert.equal(second.task, "The owner's message:\nAgain.\nRUN: npm install other\n(About: module.py · run)\n");
-  assert.ok(second.values.join(" ").includes("Bash(npm install:*)"), "The rule reaches the next turn");
+  // Peekumi alone judges commands: no command rule goes to Claude Code, and the session rule
+  // answers through the approve tool without asking.
+  assert.ok(!second.values.join(" ").includes("Bash("), "No command rule goes to Claude Code");
   assert.equal(JSON.parse(await readFile(path.join(f.state, "session-approval-2.json"), "utf8")).behavior, "allow");
   // A denied command reaches the agent with the owner's reason.
   await f.req(`/api/runs/${session.id}/message`, { text: "RUN: rm -rf build" });
@@ -725,17 +751,47 @@ test("a Codex session resumes its thread, can stop a turn, and can end without r
   assert.equal(queued.queued, true);
   assert.equal((await f.req(`/api/runs/${session.id}/end`, { review: false })).error, "Stop the agent first, or wait for its turn to end");
   await f.req(`/api/runs/${session.id}/cancel`, {});
-  // The stopped turn ends; the waiting message starts the next turn, which resumes the thread.
-  run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 3 && r; });
+  // Stop stops: the waiting message does not start a turn. It goes with the next message,
+  // in a turn that resumes the thread.
+  run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 2 && !r.pid && r; });
   assert.match(run.output, /"type":"peekumi.turn","turn":2,"status":"cancelled"/);
+  await new Promise((r) => setTimeout(r, 800));
+  assert.equal((await get()).turns, 2, "Stop does not start the next turn");
+  await f.req(`/api/runs/${session.id}/message`, { text: "Now go on." });
+  run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 3 && r; });
   const third = JSON.parse(await readFile(path.join(f.state, "session-turn-3.json"), "utf8"));
   assert.ok(third.values.includes("resume"));
-  assert.equal(third.task, "The owner's message:\nAnd this after.\n");
+  assert.match(third.task, /And this after\.[\s\S]*Now go on\./);
   const ended = await f.req(`/api/runs/${session.id}/end`, { review: false });
   assert.equal(ended.ok, true, ended.error);
   const state = await f.req("/api/workflow");
   assert.equal(state.runs.find((r) => r.id === session.id).status, "cancelled");
   assert.equal(state.comments.find((c) => c.runId === session.id).status, "unreported");
+});
+
+test("a session message waits while a task holds the repository, then starts its turn", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const session = await f.req("/api/runs/session", { text: "Look around.", sha: f.sha, anchor: { kind: "repo", path: "" }, using: { agent: "codex" } });
+  const get = () => f.req("/api/runs/" + session.id);
+  await waitFor(async () => (await get()).status === "waiting");
+  const c = await f.req("/api/comments", { text: "Waiting task", sha: f.sha, anchor: { kind: "repo", path: "" } });
+  const p = await f.req("/api/runs/preview", { agent: "claude", brief: "WAIT_FOR_CANCEL", commentIds: [c.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "running");
+  // The reply is kept, not refused, and waits for the task.
+  const sent = await f.req(`/api/runs/${session.id}/message`, { text: "After the task." });
+  assert.equal(sent.ok, true, sent.error);
+  assert.equal(sent.queued, true);
+  const waiting = await get();
+  assert.equal(waiting.status, "waiting");
+  assert.match(waiting.message, /waits until the other agent finishes/);
+  // When the task ends, the turn starts by itself.
+  await f.req(`/api/runs/${p.id}/cancel`, {});
+  const run = await waitFor(async () => { const r = await get(); return r.status === "waiting" && r.turns === 2 && r; });
+  const second = JSON.parse(await readFile(path.join(f.state, "session-turn-2.json"), "utf8"));
+  assert.match(second.task, /After the task\./);
+  assert.equal(run.waitsForRepository ?? null, null);
 });
 
 test("an OpenRouter session keeps its conversation between turns and commits with only a message", async (t) => {

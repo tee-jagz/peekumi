@@ -244,6 +244,16 @@ impl Workflow {
                 .find(|r| r["id"] == id)
                 .context("Not found")?;
             r["merge"] = json!({"from": from, "to": head, "at": now(), "checkedOut": status["checkedOut"]});
+            // The merge closes the task. Instructions that the agent flagged or did not finish
+            // stay open: they become drafts again, at their place, for a later task.
+            for c in v["comments"].as_array_mut().unwrap().iter_mut() {
+                if c["runId"] == id && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or("")) {
+                    c["status"] = json!("draft");
+                    c["report"] = Value::Null;
+                    c["runId"] = Value::Null;
+                    crate::workflow::event(c, "owner");
+                }
+            }
             Ok(Value::Null)
         })?;
         self.merge_status(id)
@@ -399,6 +409,14 @@ impl Workflow {
                     c["verification"] = Value::Null;
                 }
                 crate::workflow::event(c, "owner");
+            }
+            // Flagged and unfinished instructions stay open, and they go with the latest round,
+            // where the owner sees them; this round does not work on them.
+            for c in v["comments"].as_array_mut().unwrap().iter_mut() {
+                if c["runId"] == previous && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or("")) {
+                    c["runId"] = json!(id);
+                    crate::workflow::event(c, "owner");
+                }
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
             let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});

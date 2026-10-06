@@ -15,7 +15,7 @@ const states = {
   addressed: "Ready for review",
   flagged: "Flagged",
   verified: "Approved",
-  unreported: "Needs retry",
+  unreported: "Not done",
 };
 const active = (r) => ["starting", "running", "interrupted"].includes(r.status);
 /** Short anchor for the one-line dock: file name plus declaration, never the full path. */
@@ -227,6 +227,8 @@ export function createWorkflow({
     notice,
     context,
     using: (job) => agents.using(job),
+    // The agent that sessions use (the choice for tasks), once the agent list has loaded.
+    sessionAgent: () => agents.load().then(() => agents.current("task")?.agent || null),
     openTask: (id) => openTask(id),
     showOnMap: (r, path) => showOnMap(r, path),
     openPlace: (target) => openPlace(target),
@@ -372,12 +374,16 @@ export function createWorkflow({
   let peekMode = null,
     peekState = "",
     tailLoading = false;
+  let peekToggle = null;
   /** For an open session whose view is not on screen: one line in the place of the
    * selection's description says what the agent does now, and a small Peek at the end of the
    * row (working, needs you, or your turn) switches between the line and the description. A
    * command request brings the line forward. The map marks the agent's file. */
   function sessionPeek() {
-    const toggle = document.querySelector("#peekToggle"),
+    // One element for the life of the page: the sheet's redraws remove it from its row, and it
+    // goes back into the row below.
+    peekToggle ??= document.querySelector("#peekToggle");
+    const toggle = peekToggle,
       line = document.querySelector("#sessionLine"),
       panel = document.querySelector("#panel");
     if (!toggle || !line || !panel) return;
@@ -489,7 +495,7 @@ export function createWorkflow({
     if (!drafts.length && !running && !waiting.length) return;
     const b = action(
       running
-        ? `${running.agent} running · View progress ›`
+        ? `${agents.label(running.agent)} running · View progress ›`
         : drafts.length
           ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Prepare run ›`
           : `${waiting.length} ready for review ›`,
@@ -1191,6 +1197,11 @@ export function createWorkflow({
         ["addressed", "flagged", "unreported"].includes(c.status),
     );
   }
+  /** Instructions of a round that still need the owner's decision: flagged by the agent, or
+   * not done. Approve and Merge do not close them. */
+  function undecided(r) {
+    return data.comments.filter((c) => c.runId === r.id && ["flagged", "unreported"].includes(c.status));
+  }
   /** Where a task belongs in the Tasks list: "working" while an agent runs, "needs" while
    * it has instructions or changes waiting for you, "done" once approved but not yet merged,
    * and "history" once applied or closed. */
@@ -1199,6 +1210,9 @@ export function createWorkflow({
     if (live(r)) return "session";
     if (r.kind === "session" && r.status === "cancelled") return "history";
     if (active(r)) return "working";
+    // A flagged or unfinished instruction keeps the task in front of the owner, also after
+    // approval, until they decide it. A merge makes such instructions drafts again.
+    if (!r.revisedBy && !r.merge && undecided(r).length) return "needs";
     if (r.applied) return "history";
     // Changes being collected for a next round are current work, even on an approved task.
     if (collected(r.id).length) return "needs";
@@ -1300,14 +1314,15 @@ export function createWorkflow({
     const progress = agentActivity(r.output);
     if (active(r)) live.append(el("p", "workflow-text", progress.activity));
     if (["failed", "interrupted", "cancelled"].includes(r.status)) {
-      live.append(
-        el(
-          "p",
-          "workflow-text",
-          progress.errors.join("\n") ||
-            "This task stopped before finishing. Review the updates, then retry any unanswered instructions.",
-        ),
-      );
+      // Say what happened and what to do next, in the owner's words, not the agent's log.
+      const again = "Instructions that the agent did not answer show “Not done”. To try again, use Request changes: the next round includes them.";
+      const ended = r.kind === "session" && r.status === "cancelled";
+      const why = ended
+        ? "You ended this session without review. Its branch stays, and nothing was merged."
+        : r.status === "cancelled"
+          ? `This task stopped: you stopped it, or it reached the one-hour limit. ${again}`
+          : `${progress.errors.join("\n") || r.message || "This task stopped before it finished."} ${again}`;
+      live.append(el("p", "workflow-text", why));
     }
     const latest = progress.messages.at(-1);
     if (latest && active(r))
@@ -1442,6 +1457,16 @@ export function createWorkflow({
         body.append(card);
       }
     }
+    // Approve covers the finished instructions only; say which ones stay open.
+    const left = undecided(r).length;
+    if (decide && ready.length && left)
+      actions.append(
+        el(
+          "p",
+          "read-note",
+          `${left} instruction${left === 1 ? " needs" : "s need"} your decision (flagged, or not done). Approve covers only the finished ones. After a merge, ${left === 1 ? "it becomes a draft" : "they become drafts"} again.`,
+        ),
+      );
     if (decide && ready.length)
       actions.append(
         action("Approve", async () => {
