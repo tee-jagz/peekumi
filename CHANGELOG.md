@@ -12,9 +12,11 @@ Peekumi is licensed under the Apache License 2.0. The release archives include `
 
 - A mobile map of the real folders, files and declarations of a repository, with pan, pinch and zoom, and drill-down from the folder structure to one function.
 - Coloured Git comparisons between two commits, a Time mode with commit cards, and read-only branch switching. The branch list shows the most recent branches first and has a filter.
+- Time and Diff load older commits 80 at a time (**Earlier**), back to the root commit.
 - Open and recently merged pull requests through the GitHub CLI, as merge-base comparisons. The sheet shows the state, title, description, checks and reviews of the pull request.
 - Static relationships (imports, calls, implementations and inheritance) with committed dependency rules. Unresolved and ambiguous targets stay explicit.
-- Dependency lines that do not cross cards and that run straight into their arrowheads.
+- Dependency lines that do not cross cards and that run straight into their arrowheads. A folder with many lines shows its unchanged lines faintly until you select a card.
+- The map opens with its cards above the floating controls, Fit and Follow use only the visible part, and a pan stops while cards are still in view. Long names wrap at their parts.
 - Declaration details: inputs, outputs, fields, documentation and the changed parts of a declaration.
 - Language adapters for Rust, Python, JavaScript, TypeScript and Svelte scripts. Peekumi labels all other tracked files.
 
@@ -60,12 +62,15 @@ Peekumi is licensed under the Apache License 2.0. The release archives include `
 
 ### Safety and reliability
 
-- Session commands: Peekumi alone checks each command. A session rule never covers a command with several parts (including a single `&`), and shells, interpreters, `sudo` and other wrappers, and `git push` get no session rule.
-- The credential files of common tools (`.npmrc`, `.netrc`, AWS `credentials`, SSH keys, keystores, service-account files and Terraform state) are restricted like `.env`: Source and Ask never show them.
+- Session commands: Peekumi alone checks each command. A session rule never covers a command with several parts (including a single `&`), a quoted, escaped or full-path program, or an option that starts another program (for example `go test -exec`). Shells, interpreters, `sudo` and other wrappers, network and container tools, package runners, `git push` and `git config` get no session rule.
+- The credential files of common tools (`.npmrc`, `.netrc`, `.envrc`, AWS `credentials`, SSH keys, keystores, service-account files, cloud credentials, Docker and kube config, Terraform state and `.tfvars`) are restricted like `.env`: Source and Ask never show them.
 - A file without readable source says why in Source and Details.
-- Follow moves the map but keeps the owner's selection. A reload keeps the place on the map. A phone on its side keeps the header.
+- Follow moves the map but keeps the owner's selection. A reload keeps the place on the map, Time mode and the commit. Back keeps the branch, and leaving an explored task brings back your place.
+- A phone on its side has the desktop layout: the map at the left and the sheet at the right.
+- Offline and an update show as quiet notes in the header's comparison row.
 - A session message that arrives while a task runs waits for it. Stop does not start the next turn.
-- Approve and Merge do not hide a flagged instruction: it keeps the task under Needs you, and a merge makes it a draft again.
+- Approve and Merge do not hide a flagged instruction: it keeps the task under Needs you, a merge makes it a draft again, and Undo merge brings it back. Merge sees your edited tracked files before it starts.
+- A session shows a message that waits for the next turn. OpenRouter steps show when a tool failed.
 - A read-only device shows no owner actions. Agent errors are short sentences without host paths.
 
 ### Brand and documentation
