@@ -7055,11 +7055,17 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   }
   .top #repo-sub {
     order: 3;
+    flex-basis: 100%;
+    min-width: 0;
   }
   .top .revision-details {
     order: 4;
     flex-basis: 100%;
     margin-left: 0;
+  }
+  /* Before the first comparison loads, the line has nothing to say. */
+  .top .revision-details:has(#revisionSummary:empty) {
+    display: none;
   }
 }
 
