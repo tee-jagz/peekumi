@@ -190,3 +190,59 @@ test("explicit Cloudflare share warns, prints a temporary pairing link and close
   assert.equal(await readFile(join(state, "closed"), "utf8"), "yes");
   assert.deepEqual(JSON.parse(await readFile(join(state, "config.json"), "utf8")), original);
 });
+
+test("install.sh downloads a public release with no token: it asks the API for the file itself", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "peekumi-install-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { mkdir, chmod } = await import("node:fs/promises");
+  const { createHash } = await import("node:crypto");
+  // A small bundle whose `peekumi upgrade <prefix>` records that it ran.
+  const bundle = join(dir, "build", "peekumi-0.0.0-test");
+  await mkdir(join(bundle, "bin"), { recursive: true });
+  await writeFile(join(bundle, "bin", "peekumi"), `#!/bin/sh\nmkdir -p "$2/bin" && cp "$0" "$2/bin/peekumi" && echo "$1" > "${dir}/ran"\n`);
+  await chmod(join(bundle, "bin", "peekumi"), 0o755);
+  const archive = join(dir, "archive.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", archive, "-C", join(dir, "build"), "peekumi-0.0.0-test"]).status, 0);
+  const sum = createHash("sha256").update(await readFile(archive)).digest("hex");
+  await writeFile(join(dir, "archive.sha256"), `${sum}  archive\n`);
+  // The release lists an archive for each platform; asset ids 1 (archive) and 2 (checksum).
+  const assets = ["darwin-x64", "darwin-arm64", "linux-x64", "linux-arm64"].flatMap((p) => [
+    `{"url": "https://api.github.com/repos/o/r/releases/assets/1", "name": "peekumi-0.0.0-${p}.tar.gz"}`,
+    `{"url": "https://api.github.com/repos/o/r/releases/assets/2", "name": "peekumi-0.0.0-${p}.tar.gz.sha256"}`,
+  ]);
+  await writeFile(join(dir, "release.json"), `{"tag_name": "v0.0.0", "assets": [${assets.join(", ")}]}`);
+  // A fake curl, as GitHub's API answers: an asset URL sends the file only with
+  // "Accept: application/octet-stream", and a JSON description without it.
+  const bin = join(dir, "fake-bin");
+  await mkdir(bin);
+  await writeFile(
+    join(bin, "curl"),
+    `#!/bin/sh
+out=""; url=""; accept=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift ;;
+    -H) case "$2" in "Accept: application/octet-stream") accept=1 ;; esac; shift ;;
+    -*) ;;
+    *) url=$1 ;;
+  esac
+  shift
+done
+case "$url" in
+  */releases/latest) src="${dir}/release.json" ;;
+  */assets/1) [ -n "$accept" ] && src="${dir}/archive.tar.gz" || src="${dir}/release.json" ;;
+  */assets/2) [ -n "$accept" ] && src="${dir}/archive.sha256" || src="${dir}/release.json" ;;
+  *) exit 22 ;;
+esac
+cp "$src" "$out"
+`,
+  );
+  await chmod(join(bin, "curl"), 0o755);
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, PEEKUMI_PREFIX: join(dir, "lib"), PEEKUMI_BIN: join(dir, "links"), PEEKUMI_REPO: "o/r" };
+  delete env.GITHUB_TOKEN;
+  delete env.PEEKUMI_VERSION;
+  const run = spawnSync("sh", ["install.sh"], { encoding: "utf8", env });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal((await readFile(join(dir, "ran"), "utf8")).trim(), "upgrade", "The verified bundle installed itself");
+  assert.match(run.stdout, /Linked .*peekumi/);
+});
