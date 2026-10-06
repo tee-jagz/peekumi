@@ -78,8 +78,16 @@ export async function fixture({ env = {}, files = {} } = {}) {
     },
     async close() {
       await server.close();
-      await rm(dir, { recursive: true, force: true });
-      await rm(state, { recursive: true, force: true });
+      // An agent process can still write in a worktree for a moment after the server stops,
+      // so a folder can be busy; try the removal again.
+      const clean = {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 200,
+      };
+      await rm(dir, clean);
+      await rm(state, clean);
     },
   };
 }
