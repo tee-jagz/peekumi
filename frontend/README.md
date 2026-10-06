@@ -2,9 +2,10 @@
 
 On a phone, you use the browser interface to explore the repository structure, compare commits, follow dependencies and inspect source. The interface uses JavaScript, HTML and CSS to show the SVG map and the glass review panel.
 
-- `app.js`: navigation, API requests, revision controls and the review panel.
+- `app.js`: the map, API requests, revision controls, the review panel and the dock. It draws the view on top of the stack (`nav.js`).
+- `nav.js`: the view stack. A view is a plain value: the map in one aspect (Details, Source, Changes or Relations), Ask, Conversations, Tasks, History, the task form, the instructions on a selection, or a run. Opening a view pushes it; Back, Escape and a page's back arrow pop one. No other module keeps navigation state.
 - `ask.js`: conversations for a specific scope, which show each question immediately, and explicit actions that change a suggestion into a draft.
-- `workflow.js`: instructions (stored as comments), task preparation, run progress, agent evidence and verification.
+- `workflow.js`: instructions (stored as comments), task preparation, run progress, agent evidence and verification, and the live line on the sheet's title row that leads to an agent at work or an open session.
 - `model.js`: the directory hierarchy, the aggregation of dependencies and the filter for symbol diffs.
 - `icons.js`: original SVG icons with rounded strokes. Object types, Git status, input/output indicators and icon-only controls share these icons. Control glyphs are decorative. Each button has its own accessible name and tooltip.
 - `canvas.js`: SVG pan, pinch, zoom and card positions.
@@ -17,7 +18,7 @@ On a phone, you use the browser interface to explore the repository structure, c
 - `agents.js`: the Agents sheet. It shows the agents, models and efforts that the server lists for Ask and for tasks, and keeps the choice on the device for each repository. Each Ask question, task preview and commit message request sends the choice as `using`, and the server checks it.
 - `index.html` and `style.css`: the page structure and the responsive appearance.
 
-The phone sheet expands from a compact selection summary to half height or full height. You can use pointer controls or keyboard controls to do this. Details, Source, Changes, Relations and Discussion are direct views. The Ask/Instruction composer stays independent at the bottom. When a phone keyboard opens, the dock follows the visual viewport. The navigation surface is always one SVG graph, and commit mini cards appear only in Time mode.
+The phone sheet expands from a compact selection summary to half height or full height. You can use pointer controls or keyboard controls to do this. Details, Source, Changes and Relations are direct views of the map. Other pages (Conversations, Ask, a session, Tasks, a task) open over them with one header row. The dock at the bottom follows the view: Ask, Instruction and Session modes on the map, and a conversation's own box elsewhere. When a phone keyboard opens, the dock follows the visual viewport. The navigation surface is always one SVG graph, and commit mini cards appear only in Time mode.
 
 The review sheet is frosted glass over the background gradient. Its buttons, tabs, rows and inputs are also frosted. Text inputs are more opaque, so that their text is easy to read. Native select popups follow the browser.
 
@@ -35,7 +36,7 @@ The map key is in the floating canvas toolbar. It opens upward over the graph an
 
 Selection status, review lists and the legend use coloured SVG icons with different shapes. These icons have no badge borders or backgrounds. For inputs and outputs, the contract uses an arrow that goes in and an arrow that goes out. Icons have accessible names and tooltips, and the canvas legend explains them. Modified items use orange in the two themes.
 
-Tasks is an icon button in the header. Thus, the task state shows in each view without a badge. While an agent runs, Peek works in place of the icon, and the button opens that task directly. When the agent finishes, Peek hops one time, and the icon comes back in the accent colour to show a ready task. A task that stopped before the end, with its instructions open, shows a Peek that droops on a warm tint until you handle it. The accessible label and the tooltip tell which state applies.
+Tasks is an icon button in the header. Thus, the task state shows in each view without a badge. While an agent runs, Peek works in place of the icon, and a small Peek with one word at the right of the sheet's title row opens that task. The button always opens the Tasks list. When the agent finishes, Peek hops one time, and the icon comes back in the accent colour to show a ready task. A task that stopped before the end, with its instructions open, shows a Peek that droops on a warm tint until you handle it. The accessible label and the tooltip tell which state applies.
 
 The task view shows the same Peek next to its heading, and this Peek stays steady when the poll draws the view again. One task view contains the draft selection, a readable task preview, agent updates, results and review. Raw event streams and generated prompts are diagnostics. Unified diffs show the line numbers before and after, and they hide Git transport headers. A review records only the owner verification, and the interface explicitly shows that this is different from an application or a deployment of changes. Git ancestry tells if the task commits are applied to the watched branch, but Peekumi does not infer deployment from that status.
 

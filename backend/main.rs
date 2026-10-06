@@ -384,6 +384,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/session.js" => Some(("text/javascript", include_bytes!("../frontend/session.js"))),
         "/focus.js" => Some(("text/javascript", include_bytes!("../frontend/focus.js"))),
         "/menu.js" => Some(("text/javascript", include_bytes!("../frontend/menu.js"))),
+        "/nav.js" => Some(("text/javascript", include_bytes!("../frontend/nav.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -551,6 +552,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/session.js",
             "/focus.js",
             "/menu.js",
+            "/nav.js",
             "/style.css",
             "/pwa.js",
             "/manifest.webmanifest",

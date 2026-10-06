@@ -227,7 +227,7 @@ const costOf = (items) => items.filter((i) => i.kind === "cost").reduce((sum, i)
  * @param {() => boolean} deps.pointed True when the owner chose a place on the map since
  *   their last message (a reply then carries it as a pointer).
  * @param {() => void} deps.sent Called after a reply is sent.
- * @param {() => void} deps.back Returns to the Tasks list.
+ * @param {() => void} deps.back Returns to the view before the session.
  */
 export function createSession({ write, refresh, notice, context, using, sessionAgent = () => Promise.resolve(null), openTask, showOnMap, openPlace, references, pointed = () => true, sent = () => {}, back }) {
   // The places that the names in a session's messages point at, for the current text.
@@ -318,14 +318,14 @@ export function createSession({ write, refresh, notice, context, using, sessionA
     const items = timeline(r.output || "");
     // One row that stays at the top: back, the title, the state, and Stop while it works.
     const head = el("div", "session-head");
-    const backButton = iconButton(el("button", "session-icon"), "back", "Back to tasks");
+    const backButton = iconButton(el("button", "session-icon view-back"), "back", "Back");
     backButton.type = "button";
     backButton.onclick = back;
     const state = r.approval ? "Needs you" : r.status === "running" ? "Working" : live(r) ? "Your turn" : "Ended";
     const status = el("span", "session-status");
     status.dataset.state = r.approval ? "needs" : r.status;
     status.append(el("span", "session-dot"), document.createTextNode(state));
-    head.append(backButton, el("h2", "session-title", r.title || "Session"), status);
+    head.append(backButton, el("h2", "session-title view-title", r.title || "Session"), status);
     if (r.status === "running") {
       const stop = iconButton(el("button", "session-icon session-stop"), "stop", "Stop");
       stop.type = "button";
@@ -342,8 +342,8 @@ export function createSession({ write, refresh, notice, context, using, sessionA
       };
       head.append(stop);
     }
-    // The header sits above the scrolling conversation, not in it.
-    const host = document.querySelector("#sessionHead");
+    // The header sits above the scrolling conversation, not in it (app.js #viewHead).
+    const host = document.querySelector("#viewHead");
     if (host) host.replaceChildren(head);
     else body.append(head);
 

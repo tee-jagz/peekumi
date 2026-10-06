@@ -136,23 +136,24 @@ try {
     ["#repo-name", "1", "tr"],
     ["#revisionDetails > summary", "2", "tr"],
     [".icon-seg", "3"],
-    ["#openTasks", "4"],
-    ["#baSeg", "5", "tr"],
-    ['.node[data-kind="folder"].c-changed', "6"],
-    ['.node[data-kind="folder"].c-changed .n-counts', "7", "tr"],
-    [".crumbs", "8"],
-    [".change-filter", "9"],
-    ['.map-tools button[aria-label="Zoom out"]', "10"],
-    ['.map-tools button[aria-label="Zoom in"]', "11"],
-    ['.map-tools button[aria-label="Fit map"]', "12"],
-    ['.map-tools button[aria-label="Reset map view"]', "13"],
-    ["#mapLegend > summary", "14", "tr"],
-    ["#sheetHandle span", "15", "tr"],
-    ["#selectionSummary", "16", "tr"],
-    ["#tabs", "17"],
-    ["#dockContext", "18"],
-    ["#composerHost textarea", "19"],
-    ["#composerHost .icon-action", "20"],
+    ["#openConversations", "4"],
+    ["#openTasks", "5"],
+    ["#baSeg", "6", "tr"],
+    ['.node[data-kind="folder"].c-changed', "7"],
+    ['.node[data-kind="folder"].c-changed .n-counts', "8", "tr"],
+    [".crumbs", "9"],
+    [".change-filter", "10"],
+    ['.map-tools button[aria-label="Zoom out"]', "11"],
+    ['.map-tools button[aria-label="Zoom in"]', "12"],
+    ['.map-tools button[aria-label="Fit map"]', "13"],
+    ['.map-tools button[aria-label="Reset map view"]', "14"],
+    ["#mapLegend > summary", "15", "tr"],
+    ["#sheetHandle span", "16", "tr"],
+    ["#selectionSummary", "17", "tr"],
+    ["#tabs", "18"],
+    ["#dockContext", "19"],
+    ["#composerHost textarea", "20"],
+    ["#composerHost .icon-action", "21"],
   ]);
   await page.screenshot({ path: join(readmeShots, "mobile-map.png") });
 
@@ -210,10 +211,9 @@ try {
     ['#helperTools [data-tab="source"]', "2"],
     ['#helperTools [data-tab="changes"]', "3"],
     ['#helperTools [data-tab="dependencies"]', "4"],
-    ["#showDiscussion", "5"],
-    [".selection-facts", "6"],
-    [".selection-facts .btn.primary", "7"],
-    ["#reviewScope .x", "8"],
+    [".selection-facts", "5"],
+    [".selection-facts .btn.primary", "6"],
+    ["#reviewScope .x", "7"],
   ]);
   await page.locator('#helperTools [data-tab="source"]').click();
   await page.locator('[data-source-view="after"]').click();
@@ -262,8 +262,10 @@ try {
   await shot(page, "12-tasks", [
     ["#tabBody .btn.primary", "1"],
     ["#tabBody .workflow-card", "2"],
+    ["#viewHead .view-back", "3"],
   ]);
   await page.screenshot({ path: join(readmeShots, "mobile-tasks.png") });
+  await page.locator("#viewHead .view-back").click();
 
   // 7. Typing with the keyboard open (resizes-content shrinks the window).
   await page.locator('[data-compose="ask"]').click();
@@ -336,7 +338,7 @@ try {
     await live.getByRole("button", { name: "Start session" }).click();
     await live.locator(".session-approval").waitFor();
     await shot(live, "16-session", [
-      ["#sessionHead", "1"],
+      ["#viewHead", "1"],
       [".session-approval .session-command", "2"],
       [".session-approval-actions", "3"],
       ["#composerHost textarea", "4"],
@@ -347,8 +349,7 @@ try {
     await live.getByLabel("Reply to the agent").fill("Now read fold and route. FOCUS WAIT_FOR_STOP");
     await live.getByRole("button", { name: "Send to the agent" }).click();
     await live.locator(".session-step.is-current", { hasText: "route" }).waitFor();
-    await live.getByRole("button", { name: "Back to tasks" }).click();
-    await live.locator("#openTasks").click();
+    await live.locator("#viewHead .view-back").click();
     await height(live, "Home");
     // At the top level: backend holds the agent's place and a changed file; the repository
     // files hold its earlier place and the session's notes.
@@ -358,8 +359,15 @@ try {
       [".node.agent-trail", "2"],
       [".node.agent-trail.agent-changed", "3", "tr"],
       ["#agentFocus .follow-pill", "4"],
-      ["#sessionLine", "5"],
-      ["#peekToggle", "6", "tr"],
+      ["#liveLine", "5"],
+    ]);
+    // Conversations: the open session, and the Ask conversation of the branch.
+    await live.locator("#openConversations").click();
+    await live.locator(".conversation-row").first().waitFor();
+    await shot(live, "18-conversations", [
+      ["#viewHead .view-back", "1"],
+      [".conversation-row", "2"],
+      [".conversation-row:last-of-type", "3"],
     ]);
   } finally {
     await f.close();
@@ -373,7 +381,7 @@ try {
       "time", "diff", "tasks", "branch", "before", "after", "home", "up",
       "filter", "zoomOut", "zoomIn", "fit", "reset", "key", "details", "source",
       "changes", "relations", "discussion", "ask", "comment", "send", "pin",
-      "check", "close", "copy", "refresh",
+      "check", "close", "copy", "refresh", "agents",
     ];
     const result = glyphs.map((name) => ["glyph-" + name, d(m.glyph(name)), ""]);
     for (const status of ["added", "changed", "removed", "unchanged"])

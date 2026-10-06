@@ -161,19 +161,19 @@ try {
       await page
         .getByRole("button", { name: "Save draft", exact: true })
         .click();
+      // Saving keeps the map; Details counts the instruction, and leads to it.
+      assert.equal(
+        await page.locator("#panel").getAttribute("data-view"),
+        "details",
+        "A saved instruction stays with its selection instead of jumping to Tasks",
+      );
+      if (viewport.width < 900 && (await page.locator("#panel").getAttribute("data-height")) === "peek")
+        await page.locator("#sheetHandle").click();
+      await page.locator(".instructions-here", { hasText: "1 instruction here" }).click();
       await page.locator(".workflow-card[data-comment-id]").waitFor();
       assert.equal(
         await page.locator(".workflow-card[data-comment-id]").count(),
         1,
-      );
-      assert.equal(
-        await page.locator("#helperTools").isVisible(),
-        true,
-        "A saved instruction stays with its selection instead of jumping to Tasks",
-      );
-      assert.equal(
-        await page.locator("#showDiscussion").getAttribute("aria-pressed"),
-        "true",
       );
       await page.screenshot({
         path: `test-results/workflow-comments-${viewport.width}.png`,
@@ -215,15 +215,16 @@ try {
       await page.locator('#openTasks[data-cue="working"] .peek-mark[data-state="working"]').waitFor({ timeout: 15000 });
       assert.equal(await tasks.getAttribute("aria-label"), "Codex is working on a task");
       assert.equal(
-        await page.locator('.task-head .task-peek[data-state="working"]').count(),
+        await page.locator('#viewHead .task-peek[data-state="working"]').count(),
         1,
         "The running task shows Peek working too",
       );
-      // Starting left the task open: the first tap closes Tasks, the second goes straight
-      // back to the running task rather than the list.
+      // Starting left the task open: the Tasks button opens the list over it, and pressed
+      // again it goes back to the task.
       await tasks.click();
+      await page.locator("#viewHead .view-title", { hasText: "Tasks" }).waitFor();
       await tasks.click();
-      await page.locator('.task-head .task-peek[data-state="working"]').waitFor();
+      await page.locator('#viewHead .task-peek[data-state="working"]').waitFor();
       await page.screenshot({ path: `test-results/tasks-working-${viewport.width}.png` });
       await rm(f.state + "/hold", { force: true });
       // When it finishes, Peek hops once and the usual icon returns in the accent colour.
@@ -233,14 +234,9 @@ try {
         null,
         { timeout: 5000 },
       );
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      assert.ok(await page.getByLabel("Your question").isVisible());
-      assert.ok(
-        await page
-          .getByRole("button", { name: "Back to tasks", exact: true })
-          .isVisible(),
-      );
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
+      // A task's dock has no modes: it is the box for changes to this task.
+      assert.ok(await page.locator("#tabs").isHidden());
+      assert.ok(await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).isVisible());
       // Keeping diagnostics open must not freeze the terminal state or review actions.
       await page.locator(".diagnostics > summary").click();
       await page
@@ -289,7 +285,8 @@ try {
           actions = box(".top-actions"),
           compare = box("#revisionSummary .rev-compare"),
           summary = box("#revisionSummary");
-        return { clear: line.right <= actions.left + 1, whole: compare.right <= summary.right + 1 };
+        // Beside the buttons (desktop) or on its own row under them (phone), never under them.
+        return { clear: line.right <= actions.left + 1 || line.top >= actions.bottom - 1, whole: compare.right <= summary.right + 1 };
       });
       assert.deepEqual(header, { clear: true, whole: true });
       assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
@@ -313,6 +310,8 @@ try {
         .getByRole("button", { name: "Add to requested changes", exact: true })
         .click();
       await page.getByText("Added to requested changes", { exact: true }).waitFor();
+      // Back from the answer to the agent's work on the map, where the chip counts the change.
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
       assert.equal(await page.locator("#taskReturn").innerText(), "Back to task · 1 to send");
       await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page.getByLabel("What should change, and why").fill("Keep the result file short.");
@@ -331,7 +330,8 @@ try {
       await page
         .getByRole("button", { name: "Approve", exact: true })
         .waitFor();
-      assert.equal(await page.locator("#branchPicker").inputValue(), "refs/heads/main");
+      // The task shows at once; the map goes back to the branch it left as it loads.
+      await page.waitForFunction(() => document.querySelector("#branchPicker").value === "refs/heads/main");
       assert.equal(await page.locator("#taskReturn").isVisible(), false);
       await explore();
       await page.reload();
@@ -356,12 +356,12 @@ try {
       await page.screenshot({
         path: `test-results/workflow-task-${viewport.width}.png`,
       });
-      // The Tasks button toggles back to the map selection, and so does empty map space.
-      await page.locator("#openTasks").click();
-      assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "false");
+      // The Tasks button opens the list over the task; pressed again, it returns to the task.
       await page.locator("#openTasks").click();
       assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "true");
-      await page.locator(".task-link").first().click();
+      await page.locator("#openTasks").click();
+      assert.equal(await page.locator("#openTasks").getAttribute("aria-pressed"), "false");
+      assert.equal(await page.locator("#panel").getAttribute("data-view"), "run");
       // On the task, the bottom box adds to its list too, and one button sends the list to
       // the agent as round 2; there is no second box to fill in.
       assert.equal(await page.getByLabel("Anything else? (optional)").count(), 0);
@@ -376,12 +376,11 @@ try {
         path: `test-results/workflow-request-${viewport.width}.png`,
       });
       await send.click();
-      await page.locator(".task-meta", { hasText: /round 2$/ }).waitFor();
+      await page.locator("#viewHead .view-meta", { hasText: /round 2$/ }).waitFor();
       assert.equal(await page.getByText(/^Requested changes/).count(), 0, "The list went with round 2");
       await page
         .getByRole("button", { name: "Approve", exact: true })
         .waitFor({ timeout: 20000 });
-      await page.locator("#openTasks").click();
       await page.locator("#openTasks").click();
       assert.equal(
         await page.locator(".task-link").count(),
@@ -434,7 +433,6 @@ try {
       await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
       await page.getByRole("tab", { name: "Instruction", exact: true }).click();
-      await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Check this earlier declaration");
@@ -473,9 +471,10 @@ try {
         async () =>
           (await f.req("/api/workflow")).comments.length === countBefore + 1,
       );
-      await page
-        .locator('[role="tab"][aria-label="Instruction"][aria-selected="true"]')
-        .waitFor({ timeout: 5000 });
+      // The draft is saved where the question was asked; the conversation stays on screen.
+      assert.equal(await page.locator("#panel").getAttribute("data-view"), "ask");
+      // Back on the map, the dock's modes stay inside the visible panel.
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));
@@ -535,12 +534,12 @@ try {
         await review.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2),
         "A reader at the end of the chat stays at the end after navigating",
       );
-      assert.ok(reading > 0);
-      // Coming back to Discussion resumes at the end of the latest message.
+      assert.ok(reading > 0 || (await review.evaluate((el) => el.scrollHeight <= el.clientHeight + 2)), "The chat was read from its end");
+      // Coming back to the conversation (Back, then Conversations) resumes at its end.
       await review.evaluate((el) => (el.scrollTop = 0));
-      if (!(await page.locator("#helperTools").isVisible())) await page.locator("#sheetHandle").click();
-      await page.locator('#helperTools [data-tab="details"]').click();
-      await page.locator("#showDiscussion").click();
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
+      await page.locator("#openConversations").click();
+      await page.locator(".conversation-row", { hasText: "Ask" }).click();
       await page.waitForFunction(() => {
         const el = document.querySelector("#reviewScroll");
         return el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
@@ -552,9 +551,8 @@ try {
       // Reloading (as an app update does) brings the conversation back.
       await page.reload();
       await page.locator('.sheet[data-front="true"] .node').first().waitFor();
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      if (!(await page.locator("#showDiscussion").isVisible())) await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
+      await page.locator("#openConversations").click();
+      await page.locator(".conversation-row", { hasText: "Ask" }).click();
       await page.locator(".ask-message.from-user", { hasText: "Name references." }).waitFor();
       assert.ok(
         await page.locator(".ask-message.from-user", { hasText: "What would improve this function?" }).isVisible(),
@@ -583,7 +581,7 @@ try {
         }
         assert.ok(input.y >= dock.y && input.y + input.height <= size.height);
       };
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      // In the conversation the dock is its question box.
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));
@@ -591,8 +589,10 @@ try {
       await page.screenshot({
         path: `test-results/bottom-ask-${viewport.width}.png`,
       });
+      // On the map, an unfinished instruction stays in the dock across a visit to Tasks.
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
       await page.getByRole("tab", { name: "Instruction", exact: true }).click();
-      await page.locator("#openTasks").click();
       await page
         .getByLabel("What should change, and why")
         .fill("Keep this unfinished comment anchored.");
@@ -600,8 +600,8 @@ try {
       await page.screenshot({
         path: `test-results/bottom-comment-${viewport.width}.png`,
       });
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
+      await page.locator("#openTasks").click();
+      assert.ok(await page.locator("#conversationDock").isHidden(), "A list has no dock");
       await page.locator("#openTasks").click();
       assert.equal(
         await page.getByLabel("What should change, and why").inputValue(),
