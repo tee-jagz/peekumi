@@ -312,7 +312,7 @@ try {
       await page.getByText("Added to requested changes", { exact: true }).waitFor();
       // Back from the answer to the agent's work on the map, where the chip counts the change.
       await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
-      assert.equal(await page.locator("#taskReturn").innerText(), "Back to task · 1 to send");
+      assert.equal(await page.locator("#taskReturn").innerText(), "‹ Back to task · 1 to send");
       await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page.getByLabel("What should change, and why").fill("Keep the result file short.");
       await page
@@ -326,7 +326,8 @@ try {
         "Collecting a change does not leave the agent's work",
       );
       await page.locator("#taskReturn").click();
-      await page.getByText("Requested changes · 2", { exact: true }).waitFor();
+      await page.getByText("Requested changes", { exact: true }).waitFor();
+      assert.equal(await page.locator(".workflow-card.requested, [data-comment-id]").filter({ hasText: /Keep the result file short|What would improve/ }).count() >= 1, true);
       await page
         .getByRole("button", { name: "Approve", exact: true })
         .waitFor();

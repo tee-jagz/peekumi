@@ -1382,7 +1382,7 @@ button {
 :root[data-theme="dark"] .p-sent {
   color: var(--mid);
 }
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .app {
     grid-template-columns: minmax(0, 1fr) 400px;
     grid-template-rows: auto minmax(0, 1fr);
@@ -1758,7 +1758,7 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel {
     height: auto;
   }
@@ -2085,7 +2085,7 @@ button {
   line-height: 1.5;
   opacity: 0.75;
 }
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel {
     border-radius: 20px;
     border: 1px solid var(--glass-line);
@@ -2510,7 +2510,7 @@ button {
 #reviewScroll {
   padding-bottom: 12px;
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel {
     height: calc(var(--viewer-height, 100dvh) * 0.4);
     max-height: none;
@@ -2530,7 +2530,7 @@ button {
     height: calc(var(--viewer-height, 100dvh) - 100px);
   }
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .top {
     grid-row: 1;
   }
@@ -2773,7 +2773,7 @@ select option {
   font-size: 11px;
   padding: 6px 9px;
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel {
     height: 232px;
     max-height: calc(var(--viewer-height, 100dvh) - 54px);
@@ -2784,8 +2784,10 @@ select option {
   .panel[data-height="half"] {
     height: calc(var(--viewer-height, 100dvh) * 0.57);
   }
+  /* Full height leaves the header in view: its height is measured (app.js), as it has one
+     or two rows. */
   .panel[data-height="full"] {
-    height: calc(var(--viewer-height, 100dvh) - 58px);
+    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 58px));
   }
   .keyboard-open .panel {
     height: calc(var(--viewer-height, 100dvh) - 68px);
@@ -2802,7 +2804,7 @@ select option {
     height: calc(var(--viewer-height, 100dvh) - 68px);
   }
 }
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   #sheetHandle {
     display: none;
   }
@@ -2813,7 +2815,7 @@ select option {
 .deck {
   inset: auto;
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel[data-height="peek"] {
     height: auto;
   }
@@ -2901,7 +2903,7 @@ select option {
 .legend-line.violation {
   border-color: var(--del);
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel[data-dragging] #reviewScroll,
   .panel[data-settling] #reviewScroll {
     display: block;
@@ -2950,7 +2952,7 @@ select option {
   width: min(320px, 100%);
   max-height: min(340px, 35dvh);
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .canvas-controls {
     gap: 2px;
   }
@@ -2975,24 +2977,24 @@ select option {
 }
 
 /* Expanded Details contains the complete contract; do not repeat the compact copy. */
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   #selectionContract {
     display: none;
   }
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel:not([data-height="peek"]) #selectionContract,
   .panel[data-inspection="true"] #selectionContract {
     display: none;
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .panel[data-view="details"] #selectionSummary {
     display: none;
   }
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel[data-view="details"]:not([data-height="peek"]) #selectionSummary {
     display: none;
   }
@@ -3196,7 +3198,7 @@ select option {
   border-color: var(--accent);
   color: var(--accent);
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   #branchPicker {
     max-width: 180px;
   }
@@ -3876,7 +3878,7 @@ select.visually-hidden {
 /* Smooth sheet motion: the sheet slides over a map that keeps its size (see
    freezeStage), and only top-level glass surfaces blur. A blur nested inside
    another frosted surface only re-blurs that surface and costs a pass per frame. */
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel {
     position: relative;
     z-index: 20;
@@ -3898,7 +3900,7 @@ select.visually-hidden {
   padding: 2px 12px 10px;
   border: 0;
 }
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel[data-height="peek"] #helperTools,
   .panel[data-dragging] #helperTools,
   .panel[data-settling][data-height="peek"] #helperTools,
@@ -4221,7 +4223,7 @@ details.p-section[open] > summary::before {
   border-radius: 0;
 }
 /* Expanded views show the full content, so the peek summary would only repeat it. */
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .panel:not([data-height="peek"]):not([data-dragging]) #selectionSummary,
   .panel:not([data-height="peek"]):not([data-dragging]) #selectionContract {
     display: none;
@@ -4251,21 +4253,6 @@ details.p-section[open] > summary::before {
   box-shadow: none;
 }/* The run cue belongs to the overview; inspection views keep their space for content. */
 .panel:not([data-view="details"]) #runBar {
-  display: none;
-}.pwa-notice {
-  position: fixed;
-  top: env(safe-area-inset-top, 0px);
-  left: 10px;
-  right: 10px;
-  z-index: 1000;
-  padding: 10px;
-  border: 1px solid var(--glass-line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-}
-.pwa-notice[hidden] {
   display: none;
 }
 /* The header carries context only: repository name and comparison. */
@@ -4341,7 +4328,7 @@ details.p-section[open] > summary::before {
 
 /* While typing at peek the sheet keeps its own size, so the map stays readable above it.
    Map controls and the commit strip step aside until the keyboard closes. */
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .keyboard-open .panel[data-height="peek"] {
     height: auto;
     max-height: calc(var(--viewer-height, 100dvh) - 96px);
@@ -4834,7 +4821,7 @@ details.p-section[open] > summary::before {
   color: var(--ink);
   overflow: auto;
 }
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
   .merge-dialog {
     margin: auto;
   }
@@ -5196,18 +5183,15 @@ details.p-section[open] > summary::before {
   height: 38px;
   margin: -6px 0;
 }
-.notice.error,
-.pwa-notice.is-offline {
+.notice.error {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.notice[hidden],
-.pwa-notice[hidden] {
+.notice[hidden] {
   display: none;
 }
-.notice .peek-mark,
-.pwa-notice .peek-mark {
+.notice .peek-mark {
   width: 26px;
   height: 26px;
 }
@@ -5576,73 +5560,6 @@ details.p-section[open] > summary::before {
 }
 .reply-box .read-note {
   margin: 6px 0 0;
-}
-/* App notices (update ready, offline) are a frosted card in Peekumi's glass, floating
-   below the status bar rather than covering the header. */
-.pwa-notice {
-  top: calc(env(safe-area-inset-top, 0px) + 10px);
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
-  width: min(440px, calc(100vw - 24px));
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--glass-line);
-  border-radius: 20px;
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(24px) saturate(1.7);
-  backdrop-filter: blur(24px) saturate(1.7);
-  box-shadow: var(--shadow), var(--card-shadow);
-  color: var(--ink);
-  animation: pwa-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.pwa-notice .peek-mark {
-  flex: none;
-  width: 34px;
-  height: 34px;
-}
-.pwa-notice.is-update {
-  flex-wrap: wrap;
-}
-.pwa-text {
-  display: grid;
-  gap: 2px;
-  flex: 1 1 160px;
-  min-width: 0;
-  line-height: 1.35;
-}
-.pwa-text strong {
-  font-size: 15px;
-  font-weight: 600;
-}
-.pwa-text span {
-  font-size: 13px;
-  color: var(--muted);
-}
-.pwa-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-.pwa-actions .btn {
-  min-height: 36px;
-  padding: 6px 14px;
-  border-radius: 18px;
-  font-size: 14px;
-  white-space: nowrap;
-}
-@keyframes pwa-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -8px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pwa-notice {
-    animation: none;
-  }
 }
 /* Peek takes the Tasks icon's place while an agent works or a task needs attention. */
 #openTasks .peek-mark {
@@ -6490,28 +6407,6 @@ a.pr-link .glyph {
   color: var(--bad);
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
 }
-/* An open session outside its view (workflow.js): one line in the place of the selection's
-   description,
-with a small Peek at the end of whichever row shows. It copies the
-   description row (#reviewScope) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 14px 8px;
-  border-bottom: 1px solid var(--line);
-  font-size: 12px;
-}
-
-
-
-
-
-
-
-
-
-
-
 /* Where the session's agent has been: a fading outline for its last places, newest first. */
 .node.agent-trail {
   border-color: color-mix(in srgb, var(--good) 60%, transparent) !important;
@@ -6576,8 +6471,8 @@ with a small Peek at the end of whichever row shows. It copies the
   padding: 3px 10px;
   font-size: 12px;
 }
-/* Session parts are plain: no glass behind the line,
-Peek,
+/* Session parts are plain: no glass behind the steps or the links. */
+/* !important: the panel's glass rule carries an ID in its :not() list. */
 .panel .session-steps details.session-step,
 .panel .session-log .code-link {
   background: none !important;
@@ -6824,10 +6719,6 @@ Peek,
   padding: 4px 12px;
   font-size: 13px;
 }
-/* The line's command or file: monospace {
-  padding: 0;
-  background: none;
-}
 /* Follow: an eye alone. */
 .follow-pill {
   width: 32px;
@@ -7028,7 +6919,7 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 /* A phone's header: the name and the buttons share the first row, and the comparison line has
    the second row to itself, so the branch name never shrinks to a letter. (Its popover is
    placed from the comparison line, so it moves with it.) */
-@media (max-width: 899px) {
+@media (max-width: 639px), (max-width: 899px) and (min-height: 501px), (max-width: 899px) and (orientation: portrait) {
   .top {
     flex-wrap: wrap;
     row-gap: 0;
@@ -7050,10 +6941,22 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
     flex-basis: 100%;
     min-width: 0;
   }
+  /* A break after the first row; the comparison and the quiet notes share the second. */
+  .top::after {
+    content: "";
+    order: 3;
+    flex-basis: 100%;
+    height: 0;
+  }
   .top .revision-details {
     order: 4;
-    flex-basis: 100%;
+    flex: 0 1 auto;
+    min-width: 0;
     margin-left: 0;
+  }
+  .top .access-note,
+  .top .app-note {
+    order: 5;
   }
   /* Before the first comparison loads, the line has nothing to say. */
   .top .revision-details:has(#revisionSummary:empty) {
@@ -7062,7 +6965,7 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 }
 
 /* A phone on its side: the header stays (the comparison, Time, Diff and Tasks), in one
-   compact row, and the sheet leaves the map more room. The keyboard still hides it. */
+   compact row. The keyboard still hides it. */
 @media (max-width: 899px) and (max-height: 600px) and (orientation: landscape) {
   .top {
     padding: 4px 10px 2px 12px;
@@ -7079,18 +6982,76 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
     order: 3;
     margin-left: auto;
   }
+}
+/* A small phone on its side keeps the sheet below the map; it leaves the map more room. */
+@media (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
   .panel[data-height="half"] {
     height: calc(var(--viewer-height, 100dvh) * 0.6);
   }
   .panel[data-height="full"] {
-    height: calc(var(--viewer-height, 100dvh) - 48px);
+    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 48px));
+  }
+}
+/* A larger phone on its side has the desktop layout: the map at the left and the sheet at the
+   right, each at the full height under the header. */
+@media (min-width: 640px) and (max-width: 899px) and (max-height: 500px) and (orientation: landscape) {
+  .app {
+    grid-template-columns: minmax(0, 1fr) min(400px, 46vw);
   }
 }
 
-/* A read-only device says so once, in the header's quiet text. */
-.access-note {
+/* Quiet notes in the header's comparison row, after the comparison (never at the top-left
+   and never as a card): a read-only device, offline, and an update with its text actions. */
+.access-note,
+.app-note {
+  order: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+}
+.app-note[hidden] {
+  display: none;
+}
+.app-note .peek-mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.top .app-note-action {
+  min-height: 26px;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+.top .app-note-action.is-main {
+  color: var(--accent);
+  font-weight: 600;
+}
+/* On a wide screen the name has the first row, and the comparison and the notes share the
+   second, as on a phone. */
+@media (min-width: 900px), (min-width: 640px) and (max-height: 500px) and (orientation: landscape) {
+  .title-block {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+  }
+  .title-block > #repo-name,
+  .title-block > #repo-sub {
+    flex-basis: 100%;
+  }
+  .title-block .revision-details {
+    margin-left: 0;
+  }
 }
 
 /* Navigation (nav.js). A page's header row (app.js viewHead): Back, the title, a quiet line
@@ -7296,3 +7257,248 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   box-shadow: none;
 }
 
+/* Plain sheet content (the owner's minimal design): no card, band, tinted box, left rule or
+   shadow around notices, disclosures, answers, session steps, requests, the drafts line or
+   the way back to a task. (!important: the panel's glass rules carry an ID in their :not()
+   list.) */
+.panel .notice {
+  margin: 2px 16px 6px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 13px;
+}
+.panel details.workflow-evidence {
+  margin: 4px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+}
+.panel .workflow-evidence > summary {
+  min-height: 36px;
+  padding: 0;
+  font-weight: 500;
+}
+.panel .workflow-evidence > :not(summary) {
+  margin: 0 0 12px;
+}
+.panel .runbar {
+  width: auto;
+  padding: 4px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--accent);
+}
+.panel #taskReturn {
+  order: 1;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: 28px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.panel #taskReturn[hidden] {
+  display: none;
+}
+#reviewScope:has(#taskReturn:not([hidden])) #liveLine {
+  margin-left: 12px;
+}
+#reviewScope:has(#taskReturn:not([hidden])) .x {
+  margin-left: 0;
+}
+.panel .ask-message.from-assistant {
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+}
+.session-steps {
+  padding-left: 0;
+  border-left: 0;
+}
+.session-step.is-current > summary {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+  border-radius: 0;
+  background: none;
+}
+.session-step.is-current .session-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+.session-approval,
+.session-end {
+  padding: 4px 0;
+  border: 0;
+  border-left: 0;
+  background: none;
+}
+.panel .p-section.metadata-muted {
+  padding: 8px 0;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.panel .instructions-here {
+  font-family: inherit;
+}
+/* One Peek in a header row: a page's own Peek stands; the live line then keeps only its word. */
+#viewHead .view-head:has(.task-peek) #liveLine .live-peek {
+  display: none;
+}
+/* The step after approval: only its next step is a full-width primary button. */
+.merge-step > .btn:not(.primary) {
+  justify-self: start;
+}
+
+/* The dock's top row keeps its height when it has no modes (in a conversation): the line that
+   names what the next message is about comes and goes without moving the conversation. */
+#reviewActions {
+  min-height: 30px;
+}
+
+
+/* A small phone (360 pixels): the level and tool groups keep one row at the bottom of the
+   map, with 32px buttons, so they cover less of it. */
+@media (max-width: 379px) {
+  .map-group button,
+  .map-tools > button,
+  .map-tools > #mapLegend > summary {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+  .canvas-controls {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}
+
+/* The dock's place and agent are plain text in one row. The place's name and the agent's
+   name stay readable; the commit and the model details shorten first. */
+.panel #dockAgent.agent-chip {
+  display: flex;
+  flex: 0 1 auto;
+  max-width: 44%;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 2px;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.panel #dockAgent.agent-chip[hidden] {
+  display: none;
+}
+.panel #dockAgent:hover {
+  color: var(--ink);
+}
+#dockAgent .chip-agent {
+  flex: none;
+}
+#dockAgent .chip-detail,
+#dockContext .dock-commit {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#reviewActions #dockContext .dock-text {
+  flex: 0 1 auto;
+  min-width: 4ch;
+}
+#reviewActions #dockContext .dock-commit {
+  color: var(--muted);
+}
+
+/* The chosen Time card: its subject stays readable on the light accent fill. */
+#timeRail .chip[aria-selected="true"] span {
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+/* On a phone the header's comparison line shows the commit; the dock names only the place. */
+@media (max-width: 439px) {
+  #reviewActions #dockContext .dock-commit {
+    display: none;
+  }
+}
+
+/* A long name on a map card takes a second line at its parts (app.js breakable), so it is
+   readable at 1:1. Only a name longer than two lines ends with an ellipsis. */
+.node .n-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.node .n-top {
+  align-items: flex-start;
+}
+.node .n-top > .glyph,
+.node .n-top > svg {
+  flex: none;
+  margin-top: 1px;
+}
+/* The place has priority over the agent: the agent's details shorten first. */
+#reviewActions #dockContext {
+  flex: 1 1 auto;
+}
+.panel #dockAgent.agent-chip {
+  flex: 0 4 auto;
+}
+/* In a narrow dock the chip names only the agent; its label and tooltip keep the details. */
+#reviewActions {
+  container-type: inline-size;
+}
+@container (max-width: 419px) {
+  #dockAgent .chip-detail {
+    display: none;
+  }
+}
+
+/* The rail's first card loads older commits: quiet text, no commit fill. */
+#timeRail .chip.earlier {
+  background: none;
+  color: var(--muted);
+}
+#timeRail .chip.earlier b {
+  font-family: inherit;
+}
+
+/* A level with many lines (app.js drawEdges): unchanged lines are fainter at rest, and a
+   selection hides the lines that do not touch it almost fully. Changed lines keep their
+   colour. */
+.edges.dense path.e.structure:not(.hl):not(.sel),
+.edges.dense path.e.quiet:not(.hl):not(.sel) {
+  opacity: 0.3;
+}
+.edges.dense path.e.dim {
+  opacity: 0.05;
+}

@@ -40,6 +40,7 @@ function savePermissions(mode) {
 export function activity(tail) {
   if (tail.approval)
     return { state: "needs", title: "Needs you", label: tail.approval.tool === "Bash" ? "Allow this command?" : `Allow ${tail.approval.tool}?`, code: tail.approval.tool === "Bash" ? tail.approval.input : "" };
+  if (tail.waitsForRepository) return { state: "queued", title: "Waiting", label: "Your message waits until the other agent finishes" };
   if (tail.status !== "running") return { state: "waiting", title: "Your turn", label: tail.summary ? tail.summary.split("\n")[0] : "The agent waits for your reply." };
   const last = timeline(tail.output || "").filter((i) => i.kind === "step" || i.kind === "text").at(-1);
   if (!last) return { state: "running", title: "Working", label: "Starting" };
@@ -198,7 +199,8 @@ export function timeline(output = "") {
         });
       } else if (item.type === "file_change") {
         const paths = item.changes ? item.changes.map((c) => relative(c.path)) : [relative(item.path)];
-        items.push({ kind: "step", label: `Changed ${paths.map(fileName).join(", ")}`, files: paths, changed: paths, targets: paths.map((path) => ({ path })), done: true });
+        const failed = item.status === "failed";
+        items.push({ kind: "step", label: `${failed ? "Could not change" : "Changed"} ${paths.map(fileName).join(", ")}`, files: paths, changed: failed ? [] : paths, targets: paths.map((path) => ({ path })), done: true, failed });
       } else if (item.type === "mcp_tool_call" && item.server === "peekumi_graph")
         items.push({ kind: "step", label: `Map · ${item.tool}`, done: true, files: [], changed: [], targets: item.arguments?.path ? [{ path: item.arguments.path, symbol: item.arguments.name }] : [] });
     }
@@ -321,9 +323,9 @@ export function createSession({ write, refresh, notice, context, using, sessionA
     const backButton = iconButton(el("button", "session-icon view-back"), "back", "Back");
     backButton.type = "button";
     backButton.onclick = back;
-    const state = r.approval ? "Needs you" : r.status === "running" ? "Working" : live(r) ? "Your turn" : "Ended";
+    const state = r.approval ? "Needs you" : r.status === "running" ? "Working" : r.waitsForRepository ? "Waiting" : live(r) ? "Your turn" : "Ended";
     const status = el("span", "session-status");
-    status.dataset.state = r.approval ? "needs" : r.status;
+    status.dataset.state = r.approval ? "needs" : r.waitsForRepository ? "queued" : r.status;
     status.append(el("span", "session-dot"), document.createTextNode(state));
     head.append(backButton, el("h2", "session-title view-title", r.title || "Session"), status);
     if (r.status === "running") {
@@ -349,16 +351,30 @@ export function createSession({ write, refresh, notice, context, using, sessionA
 
     const log = conversation(r, items);
     if (r.approval) log.append(approvalCard(r));
+    // Messages that wait for a turn show as the owner wrote them, with when they go.
+    for (const m of (r.messages || []).filter((x) => !x.delivered)) {
+      const bubble = el("div", "session-owner is-waiting");
+      bubble.append(richText(m.text, "session-text"));
+      bubble.append(
+        el(
+          "p",
+          "session-anchors",
+          r.waitsForRepository
+            ? "Waits until the other agent finishes"
+            : r.status === "running"
+              ? "Goes to the agent after this turn"
+              : "Goes with your next message",
+        ),
+      );
+      log.append(bubble);
+    }
     if (r.status === "running" && !r.approval) {
       const working = el("div", "session-working");
-      const queued = (r.messages || []).filter((m) => !m.delivered).length;
-      working.append(
-        peek("working", { className: "session-working-peek" }),
-        el("span", "pending-text", queued ? `Working · ${queued} message${queued === 1 ? "" : "s"} waiting for the next turn` : "Working"),
-      );
+      working.append(peek("working", { className: "session-working-peek" }), el("span", "pending-text", "Working"));
       log.append(working);
     }
-    if (r.message && r.status !== "running") log.append(el("p", "read-note", r.message));
+    // The conversation already says "Stopped by you."; a note that repeats it is left out.
+    if (r.message && r.status !== "running" && !r.waitsForRepository && !/^Stopped\./.test(r.message)) log.append(el("p", "read-note", r.message));
     body.append(log);
     renderActions(body, r);
   }
@@ -496,7 +512,7 @@ export function createSession({ write, refresh, notice, context, using, sessionA
 
   /** The dock's composer in Session mode: a reply to the open session, with the selection
    * on the map as a pointer, or the first message of a new session. */
-  function renderComposer(host, current) {
+  function renderComposer(host, current, { named = false } = {}) {
     const here = context();
     const box = el("section", "composer");
     // Only a place the owner chose goes with a reply, not where Follow moved the map.
@@ -509,10 +525,13 @@ export function createSession({ write, refresh, notice, context, using, sessionA
     input.value = draft;
     const name = current ? "Reply to the agent" : "What do you want to work on?";
     input.setAttribute("aria-label", name);
+    // With more than one open session, the box says which one the reply goes to.
     input.placeholder = current
-      ? current.status === "running"
-        ? "Steer the agent: it reads this after its current turn"
-        : "Reply to the agent"
+      ? named
+        ? `Reply to “${(current.title || "Session").slice(0, 40)}”`
+        : current.status === "running"
+          ? "Steer the agent: it reads this after its current turn"
+          : "Reply to the agent"
       : "What do you want to work on?";
     input.oninput = () => {
       draft = input.value;

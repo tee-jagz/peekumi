@@ -114,10 +114,14 @@ A **Session** is a live conversation with an agent. Use it when you want to work
 **Allow … in this session** allows the same program and subcommand again, for example `npm install` or `cargo build`. Some commands get no session rule, because one rule would allow too much. Allow them once, or allow all commands:
 
 - A command with several parts or a redirect: `;`, `&`, `&&`, `|`, `||`, `$(…)`, backticks, `>` or `<`.
+- A program written with quotes, a backslash or a path, for example `'bash'`, `\sudo` or `/usr/bin/git`. Such a name can hide what runs.
 - A command that starts with `NAME=value`.
 - A shell, an interpreter or a wrapper that runs other commands: for example `bash`, `sh`, `sudo`, `env`, `xargs`, `find`, `node`, `perl`, `ruby` or `ssh`.
+- A package runner, a container or a network tool: for example `npx`, `npm exec`, `uv run`, `docker`, `curl` or `rsync`.
 - A program that takes a subcommand, with an option first: for example `git -C x push` or `python3 -c …`.
-- `git push`. Peekumi never pushes.
+- `git push` (Peekumi never pushes) and `git config` (it could make a listed `git commit` run hooks).
+
+Some options make an allowed program start another program, load code, or read or write outside the worktree: for example `go test -exec`, `npm test --script-shell`, `node --test --import`, `cargo test --config`, `pytest -p`, `git log --output` and `git diff --no-index`. A command with one of them always waits for you, also when the program is on the session's list or has a rule. The listed test commands still run the project's own tests, which the agent can change: "ask first" stops other commands, but it is not a sandbox.
 
 **Allow all commands.** In this mode, no command waits for you. Set it before you start with the shield next to **Start session** (amber means all commands are allowed; the device keeps your choice), or change it at any time with **Commands: ask first** under the conversation. The shield and the link show only when sessions use Claude Code: Codex runs with its own preset, and OpenRouter runs no commands. **Allow all commands** on a request also sets it. The next turn starts the agent in the new mode, and a request that waits is allowed at once.
 
@@ -130,7 +134,7 @@ A **Session** is a live conversation with an agent. Use it when you want to work
 - **Changed:** a file that the session changed, or a folder that holds one, has an amber dot. The dots stay for the whole session. The server finds these files with Git, so they include changes from commands and uncommitted changes.
 - **Follow:** the eye button at the top right of the map moves the map to the agent's current place, and puts its card in the middle of the map. It moves to another level of the map at most once every three seconds. When you move the map or select a card yourself, Follow pauses, and the eye shows a line through it. Tap the eye to follow again. Tap it while it follows to turn it off. The device keeps that choice.
 - **Your turn:** when the agent waits, the "now" mark goes, and the trail and the dots stay.
-- **Legend:** while a session is open, the map's legend starts with **Session agent**, which explains the three marks. The eye button hides while the legend is open.
+- **Legend:** while an agent's marks show (a session, a task at work, or Ask), the map's legend starts with **Agent**, which explains the three marks. The eye button hides while the legend is open.
 
 A place that Follow showed is not a pointer. Follow moves the map, but it never changes your selection: the dock keeps the part that you chose for Ask, an instruction or the next reply, until you select, move the map or change the comparison yourself.
 

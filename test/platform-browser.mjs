@@ -1,5 +1,7 @@
-/** Platform behaviour in the browser: a phone on its side keeps the header; a file without
- * readable source says why in every view; the keyboard opens what it selects; a read-only
+/** Platform behaviour in the browser: a phone on its side keeps the header and has the
+ * side-by-side layout; the map's cards start above its controls, which keep one row on a
+ * small phone; a file without readable source says why in every view; the keyboard opens
+ * what it selects, and Escape keeps the focus on the map; a read-only
  * device sees no owner actions; a reload and a second access link keep the owner's place;
  * the commands switch shows only for an agent that asks before commands. */
 import assert from "node:assert/strict";
@@ -32,8 +34,42 @@ try {
   await front(side).locator(".node").first().waitFor();
   assert.ok(await side.locator("header.top").isVisible(), "The header shows in landscape");
   assert.ok(await side.locator("#openTasks").isVisible());
+  // It has the desktop layout: the sheet at the right of the map, and a tall map.
+  const [stage, sheet] = await side.evaluate(() =>
+    ["#stage", "#panel"].map((s) => {
+      const r = document.querySelector(s).getBoundingClientRect();
+      return { left: r.left, right: r.right, height: r.height };
+    }),
+  );
+  assert.ok(sheet.left >= stage.right - 1, "The sheet is at the right of the map");
+  assert.ok(stage.height > 250, `The map has the height: ${stage.height}px`);
   await side.screenshot({ path: "test-results/platform-landscape.png" });
   await side.close();
+
+  // The visible map is the part above its floating controls: at peek and at half height, on
+  // a 390 and a 360 phone, the cards start there, and the controls keep one row.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 360, height: 640 }]) {
+    const phone = await open({ viewport });
+    await phone.goto(link);
+    await front(phone).locator(".node").first().waitFor();
+    for (const height of ["peek", "half"]) {
+      if (height === "half") {
+        await phone.locator("#sheetHandle").click();
+        await phone.waitForFunction(() => document.querySelector("#panel").dataset.height === "half");
+        await phone.waitForTimeout(500);
+      }
+      const shape = await phone.evaluate(() => {
+        const sheet = document.querySelector('.sheet[data-front="true"]');
+        const canvas = sheet.querySelector(".map-canvas").getBoundingClientRect();
+        const groups = [...sheet.querySelectorAll(".canvas-controls > *")].map((g) => Math.round(g.getBoundingClientRect().top));
+        const top = Math.min(...[...sheet.querySelectorAll(".node")].map((n) => n.getBoundingClientRect().top));
+        return { canvasTop: canvas.top, toolsTop: Math.min(...groups), rows: new Set(groups).size, top };
+      });
+      assert.equal(shape.rows, 1, `${viewport.width} ${height}: the controls keep one row`);
+      assert.ok(shape.top >= shape.canvasTop && shape.top < shape.toolsTop, `${viewport.width} ${height}: the cards start in view, ${JSON.stringify(shape)}`);
+    }
+    await phone.close();
+  }
 
   // A phone that cannot reach the server: the header keeps the name on one line, and the
   // waiting text has its own row.
@@ -60,6 +96,18 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => /backend/.test(document.querySelector(".crumbs")?.textContent || ""));
   assert.ok(await page.evaluate(() => Boolean(document.activeElement?.closest("#deck .node"))), "The new level's first card has the focus");
+  // Escape steps back, and the focus stays on the map (it does not drop to the page).
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  assert.ok(await page.evaluate(() => Boolean(document.activeElement?.closest("#deck"))), "Escape keeps the focus on the map");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  assert.ok(await page.evaluate(() => Boolean(document.activeElement?.closest("#deck"))), "A second Escape keeps it too");
+  // The second Escape went up to the top level; open backend again.
+  await backend.click();
+  await backend.click();
+  await page.waitForFunction(() => /backend/.test(document.querySelector(".crumbs")?.textContent || ""));
 
   // A reload opens the same place, with the same selection.
   await front(page).locator('.node[data-path="backend/lookup.py"]').click();

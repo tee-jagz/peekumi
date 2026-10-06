@@ -21,12 +21,16 @@ const validModel = (name) => /^[A-Za-z0-9._:/@[\]][A-Za-z0-9._:/@[\]-]{0,99}$/.t
 /** An effort level as a label: "high" → "High", "xhigh" → "Extra high". */
 const title = (word) =>
   word === "xhigh" ? "Extra high" : word[0].toUpperCase() + word.slice(1);
+/** Effort levels from least to most, so a list joined from several models reads in order. */
+const ORDER = ["auto", "minimal", "low", "medium", "high", "xhigh", "max"];
+const inOrder = (levels) =>
+  [...new Set(levels)].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
 /** A provider's models for `job`, after one "Default" row for the model it uses on its own
  * (none for a provider without a default model, such as OpenRouter). */
 function modelsOf(agent, job) {
   const listed = (agent.models[job] || []).filter((m) => m.id !== null);
   if (agent.defaultModel === false) return listed;
-  const efforts = [...new Set(listed.flatMap((m) => m.efforts))];
+  const efforts = inOrder(listed.flatMap((m) => m.efforts));
   const fallback = (agent.models[job] || []).find((m) => m.id === null);
   return [
     {
@@ -278,7 +282,7 @@ export function createAgents({ api, repo }) {
       // Effort: the levels of the chosen model (all of the provider's for a typed name).
       const levels = chosen?.efforts?.length
         ? chosen.efforts
-        : [...new Set(models.flatMap((m) => m.efforts || []))];
+        : inOrder(models.flatMap((m) => m.efforts || []));
       const efforts = el("div", "agents-efforts");
       efforts.setAttribute("role", "group");
       efforts.setAttribute("aria-label", "Effort");
@@ -407,5 +411,11 @@ export function createAgents({ api, repo }) {
     if (job) list(job);
     else main();
   }
-  return { load, using, current, describe, label, open };
+  /** Why the provider chosen for `job` cannot run now, or null when it is ready. */
+  const problem = (job) => {
+    const choice = current(job),
+      agent = catalog?.agents.find((a) => a.id === choice?.agent);
+    return agent && !agent.status.ready ? `${agent.label}: ${agent.status.reason}` : null;
+  };
+  return { load, using, current, describe, label, problem, open };
 }

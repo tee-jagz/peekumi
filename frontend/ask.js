@@ -196,6 +196,8 @@ export function createAsk({
             // round, which builds on the agent's work; a draft would start again from main.
             message.added
               ? Object.assign(el("p", "Added to requested changes"), { className: "read-note" })
+              : message.saved
+              ? Object.assign(el("p", "Saved as a draft instruction"), { className: "read-note" })
               : changeTarget()
               ? btn("Add to requested changes", async () => {
                   await addToChanges(message);
@@ -203,11 +205,22 @@ export function createAsk({
                   redraw();
                 })
               : btn("Save as draft instruction", async () => {
-                  await makeDraft({
-                    anchor: message.asked.anchor,
-                    sha: message.asked.sha,
-                    text: message.suggestion,
-                  });
+                  // Once only: the button gives way to a note, so a second tap adds nothing.
+                  if (message.saved) return;
+                  message.saved = true;
+                  try {
+                    await makeDraft({
+                      anchor: message.asked.anchor,
+                      sha: message.asked.sha,
+                      text: message.suggestion,
+                    });
+                    save();
+                  } catch (e) {
+                    message.saved = false;
+                    throw e;
+                  } finally {
+                    redraw();
+                  }
                 }),
           );
           bubble.append(proposal);
@@ -271,6 +284,8 @@ export function createAsk({
           key = branch;
         chat.pendingFor = key;
         thread.push({ role: "user", text: question, subject: subjectOf(asked.anchor) });
+        // Kept at once, so a reload during the answer does not lose the question.
+        save(key, thread);
         chat.question = "";
         chat.pending = true;
         chat.partial = "";
@@ -311,6 +326,7 @@ export function createAsk({
         } catch (e) {
           // Put the question back so it can be retried or edited.
           thread.pop();
+          save(key, thread);
           if (!chat.question) chat.question = question;
           notice(e.message, true);
         } finally {

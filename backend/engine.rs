@@ -38,23 +38,29 @@ pub fn restricted(file: &str) -> bool {
     let template = [".example", ".sample", ".template", ".dist"]
         .iter()
         .any(|s| name.ends_with(s));
-    let env = name == ".env" || name.starts_with(".env.") || name.ends_with(".env");
+    let env = name == ".env" || name == ".envrc" || name.starts_with(".env.") || name.ends_with(".env");
     let key_file = [
         ".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".ppk", ".kdbx", ".tfstate",
+        ".tfvars",
     ]
     .iter()
     .any(|s| name.ends_with(s));
-    let ssh_key = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk"]
-        .contains(&name.as_str());
+    // A private SSH key, also a copy of one (`id_rsa.bak`); the public key stays readable.
+    let ssh_key = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]
+        .iter()
+        .any(|k| name.starts_with(k))
+        && !name.ends_with(".pub");
     let credentials = [
         "credentials", "credentials.json", ".npmrc", ".netrc", "_netrc", ".pgpass", ".pypirc",
-        ".git-credentials", ".dockercfg", ".htpasswd", "terraform.tfstate.backup",
+        ".git-credentials", ".dockercfg", ".htpasswd", "terraform.tfstate.backup", ".terraformrc",
+        "terraform.rc", ".yarnrc.yml", "application_default_credentials.json",
     ]
     .contains(&name.as_str());
     let service_account = name.ends_with(".json")
         && (name.contains("service-account") || name.contains("service_account") || name.contains("serviceaccount"));
-    let docker_auth = file.to_lowercase().ends_with(".docker/config.json");
-    ((env || key_file) && !template) || ssh_key || credentials || service_account || docker_auth
+    let lower = file.to_lowercase();
+    let tool_config = lower.ends_with(".docker/config.json") || lower.ends_with(".kube/config");
+    ((env || key_file) && !template) || ssh_key || credentials || service_account || tool_config
 }
 #[derive(Clone, Default)]
 /// One tracked Git entry and its optional syntax analysis.
@@ -242,12 +248,31 @@ impl Repository {
                         && text(&b["name"]) == branch.trim())
             })
             .cloned();
+        let (commits, more) = self.first_parents(&initial_head, false)?;
+        let base = self.resolve(base).or_else(|_| {
+            commits
+                .last()
+                .map(|v| text(&v["sha"]).to_string())
+                .context("Repository has no commits")
+        })?;
+        let root = string(self.git(&["rev-parse", "--show-toplevel"])?);
+        Ok(
+            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"moreCommits":more,"initialBase":base,"initialHead":initial_head,"branches":branches,"selectedBranch":selected_branch}),
+        )
+    }
+    /// Returns one page of the first-parent history from `start`, newest first, and whether
+    /// older commits exist. With `after`, the page starts at `start`'s first parent, so the
+    /// interface can load the history page by page.
+    fn first_parents(&self, start: &str, after: bool) -> Result<(Vec<Value>, bool)> {
+        const PAGE: usize = 80;
+        let count = format!("-{}", PAGE + 1 + usize::from(after));
         let log = string(self.git(&[
             "log",
             "--first-parent",
-            "-80",
+            &count,
             "--format=%H%x00%h%x00%s%x00%aI%x00%P%x00",
-            &initial_head,
+            "--end-of-options",
+            start,
         ])?);
         let values: Vec<_> = log.trim().split('\0').collect();
         let mut commits = vec![];
@@ -258,16 +283,18 @@ impl Repository {
             let parent = fields[4].split(' ').next().filter(|p| !p.is_empty());
             commits.push(json!({"sha":fields[0].trim(),"short":fields[1],"subject":fields[2],"time":fields[3],"parent":parent}));
         }
-        let base = self.resolve(base).or_else(|_| {
-            commits
-                .last()
-                .map(|v| text(&v["sha"]).to_string())
-                .context("Repository has no commits")
-        })?;
-        let root = string(self.git(&["rev-parse", "--show-toplevel"])?);
-        Ok(
-            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"initialBase":base,"initialHead":initial_head,"branches":branches,"selectedBranch":selected_branch}),
-        )
+        if after && !commits.is_empty() {
+            commits.remove(0);
+        }
+        let more = commits.len() > PAGE;
+        commits.truncate(PAGE);
+        Ok((commits, more))
+    }
+    /// The page of first-parent history before commit `before` (older commits for Time and
+    /// the comparison pickers): `{commits, more}`.
+    pub fn earlier_commits(&self, before: &str) -> Result<Value> {
+        let (commits, more) = self.first_parents(&self.resolve(before)?, true)?;
+        Ok(json!({"commits": commits, "more": more}))
     }
     /// Loads an immutable snapshot, reusing up to six cached revisions.
     /// Symbolic references are resolved again so advancing HEAD is visible; cache misses read committed Git objects.
@@ -916,6 +943,13 @@ mod tests {
             ".docker/config.json",
             "infra/terraform.tfstate",
             "production.env",
+            ".envrc",
+            "prod.tfvars",
+            "home/.kube/config",
+            "gcloud/application_default_credentials.json",
+            ".terraformrc",
+            ".yarnrc.yml",
+            "keys/id_rsa.bak",
         ] {
             assert!(restricted(path), "{path}");
         }
@@ -929,6 +963,8 @@ mod tests {
             "package.json",
             "docker/config.json",
             "keyboard.rs",
+            "kube/config.go",
+            "variables.tf",
         ] {
             assert!(!restricted(path), "{path}");
         }

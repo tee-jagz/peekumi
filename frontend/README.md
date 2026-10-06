@@ -8,7 +8,8 @@ On a phone, you use the browser interface to explore the repository structure, c
 - `workflow.js`: instructions (stored as comments), task preparation, run progress, agent evidence and verification, and the live line on the sheet's title row that leads to an agent at work or an open session.
 - `model.js`: the directory hierarchy, the aggregation of dependencies and the filter for symbol diffs.
 - `icons.js`: original SVG icons with rounded strokes. Object types, Git status, input/output indicators and icon-only controls share these icons. Control glyphs are decorative. Each button has its own accessible name and tooltip.
-- `canvas.js`: SVG pan, pinch, zoom and card positions.
+- `canvas.js`: SVG pan, pinch, zoom and card positions. The visible map is the part above the floating controls and the sheet. The first view, Fit and centering use that part, and a pan stops while some cards are still in view. Until you move the map, a new size (the sheet, a turned phone) places it again.
+- `pwa.js`: the installable app shell. Offline and an update are quiet notes in the header's comparison row, never a card.
 - `select.js`: frosted menus that replace native select popups. Each `<select>` stays in the DOM as the source of the value and of the change event. A button and a listbox copy its state, and they accept the arrow, Home/End, Enter and Escape keys.
 - `text.js`: a safe Markdown renderer (paragraphs, lists, code, bold, italic) for answers, instructions and agent reports. It builds DOM nodes and never parses HTML. When the server resolved a code span, that code span becomes a link into the map.
 - `peek.js`: Peek, the mascot, as an inline SVG. CSS animates its state (idle, loading, thinking, success, error, empty). Peek is decorative, and it stays still when reduced motion is on.

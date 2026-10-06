@@ -58,7 +58,9 @@ The screen has three parts. The header shows the name of the repository and the 
 
 The lines between cards are static dependencies: imports, calls, implementations and inheritance that Peekumi finds in the code. They do not show runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
 
-When you select a card, Peekumi highlights the connections of that card and fades all unrelated items. Blue lines show what the selection uses. Teal lines show what uses the selection. If the selection has no connections, no items fade.
+When you select a card, Peekumi highlights the connections of that card and fades all unrelated items. Blue lines show what the selection uses. Teal lines show what uses the selection. If the selection has no connections, no items fade. A folder with many lines shows its unchanged lines faintly. Select a card to read its lines.
+
+A long name takes a second line on its card. Inside a file, a method card does not repeat the name of its class when the class has a card on the same level. The full name is in the sheet.
 
 ## Gestures and keys
 
@@ -126,7 +128,7 @@ Each picker opens a menu like this one. A check mark (1) shows the current choic
 
 <img src="guide/05-time.jpg" width="340" alt="Time mode with commit cards above the map">
 
-In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows, compared with its parent. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits.
+In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows, compared with its parent. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits. Peekumi loads 80 commits at a time. When older commits exist, the first card is **Earlier**: tap it to load the next 80. In **Diff**, the last item of each commit list is **Earlier commits…**.
 
 ## Selecting something
 
@@ -217,7 +219,7 @@ If the answer ends with a suggested instruction, **Save as draft instruction** k
 
 ### Agents
 
-Tap the chip next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. The **Agents** icon (two sliders) in the header of the Tasks page opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
+Tap the agent name next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. On a phone it shows only the agent, for example **Claude**. The **Agents** icon (two sliders) in the header of the Tasks page opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
 
 1. Select the provider. For Ask: Claude Code, or OpenRouter (any model, with your API key). For tasks: Claude Code, Codex or OpenRouter. With OpenRouter, Peekumi runs the model itself: it reads, searches, edits and commits files in the worktree of the task, but it cannot run commands or tests. The first time that you select OpenRouter, paste your API key and tap **Test and save**.
 2. Select a model. **Default** is the model that the provider uses on its own. The other models come from the provider. **Other model** lets you type the name of a model.
@@ -336,7 +338,7 @@ When the keyboard opens, the header and the map controls move away. The sheet ke
 
 <img src="guide/14-desktop.jpg" width="720" alt="The desktop layout in dark mode">
 
-On a wide screen, the header (1) is across the top and the map (2) fills the left side. The review sheet (3) is on the right at full height. All other functions operate the same way. Peekumi uses the light or dark appearance of the system.
+On a wide screen, the header (1) is across the top and the map (2) fills the left side. The review sheet (3) is on the right at full height. A phone on its side uses this layout too. All other functions operate the same way. Peekumi uses the light or dark appearance of the system.
 
 ## Icon reference
 
@@ -424,4 +426,4 @@ A modified declaration shows which parts changed, on its card and in the sheet. 
 
 ## Offline and updates
 
-Peekumi runs on your own computer, and the phone app is a window into it. If the phone loses its connection, a banner tells you. Peekumi stores no code on the phone. When the server has a new version, the app shows **Update available · reload**. Save all unsent text, and then tap the message. After a reload, the map opens at the same folder or file, with the same selection. Changes to the name, icon or full-screen mode of the app occur after you remove the app from the home screen and add it again.
+Peekumi runs on your own computer, and the phone app is a window into it. If the phone loses its connection, the comparison line in the header says **Offline**. Peekumi stores no code on the phone. When the server has a new version, the same line says **Update ready**. Save all unsent text, and then tap **Reload**, or tap **Later**. After a reload, the map opens at the same folder or file, with the same selection. Changes to the name, icon or full-screen mode of the app occur after you remove the app from the home screen and add it again.

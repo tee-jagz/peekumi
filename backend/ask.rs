@@ -757,6 +757,8 @@ pub fn plain_error(e: &anyhow::Error) -> String {
         .or_else(|| lines.iter().rev().find(|l| !l.starts_with("at ") && !l.starts_with('^')))
         .copied()
         .unwrap_or("");
+    // "Error: " says nothing that "stopped with an error" does not.
+    let line = line.trim_start_matches("Error:").trim();
     let line: String = line
         .split_whitespace()
         .map(|w| if w.contains('/') && w.len() > 1 { w.rsplit('/').next().unwrap_or(w) } else { w })
@@ -940,7 +942,7 @@ mod tests {
     fn ask_errors_are_plain_sentences_without_host_paths() {
         let raw = anyhow::anyhow!("/var/folders/x/T/state/agent: file:///var/folders/x/T/state/agent:12\n    throw Error(\"Unsupported model\");\n    ^\n\nError: Unsupported model\n    at process.processTicks (node:internal)");
         let plain = plain_error(&raw);
-        assert_eq!(plain, "The agent (agent) stopped with an error: Error: Unsupported model");
+        assert_eq!(plain, "The agent (agent) stopped with an error: Unsupported model");
         let missing = plain_error(&anyhow::anyhow!("Cannot start /opt/bin/claude"));
         assert!(missing.starts_with("The agent (claude) cannot start") && !missing.contains("/opt"));
         assert_eq!(plain_error(&anyhow::anyhow!("Select a part of the map first")), "Select a part of the map first");

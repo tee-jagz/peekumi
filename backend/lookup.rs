@@ -342,7 +342,11 @@ async fn run(app: &App, name: &str, args: &Value, base: &Value, head: &Value) ->
             let (path, side) = (argument(args, "path")?, side(args)?);
             let data = engine("source", json!([base, head, path])).await?;
             let source = data[side].as_str().with_context(|| {
-                format!("{path} has no readable text on the {side} side (binary, unsupported, oversized or absent)")
+                if data["analysis"].as_str().is_some_and(|a| a.starts_with("restricted")) {
+                    format!("{path} is restricted: its name often holds secrets, so Peekumi never reads it")
+                } else {
+                    format!("{path} has no readable text on the {side} side (binary, unsupported, oversized or absent)")
+                }
             })?;
             let lines: Vec<&str> = source.lines().collect();
             let first = args["start_line"].as_u64().unwrap_or(1).max(1) as usize;

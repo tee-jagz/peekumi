@@ -17,7 +17,8 @@ The old Node backend is in `test/reference/`. It is an equivalence oracle and a 
 ## API
 
 - `POST /api/session`: exchanges the access token for a session cookie.
-- `GET /api/repo`: the name, the branch, the first-parent commit history and the initial revisions.
+- `GET /api/repo`: the name, the branch, the latest 80 first-parent commits (`moreCommits` is true when older commits exist) and the initial revisions.
+- `GET /api/commits?before=`: the next 80 first-parent commits after commit `before`, and `more`.
 - `GET /api/compare?base=&head=`: the complete comparison, for compatibility. Add `view=overview` to get file statuses, dependency edges, counts and compact colour previews of symbols.
 - `GET /api/directories?base=&head=`: directory README summaries or Python package docstrings for a specific revision, with provenance and adapter capabilities.
 - `GET /api/relationships?base=&head=&path=`: typed relationships, source sites, resolution evidence and before/after rule outcomes. The optional `view=overview` aggregates resolved file pairs for the initial map. With a path, the response includes incoming and outgoing evidence.

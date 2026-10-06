@@ -98,7 +98,8 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
   const metadata = await get("/api/repo");
   assert.ok(metadata.branches.some((b) => b.ref === "refs/heads/main"));
   assert.equal(metadata.selectedBranch.ref, "refs/heads/main");
-  const { branches, selectedBranch, ...identity } = metadata;
+  const { branches, selectedBranch, moreCommits, ...identity } = metadata;
+  assert.equal(moreCommits, false, "A short history has no older page");
   assert.deepEqual(identity, {
     ...(await f.repo.metadata()),
     initialBase: f.base,
@@ -145,6 +146,33 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
   );
   assert.equal((await f.git("status", "--porcelain")).toString(), "");
 });
+test("a long history loads 80 commits at a time, back to the root commit", async (t) => {
+  const f = await fixture(t);
+  for (let i = 0; i < 170; i++) await f.git("commit", "-q", "--allow-empty", "-m", `Step ${i}`);
+  const server = await startRust(f.directory, { base: f.base });
+  t.after(() => server.close());
+  const get = async (route) => {
+    const r = await fetch(server.url + route, { headers: { Authorization: "Bearer " + server.token } });
+    return [r.status, await r.json()];
+  };
+  const [, metadata] = await get("/api/repo");
+  assert.equal(metadata.commits.length, 80);
+  assert.equal(metadata.moreCommits, true);
+  const all = [...metadata.commits];
+  let more = true;
+  while (more) {
+    const [status, page] = await get("/api/commits?before=" + all.at(-1).sha);
+    assert.equal(status, 200);
+    assert.equal(page.commits[0]?.sha, all.at(-1).parent, "A page starts at the first parent");
+    all.push(...page.commits);
+    more = page.more;
+  }
+  const log = (await f.git("rev-list", "--first-parent", "HEAD")).toString().trim().split("\n");
+  assert.deepEqual(all.map((c) => c.sha), log, "Every first-parent commit, once, in order");
+  assert.equal(all.at(-1).parent, null, "The last page ends at the root commit");
+  assert.equal((await get("/api/commits?before=--output=x"))[0], 400);
+});
+
 test("Rust authentication, write content-type boundary, gzip negotiation and static assets", async (t) => {
   const f = await fixture(t);
   const server = await startRust(f.directory, { base: f.base });

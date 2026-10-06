@@ -87,8 +87,11 @@ try {
       await page.keyboard.press("Escape");
       assert.equal(await view(), "details", "Escape steps back as Back does");
 
-      // Ask: a question opens its thread; the dock is the thread's box; Back returns. (The
-      // return from the explored branch started the map again, so select backend again.)
+      // The return from the explored branch brought back the map's place (inside backend,
+      // which the second tap above opened).
+      assert.match(await crumbs(), /backend/);
+      // Ask: a question opens its thread; the dock is the thread's box; Back returns.
+      await page.locator(".crumbs .crumb-home").click();
       await backend.click();
       await page.locator('[data-compose="ask"]').click();
       await page.getByLabel("Your question").fill("Name references.");

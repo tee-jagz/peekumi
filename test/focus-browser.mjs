@@ -35,13 +35,16 @@ try {
       assert.equal(await pill.getAttribute("data-on"), "true");
       await page.locator('.node.agent-here[data-key="symbol:route"] .agent-badge').waitFor({ timeout: 15000 });
       assert.match(await page.locator(".session-step.is-current").textContent(), /read_declaration\s*route/);
-      // The agent's place sits in the middle of the visible map.
+      // The agent's place sits in the middle of the visible map: above the sheet and above
+      // the map's floating controls.
       await page.waitForTimeout(400);
       const centred = await page.evaluate(() => {
         const card = document.querySelector('.node.agent-here[data-key="symbol:route"]').getBoundingClientRect();
         const map = document.querySelector('.sheet[data-front="true"] .map-canvas').getBoundingClientRect();
         const sheet = document.querySelector("#panel").getBoundingClientRect();
-        const bottom = sheet.top > map.top + 80 ? Math.min(map.bottom, sheet.top) : map.bottom;
+        const tools = document.querySelector('.sheet[data-front="true"] .canvas-controls').getBoundingClientRect();
+        let bottom = sheet.top > map.top + 80 ? Math.min(map.bottom, sheet.top) : map.bottom;
+        bottom = Math.min(bottom, tools.top - 6);
         return [card.left + card.width / 2 - (map.left + map.width / 2), card.top + card.height / 2 - (map.top + bottom) / 2];
       });
       assert.ok(Math.abs(centred[0]) < 30 && Math.abs(centred[1]) < 30, `Centred: ${centred}`);
@@ -79,7 +82,7 @@ try {
       // The map's legend explains the marks; nothing else floats on the map.
       assert.equal(await page.locator("#agentFocus .agent-key").count(), 0);
       await page.locator("#mapLegend > summary").click();
-      assert.match(await page.locator("#legendContent").innerText(), /Session agent\s*Agent is here\s*Looked at\s*Changed/);
+      assert.match(await page.locator("#legendContent").innerText(), /Agent\s*Agent is here\s*Looked at\s*Changed/);
       await page.screenshot({ path: `test-results/focus-legend-${viewport.width}.png` });
       await page.getByRole("button", { name: "Close legend", exact: true }).click();
       await page.locator(".crumbs .crumb-home").click();
