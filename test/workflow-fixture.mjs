@@ -300,10 +300,12 @@ if (run.kind === "update") {
 }
 if (run.brief === "WAIT_FOR_CANCEL")
   await new Promise((r) => setTimeout(r, 30000));
-// FOCUS_TASK: the agent reads a file, then works for a while, so the map can show where.
+// FOCUS_TASK: the agent reads a file, then works for a while, so the map can show where. A
+// task started outside the page shows at the page's next idle poll (up to 12 s), so the
+// work lasts longer than that.
 if (run.brief === "FOCUS_TASK") {
   console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "focus-read", name: "Read", input: { file_path: `${process.cwd()}/backend/graph.py` } }] } }));
-  await new Promise((r) => setTimeout(r, 6000));
+  await new Promise((r) => setTimeout(r, 25000));
 }
 const first = run.comments[0];
 if (

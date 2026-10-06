@@ -104,7 +104,8 @@ try {
       const c = await f.req("/api/comments", { text: "Look at graph.", sha: f.sha, anchor: { kind: "repo", path: "" } });
       const p = await f.req("/api/runs/preview", { commentIds: [c.id], brief: "FOCUS_TASK", using: { agent: "claude" } });
       await f.req("/api/runs", { previewId: p.id });
-      await page.locator('.node.agent-here[data-path="backend/graph.py"] .agent-badge').waitFor({ timeout: 20000 });
+      // The page sees a task started elsewhere at its next idle poll (up to 12 s).
+      await page.locator('.node.agent-here[data-path="backend/graph.py"] .agent-badge').waitFor({ timeout: 30000 });
       await page.screenshot({ path: `test-results/focus-task-${viewport.width}.png` });
       assert.deepEqual(errors, []);
       console.log(`PASS agent focus ${viewport.width}`);
