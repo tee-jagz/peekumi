@@ -36,7 +36,14 @@ try {
       // Real touch input through the browser, so the press is a true one.
       const cdp = phone ? await page.context().newCDPSession(page) : null;
       const touch = async (target, { move = 0 } = {}) => {
-        const box = await target.boundingBox();
+        // The map can draw the card again just after a reload; wait for its box.
+        let box = null;
+        for (let i = 0; i < 50 && !box; i++) {
+          await target.waitFor();
+          box = await target.boundingBox();
+          if (!box) await page.waitForTimeout(100);
+        }
+        assert.ok(box, "The card has a box on the screen");
         const x = box.x + Math.min(40, box.width / 2),
           y = box.y + Math.min(30, box.height / 2);
         await cdp.send("Input.dispatchTouchEvent", {
