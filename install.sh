@@ -52,11 +52,13 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
+# An asset's API URL sends the file itself only with this Accept header; without it, the API
+# sends a JSON description of the asset. This is true with or without a token.
 fetch() {
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$1" -o "$2"
   else
-    curl -fsSL "$1" -o "$2"
+    curl -fsSL -H "Accept: application/octet-stream" "$1" -o "$2"
   fi
 }
 
@@ -80,7 +82,7 @@ else
     curl -fsSL "$release" -o "$work/release.json" ||
       fail "could not read the release from $release (private repositories need GITHUB_TOKEN)"
   fi
-  # Asset API URLs work for private repositories with a token; public downloads use either.
+  # Asset API URLs work for a public repository, and for a private one with a token.
   asset_url() {
     tr ',' '\n' <"$work/release.json" | awk -v want="$1" '
       /"url": *"[^"]*\/releases\/assets\// {
