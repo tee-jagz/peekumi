@@ -36,7 +36,7 @@ This code of conduct applies in all community spaces. It also applies when a per
 
 ## Enforcement
 
-Report abusive, harassing or other unacceptable behaviour to the maintainers. Until this file gives a private contact address, use the **Report content** menu item of GitHub on the comment, the issue or the discussion. The maintainers review and investigate all complaints quickly and fairly.
+Report abusive, harassing or other unacceptable behaviour to the maintainers by email at [jegstolu@gmail.com](mailto:jegstolu@gmail.com). You can also use the **Report content** menu item of GitHub on the comment, the issue or the discussion. The maintainers review and investigate all complaints quickly and fairly.
 
 All maintainers must respect the privacy and the security of the person who reports an incident.
 
