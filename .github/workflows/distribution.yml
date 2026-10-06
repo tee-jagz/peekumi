@@ -73,6 +73,9 @@ jobs:
       - name: Create a draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
-          --draft --generate-notes --title "Peekumi $GITHUB_REF_NAME"
+        # The notes are the install steps and this version's section of CHANGELOG.md
+        # (GitHub's generated notes list only merged pull requests).
+        run: |
+          node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --draft --notes-file release-notes.md --title "Peekumi $GITHUB_REF_NAME"
