@@ -721,10 +721,8 @@ export function createWorkflow({
         card.append(richText(c.text, "workflow-text"), foot);
         const report = c.report;
         if (report) {
-          card.append(
-            el("strong", "report-label", "Agent result"),
-            richText(report.note || report.reason, "workflow-text"),
-          );
+          // What the agent says about it, quietly under the instruction; no heading.
+          card.append(richText(report.note || report.reason, "workflow-text report-text"));
           if (report.checks) {
             const d = el("details", "workflow-evidence");
             d.append(
@@ -1106,15 +1104,16 @@ export function createWorkflow({
   }
   /** Every instruction in a task round: its work and any finished ones carried along. */
   const instructionsOf = (r) => [...(r.comments || []), ...(r.done || [])];
+  /** A task in words: its first instruction (one line, shortened), how many more, and the
+   * round after the first. A session is its title. */
   function taskTitle(r) {
-    if (r.kind === "session") return `Session · ${r.title || "Untitled"}`;
-    const paths = [
-      ...new Set(instructionsOf(r).map((c) => c.anchor.path || "Repository")),
-    ];
-    const scope = paths.length === 1 ? paths[0] : `${paths.length} locations`;
+    if (r.kind === "session") return r.title || "Session";
+    const list = instructionsOf(r);
+    const first = (list[0]?.text || "").split("\n")[0].replace(/[`*#>]/g, "").trim() || "Task";
+    const words = first.length > 64 ? first.slice(0, 61).trimEnd() + "…" : first;
+    const more = list.length > 1 ? ` + ${list.length - 1} more` : "";
     const round = r.round > 1 ? ` · round ${r.round}` : "";
-    const count = instructionsOf(r).length;
-    return `${count} instruction${count === 1 ? "" : "s"} · ${scope}${round}`;
+    return `${words}${more}${round}`;
   }
   /** True once a finished task has no instruction left to review and at least one approved. */
   function reviewed(r) {
@@ -1317,7 +1316,6 @@ export function createWorkflow({
           "Explore changes",
           // An update round shows the task on top of the new target, not the target's own changes.
           () => explore(r.mergeTarget || r.base, r.branch, r.id),
-          !(collected(r.id).length && !r.revisedBy),
         ),
       );
     // A later round carries this one's work forward; decisions happen there.
