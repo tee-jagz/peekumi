@@ -1,11 +1,15 @@
 # Weekly updates for the Rust crates, the npm packages and the GitHub Actions. Minor and patch
 # updates come together in one pull request for each ecosystem; a major update has its own.
 version: 2
+# A major update changes an API, so it is a planned migration, not a weekly pull request.
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       crates:
         update-types: [minor, patch]
@@ -13,6 +17,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       packages:
         update-types: [minor, patch]
@@ -20,6 +27,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       actions:
         update-types: [minor, patch]

@@ -37,6 +37,23 @@ The installer reads these optional variables:
 
 For example: `curl -fsSL https://raw.githubusercontent.com/tee-jagz/peekumi/main/install.sh | PEEKUMI_VERSION=v0.2.0 sh`. If `~/.local/bin` is not on your PATH, the installer prints the line that you must add.
 
+### Install without the script
+
+You can download and check the archive yourself. Then nothing runs on your computer before you look at it. Select your system: `darwin-arm64`, `darwin-x64`, `linux-x64` or `linux-arm64`.
+
+```sh
+v=0.2.0 p=darwin-arm64
+curl -fLO https://github.com/tee-jagz/peekumi/releases/download/v$v/peekumi-$v-$p.tar.gz
+curl -fLO https://github.com/tee-jagz/peekumi/releases/download/v$v/peekumi-$v-$p.tar.gz.sha256
+shasum -a 256 -c peekumi-$v-$p.tar.gz.sha256    # on Linux: sha256sum -c
+tar -xzf peekumi-$v-$p.tar.gz
+./peekumi-$v-$p/bin/peekumi upgrade ~/.local/lib/peekumi
+mkdir -p ~/.local/bin && ln -sf ~/.local/lib/peekumi/bin/peekumi ~/.local/bin/peekumi
+peekumi doctor
+```
+
+The check must print `OK`. If it does not, do not continue. The `upgrade` command copies the archive into the folder that you give, and it keeps the previous installation as a backup. On macOS, download with `curl` as above: a browser adds a quarantine flag to the unsigned binaries.
+
 ### From source
 
 Contributors can build from source instead, and you can also do this on unsupported systems. You must have Git, a stable Rust toolchain and Node 22.13 or later:
