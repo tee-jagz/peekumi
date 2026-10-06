@@ -2527,9 +2527,6 @@ button {
   .panel {
     height: calc(var(--viewer-height, 100dvh) - 100px);
   }
-  .top {
-    display: none;
-  }
 }
 @media (max-width: 899px) {
   .top {
@@ -4782,8 +4779,8 @@ details.p-section[open] > summary::before {
   background: color-mix(in srgb, var(--accent) 7%, var(--el-glass));
 }
 .merge-step[data-state="merged"] {
-  border-color: color-mix(in srgb, #b48cff 40%, transparent);
-  background: color-mix(in srgb, #b48cff 7%, var(--el-glass));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--el-glass));
 }
 .merge-step[data-state="blocked"],
 .merge-step[data-state="elsewhere"] {
@@ -5764,9 +5761,9 @@ details.p-section[open] > summary::before {
   border: 1px solid color-mix(in srgb, var(--add) 35%, transparent);
 }
 .pr-state[data-state="merged"] {
-  color: #b48cff;
-  background: color-mix(in srgb, #b48cff 14%, transparent);
-  border-color: color-mix(in srgb, #b48cff 35%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .pr-state[data-state="closed"] {
   color: var(--del);
@@ -6001,7 +5998,7 @@ a.pr-link .glyph {
   color: var(--add);
 }
 .pr-state-word[data-state="merged"] {
-  color: #b48cff;
+  color: var(--accent);
 }
 .pr-state-word[data-state="closed"] {
   color: var(--del);
@@ -6647,16 +6644,14 @@ a.pr-link .glyph {
   pointer-events: none;
   z-index: 2;
 }
-.btn.session-mode {
-  min-height: 30px;
-  padding: 3px 10px;
-  font-size: 12px;
-  margin-top: 4px;
+/* The commands switch: a quiet shield beside Start; amber while all commands are allowed. */
+.icon-action.session-mode {
+  color: var(--muted);
+  background: transparent;
 }
-.btn.session-mode.is-open {
+.icon-action.session-mode.is-open {
   color: var(--mod);
-  border-color: color-mix(in srgb, var(--mid) 50%, transparent);
-  background: color-mix(in srgb, var(--mid) 12%, transparent);
+  background: color-mix(in srgb, var(--mid) 14%, transparent);
 }
 .session-working-peek {
   flex: none;
@@ -7123,4 +7118,32 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* A phone on its side: the header stays (the comparison, Time, Diff and Tasks), in one
+   compact row, and the sheet leaves the map more room. The keyboard still hides it. */
+@media (max-width: 899px) and (max-height: 600px) and (orientation: landscape) {
+  .top {
+    padding: 4px 10px 2px 12px;
+  }
+  .keyboard-open .top {
+    display: none;
+  }
+  .top .title-block {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .panel[data-height="half"] {
+    height: calc(var(--viewer-height, 100dvh) * 0.6);
+  }
+  .panel[data-height="full"] {
+    height: calc(var(--viewer-height, 100dvh) - 48px);
+  }
+}
+
+/* A read-only device says so once, in the header's quiet text. */
+.access-note {
+  font-size: 12px;
+  color: var(--muted);
 }

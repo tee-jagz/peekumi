@@ -85,12 +85,15 @@ try {
       await page.locator(".crumbs .crumb-home").click();
       await page.locator('.node.agent-trail[data-path="backend"]').waitFor();
       await page.screenshot({ path: `test-results/focus-waiting-${viewport.width}.png` });
-      // Ask: while the answer works, the map follows what it reads.
+      // Ask: while the answer works, the map follows what it reads. The owner's selection is
+      // the subject of the next message; Follow moves the map, but never that choice.
+      await page.locator('.sheet[data-front="true"] .node[data-path="backend"]').click();
       await page.locator("#agentFocus .follow-pill").click();
       await page.getByRole("tab", { name: "Ask", exact: true }).click();
       await page.getByLabel("Your question").fill("Look at route.");
       await page.locator("#composerHost").getByRole("button", { name: "Send question", exact: true }).click();
       await page.locator('.node.agent-here[data-key="symbol:route"] .agent-badge').waitFor({ timeout: 15000 });
+      assert.match(await page.locator("#dockContext").innerText(), /^backend\b/, "Follow keeps the owner's anchor");
       await page.screenshot({ path: `test-results/focus-ask-${viewport.width}.png` });
       await page.locator(".ask-message.from-assistant", { hasText: "returns 1" }).waitFor();
       await page.locator('.node.agent-trail[data-key="symbol:route"]').waitFor();

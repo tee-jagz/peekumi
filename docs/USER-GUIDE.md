@@ -263,7 +263,7 @@ To start a session, select a part of the map and tap **Session** in the dock. Wr
 
 Each step of the agent shows in the conversation. Tap a step to see its output. A file or declaration name in the conversation is a link: tap it, and the map moves there while the session stays on the screen. Under the conversation, one line gives the agent, the turns, the commits and the cost. Links there show the changes on the map, change how the session treats commands, and end the session.
 
-**Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
+**Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. With Claude Code, the shield next to **Start session** sets it before you start: amber means that all commands are allowed. Codex and OpenRouter have no shield, because they never ask before commands. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
 
 To finish, tap **End session**, then **Send to review**. The work then goes through the normal review: **Approve**, then **Merge**. Refer to [WORKFLOW.md](WORKFLOW.md#sessions) for all the details.
 
@@ -399,4 +399,4 @@ A modified declaration shows which parts changed, on its card and in the sheet. 
 
 ## Offline and updates
 
-Peekumi runs on your own computer, and the phone app is a window into it. If the phone loses its connection, a banner tells you. Peekumi stores no code on the phone. When the server has a new version, the app shows **Update available · reload**. Save all unsent text, and then tap the message. Changes to the name, icon or full-screen mode of the app occur after you remove the app from the home screen and add it again.
+Peekumi runs on your own computer, and the phone app is a window into it. If the phone loses its connection, a banner tells you. Peekumi stores no code on the phone. When the server has a new version, the app shows **Update available · reload**. Save all unsent text, and then tap the message. After a reload, the map opens at the same folder or file, with the same selection. Changes to the name, icon or full-screen mode of the app occur after you remove the app from the home screen and add it again.

@@ -17,6 +17,8 @@ pub fn launch(store: Workflow, id: String, token: String) {
         if let Err(e) = execute(&store, &id, &token) {
             let _ = store.finish(&id, "failed", &e.to_string(), json!([]));
         }
+        // A session message that waited for this task can start now.
+        store.wake_sessions();
     });
 }
 /// Creates one worktree from the frozen SHA, then supervises a bounded agent session.
@@ -256,6 +258,8 @@ pub fn launch_session(store: Workflow, id: String) {
                 }
             }
         }
+        // Another session's message that waited for this one can start now.
+        store.wake_sessions();
     });
 }
 /// One session turn: takes the waiting messages, prepares the worktree on the first turn,
@@ -354,12 +358,6 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
             id.into(),
         ];
         let (model, effort) = crate::agents::flags(&run);
-        let allow: Vec<String> = run["allow"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|r| r.as_str().map(str::to_string))
-            .collect();
         let mut command = agent
             .task_command(&crate::agents::Launch {
                 model: model.as_deref(),
@@ -371,7 +369,6 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
                 session: Some(crate::agents::SessionTurn {
                     conversation: run["conversation"].as_str(),
                     first: turn == 1,
-                    allow: &allow,
                     allow_all: run["permissions"] == "allow",
                 }),
             })
@@ -584,6 +581,7 @@ pub fn recover(store: Workflow) -> Result<()> {
             if r["kind"] == "session" {
                 let _ = store.close_turn(&id, current_results(&store, &id), None, None, Some("Service restarted, and the last turn stopped. Send a message to continue.".into()));
                 let _ = store.patch_run(&id, json!({"status": "waiting"}));
+                store.wake_sessions();
                 return;
             }
             let commits = store
@@ -603,8 +601,11 @@ pub fn recover(store: Workflow) -> Result<()> {
                 "Service interrupted this run; inspect retained work and reports.",
                 json!(commits.lines().collect::<Vec<_>>()),
             );
+            store.wake_sessions();
         });
     }
+    // A session message that waited for the repository before the restart.
+    store.wake_sessions();
     Ok(())
 }
 /// Serves a minimal stdio MCP transport with only three run-scoped reporting tools.

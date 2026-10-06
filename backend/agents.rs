@@ -86,8 +86,6 @@ pub struct SessionTurn<'a> {
     pub conversation: Option<&'a str>,
     /// True on the first turn, which starts the conversation.
     pub first: bool,
-    /// Commands the owner allowed for this session, as Claude Code rules (`Bash(npm install:*)`).
-    pub allow: &'a [String],
     /// True when the owner allowed every command: no command waits for a question.
     pub allow_all: bool,
 }
@@ -295,12 +293,12 @@ impl Agent for ClaudeCode {
         let mut tools = "Read,Edit,Write,Glob,Grep,Bash,mcp__peekumi__get_run,mcp__peekumi__resolve_comment,mcp__peekumi__flag_comment".to_string();
         if let Some(session) = &launch.session {
             // A session asks the owner before any command outside its list: manual mode, no
-            // user or project settings that could allow more, and Peekumi's approve tool.
+            // user or project settings that could allow more, and Peekumi's approve tool. No
+            // command rule goes to Claude Code: every command reaches the approve tool, and
+            // Peekumi alone judges it against the list and the owner's rules.
             let mut allowed: Vec<String> = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__peekumi__get_run"]
                 .iter()
                 .map(|t| t.to_string())
-                .chain(SESSION_COMMANDS.iter().map(|t| t.to_string()))
-                .chain(session.allow.iter().cloned())
                 .collect();
             if launch.graph.is_some() {
                 allowed.extend(GRAPH_TOOLS.iter().map(|t| t.to_string()));

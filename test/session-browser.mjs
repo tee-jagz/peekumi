@@ -24,12 +24,19 @@ try {
       await page.locator('[data-compose="session"]').click();
       assert.equal(await page.locator('[data-compose="session"]').getAttribute("aria-selected"), "true");
       const start = page.getByLabel("What do you want to work on?");
+      // Claude Code asks before commands: its switch is one quiet shield, off by default.
+      const shield = page.locator("#composerHost .session-mode");
+      await shield.waitFor();
+      assert.equal(await shield.getAttribute("aria-label"), "Allow all commands");
+      assert.equal(await shield.getAttribute("aria-pressed"), "false");
       await start.fill("Make the change.\nRUN: npm install left-pad");
       await page.getByRole("button", { name: "Start session" }).click();
       // The command waits for the owner, in the conversation.
       const approval = page.locator(".session-approval");
       await approval.waitFor();
       assert.match(await approval.locator(".session-command").textContent(), /npm install left-pad/);
+      // The note goes with Deny, so it comes before the buttons.
+      assert.ok(await approval.evaluate((card) => Boolean(card.querySelector("label").compareDocumentPosition(card.querySelector(".session-approval-actions")) & Node.DOCUMENT_POSITION_FOLLOWING)), "The note comes first");
       await page.screenshot({ path: `test-results/session-approval-${viewport.width}.png` });
       // The chip beside the dock names the agent that sessions use (once the list loads).
       await page.waitForFunction(() => /Sessions use Claude/.test(document.querySelector("#dockAgent")?.title || ""), null, { timeout: 60000 });
@@ -80,7 +87,16 @@ try {
       assert.ok(await line.isHidden());
       assert.ok(await page.locator("#reviewScope").isVisible(), "The description comes back");
       assert.ok(await toggle.isVisible(), "Peek stays to switch back");
-      await toggle.click();
+      // Opening a card redraws the sheet: Peek and the line stay, so a request never hides.
+      const homeCrumb = page.locator(".crumbs .crumb-home");
+      if (await homeCrumb.isEnabled()) await homeCrumb.click();
+      const card = page.locator('.sheet[data-front="true"] .node').first();
+      await card.click();
+      await card.click();
+      await page.waitForFunction(() => document.querySelector(".crumbs .crumb-home") && !document.querySelector(".crumbs .crumb-home").disabled);
+      await toggle.waitFor();
+      assert.equal(await page.locator("#peekToggle").count(), 1, "Peek survives the redraw");
+      if (await line.isHidden()) await toggle.click();
       await line.click();
       await log.getByText("Turn 1 is done.").waitFor();
       assert.ok(await toggle.isHidden(), "Peek hides while the session is on screen");

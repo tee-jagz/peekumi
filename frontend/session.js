@@ -18,7 +18,6 @@ export const live = (r) => r?.kind === "session" && ["running", "waiting"].inclu
 
 /** True for a command with several parts, which a session rule cannot cover (see
  * backend/agent_session.rs). */
-const chained = (command = "") => ["&&", "||", ";", "|", "`", "$(", ">", "<", "\n"].some((c) => command.includes(c)) || command.trim().startsWith("(");
 
 /** How a new session treats commands on this device: "ask" (the default) or "allow". */
 const PERMISSIONS = "peekumi.session.permissions";
@@ -230,7 +229,7 @@ const costOf = (items) => items.filter((i) => i.kind === "cost").reduce((sum, i)
  * @param {() => void} deps.sent Called after a reply is sent.
  * @param {() => void} deps.back Returns to the Tasks list.
  */
-export function createSession({ write, refresh, notice, context, using, openTask, showOnMap, openPlace, references, pointed = () => true, sent = () => {}, back }) {
+export function createSession({ write, refresh, notice, context, using, sessionAgent = () => Promise.resolve(null), openTask, showOnMap, openPlace, references, pointed = () => true, sent = () => {}, back }) {
   // The places that the names in a session's messages point at, for the current text.
   let places = { key: "", map: {} },
     findingPlaces = false;
@@ -266,9 +265,6 @@ export function createSession({ write, refresh, notice, context, using, openTask
     card.append(el("strong", "", a.tool === "Bash" ? "The agent asks to run a command" : `The agent asks to use ${a.tool}`));
     card.append(el("pre", "session-command", a.input));
     if (a.reason) card.append(el("p", "read-note", `Why: “${a.reason}”`));
-    const words = a.input.trim().split(/\s+/);
-    const twoWords = ["npm", "npx", "pnpm", "yarn", "bun", "cargo", "git", "go", "pip", "pip3", "uv", "poetry", "make", "docker", "python", "python3"];
-    const rule = a.tool !== "Bash" ? a.tool : twoWords.includes(words[0]) && words[1] && !words[1].startsWith("-") ? words.slice(0, 2).join(" ") : words[0];
     const label = el("label", "workflow-field", "A note for the agent (optional)");
     const note = el("input");
     note.value = denyNote;
@@ -282,10 +278,12 @@ export function createSession({ write, refresh, notice, context, using, openTask
     };
     const buttons = el("div", "session-approval-actions");
     buttons.append(action("Allow once", decide("allow"), true));
-    // A command with several parts has no safe rule: allow it once, or allow everything.
-    if (a.tool !== "Bash" || !chained(a.input)) buttons.append(action(`Allow ${rule} in this session`, decide("session")));
+    // The server names the rule, or none when no rule is safe (a chained command, a shell,
+    // sudo, git push…): then allow it once, or allow everything.
+    if (a.rule) buttons.append(action(`Allow ${a.rule} in this session`, decide("session")));
     buttons.append(action("Allow all commands", decide("all")), action("Deny", decide("deny"), false, "danger"));
-    card.append(buttons, label);
+    // The note comes first: it goes with Deny, so it is written before the tap.
+    card.append(label, buttons);
     // A new request comes into view once, from its top, so its command is visible.
     if (shownRequest !== a.id) {
       shownRequest = a.id;
@@ -441,14 +439,16 @@ export function createSession({ write, refresh, notice, context, using, openTask
     if (r.results?.length) links.append(link("Changes on the map", () => showOnMap(r)));
     // How the session treats commands; the next turn starts with the new choice.
     const all = r.permissions === "allow";
-    const mode = link(all ? "Commands: all allowed" : "Commands: ask first", async () => {
+    const mode = r.agent === "claude" && link(all ? "Commands: all allowed" : "Commands: ask first", async () => {
       await write(`/api/runs/${r.id}/permissions`, { mode: all ? "ask" : "allow" });
       await refresh();
     });
-    mode.setAttribute("aria-pressed", String(all));
-    mode.title = all ? "Commands run with no question. Tap to ask before commands outside the list" : "Commands outside the list wait for you. Tap to allow all commands";
-    if (all) mode.classList.add("is-open");
-    links.append(mode);
+    if (mode) {
+      mode.setAttribute("aria-pressed", String(all));
+      mode.title = all ? "Commands run with no question. Tap to ask before commands outside the list" : "Commands outside the list wait for you. Tap to allow all commands";
+      if (all) mode.classList.add("is-open");
+      links.append(mode);
+    }
     if (r.status === "waiting" && !ending)
       links.append(link("End session", () => {
         ending = true;
@@ -523,13 +523,19 @@ export function createSession({ write, refresh, notice, context, using, openTask
     const buttons = el("div", "sel-acts draft-buttons");
     let permissions = savedPermissions();
     if (!current) {
-      const mode = el("button", "btn session-mode", "");
+      // Only Claude Code asks before commands: Codex runs with its own preset, and OpenRouter
+      // runs no commands. So the switch shows only when sessions use Claude Code.
+      const mode = el("button", "icon-action session-mode", "");
       mode.type = "button";
+      mode.hidden = true;
       const show = () => {
-        mode.textContent = permissions === "allow" ? "Allow all commands" : "Ask before commands";
-        mode.setAttribute("aria-pressed", String(permissions === "allow"));
-        mode.classList.toggle("is-open", permissions === "allow");
-        mode.title = permissions === "allow" ? "The agent runs any command with no question" : "Commands outside the usual checks wait for you";
+        const all = permissions === "allow";
+        iconButton(mode, all ? "shieldOff" : "shield", "Allow all commands");
+        mode.setAttribute("aria-pressed", String(all));
+        mode.classList.toggle("is-open", all);
+        mode.title = all
+          ? "All commands allowed: the agent runs any command with no question. Tap to ask first"
+          : "Commands outside the usual checks wait for you. Tap to allow all commands";
       };
       mode.onclick = () => {
         permissions = permissions === "allow" ? "ask" : "allow";
@@ -537,6 +543,7 @@ export function createSession({ write, refresh, notice, context, using, openTask
         show();
       };
       show();
+      sessionAgent().then((agent) => (mode.hidden = agent !== "claude"));
       buttons.append(mode);
     }
     const send = action(current ? "Send" : "Start session", async () => {

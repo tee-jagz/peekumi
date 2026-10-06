@@ -2,7 +2,7 @@
 
 This file records the changes in each release of Peekumi. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version numbers follow [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - 2026-10-05
+## [0.2.0] - 2026-10-06
 
 This is the first public release. Peekumi was called Repo Strata during its development, and the former `strata` command and `STRATA_*` settings still work.
 
@@ -50,6 +50,16 @@ Peekumi is licensed under the Apache License 2.0. The release archives include `
 - A background service, several repositories on one server, and `peekumi repo add` and `remove` without a restart.
 - Private phone access through Tailscale Serve, and an explicit, temporary public option through a Cloudflare Quick Tunnel.
 - Owner and read-only device pairing with revocation, and an installable PWA.
+
+### Safety and reliability
+
+- Session commands: Peekumi alone checks each command. A session rule never covers a command with several parts (including a single `&`), and shells, interpreters, `sudo` and other wrappers, and `git push` get no session rule.
+- The credential files of common tools (`.npmrc`, `.netrc`, AWS `credentials`, SSH keys, keystores, service-account files and Terraform state) are restricted like `.env`: Source and Ask never show them.
+- A file without readable source says why in Source and Details.
+- Follow moves the map but keeps the owner's selection. A reload keeps the place on the map. A phone on its side keeps the header.
+- A session message that arrives while a task runs waits for it. Stop does not start the next turn.
+- Approve and Merge do not hide a flagged instruction: it keeps the task under Needs you, and a merge makes it a draft again.
+- A read-only device shows no owner actions. Agent errors are short sentences without host paths.
 
 ### Brand and documentation
 

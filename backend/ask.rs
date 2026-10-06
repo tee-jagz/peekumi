@@ -732,6 +732,46 @@ async fn openrouter_pass(
 }
 /// Requests one non-executing answer and returns it whole.
 /// Model output is never interpreted as a command or automatic draft.
+/// A plain sentence for an Ask failure. Messages from Peekumi itself stay as they are; the
+/// output of an agent that failed (stack lines, temporary file paths) becomes one short
+/// reason, so the owner sees what to do and nothing of the host's file system.
+pub fn plain_error(e: &anyhow::Error) -> String {
+    let text = e.to_string();
+    let Some((program, detail)) = text.split_once(": ").filter(|(p, _)| p.starts_with('/')) else {
+        if let Some(program) = text.strip_prefix("Cannot start ") {
+            let name = program.rsplit('/').next().unwrap_or(program);
+            return format!("The agent ({name}) cannot start on this computer. Check that it is installed and signed in, then try again. peekumi doctor shows its state.");
+        }
+        if text.starts_with('/') && text.ends_with(" timed out") {
+            return "The agent took too long to answer. Ask again, perhaps about a smaller part.".into();
+        }
+        return text;
+    };
+    let name = program.rsplit('/').next().unwrap_or(program);
+    // The most telling line: an error line if there is one, else the last line that is not
+    // part of a stack. Paths shrink to their file name.
+    let lines: Vec<&str> = detail.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let line = lines
+        .iter()
+        .find(|l| l.contains("Error:") || l.starts_with("error"))
+        .or_else(|| lines.iter().rev().find(|l| !l.starts_with("at ") && !l.starts_with('^')))
+        .copied()
+        .unwrap_or("");
+    let line: String = line
+        .split_whitespace()
+        .map(|w| if w.contains('/') && w.len() > 1 { w.rsplit('/').next().unwrap_or(w) } else { w })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(240)
+        .collect();
+    if line.is_empty() {
+        format!("The agent ({name}) stopped with an error. Try again, or choose another model in Agents.")
+    } else {
+        format!("The agent ({name}) stopped with an error: {line}")
+    }
+}
+
 pub async fn answer(app: &App, body: Value) -> Result<Value> {
     let prepared = prepare(app, &body).await?;
     let engine = ask_engine(app, &body)?;
@@ -888,7 +928,7 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
             done["type"] = json!("done");
             done
         }
-        Err(e) => json!({"type":"error","message":e.to_string()}),
+        Err(e) => json!({"type":"error","message":plain_error(&e)}),
     };
     let _ = events.send(event).await;
 }
@@ -896,6 +936,15 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ask_errors_are_plain_sentences_without_host_paths() {
+        let raw = anyhow::anyhow!("/var/folders/x/T/state/agent: file:///var/folders/x/T/state/agent:12\n    throw Error(\"Unsupported model\");\n    ^\n\nError: Unsupported model\n    at process.processTicks (node:internal)");
+        let plain = plain_error(&raw);
+        assert_eq!(plain, "The agent (agent) stopped with an error: Error: Unsupported model");
+        let missing = plain_error(&anyhow::anyhow!("Cannot start /opt/bin/claude"));
+        assert!(missing.starts_with("The agent (claude) cannot start") && !missing.contains("/opt"));
+        assert_eq!(plain_error(&anyhow::anyhow!("Select a part of the map first")), "Select a part of the map first");
+    }
     #[test]
     fn drafts_that_leave_checks_open_get_another_pass() {
         assert!(left_unchecked("I did not check where that import comes from."));

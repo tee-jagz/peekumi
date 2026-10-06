@@ -35,6 +35,9 @@ const glyphs = {
   discussion: "M3 4h10v7H8l-3 3v-3H3ZM15.5 8H17v7h-1.5v2.5L12 15H9",
   session: "M3 4h14v9h-7l-4 3v-3H3ZM8 7l-2 1.5L8 10M12 7l2 1.5-2 1.5",
   stop: "M6 6h8v8H6Z",
+  // Commands: a shield (ask before commands); open with a slash (all commands allowed).
+  shield: "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7Z",
+  shieldOff: "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7ZM3 3l14 14",
   eye: "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" + ring(10, 10, 2.5),
   eyeOff: "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" + ring(10, 10, 2.5) + "M3.5 3.5l13 13",
   structure: "M3 3h5v4H3ZM12 13h5v4h-5ZM5.5 7v8h6.5",

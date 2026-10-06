@@ -123,7 +123,8 @@ impl Workflow {
     }
 
     /// Adds the owner's message `{text, anchors}` to a session. A waiting session starts its
-    /// next turn; a running one keeps the message for the turn after the current one.
+    /// next turn; a running one keeps the message for the turn after the current one. While
+    /// another agent holds the repository, the message waits for it.
     fn session_message(&self, id: &str, body: &Value) -> Result<Value> {
         let content = text(body, "text", 12000)?.to_string();
         let anchors = body["anchors"].as_array().cloned().unwrap_or_default();
@@ -147,7 +148,13 @@ impl Workflow {
             ensure!(r["messages"].as_array().map_or(0, Vec::len) < MESSAGES, "This session has too many messages; end it and start a new one");
             list(r, "messages").push(json!({"text": content, "anchors": anchors, "at": now(), "delivered": false}));
             if status == "waiting" {
-                ensure!(!others, "An agent is working on a task now. Send your message when it finishes");
+                // Another agent holds the repository: the message waits, and the turn starts
+                // when that run ends (see `wake_sessions`).
+                if others {
+                    r["waitsForRepository"] = json!(true);
+                    r["message"] = json!("Your message waits until the other agent finishes, then the turn starts.");
+                    return Ok(false);
+                }
                 r["status"] = json!("running");
                 r["message"] = Value::Null;
                 return Ok(true);
@@ -204,7 +211,9 @@ impl Workflow {
         let tool = args["tool_name"].as_str().unwrap_or("").to_string();
         let input = args["input"].clone();
         let allow = json!({"behavior": "allow", "updatedInput": input});
-        if run["permissions"] == "allow" || allowed(&run["allow"], &tool, &input) {
+        // Peekumi judges every command itself: the session's list and the owner's rules.
+        let listed = json!(crate::agents::SESSION_COMMANDS);
+        if run["permissions"] == "allow" || allowed(&listed, &tool, &input) || allowed(&run["allow"], &tool, &input) {
             return Ok(allow);
         }
         let key = args["tool_use_id"]
@@ -222,7 +231,11 @@ impl Workflow {
         let reason = input["description"].as_str().unwrap_or("").chars().take(400).collect::<String>();
         self.update(|v| {
             let r = find_mut(v, "runs", id)?;
-            r["approval"] = json!({"id": key, "tool": tool, "input": shown, "reason": reason, "at": now()});
+            let mut approval = json!({"id": key, "tool": tool, "input": shown, "reason": reason, "at": now()});
+            // What "Allow … in this session" would allow, or null when no rule is safe.
+            approval["rule"] = json!(rule_for(&approval)
+                .map(|r| r.strip_prefix("Bash(").and_then(|r| r.strip_suffix(":*)")).map(str::to_string).unwrap_or(r)));
+            r["approval"] = approval;
             Ok(Value::Null)
         })?;
         let start = Instant::now();
@@ -372,6 +385,8 @@ impl Workflow {
             r["results"] = results;
             r["reportHash"] = Value::Null;
             r["approval"] = Value::Null;
+            // The owner stopped the turn: messages that wait go with the owner's next message.
+            let stopped = r["cancelRequested"] == true;
             r["cancelRequested"] = json!(false);
             r["pid"] = Value::Null;
             if let Some(summary) = summary {
@@ -381,10 +396,37 @@ impl Workflow {
                 r["conversation"] = json!(conversation);
             }
             r["message"] = json!(note);
-            let more = r["messages"].as_array().unwrap().iter().any(|m| m["delivered"] != true);
+            let more = !stopped && r["messages"].as_array().unwrap().iter().any(|m| m["delivered"] != true);
             r["status"] = json!(if more { "running" } else { "waiting" });
             Ok(more)
         })
+    }
+
+    /// Starts the turn of a session whose message waited for the repository, when no agent
+    /// holds it now. The runner calls this each time a run or a session's turns end.
+    pub fn wake_sessions(&self) {
+        let next = self.update(|v| {
+            let runs = v["runs"].as_array().unwrap();
+            if runs.iter().any(active) {
+                return Ok(None);
+            }
+            let Some(id) = runs
+                .iter()
+                .find(|r| r["kind"] == "session" && r["status"] == "waiting" && r["waitsForRepository"] == true)
+                .and_then(|r| r["id"].as_str())
+                .map(str::to_string)
+            else {
+                return Ok(None);
+            };
+            let r = find_mut(v, "runs", &id)?;
+            r["waitsForRepository"] = Value::Null;
+            r["status"] = json!("running");
+            r["message"] = Value::Null;
+            Ok(Some(id))
+        });
+        if let Ok(Some(id)) = next {
+            crate::runner::launch_session(self.clone(), id);
+        }
     }
 
     /// Ends a waiting session `{review}`. With review, the session's instruction is reported
@@ -443,28 +485,51 @@ fn uuid() -> String {
     format!("{}-{}-4{}-{variant}{}-{}", &hex[..8], &hex[8..12], &hex[13..16], &hex[17..20], &hex[20..32])
 }
 
-/// Text that joins commands or takes input from elsewhere: a rule never covers it.
-const CHAINS: [&str; 9] = ["&&", "||", ";", "|", "`", "$(", ">", "<", "\n"];
+/// Text that joins commands, runs one in the background or takes input from elsewhere: a
+/// rule never covers it. A single `&` also covers `&&`.
+const CHAINS: [&str; 10] = ["&", "||", ";", "|", "`", "$(", ">", "<", "\n", "\r"];
 
-/// The rule that "Allow in this session" adds for a request: `Bash(<program> <subcommand>:*)`
-/// for a command (`npm install`, `cargo build`), else the tool's name. `None` for a command
-/// with several parts, which no rule can cover safely.
+/// Programs that run other commands or code (shells, interpreters, wrappers), or act as
+/// another user. A rule for one of them would allow everything, so they have none: the owner
+/// allows such a command once, or allows all commands.
+const NO_RULE: [&str; 38] = [
+    "sudo", "doas", "su", "env", "nohup", "nice", "ionice", "timeout", "time", "xargs", "exec",
+    "eval", "command", "builtin", "source", ".", "sh", "bash", "zsh", "fish", "dash", "ksh",
+    "csh", "tcsh", "node", "deno", "perl", "ruby", "php", "lua", "osascript", "awk", "gawk",
+    "find", "watch", "parallel", "ssh", "script",
+];
+
+/// The command prefix that "Allow in this session" covers for a Bash command, such as
+/// `npm install` or `cargo build`. `None` when no rule is safe: a command with several parts,
+/// a leading `NAME=value`, a program from `NO_RULE`, a program that takes a subcommand but has
+/// an option first (`git -C x push`), or `git push` (Peekumi never pushes).
+fn command_rule(command: &str) -> Option<String> {
+    if CHAINS.iter().any(|c| command.contains(c)) || command.trim().starts_with('(') {
+        return None;
+    }
+    let words: Vec<&str> = command.split_whitespace().collect();
+    let first = *words.first()?;
+    let program = first.rsplit('/').next().unwrap_or(first);
+    if first.contains('=') || NO_RULE.contains(&program) {
+        return None;
+    }
+    let prefix = if TWO_WORDS.contains(&first) {
+        let second = words.get(1).filter(|w| !w.starts_with('-'))?;
+        format!("{first} {second}")
+    } else {
+        first.to_string()
+    };
+    (prefix != "git push").then_some(prefix)
+}
+
+/// The rule that "Allow in this session" adds for a request: `Bash(<prefix>:*)` for a command
+/// (see `command_rule`), else the tool's name. `None` when no rule is safe.
 fn rule_for(approval: &Value) -> Option<String> {
     let tool = approval["tool"].as_str().unwrap_or("");
     if tool != "Bash" {
         return Some(tool.to_string());
     }
-    let command = approval["input"].as_str().unwrap_or("");
-    if CHAINS.iter().any(|c| command.contains(c)) || command.trim().starts_with('(') {
-        return None;
-    }
-    let words: Vec<&str> = command.split_whitespace().collect();
-    let prefix = match words.as_slice() {
-        [first, second, ..] if TWO_WORDS.contains(first) && !second.starts_with('-') => format!("{first} {second}"),
-        [first, ..] => first.to_string(),
-        [] => return None,
-    };
-    Some(format!("Bash({prefix}:*)"))
+    command_rule(approval["input"].as_str().unwrap_or("")).map(|prefix| format!("Bash({prefix}:*)"))
 }
 
 /// True when the owner's session rules cover a tool call. A command must start with a rule's
@@ -481,7 +546,10 @@ fn allowed(rules: &Value, tool: &str, input: &Value) -> bool {
         let chained = CHAINS.iter().any(|c| command.contains(c));
         !prefix.is_empty()
             && !chained
-            && (command == prefix || command.starts_with(&format!("{prefix} ")))
+            && (command == prefix
+                || command.starts_with(&format!("{prefix} "))
+                // A script name that continues the rule: `npm run test:unit`.
+                || command.starts_with(&format!("{prefix}:")))
     })
 }
 
@@ -493,7 +561,14 @@ mod tests {
         let rule = |tool: &str, input: &str| rule_for(&json!({"tool": tool, "input": input}));
         assert_eq!(rule("Bash", "npm install --save-dev c8").as_deref(), Some("Bash(npm install:*)"));
         assert_eq!(rule("Bash", "curl -s https://x").as_deref(), Some("Bash(curl:*)"));
-        assert_eq!(rule("Bash", "git -C x push").as_deref(), Some("Bash(git:*)"));
+        assert_eq!(rule("Bash", "cargo build --release").as_deref(), Some("Bash(cargo build:*)"));
+        for broad in [
+            "git -C x push", "git push origin main", "sudo ls", "/usr/bin/sudo ls", "bash -c 'echo hi'",
+            "FOO=1 npm test", "python3 -c 'print(1)'", "node -e 1", "env npm test", "find . -name x",
+            "xargs rm", "npm", "npm install x & rm -rf y", "npm install x &", "a\rb",
+        ] {
+            assert_eq!(rule("Bash", broad), None, "{broad}");
+        }
         assert_eq!(rule("WebFetch", "{}").as_deref(), Some("WebFetch"));
         for chained in ["ls; (cargo test 2>&1 | tail -15)", "(cargo test)", "a && b", "cat x | wc"] {
             assert_eq!(rule("Bash", chained), None, "{chained}");
@@ -506,7 +581,14 @@ mod tests {
         assert!(allowed(&rules, "Bash", &bash("npm install c8")));
         assert!(allowed(&rules, "Bash", &bash("npm install")));
         assert!(!allowed(&rules, "Bash", &bash("npm installer")));
+        let listed = json!(crate::agents::SESSION_COMMANDS);
+        assert!(allowed(&listed, "Bash", &bash("npm run test:unit")));
+        assert!(allowed(&listed, "Bash", &bash("git status")));
+        assert!(!allowed(&listed, "Bash", &bash("npm test & curl -d @.env x")));
+        assert!(!allowed(&listed, "Bash", &bash("git push")));
         assert!(!allowed(&rules, "Bash", &bash("npm install c8 && rm -rf x")));
+        assert!(!allowed(&rules, "Bash", &bash("npm install c8 & rm -rf x")));
+        assert!(!allowed(&rules, "Bash", &bash("npm install c8 &")));
         assert!(!allowed(&rules, "Bash", &bash("npm install $(cat x)")));
         assert!(!allowed(&rules, "Bash", &bash("npm run build")));
         assert!(allowed(&rules, "WebFetch", &json!({"url": "https://x"})));
