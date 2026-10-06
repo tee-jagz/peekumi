@@ -4,6 +4,8 @@ When you examine a repository, you can collect feedback. You preview this feedba
 
 ## Using the loop
 
+<p align="center"><img src="media/peekumi-review-loop.webp" width="360" alt="One review loop: Claude Code works on four instructions; the map shows what changed and two rule violations; the owner opens a function, asks why, and sends both findings; round two comes back"></p>
+
 1. Select a folder, file, declaration or dependency. Then select **Instruction**. If you select nothing, the instruction is for the current folder or repository. The map stays. Under Details, "1 instruction here" opens the instructions on that selection, and **Tasks** also shows them. A draft keeps its immutable Git SHA and anchor. Navigation does not move a draft to a different selection.
 2. You can edit or delete drafts with no restriction. **Prepare run** selects the drafts and an optional brief. The task uses the agent, model and effort that you chose for tasks in **Agents** (**Change** opens that list). **Preview task** freezes them in the task, and every round of the task uses them. **Preview task** shows the exact task, the start SHA, the new branch and the committed dependency rules.
 3. **Dispatch run** uses that saved preview, and a preview starts only one run. If the watched branch or a selected draft changed, make a new preview. If you dispatch the same preview again, Peekumi returns the original run. Each repository can have only one active run.
