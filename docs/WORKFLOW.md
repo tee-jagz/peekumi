@@ -4,7 +4,7 @@ When you examine a repository, you can collect feedback. You preview this feedba
 
 ## Using the loop
 
-1. Select a folder, file, declaration or dependency. Then select **Instruction**. If you select nothing, the instruction is for the current folder or repository. **Discussion** shows the saved drafts for that selection, and **Tasks** also shows them. A draft keeps its immutable Git SHA and anchor. Navigation does not move a draft to a different selection.
+1. Select a folder, file, declaration or dependency. Then select **Instruction**. If you select nothing, the instruction is for the current folder or repository. The map stays. Under Details, "1 instruction here" opens the instructions on that selection, and **Tasks** also shows them. A draft keeps its immutable Git SHA and anchor. Navigation does not move a draft to a different selection.
 2. You can edit or delete drafts with no restriction. **Prepare run** selects the drafts and an optional brief. The task uses the agent, model and effort that you chose for tasks in **Agents** (**Change** opens that list). **Preview task** freezes them in the task, and every round of the task uses them. **Preview task** shows the exact task, the start SHA, the new branch and the committed dependency rules.
 3. **Dispatch run** uses that saved preview, and a preview starts only one run. If the watched branch or a selected draft changed, make a new preview. If you dispatch the same preview again, Peekumi returns the original run. Each repository can have only one active run.
 4. Monitor the progress in **Tasks**. Examine the agent output, the original task and the result commits. **Stop run** stops the agent process group. The maximum time for a run is one hour. Logs keep the first MiB, and Peekumi drains the output that follows.
@@ -107,7 +107,7 @@ A **Session** is a live conversation with an agent. Use it when you want to work
 
 **Names are links.** In the conversation, a name in backticks that names one file or declaration is a link, as in Ask. Examples are `backend/main.rs:953`, `has_grant` and `Workflow.route`. Tap it, and the map moves there and puts it in the middle, while the session stays on screen. A session opens at its latest message. Its header stays above the conversation while you scroll: the title, the state (**Working**, **Your turn** or **Needs you**) and the stop button (a small square) while the agent works. Under the conversation, one line gives the agent, turns, commits and cost, and links show the changes on the map, change how the session treats commands, and end the session.
 
-**Point at code.** While a session is open, the dock replies to it. When a part of the map is selected, the message includes it, for example `(About: lookup.rs · route)`.
+**Point at code.** While the session is on screen, its dock is the reply box. Select a part of the map, and the session stays on screen: the next message includes that part, for example `(About: lookup.rs · route)`. On the map, the dock's Session mode also replies to the open session.
 
 **Commands.** A session agent can run Git on its branch and the usual test commands with no question: `npm test`, `npm run test…`, `cargo test`, `cargo check`, `pytest`, `go test` and `node --test`. For Claude Code, every other command waits for you. Peekumi alone decides which commands run without a question: no command rule goes to Claude Code. The request shows the command and the reason. Write an optional note for the agent, then choose **Allow once**, **Allow … in this session**, **Allow all commands** or **Deny**. After 15 minutes with no answer, the agent continues without the command.
 
@@ -121,7 +121,7 @@ A **Session** is a live conversation with an agent. Use it when you want to work
 
 **Allow all commands.** In this mode, no command waits for you. Set it before you start with the shield next to **Start session** (amber means all commands are allowed; the device keeps your choice), or change it at any time with **Commands: ask first** under the conversation. The shield and the link show only when sessions use Claude Code: Codex runs with its own preset, and OpenRouter runs no commands. **Allow all commands** on a request also sets it. The next turn starts the agent in the new mode, and a request that waits is allowed at once.
 
-**While you look elsewhere.** When a session is open and its view is not on screen, a small Peek shows at the top right of the sheet, on every sheet height: working, thinking (the agent needs you) or ready (your turn). One line in place of the description says what the agent does now, with the command or file highlighted, for example "Working `cargo test`". Tap the line to open the session. Tap Peek to switch between the line and the description of the selected part of the map. When you select a part of the map, the sheet shows its description. When the agent asks to run a command, the line comes back.
+**While you look elsewhere.** When a session is open and its view is not on screen, a small Peek and one word show at the right of the sheet's title row, on every sheet height: **Working**, **Needs you** or **Your turn**. They take no row of their own and never cover the selection's description. Tap them to open the session. Their accessible name says what the agent does now, for example "Working: Ran `cargo test`". A task at work shows in the same place. Conversations lists every open session.
 
 **Agent focus.** The map shows where the agent looks. This works for a session, for a task while its agent works, and for an Ask answer while it reads the code (its lookups). One shows at a time: an agent at work first, else the latest. After an Ask answer, its trail stays until the next question. Peekumi finds the place from every step: a file that the agent reads or changes, a folder that it searches, a file path in a command (for example `sed -n 1,40p backend/lookup.rs`), and a file and declaration in a map lookup (for example `read_declaration route`).
 
@@ -153,13 +153,15 @@ On a desktop, keys run the actions: Enter opens, A asks, I adds an instruction, 
 
 ## The back button
 
-The phone's back button, and the browser's back, step back inside Peekumi before they leave it. Each press undoes one layer, the most recent first: an open menu, popover or dialog; a task's or session's branch that you explore on the map; a task or session (back to the Tasks list); the Tasks list; another sheet view such as Ask or Source (back to the details); the selection; and then one level up on the map. When nothing is left, back leaves Peekumi as usual.
+The phone's back button, the browser's back, Escape and the back arrow of a page all do the same thing: they go back to the view before. Peekumi keeps one stack of views (`frontend/nav.js`). The map's own views (Details, Source, Changes and Relations) are its base. A page opens on top of the view that you looked at: Conversations, Ask, a session, Tasks, History, the task form, a task, or the instructions on a selection. Exploring a task's branch on the map is a view too, and going back from it returns the map to the branch and base that it left.
+
+Each press undoes one layer, the most recent first: an open menu, popover or dialog; the view on top; another aspect of the map (back to Details); the selection; and then one level up on the map. When nothing is left, back leaves Peekumi as usual. A list or a task gives way to the map when you select a card (Back returns to it); a conversation stays on screen, and the card becomes the subject of its next message.
 
 ## Ask versus Instruction
 
 **Ask** and **Instruction** stay visible at the bottom edge. They are outside the review content that scrolls, which includes source, diffs, dependencies and run results. The question or draft input stays directly below the mode switch, and its anchor and revision are visible. The two modes use the selected item or the current folder/repository scope. If you reopen an unfinished instruction, it keeps its original anchor and text.
 
-To get direct Details, Source, Changes, Relations and Discussion views, drag the sheet up. Commit mini cards show above the graph only in Time mode. Diff uses base/head selectors. **Discussion** shows the conversation that matches the box: Ask questions and answers, or the instructions on the selection. **Tasks** contains each draft, preparation and progress.
+To get direct Details, Source, Changes and Relations views, drag the sheet up. Commit mini cards show above the graph only in Time mode. Diff uses base/head selectors. A question opens the Ask page, where the dock is the question box; **Conversations** opens it again later. **Tasks** contains each draft, preparation and progress.
 
 Ask is a contextual conversation that uses the installed, signed-in Claude Code client. All built-in tools, skills and other MCP servers are disabled for Ask. Ask makes no provider call until the owner sends a question. Source and comparison context, static relationships, committed rules and scoped instructions have limits. Ask tells you about all omissions.
 
@@ -167,7 +169,7 @@ Ask runs Claude Code. Choose its model and effort in **Agents**. Without a choic
 
 ## Agents
 
-**Agents** has one row for each job: **Ask** answers questions, and **Tasks** change code. Open it from the chip next to the composer, which shows what the current mode uses, or from **Agents** in the Tasks view. For each job, select a provider, then one of its models, then an effort:
+**Agents** has one row for each job: **Ask** answers questions, and **Tasks** change code. Open it from the chip next to the composer, which shows what the current mode uses, or from the **Agents** icon in the Tasks header. For each job, select a provider, then one of its models, then an effort:
 
 - **Provider:** for Ask, Claude Code or OpenRouter. For tasks, Claude Code, Codex or OpenRouter. A provider that is not ready is grey and shows the reason, for example "Not signed in. Run codex login on your computer".
 - **Model:** **Default** (the model that the provider uses on its own), the models that the provider reports, or **Other model**, which accepts any model name.

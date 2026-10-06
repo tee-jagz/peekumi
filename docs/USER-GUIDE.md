@@ -15,7 +15,9 @@ The command `node scripts/guide-screenshots.mjs` makes the screenshots and icon 
 - [Moving through history](#moving-through-history)
 - [Selecting something](#selecting-something)
 - [The review sheet](#the-review-sheet): Details, Source, Changes, Relations
+- [Pages and the way back](#pages-and-the-way-back)
 - [Ask, instructions and tasks](#ask-instructions-and-tasks)
+- [Conversations](#conversations)
 - [Sessions](#sessions) and [agent focus](#agent-focus)
 - [The context menu](#the-context-menu)
 - [The back button](#the-back-button)
@@ -28,30 +30,31 @@ The command `node scripts/guide-screenshots.mjs` makes the screenshots and icon 
 
 <img src="guide/01-map.jpg" width="340" alt="The phone layout: the header, the map with its controls on top, and the review sheet at peek height">
 
-The screen has three parts. The header shows the name of the repository and the comparison. The map in the glass card shows the real folders, files and declarations of the repository. The review sheet at the bottom tells you about the item that you look at. The review sheet also contains the Ask and Instruction box.
+The screen has three parts. The header shows the name of the repository and the comparison. The map in the glass card shows the real folders, files and declarations of the repository. The review sheet at the bottom tells you about the item that you look at. The review sheet also contains the dock, where you ask, write instructions and start sessions.
 
 | # | Element | How to use it |
 |---|---|---|
 | 1 | Repository name | The repository that Peekumi inspects. If you register more than one repository, use the comparison popover (2) to change between them. |
 | 2 | Comparison line | Shows the branch and the two commits that Peekumi compares, as `base → head`. Tap it to change the branch, head, base or pull request. |
 | 3 | Time / Diff | **Time** shows commit cards. Use them to go through the history one commit at a time. **Diff** compares any head with any base that you select. |
-| 4 | Tasks | Opens your draft instructions and agent runs. The icon becomes blue when an agent completes work that is ready for review. |
-| 5 | Before / After | Shows in Diff. It changes the map and the source between the base (dot on the left) and the head (dot on the right). |
-| 6 | Card | A folder, file or declaration. Tap it one time to select it. Tap it again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, and plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
-| 7 | Card counts | The number of files in the card that are added, modified or removed, and then the total number of files. |
-| 8 | Home and Up | Home goes back to the repository root. Up goes to the parent folder. At the root, the two buttons are dim. |
-| 9 | Changes only | Hides unchanged cards at all levels. Changed folders stay on the map, so you can still go down into them. |
-| 10 | Zoom out | Zooms the map out. You can also pinch the map. |
-| 11 | Zoom in | Zooms the map in. |
-| 12 | Fit | Makes the full map fit on the screen. |
-| 13 | Reset | Goes back to actual size, with the map aligned to the top. |
-| 14 | Key | Opens the map key. The map key also contains the colour lens. Refer to [Map key](#map-key). |
-| 15 | Sheet handle | Drag it up or down, or tap it, to move the sheet between peek, half and full height. |
-| 16 | Summary | The description of the selection or the current folder. This text comes from committed documentation. You can scroll long text. While more text is available, its last line fades. |
-| 17 | Ask / Instruction / Session | Ask a question about the selection, write an instruction for an agent, or start a [session](#sessions) with an agent. |
-| 18 | Anchor | The subject of your question or instruction, and the commit that it refers to. |
-| 19 | Text field | Type your question or instruction here. |
-| 20 | Send | Sends the question. In Instruction mode, Cancel and Save draft replace this button. |
+| 4 | Conversations | Your Ask conversation and your open sessions. Refer to [Conversations](#conversations). |
+| 5 | Tasks | Your draft instructions and agent tasks: work to send, review and merge. The icon becomes blue when an agent completes work that is ready for review. |
+| 6 | Before / After | Shows in Diff. It changes the map and the source between the base (dot on the left) and the head (dot on the right). |
+| 7 | Card | A folder, file or declaration. Tap it one time to select it. Tap it again to open it. The tint shows its change: orange is modified, green is added, red and dashed is removed, and plain is unchanged. A modified declaration also shows which parts changed: signature, documentation or implementation. |
+| 8 | Card counts | The number of files in the card that are added, modified or removed, and then the total number of files. |
+| 9 | Home and Up | Home goes back to the repository root. Up goes to the parent folder. At the root, the two buttons are dim. |
+| 10 | Changes only | Hides unchanged cards at all levels. Changed folders stay on the map, so you can still go down into them. |
+| 11 | Zoom out | Zooms the map out. You can also pinch the map. |
+| 12 | Zoom in | Zooms the map in. |
+| 13 | Fit | Makes the full map fit on the screen. |
+| 14 | Reset | Goes back to actual size, with the map aligned to the top. |
+| 15 | Key | Opens the map key. The map key also contains the colour lens. Refer to [Map key](#map-key). |
+| 16 | Sheet handle | Drag it up or down, or tap it, to move the sheet between peek, half and full height. |
+| 17 | Summary | The description of the selection or the current folder. This text comes from committed documentation. You can scroll long text. While more text is available, its last line fades. |
+| 18 | Ask / Instruction / Session | Ask a question about the selection, write an instruction for an agent, or start a [session](#sessions) with an agent. |
+| 19 | Anchor | The subject of your question or instruction, and the commit that it refers to. |
+| 20 | Text field | Type your question or instruction here. |
+| 21 | Send | Sends the question. In Instruction mode, Cancel and Save draft replace this button. |
 
 The lines between cards are static dependencies: imports, calls, implementations and inheritance that Peekumi finds in the code. They do not show runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
 
@@ -151,10 +154,9 @@ Drag the sheet up to half or full height to inspect the selection. The view butt
 | 2 | Source | The code, as a diff or as the Before or After version. |
 | 3 | Changes | Changed files or declarations in the current scope, and file search. |
 | 4 | Relations | Dependencies, dependency rules and their evidence. |
-| 5 | Discussion | Shows the conversation for the selection that agrees with the box below: your Ask questions and answers, or the instructions on the selection. |
-| 6 | Facts | One quiet line after the content: the line range, or the file and change counts for a folder. |
-| 7 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. It is next to the facts. |
-| 8 | Clear selection | Removes the selection and sets the sheet back to the current folder or file. |
+| 5 | Facts | One quiet line after the content: the line range, or the file and change counts for a folder. |
+| 6 | Main action | The next step for this selection, such as **View source**, **Open file**, **Open folder** or **Show evidence**. It is next to the facts. |
+| 7 | Clear selection | Removes the selection and sets the sheet back to the current folder or file. |
 
 Expanded Details is the peek view in full. It shows the full description and the same **In** and **Out** lines, with parameter defaults. It also shows notes on parameters where the code documents them. For a folder, it shows the README or package docstring of the folder as plain text, with a link to the full file. At the end, a small **adapter** note gives the name of the language adapter that read the file. Tap the note to see what the adapter extracts and its limits.
 
@@ -193,6 +195,16 @@ Only the open view button has a label. The other view buttons show only their ic
 | 5 | Resolved evidence | Each relationship that Peekumi found in the code, with a link that opens the exact source line. |
 | 6 | Unresolved targets | References that Peekumi cannot resolve with certainty, and the reason. Peekumi lists these references and does not guess. |
 
+## Pages and the way back
+
+The sheet shows the map's own views (Details, Source, Changes and Relations), or a page: Conversations, Ask, a session, Tasks, a task, History, or the instructions on a selection. A page opens over the view that you looked at, and it takes the whole sheet.
+
+Each page has one header row: a back arrow, its title and its few actions. The arrow, the phone's back button and Escape all do the same thing: they go back to the view before. From another aspect of the map, Back returns to Details. When nothing is open, Back clears the selection, then goes up one level of the map, and then leaves Peekumi.
+
+When you select a card from a list or a task, the map opens over it, and Back returns to the list or the task. A tap on an empty part of the map closes a list or a task. In Ask or a session, the conversation stays on the screen when you select a card: the card becomes the subject of your next message.
+
+The dock follows the page. On the map it has three modes: Ask, Instruction and Session. In a conversation it is that conversation's box. On a task that can take changes, it is the box for those changes. A list has no dock.
+
 ## Ask, instructions and tasks
 
 **Ask** uses Claude Code on this computer to answer questions about the selection. It reads only committed code. It cannot run, change or send anything. For a file or declaration, it reads the source and its diff. It also reads what the code calls, imports or inherits, and what calls the code. For a folder or the whole repository, it reads the README of that folder, the declarations in it and the diffs of its changed files.
@@ -205,7 +217,7 @@ If the answer ends with a suggested instruction, **Save as draft instruction** k
 
 ### Agents
 
-Tap the chip next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. **Agents** in the Tasks view opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
+Tap the chip next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. The **Agents** icon (two sliders) in the header of the Tasks page opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
 
 1. Select the provider. For Ask: Claude Code, or OpenRouter (any model, with your API key). For tasks: Claude Code, Codex or OpenRouter. With OpenRouter, Peekumi runs the model itself: it reads, searches, edits and commits files in the worktree of the task, but it cannot run commands or tests. The first time that you select OpenRouter, paste your API key and tap **Test and save**.
 2. Select a model. **Default** is the model that the provider uses on its own. The other models come from the provider. **Other model** lets you type the name of a model.
@@ -215,7 +227,7 @@ A provider that is not ready is grey and shows the reason. The choice stays on t
 
 The **Back to task** chip shows the number of changes that wait ("2 to send"). The task lists those changes, and you can edit them. The button below the list sends them together, for example **Send 2 changes to Codex**.
 
-One conversation continues for the session. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. Each branch has its own conversation. When you explore the branch of an agent, Ask shows the conversation for that branch. When you go back, Ask shows the conversation for your branch again. Peekumi keeps each conversation, so a reload or an app update does not remove it. **New conversation** clears the conversation for the branch that you see.
+When you send a question, the Ask page opens, and its dock is the question box. To open it again later, use [Conversations](#conversations). One conversation continues for the branch. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. Each branch has its own conversation. When you explore the branch of an agent, Ask shows the conversation for that branch. When you go back, Ask shows the conversation for your branch again. Peekumi keeps each conversation, so a reload or an app update does not remove it. The **+** in the header of the Ask page starts a new conversation for the branch that you see.
 
 <img src="guide/11-comment.jpg" width="340" alt="The Instruction box while you write a draft instruction">
 
@@ -225,7 +237,7 @@ One conversation continues for the session. It stays on the screen while you mov
 | 2 | Anchor | The selection and commit that the instruction is attached to. It stays attached if you go to a different location before you save. |
 | 3 | Instruction text | Describe the change that you want and the reason for it. |
 | 4 | Cancel | Discards the unsent instruction. |
-| 5 | Save draft | Saves the instruction as a draft. Discussion shows the draft for that selection. Drafts are private until you send them to an agent. |
+| 5 | Save draft | Saves the instruction as a draft. The map stays. Details then shows "1 instruction here", which opens the instructions on that selection, and Tasks lists the draft. Drafts are private until you send them to an agent. |
 
 <img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft instruction">
 
@@ -233,14 +245,15 @@ One conversation continues for the session. It stays on the screen while you mov
 |---|---|---|
 | 1 | Review task | Makes a task from your drafts. Select the drafts and optional extra instructions. The task uses your choice for tasks in **Agents**; **Change** opens it. Then look at a preview of the exact task before you start it. |
 | 2 | Draft | A saved instruction with its anchor and commit. You can edit or delete it while it is a draft. |
+| 3 | Back | Goes back to the view before. The phone's back button does the same. |
 
 After a task starts, the same view shows the progress of the agent, the checks that the agent reports and the commits that it made. The task first shows its state, then each instruction and the result from the agent. **Explore changes** shows all the work of the agent on the map, compared with the commit that the task started from. **Back to task** takes you back to the task and your previous view. **Agent log** contains the messages of the agent, the raw events and the generated task.
 
 **Approve** records your review. To add a note, tap **Add note** first. To ask for changes, write each change in the box at the bottom of the task and tap ✓. Peekumi adds the change to the list of the task. **Request changes** puts the cursor in that box. Then tap the button below the list, for example **Send 1 change to Codex**. The same agent starts the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. To open an earlier round, use **Open round N** in the latest round.
 
-The Tasks list puts tasks in groups by what they need from you. **Needs you** has drafts and tasks to review. **Working** has the tasks that an agent works on now. **Done · waiting to merge** has approved tasks that you did not merge yet, and these are muted. When a task is applied to main, it goes to **History**. A link at the bottom of the list opens History. On a selection, approved instructions and instructions of applied tasks go into one line, "N earlier instructions", which opens when you tap it.
+Tasks hold only work. An open session is a conversation, so it is in Conversations; after **Send to review** it becomes a task. The Tasks list puts tasks in groups by what they need from you. **Needs you** has drafts and tasks to review. **Working** has the tasks that an agent works on now. **Done · waiting to merge** has approved tasks that you did not merge yet, and these are muted. When a task is applied to main, it goes to **History**. A link at the bottom of the list opens History. On a selection, approved instructions and instructions of applied tasks go into one line, "N earlier instructions", which opens when you tap it.
 
-The Tasks button is a toggle. To go back to the map selection, tap it again or tap an empty area of the map. While an agent works, Peek works inside the Tasks button in all parts of the app. Tap the button to open that task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
+The Tasks button opens the Tasks list over the current view. Tap it again, or tap an empty area of the map, to go back. While an agent works, Peek works inside the Tasks button, and a small Peek with **Working** shows at the right of the sheet's title row. Tap it to open the task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
 
 Approval of a task does not change your code. After you approve, the task shows **Ready to merge into main**, with the number of commits and changed files. Tap **Merge into main**, then **Merge** to confirm. Peekumi does a fast-forward of main to the last commit of the task. It never pushes. After the merge, the task shows **Merged into main** and an **Undo merge** button. Undo works until main changes.
 
@@ -256,7 +269,7 @@ To start a session, select a part of the map and tap **Session** in the dock. Wr
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Header | The title and the state of the session: **Working**, **Your turn** or **Needs you**. While the agent works, the small square stops the turn. The arrow takes you back to the Tasks list. |
+| 1 | Header | The title and the state of the session: **Working**, **Your turn** or **Needs you**. While the agent works, the small square stops the turn. The arrow takes you back to the view before. |
 | 2 | Command request | Claude Code asks before it runs a command that is not on the session's list. The request shows the command and the reason. |
 | 3 | Answer | **Allow once**, **Allow … in this session**, **Allow all commands** or **Deny**. You can add a note for the agent. |
 | 4 | Reply | Your next message to the agent. If a part of the map is selected, the message includes it. If you send while the agent works, the message waits for the next turn. |
@@ -279,10 +292,21 @@ The map shows where the agent looks. This works for a session, for a task while 
 | 2 | Trail | The places before the current one keep an outline that fades with age. |
 | 3 | Changed | An amber dot marks a file that the session changed, or a folder that holds one. |
 | 4 | Follow | Tap the eye to move the map with the agent. The map puts the agent's place in the middle. When you move the map yourself, Follow pauses. Tap the eye again to continue. |
-| 5 | Session line | When the session is not on the screen, this line tells what the agent does now. Tap it to open the session. |
-| 6 | Peek | Tap it to switch between the session line and the description of the selection. Peek shows the state: it works while the agent works, it thinks when the agent needs you, and it rests when it is your turn. |
+| 5 | Live line | When the session, or a task at work, is not on the screen, a small Peek and one word show at the right of the sheet's title row: **Working**, **Needs you** or **Your turn**. Tap them to open the session or the task. |
 
 The map key explains the three marks while a session is open.
+
+## Conversations
+
+<img src="guide/18-conversations.jpg" width="340" alt="The Conversations page with an open session and the Ask conversation">
+
+Conversations holds the talks with agents: your open sessions and the Ask conversation of the branch on the map. Open it with the Conversations button in the header.
+
+| # | Element | How to use it |
+|---|---|---|
+| 1 | Back | Goes back to the view before. |
+| 2 | Session | An open session, with its state. Tap it to open the session. |
+| 3 | Ask | The Ask conversation of this branch, with your last question. Tap it to read it and ask more. |
 
 ## The context menu
 
@@ -345,7 +369,7 @@ Each icon button has a name. The name shows as a tooltip, and screen readers rea
 | <img src="guide/icons/glyph-source.svg" width="20" alt=""> | Source | Code and diff. |
 | <img src="guide/icons/glyph-changes.svg" width="20" alt=""> | Changes | Changed files and search. |
 | <img src="guide/icons/glyph-relations.svg" width="20" alt=""> | Relations | Dependencies and rules. |
-| <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Discussion | Your Ask conversation, or the instructions on the selection. |
+| <img src="guide/icons/glyph-discussion.svg" width="20" alt=""> | Conversations | Your Ask conversation and your open sessions. |
 | <img src="guide/icons/glyph-ask.svg" width="20" alt=""> | Ask | Ask a question about the selection. |
 | <img src="guide/icons/glyph-comment.svg" width="20" alt=""> | Instruction | Write an instruction for an agent. |
 | <img src="guide/icons/glyph-pin.svg" width="20" alt=""> | Anchor | The subject of the question or instruction. |
@@ -354,6 +378,7 @@ Each icon button has a name. The name shows as a tooltip, and screen readers rea
 | <img src="guide/icons/glyph-close.svg" width="20" alt=""> | Cancel or close | Discard, or close a popover. |
 | <img src="guide/icons/glyph-copy.svg" width="20" alt=""> | Copy | Copy the command that applies a reviewed task. |
 | <img src="guide/icons/glyph-refresh.svg" width="20" alt=""> | Refresh | Look for new commits. |
+| <img src="guide/icons/glyph-agents.svg" width="20" alt=""> | Agents | In the Tasks header: choose the provider, model and effort for Ask and for tasks. |
 
 ### Change status
 

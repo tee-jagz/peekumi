@@ -152,7 +152,12 @@ export function createWorkflow({
   // The agent choice for tasks and Ask on this device (see agents.js).
   agents,
   context,
-  showTab,
+  // The view stack (nav.js): which list, form or run the sheet shows, and the way back.
+  nav,
+  // The header row of a page (app.js viewHead): back, a title, a quiet line and actions.
+  head = () => {},
+  // Opens the map's dock in Instruction mode, for a new instruction (app.js).
+  writeInstruction = () => {},
   redraw,
   notice,
   inspect,
@@ -174,21 +179,19 @@ export function createWorkflow({
   let composer = null,
     draft = "",
     editing = null,
-    preview = null,
-    preparing = false;
-  // The end of an open session's log while another view is open (see sessionPeek).
+    preview = null;
+  // The end of an open session's log while another view is open (see cueLive).
   let sessionTail = null;
   let brief = "",
     picks = new Set(),
-    runId = null,
     runDetail = null,
     // The open task's merge state from the server (see backend/merge.rs), or null.
     mergeInfo = null,
     // Below a finished task's actions: null, or "note" while the Approve note is open.
     reply = null;
-  // "here" lists comments on the current selection; "all" is the Tasks overview.
-  let filter = "all",
-    verificationNote = "";
+  let verificationNote = "";
+  /** The run on screen (a task or a session), from the view on top, or null. */
+  const runId = () => (nav.view().name === "run" ? nav.view().id : null);
   const write = (path, body, method = "POST") =>
     api(path, {
       method,
@@ -235,22 +238,17 @@ export function createWorkflow({
     pointed: () => ownerPointed,
     sent: () => (ownerPointed = false),
     references: (body) => write("/api/references", body),
-    back: () => {
-      filter = "all";
-      runId = null;
-      showTab("comments");
-    },
+    back: () => nav.back(),
   });
   /** The open session: the one on screen, else the newest still open. */
   function liveSession() {
-    const shown = runDetail && runDetail.id === runId && live(runDetail) ? runDetail : null;
+    const shown = runDetail && runDetail.id === runId() && live(runDetail) ? runDetail : null;
     return shown || data.runs.slice().reverse().find(live) || null;
   }
   /** The finished task on screen, when it can still collect changes for a next round. */
   function viewedTask() {
     const r = runDetail;
-    if (document.querySelector("#panel")?.dataset.view !== "runs" || !r || r.id !== runId)
-      return null;
+    if (!r || r.id !== runId()) return null;
     return !active(r) && !live(r) && r.status !== "preview" && !r.revisedBy && !r.applied ? r.id : null;
   }
   /** Drafts waiting for a new task; those collected for a finished task go back with it. */
@@ -266,13 +264,14 @@ export function createWorkflow({
       .then(async () => {
         data = await api("/api/workflow");
         loaded = true;
-        if (runId) runDetail = await api("/api/runs/" + runId);
+        const shown = runId();
+        if (shown) runDetail = await api("/api/runs/" + shown);
         // A running run or an open session outside its view: only the end of its log, for
         // the sheet's line and the map's agent focus.
         const open = data.runs.slice().reverse().find((r) => active(r) || live(r));
-        sessionTail = open && open.id !== runId ? await api(`/api/runs/${open.id}/tail`).catch(() => null) : null;
+        sessionTail = open && open.id !== shown ? await api(`/api/runs/${open.id}/tail`).catch(() => null) : null;
         // An approved or merged task shows what a merge would do now.
-        const r = runId && runDetail;
+        const r = shown && runDetail?.id === shown && runDetail;
         mergeInfo =
           r && r.status === "completed" && !r.revisedBy && (reviewed(r) || r.merge)
             ? await api(`/api/runs/${r.id}/merge`).catch(() => null)
@@ -281,12 +280,9 @@ export function createWorkflow({
         const signature = JSON.stringify([data, runDetail, mergeInfo]),
           changed = signature !== lastSignature;
         lastSignature = signature;
+        // A poll redraws only a page that shows this data (never the map's own views).
         if (render === "poll")
-          render =
-            changed &&
-            ["comments", "runs", "discussion"].includes(
-              document.querySelector("#panel")?.dataset.view,
-            );
+          render = changed && ["tasks", "history", "instructions", "run", "conversations"].includes(nav.view().name);
         if (render) {
           const focused = document.activeElement;
           const focusLabel = focused?.matches("textarea,input,select")
@@ -301,10 +297,10 @@ export function createWorkflow({
           ]
             .map((d) => d.dataset.key)
             .filter(Boolean);
-          const kept = document.querySelector("#tabBody .task-peek");
+          const kept = document.querySelector("#viewHead .task-peek");
           redraw();
           // The same Peek carries on across a redraw rather than restarting its loop.
-          const fresh = document.querySelector("#tabBody .task-peek");
+          const fresh = document.querySelector("#viewHead .task-peek");
           if (kept && fresh && kept.dataset.state === fresh.dataset.state)
             fresh.replaceWith(kept);
           for (const d of document.querySelectorAll("#tabBody details"))
@@ -338,12 +334,13 @@ export function createWorkflow({
    * polling never restarts the animation. */
   function cueTasks(button, ready) {
     tasksIcon ||= button.querySelector("svg");
-    const running = data.runs.find(active),
+    // Tasks only: an open session shows in the sheet's live line (see cueLive).
+    const running = data.runs.find((r) => active(r) && r.kind !== "session"),
       stuck = !running && data.runs.find(stalled);
     const next = running ? "working" : stuck ? "attention" : ready.length ? "ready" : "";
     const agent = (r) => ({ claude: "Claude Code", codex: "Codex", openrouter: "OpenRouter" })[r.agent] || r.agent;
     const label = running
-      ? `${agent(running)} is working ${running.kind === "session" ? "in a session" : "on a task"}`
+      ? `${agent(running)} is working on a task`
       : stuck
         ? "A task stopped and needs your attention"
         : ready.length
@@ -369,92 +366,68 @@ export function createWorkflow({
       settle = setTimeout(() => cue === "ready" && button.replaceChildren(tasksIcon), 2600);
     } else button.replaceChildren(tasksIcon);
   }
-  // The sheet header's choice while a session is open: "selection" or "session" (null:
-  // the session, until the owner picks the selection or selects a part of the map).
-  let peekMode = null,
-    peekState = "",
-    tailLoading = false;
-  let peekToggle = null;
-  /** For an open session whose view is not on screen: one line in the place of the
-   * selection's description says what the agent does now, and a small Peek at the end of the
-   * row (working, needs you, or your turn) switches between the line and the description. A
-   * command request brings the line forward. The map marks the agent's file. */
-  function sessionPeek() {
-    // One element for the life of the page: the sheet's redraws remove it from its row, and it
-    // goes back into the row below.
-    peekToggle ??= document.querySelector("#peekToggle");
-    const toggle = peekToggle,
-      line = document.querySelector("#sessionLine"),
-      panel = document.querySelector("#panel");
-    if (!toggle || !line || !panel) return;
-    const viewing = panel.dataset.view === "runs" && runDetail?.id === runId && live(runDetail);
-    // On the session itself, the closed sheet hides the conversation: the line takes its place.
-    const closed = viewing && panel.dataset.height === "peek";
-    const open = closed ? runDetail : data.runs.slice().reverse().find(live);
+  /** The sheet's live line: a small Peek and one state word at the right of the sheet's title
+   * row (the selection's name, or a page's header row), for an agent at work or an open
+   * session that is not on screen: a request that waits for the owner first, then work in
+   * progress, then a session that waits for a reply. A tap opens it. It adds no row and no
+   * box. One element for the life of the page: the title rows are drawn again, and it goes
+   * back into the row on screen. It is rebuilt only when what it says changes, so Peek's
+   * animation carries on. */
+  let liveLine = null;
+  function cueLive() {
     // The map shows where the agent is, from every view (see focus.js).
     runFocus();
-    if (!open || (viewing && !closed)) {
-      toggle.hidden = line.hidden = true;
-      panel.dataset.peek = "";
-      return;
-    }
-    // Just out of the session's view: fetch the end of its log now, not at the next poll.
-    if (!closed && open.status === "running" && sessionTail?.id !== open.id && !tailLoading) {
+    liveLine ??= document.querySelector("#liveLine");
+    const line = liveLine;
+    if (!line) return;
+    const row = nav.view().name === "inspect" ? document.querySelector("#reviewScope") : document.querySelector("#viewHead .view-head, #viewHead .session-head");
+    if (row && line.parentElement !== row) row.append(line);
+    const view = nav.view(),
+      runs = data.runs.slice().reverse();
+    const r =
+      runs.find((x) => live(x) && x.approval) ||
+      runs.find((x) => live(x) && x.status === "running") ||
+      runs.find((x) => active(x) && x.kind !== "session") ||
+      runs.find(live);
+    line.hidden = !r || (view.name === "run" && view.id === r.id);
+    if (line.hidden) return;
+    const session = r.kind === "session";
+    // What the agent does now, from the end of its log.
+    const full = runDetail?.id === r.id ? runDetail : sessionTail?.id === r.id ? sessionTail : r;
+    const now = session ? activity(full) : { state: "running", title: "Working", label: taskTitle(r), code: "" };
+    const name = session ? r.title || "Session" : taskTitle(r);
+    // Just out of a running session's view: fetch the end of its log now, not at the next poll.
+    if (session && r.status === "running" && full === r && !tailLoading) {
       tailLoading = true;
-      api(`/api/runs/${open.id}/tail`)
+      api(`/api/runs/${r.id}/tail`)
         .then((tail) => (sessionTail = tail))
         .catch(() => {})
         .finally(() => {
           tailLoading = false;
-          sessionPeek();
+          cueLive();
         });
     }
-    const now = activity(closed ? open : sessionTail && sessionTail.id === open.id ? sessionTail : open);
-    if (now.state === "needs" && peekState !== "needs") peekMode = null;
-    // From the session itself there is no description to switch to.
-    const mode = closed ? "session" : peekMode || "session";
-    panel.dataset.peek = mode;
-    line.hidden = mode !== "session";
-    toggle.hidden = false;
-    // Peek ends whichever row shows: the session line, or the selection's description.
-    const row = mode === "session" ? line : document.querySelector("#reviewScope");
-    if (row && toggle.parentElement !== row) row.append(toggle);
-    toggle.setAttribute("aria-pressed", String(mode === "session"));
-    const shown = closed ? "Open the session" : mode === "session" ? "Show the selection" : `Show the session: ${now.title}`;
-    toggle.setAttribute("aria-label", shown);
-    toggle.title = shown;
-    toggle.onclick = () => {
-      // On the session itself, Peek opens the sheet again, as the line does.
-      if (closed) return showTab("runs");
-      peekMode = mode === "session" ? "selection" : "session";
-      sessionPeek();
-    };
-    // Peek is rebuilt only when its state changes, so its animation carries on.
-    if (peekState !== now.state || !toggle.firstChild) {
-      toggle.dataset.state = now.state;
-      toggle.replaceChildren(peek(now.state === "running" ? "working" : now.state === "needs" ? "thinking" : "ready"));
-    }
-    peekState = now.state;
-    const button = line.querySelector(".session-line-open");
-    // A tap opens the session, or opens the sheet again when the session is already open.
-    button.onclick = () => (closed ? showTab("runs") : openTask(open.id));
-    button.setAttribute("aria-label", `Session ${open.title || ""}. ${now.title}: ${now.label}${now.code ? " " + now.code : ""}. Open the session`);
-    const key = [open.id, now.state, now.label, now.code].join("|");
+    const plain = (t) => t.replace(/[`*#>]/g, "").trim();
+    const label = `${session ? "Session" : "Task"} ${name} · ${now.title}${now.label ? ": " + plain(now.label) : ""}${now.code ? " " + now.code : ""}. Open it`;
+    line.setAttribute("aria-label", label);
+    line.title = label;
+    line.onclick = () => openTask(r.id);
+    const key = [r.id, now.state].join("|");
     if (line.dataset.key === key) return;
     line.dataset.key = key;
     line.dataset.state = now.state;
-    // Plain words: the agent's markdown marks do not belong in one line.
-    const plain = (t) => t.replace(/[`*#>]/g, "").trim();
-    const parts = [el("strong", "session-line-title", now.title), el("span", "session-line-label", plain(now.label))];
-    if (now.code) parts.push(el("code", "session-line-code", now.code));
-    button.replaceChildren(...parts);
+    line.replaceChildren(
+      peek(now.state === "running" ? "working" : now.state === "needs" ? "thinking" : "ready", { className: "live-peek" }),
+      el("span", "live-state", now.title),
+    );
   }
+  let tailLoading = false;
   // True once the owner moved or selected on the map since their last session message.
   let ownerPointed = false;
   /** The run whose agent the map shows (see focus.js): an agent at work first (the one on
    * screen, else any), then the open session on screen, then any open session. */
   function markedRun() {
-    const shown = runDetail?.id === runId ? runDetail : null;
+    const shown = runDetail?.id === runId() ? runDetail : null;
     // The run on screen comes from a later read than the list: its copy is the newer one.
     const all = data.runs.slice().reverse().map((r) => (r.id === shown?.id ? shown : r));
     if (shown && active(shown)) return shown;
@@ -470,7 +443,7 @@ export function createWorkflow({
     focus.set("run", { running: r.status === "running", live: live(r), current: where.current, trail: where.trail, changed: full.changed || [] });
   }
   function bar() {
-    sessionPeek();
+    cueLive();
     const host = document.querySelector("#runBar");
     host.replaceChildren();
     const ready = data.runs.filter(
@@ -482,56 +455,28 @@ export function createWorkflow({
     const tasksButton = document.querySelector("#openTasks");
     // The cue is Peek or the icon colour plus the accessible name, never a count badge.
     if (tasksButton) cueTasks(tasksButton, ready);
-    if (
-      ["comments", "runs"].includes(
-        document.querySelector("#panel")?.dataset.view,
-      )
-    )
-      return;
-    const drafts = data.comments.filter(sendable),
-      // A session shows itself in the sheet's line, not here.
-      running = data.runs.find((r) => active(r) && r.kind !== "session");
+    // Only the map's Details carry this line; work in progress shows in the live line.
+    if (nav.view().name !== "inspect") return;
+    const drafts = data.comments.filter(sendable);
     const waiting = data.comments.filter((c) => c.status === "addressed");
-    if (!drafts.length && !running && !waiting.length) return;
+    if (!drafts.length && !waiting.length) return;
     const b = action(
-      running
-        ? `${agents.label(running.agent)} running · View progress ›`
-        : drafts.length
-          ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Prepare run ›`
-          : `${waiting.length} ready for review ›`,
+      drafts.length
+        ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Prepare run ›`
+        : `${waiting.length} ready for review ›`,
       () => {
-        if (running) {
-          return openTask(running.id);
-        }
-        if (drafts.length) {
-          preparing = true;
-          picks = new Set(drafts.map((c) => c.id));
-          preview = null;
-          showTab("runs");
-        } else {
-          filter = "all";
-          showTab("comments");
-        }
+        if (!drafts.length) return nav.go({ name: "tasks" });
+        picks = new Set(drafts.map((c) => c.id));
+        preview = null;
+        nav.go({ name: "prepare" });
       },
     );
     b.className = "runbar";
     host.append(b);
   }
-  function compose() {
-    if (!composer) {
-      composer = context();
-      editing = null;
-      draft = "";
-    }
-    filter = "here";
-    showTab("comments");
-    document
-      .querySelector("#composerHost textarea")
-      ?.focus({ preventScroll: true });
-  }
+  /** True when instruction `c` is on the map's selection (or inside it). */
   function visible(c) {
     if (c.status === "deleted") return false;
-    if (filter === "all") return true;
     const a = context().anchor;
     if (a.kind === "repo") return true;
     if (a.kind === "symbol")
@@ -592,12 +537,14 @@ export function createWorkflow({
               "PATCH",
             );
           else await write("/api/comments", { ...composer, text: draft });
-          // A new comment stays with its selection; an edit stays in the list it came from.
-          if (!editing) filter = "here";
+          // The view stays: a new draft is counted under Details, and Tasks lists it.
+          if (!editing) {
+            notice("Saved as a draft. Tasks lists it.");
+            setTimeout(() => notice(""), 2500);
+          }
           composer = null;
           draft = "";
           editing = null;
-          showTab("comments");
           await refresh();
         },
         true,
@@ -627,32 +574,28 @@ export function createWorkflow({
       composerHost.append(box);
     }
   }
+  /** A list of instructions: on the map's selection (the "instructions" view), the Tasks
+   * list (the "tasks" view), or the instructions of `task`. */
   function comments(body, task = null) {
-    const here = !task && filter === "here";
+    const name = nav.view().name;
+    const here = !task && name === "instructions";
     if (here) {
-      const top = el("div", "ask-head");
-      top.append(
-        el("p", "read-note", "Instructions here · drafts wait until you send them as a task"),
-        action("All tasks", () => {
-          filter = "all";
-          showTab("comments");
-        }),
-      );
-      body.append(top);
+      head(`Instructions · ${label(context().anchor)}`);
+      body.append(el("p", "read-note", "Drafts wait here until you send them as a task."));
     }
-    const overview = !task && filter === "all";
-    if (!task && filter === "history") {
+    const overview = !task && name === "tasks";
+    if (!task && name === "history") {
       history(body);
       return;
     }
     if (overview) {
       // The Agents sheet opens from here; the line says what a new task uses.
-      const top = el("div", "tasks-top");
-      top.append(
-        el("h2", "task-heading", "Tasks"),
-        Object.assign(action("Agents", () => agents.open(null, () => redraw())), { id: "openAgents" }),
-      );
-      body.append(top);
+      // Agents is a quiet icon in the header row, as the back arrow is.
+      const choose = iconButton(el("button", "view-action"), "agents", "Agents");
+      choose.type = "button";
+      choose.id = "openAgents";
+      choose.onclick = () => agents.open(null, () => redraw());
+      head("Tasks", { actions: [choose] });
       const uses = agents.describe("task");
       if (uses) body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));
       else agents.load().then((c) => c && redraw()).catch(() => {});
@@ -660,9 +603,7 @@ export function createWorkflow({
         .filter((r) => r.status !== "preview" && !r.revisedBy)
         .slice()
         .reverse();
-      const sessions = shown.filter((r) => stageOf(r) === "session");
-      if (sessions.length)
-        body.append(el("h3", "workflow-group", "Sessions"), ...sessions.map((r) => taskCard(r)));
+      // Open sessions are conversations (see Conversations); a session sent to review is work.
       const drafts = data.comments.filter(sendable);
       const needs = shown.filter((r) => stageOf(r) === "needs");
       if (drafts.length || needs.length) body.append(el("h3", "workflow-group", "Needs you"));
@@ -671,10 +612,9 @@ export function createWorkflow({
           action(
             `Review task · ${drafts.length} draft${drafts.length === 1 ? "" : "s"}`,
             () => {
-              preparing = true;
               preview = null;
               picks = new Set(drafts.map((c) => c.id));
-              showTab("runs");
+              nav.go({ name: "prepare" });
             },
             true,
           ),
@@ -721,7 +661,7 @@ export function createWorkflow({
         el(
           "p",
           "empty",
-          loaded ? "Add an instruction below to start a task." : "Loading tasks…",
+          loaded ? "No tasks yet. Write an instruction on the map to start one." : "Loading tasks…",
         ),
       );
     // On a selection, finished instructions (approved, or in an applied task) collapse into
@@ -744,10 +684,7 @@ export function createWorkflow({
         (r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history",
       ).length;
       if (past) {
-        const link = action(`History · ${past}`, () => {
-          filter = "history";
-          showTab("comments");
-        });
+        const link = action(`History · ${past}`, () => nav.go({ name: "history" }));
         link.classList.add("link-button", "history-link");
         body.append(link);
       }
@@ -758,7 +695,7 @@ export function createWorkflow({
     for (const state of Object.keys(states)) {
       const group = list.filter((c) => c.status === state);
       if (!group.length) continue;
-      if (state === "draft" && filter === "all")
+      if (state === "draft" && nav.view().name === "tasks")
         target.append(el("h3", "workflow-group", "Your draft instructions"));
       for (const c of group) {
         const card = el("article", "workflow-card");
@@ -923,8 +860,9 @@ export function createWorkflow({
         "Start task",
         async () => {
           const result = await write("/api/runs", { previewId: preview.id });
-          preparing = false;
           preview = null;
+          // The form is done: the new task takes its place, over the list.
+          nav.back();
           await openTask(result.id);
         },
         true,
@@ -1232,15 +1170,7 @@ export function createWorkflow({
   }
   /** Applied and closed tasks, newest first: the record, out of the way of current work. */
   function history(body) {
-    const row = el("div", "task-head"),
-      back = iconButton(el("button", "btn icon-action"), "back", "Back to tasks");
-    back.type = "button";
-    back.onclick = () => {
-      filter = "all";
-      showTab("comments");
-    };
-    row.append(back, el("h2", "task-heading", "History"));
-    body.append(row);
+    head("History");
     const past = data.runs
       .filter((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) === "history")
       .slice()
@@ -1268,12 +1198,12 @@ export function createWorkflow({
       }[r.status] || r.status
     );
   }
+  /** Opens run `id` (a task or a session) over the current view. */
   async function openTask(id) {
-    if (id !== runId) reply = null;
-    runId = id;
-    preparing = false;
-    showTab("runs");
-    await refresh();
+    if (id !== runId()) reply = null;
+    // The view change reads the run (see viewChanged); wait for that read.
+    nav.go({ name: "run", id });
+    await refreshQueue;
   }
   /** The commit holding everything the agent did, or nothing when it reported no commit. */
   function resultCommit(r) {
@@ -1284,20 +1214,9 @@ export function createWorkflow({
     );
   }
   /** A small back arrow beside the view's heading, in place of a full-width button. */
+  /** A task's header row: its state as the title, a quiet line, and Peek's mood. */
   function header(body, title, status = "", mood = "") {
-    const row = el("div", "task-head"),
-      back = iconButton(el("button", "btn icon-action"), "back", "Back to tasks"),
-      text = el("div");
-    back.type = "button";
-    back.onclick = () => {
-      preparing = false;
-      showTab("comments");
-    };
-    text.append(el("h2", "task-heading", title));
-    if (status) text.append(el("p", "task-meta", status));
-    row.append(back, text);
-    if (mood) row.append(peek(mood, { className: "task-peek" }));
-    body.append(row);
+    head(title, { meta: status, mood });
   }
   /** Peek's state for a task: working while it runs, ready to review, merged once applied,
    * stopped when it ended early; none otherwise. */
@@ -1333,13 +1252,9 @@ export function createWorkflow({
     const live = document.querySelector(".task-live");
     if (live && runDetail) live.replaceWith(activityView(runDetail));
   }
+  /** The run view: a task, or an open session. */
   function runs(body) {
-    if (preparing) {
-      header(body, "Review task");
-      prepare(body);
-      return;
-    }
-    if (!runDetail || runDetail.id !== runId) {
+    if (!runDetail || runDetail.id !== runId()) {
       header(body, "Task");
       body.append(el("p", "read-note", "Loading task…"));
       return;
@@ -1539,8 +1454,7 @@ export function createWorkflow({
             };
             editing = null;
             draft = "";
-            redraw();
-            document.querySelector("#composerHost textarea")?.focus();
+            writeInstruction();
           },
           true,
         ),
@@ -1590,15 +1504,16 @@ export function createWorkflow({
   }, 3000);
   // A session on screen that is working updates faster, so its steps appear as they happen.
   setInterval(() => {
-    const viewing = document.querySelector("#panel")?.dataset.view === "runs";
-    if (document.hidden || !loaded || !viewing || runDetail?.id !== runId || !live(runDetail) || runDetail.status !== "running") return;
+    if (document.hidden || !loaded || !runId() || runDetail?.id !== runId() || !live(runDetail) || runDetail.status !== "running") return;
     refresh("poll").catch((e) => notice(e.message, true));
   }, 1200);
+  /** A run by `id`: the full copy on screen, else the list's summary. */
+  const runOf = (id) => (runDetail?.id === id ? runDetail : data.runs.find((r) => r.id === id));
   return {
     refresh,
-    compose,
     openTask,
     focusRun,
+    cueLive,
     /** True when a finished task, not yet continued, can collect changes for a next round. */
     revisable(id) {
       const r = data.runs.find((x) => x.id === id);
@@ -1611,20 +1526,30 @@ export function createWorkflow({
       await write("/api/comments", { anchor, sha, text, forRun: id });
       await refresh(false);
     },
+    /** The task whose branch is explored, when it can still take requested changes. */
+    exploringTask: () => exploring(),
     renderComposer,
-    /** The dock's Session composer: a reply to the open session, or a new session. */
-    renderSessionComposer: (host) => session.renderComposer(host, liveSession()),
-    /** True while an open session fills the Tasks view. */
-    viewingSession: () => Boolean(runDetail && runDetail.id === runId && live(runDetail)),
+    /** The dock's Session box: a reply to run `id` (or the open session), or a new session. */
+    renderSessionComposer: (host, id = null) => session.renderComposer(host, id ? runOf(id) : liveSession()),
+    /** True when run `id` is an open session (a conversation, not a task). */
+    isLive: (id) => Boolean(runOf(id) && live(runOf(id))),
+    /** How run `id` shows, for the sheet's scroll rule: "loading", "session" or "task". */
+    runShape: (id) => (runDetail?.id === id ? (live(runDetail) ? "session" : "task") : "loading"),
     /** True when an open session exists (the dock then offers a reply to it). */
     hasLiveSession: () => Boolean(liveSession()),
-    /** Updates the sheet header and the map mark for an open session (after a view or map
-     * change). */
-    updateSessionBar: () => sessionPeek(),
-    /** The owner selected a part of the map: the sheet header shows its description. */
-    showSelection() {
-      if (data.runs.some(live)) peekMode = "selection";
-    },
+    /** The open sessions, newest first, for Conversations: `{id, title, line, mood}`. */
+    liveSessions: () =>
+      data.runs
+        .filter(live)
+        .reverse()
+        .map((r) => ({
+          id: r.id,
+          title: r.title || "Session",
+          line: runStatus(r),
+          mood: r.approval ? "thinking" : r.status === "running" ? "working" : "ready",
+        })),
+    /** How many instructions are on the map's selection (or inside it). */
+    instructionsHere: () => data.comments.filter(visible).length,
     /** The owner moved the map: Follow pauses until they tap it. Follow's own moves do not
      * count. */
     ownerMoved() {
@@ -1633,24 +1558,21 @@ export function createWorkflow({
       ownerPointed = true;
       focus.ownerMoved();
     },
-    /** What the Tasks view shows, as a key for the sheet's scroll rule (app.js): a task in
-     * preparation, a run that is loading, an open session, or a task. */
-    viewKey() {
-      if (preparing) return "prepare";
-      if (!runId) return "list";
-      const shown = runDetail?.id === runId ? (live(runDetail) ? "session" : "task") : "loading";
-      return `${runId}:${shown}`;
+    /** The view changed (nav.js): a page that shows this data reads it again. */
+    viewChanged(view) {
+      if (["tasks", "history", "instructions", "conversations", "run", "prepare"].includes(view.name))
+        refresh().catch((e) => notice(e.message, true));
     },
     /** The ID of the open session, or null. */
     liveSessionId: () => liveSession()?.id || null,
-    /** Chooses between instructions on the selection ("here") and the Tasks overview ("all"). */
-    scope(value) {
-      filter = value;
-    },
-    scoped: () => filter === "here",
-    render(body, tab) {
+    /** Draws page `view`: a list of instructions or tasks, the task form, or a run. */
+    render(body, view) {
       bar();
-      tab === "comments" ? comments(body) : runs(body);
+      if (view.name === "prepare") {
+        header(body, "Review task");
+        prepare(body);
+      } else if (view.name === "run") runs(body);
+      else comments(body);
     },
   };
 }

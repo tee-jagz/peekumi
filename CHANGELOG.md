@@ -51,6 +51,13 @@ Peekumi is licensed under the Apache License 2.0. The release archives include `
 - Private phone access through Tailscale Serve, and an explicit, temporary public option through a Cloudflare Quick Tunnel.
 - Owner and read-only device pairing with revocation, and an installable PWA.
 
+### Navigation
+
+- One view stack (`frontend/nav.js`) decides what the sheet shows. A page opens over the view that you looked at, and the back arrow, the phone's back button and Escape all return to it.
+- Conversations (Ask and open sessions) and Tasks (work only) are separate places in the header.
+- The dock follows the view: its modes on the map, and a conversation's own box in a conversation.
+- A small Peek and one word at the right of the sheet's title row lead to an agent at work or an open session, with no extra row.
+
 ### Safety and reliability
 
 - Session commands: Peekumi alone checks each command. A session rule never covers a command with several parts (including a single `&`), and shells, interpreters, `sudo` and other wrappers, and `git push` get no session rule.

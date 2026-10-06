@@ -86,7 +86,9 @@ try {
       await page.locator('.node.agent-trail[data-path="backend"]').waitFor();
       await page.screenshot({ path: `test-results/focus-waiting-${viewport.width}.png` });
       // Ask: while the answer works, the map follows what it reads. The owner's selection is
-      // the subject of the next message; Follow moves the map, but never that choice.
+      // the subject of the next message; Follow moves the map, but never that choice. (Ask
+      // starts from the map's dock, so leave the session first.)
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
       await page.locator('.sheet[data-front="true"] .node[data-path="backend"]').click();
       await page.locator("#agentFocus .follow-pill").click();
       await page.getByRole("tab", { name: "Ask", exact: true }).click();

@@ -12,6 +12,8 @@ export function createAsk({
   redraw,
   notice,
   makeDraft,
+  // A question was sent: the app shows its conversation.
+  opened = () => {},
   changeTarget,
   addToChanges,
   openReference,
@@ -131,24 +133,23 @@ export function createAsk({
       if (branch === key) chat.messages = thread;
       return true;
     },
+    /** True when this branch's conversation has messages (New conversation can clear it). */
+    hasMessages: () => Boolean(chat.messages.length && !chat.pending),
+    /** The last question of this branch's conversation, for the Conversations list. */
+    lastQuestion: () => chat.messages.filter((m) => m.role === "user").at(-1)?.text || "",
+    /** Starts a new conversation on this branch. */
+    clear() {
+      if (chat.pending) return;
+      chat.messages = [];
+      threads.set(branch, chat.messages);
+      chat.question = "";
+      save();
+      redraw();
+    },
     render(body, composerHost) {
       // New questions are about the current selection; earlier ones keep their own subject.
       const c = context(),
         subject = subjectOf(c.anchor);
-      // The header already shows the comparison; only the conversation's controls sit here.
-      const head = el("div");
-      head.className = "ask-head";
-      if (chat.messages.length && !chat.pending)
-        head.append(
-          btn("New conversation", () => {
-            chat.messages = [];
-            threads.set(branch, chat.messages);
-            chat.question = "";
-            save();
-            redraw();
-          }),
-        );
-      body.append(head);
       if (!chat.messages.length && !chat.pending) {
         const empty = el(
           "p",
@@ -275,6 +276,7 @@ export function createAsk({
         chat.partial = "";
         chat.live = [];
         chat.reveal = true;
+        opened();
         redraw();
         // Where the answer looks, for the map: the place of each lookup that names one.
         const places = [];

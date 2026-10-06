@@ -3056,15 +3056,13 @@ select option {
 }
 
 /* One task surface: request, updates, result and review stay together. */
-.panel[data-view="comments"] #helperTools,
-.panel[data-view="runs"] #helperTools,
-.panel[data-view="comments"] #reviewScope,
-.panel[data-view="runs"] #reviewScope,
-.panel[data-view="comments"] #selectionSummary,
-.panel[data-view="runs"] #selectionSummary,
-.panel[data-view="comments"] #selectionContract,
-.panel[data-view="runs"] #selectionContract {
-  display: none;
+/* A page (a list, a task, a conversation; nav.js) takes the whole sheet under its header row:
+   the selection's header and the aspect buttons belong to the map's own views. */
+.panel[data-sheet="page"] #helperTools,
+.panel[data-sheet="page"] #reviewScope,
+.panel[data-sheet="page"] #selectionSummary,
+.panel[data-sheet="page"] #selectionContract {
+  display: none !important;
 }
 #openTasks {
   padding: 6px 9px;
@@ -3174,22 +3172,6 @@ select option {
   max-width: 100%;
 }
 
-@media (max-width: 899px) {
-  .panel[data-height="peek"][data-view="comments"] #reviewScope,
-  .panel[data-height="peek"][data-view="runs"] #reviewScope {
-    display: flex;
-  }
-  .panel[data-height="peek"][data-view="comments"] #selectionSummary,
-  .panel[data-height="peek"][data-view="runs"] #selectionSummary {
-    display: -webkit-box;
-  }
-  .panel[data-height="peek"][data-view="comments"]
-    #selectionContract:not([hidden]),
-  .panel[data-height="peek"][data-view="runs"]
-    #selectionContract:not([hidden]) {
-    display: grid;
-  }
-}
 
 /* The branch picker changes the viewed Git ref, never the working checkout. */
 .top > div:first-child {
@@ -3947,7 +3929,7 @@ select.visually-hidden {
 #tabBody:empty {
   display: none;
 }
-.panel:not([data-view="comments"]):not([data-view="runs"]) #tabBody {
+.panel:not([data-sheet="page"]) #tabBody {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -6517,9 +6499,9 @@ a.pr-link .glyph {
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
 }
 /* An open session outside its view (workflow.js): one line in the place of the selection's
-   description, with a small Peek at the end of whichever row shows. It copies the
-   description row (#reviewScope), so the sheet keeps its shape. */
-#sessionLine {
+   description,
+with a small Peek at the end of whichever row shows. It copies the
+   description row (#reviewScope) {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6527,79 +6509,17 @@ a.pr-link .glyph {
   border-bottom: 1px solid var(--line);
   font-size: 12px;
 }
-#sessionLine[hidden],
-#peekToggle[hidden] {
-  display: none;
-}
-#panel[data-peek="session"] #reviewScope,
-#panel[data-peek="session"] #selectionSummary,
-#panel[data-peek="session"] #selectionContract {
-  display: none;
-}
-.session-line-open {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.session-line-title {
-  flex: none;
-  font-size: 13px;
-  color: var(--good);
-}
-#sessionLine[data-state="needs"] .session-line-title {
-  color: var(--mod);
-}
-#sessionLine[data-state="waiting"] .session-line-title {
-  color: var(--accent);
-}
-.session-line-label {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.session-line-code {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 5px;
-  border-radius: 5px;
-  font: 11px var(--mono);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-#sessionLine[data-state="needs"] .session-line-code {
-  color: var(--mod);
-  background: color-mix(in srgb, var(--mid) 16%, transparent);
-}
-#peekToggle {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  cursor: pointer;
-}
-#peekToggle .peek-mark {
-  width: 24px;
-  height: 24px;
-}
+
+
+
+
+
+
+
+
+
+
+
 /* Where the session's agent has been: a fading outline for its last places, newest first. */
 .node.agent-trail {
   border-color: color-mix(in srgb, var(--good) 60%, transparent) !important;
@@ -6664,19 +6584,15 @@ a.pr-link .glyph {
   padding: 3px 10px;
   font-size: 12px;
 }
-/* Session parts are plain: no glass behind the line, Peek, the steps or the links. */
-/* !important: the panel's glass rule carries an ID in its :not() list. */
-.panel #sessionLine .session-line-open,
-.panel #peekToggle,
+/* Session parts are plain: no glass behind the line,
+Peek,
 .panel .session-steps details.session-step,
 .panel .session-log .code-link {
   background: none !important;
   border: 0 !important;
   box-shadow: none !important;
 }
-.panel #peekToggle[aria-pressed="false"][data-state="needs"] {
-  background: color-mix(in srgb, var(--mid) 22%, transparent) !important;
-}
+
 .panel .session-log .code-link {
   display: inline;
   min-height: 0;
@@ -6794,12 +6710,11 @@ a.pr-link .glyph {
 /* Session view, minimal (session.js): one quiet header row that stays at the top, a dot for
    the state, plain text in place of chips, and no boxed cards. */
 /* Above the scrolling conversation: no background or line is needed. */
-#sessionHead {
+#viewHead {
   flex-shrink: 0;
   padding: 0 12px;
 }
-#sessionHead:empty,
-.panel[data-height="peek"] #sessionHead {
+#viewHead:empty {
   display: none;
 }
 .session-head {
@@ -6917,9 +6832,7 @@ a.pr-link .glyph {
   padding: 4px 12px;
   font-size: 13px;
 }
-/* The line's command or file: monospace, no chip. */
-.session-line-code,
-#sessionLine[data-state="needs"] .session-line-code {
+/* The line's command or file: monospace {
   padding: 0;
   background: none;
 }
@@ -7120,6 +7033,36 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   user-select: none;
 }
 
+/* A phone's header: the name and the buttons share the first row, and the comparison line has
+   the second row to itself, so the branch name never shrinks to a letter. (Its popover is
+   placed from the comparison line, so it moves with it.) */
+@media (max-width: 899px) {
+  .top {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .top .title-block {
+    display: contents;
+  }
+  .top #repo-name {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    align-self: center;
+  }
+  .top .top-actions {
+    order: 2;
+  }
+  .top #repo-sub {
+    order: 3;
+  }
+  .top .revision-details {
+    order: 4;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}
+
 /* A phone on its side: the header stays (the comparison, Time, Diff and Tasks), in one
    compact row, and the sheet leaves the map more room. The keyboard still hides it. */
 @media (max-width: 899px) and (max-height: 600px) and (orientation: landscape) {
@@ -7129,10 +7072,14 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   .keyboard-open .top {
     display: none;
   }
-  .top .title-block {
-    flex-direction: row;
-    align-items: baseline;
-    gap: 10px;
+  .top .revision-details {
+    flex-basis: auto;
+    order: 2;
+    margin-left: 4px;
+  }
+  .top .top-actions {
+    order: 3;
+    margin-left: auto;
   }
   .panel[data-height="half"] {
     height: calc(var(--viewer-height, 100dvh) * 0.6);
@@ -7147,3 +7094,182 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Navigation (nav.js). A page's header row (app.js viewHead): Back, the title, a quiet line
+   and the page's few actions. The same row on every page, plain, with no band. */
+.view-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+.view-text {
+  flex: 1;
+  min-width: 0;
+}
+.view-head .view-title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-meta {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.panel .view-back,
+.panel .view-action {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 50%;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--muted);
+}
+.panel .view-action:disabled {
+  opacity: 0.4;
+}
+.view-head .btn {
+  flex: none;
+}
+.view-head .task-peek {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+#tabs[hidden],
+#conversationDock[hidden] {
+  display: none !important;
+}
+
+#openConversations {
+  padding: 6px 9px;
+}
+
+/* The live line (workflow.js cueLive): an agent at work, or an open session, as a small Peek
+   and one word at the right of the title row (the selection's name, or a page's header row),
+   on the same line as the title. It takes no row of its own, and it has no box, band, border
+   or shadow. (!important: the panel's glass rule for buttons carries an ID in its :not() list.) */
+.panel #liveLine {
+  order: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  height: auto;
+  min-height: 0;
+  max-width: 45%;
+  line-height: 1.2;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: var(--good);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.panel #liveLine[hidden] {
+  display: none;
+}
+/* Beside the live line, the clear button follows it, at the end of the title row. */
+#reviewScope .x {
+  order: 2;
+}
+#reviewScope:has(#liveLine:not([hidden])) .x {
+  margin-left: 0;
+}
+#liveLine .live-peek {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.live-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#liveLine[data-state="needs"] {
+  color: var(--mod);
+}
+#liveLine[data-state="waiting"] {
+  color: var(--accent);
+}
+
+/* The Conversations page: plain rows, one line each, no cards. */
+.conversation-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel .conversation-row {
+  background: none !important;
+  box-shadow: none !important;
+}
+.conversation-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.conversation-text strong {
+  font-size: 15px;
+}
+.conversation-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+.conversation-peek,
+.conversation-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+.conversation-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.conversation-row > .glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--faint);
+}
+
+/* Under Details: the instructions on this selection, as one quiet link. */
+.instructions-here {
+  margin: 4px 0 8px;
+}
+

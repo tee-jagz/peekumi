@@ -15,6 +15,7 @@ const SHELL = [
   "/session.js",
   "/focus.js",
   "/menu.js",
+  "/nav.js",
   "/style.css",
   "/pwa.js",
   "/manifest.webmanifest",

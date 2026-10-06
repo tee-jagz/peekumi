@@ -65,55 +65,46 @@ try {
       await page.getByRole("button", { name: "Commands: all allowed" }).waitFor();
       await page.getByRole("button", { name: "Commands: all allowed" }).click();
       await page.getByRole("button", { name: "Commands: ask first" }).waitFor();
-      // Outside its view, a small Peek switches the sheet between the selection's description
-      // and one line on the session, on every sheet height.
-      await page.getByRole("button", { name: "Back to tasks" }).click();
-      await page.locator("#openTasks").click();
-      const toggle = page.locator("#peekToggle");
-      const line = page.locator("#sessionLine");
-      await line.waitFor();
-      assert.match(await line.textContent(), /Your turn\s*Turn 1 is done\./);
-      assert.equal(await toggle.locator('.peek-mark[data-state="ready"]').count(), 1);
-      assert.ok((await line.boundingBox()).height <= 40, "One line");
+      // Outside its view, the Conversations button shows the session's state, and nothing else
+      // on the sheet changes: the selection's description stays.
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
+      // Outside its view, the sheet's handle row shows Peek and one word; a tap opens it.
+      const live = page.locator("#liveLine");
+      await live.waitFor();
+      assert.equal(await live.innerText(), "Your turn");
+      assert.match(await live.getAttribute("aria-label"), /^Session Make the change\. · Your turn: Turn 1 is done\./);
+      // On the title's line, at its right: no row of its own.
+      const [title, mark] = [await page.locator("#reviewScope .review-name").boundingBox(), await live.boundingBox()];
+      assert.ok(Math.abs(title.y + title.height / 2 - (mark.y + mark.height / 2)) < 6, "On the same line as the title");
+      assert.ok(mark.x > title.x + title.width, "At the right of the title");
       if (viewport.width < 900) {
         await page.locator("#sheetHandle").focus();
         await page.keyboard.press("Home");
         await page.waitForFunction(() => document.querySelector("#panel").dataset.height === "peek");
-        assert.ok(await line.isVisible(), "The session shows on the closed sheet");
-        assert.ok(await page.locator("#reviewScope").isHidden(), "In place of the description");
+        assert.ok(await page.locator("#reviewScope").isVisible(), "The description stays");
       }
       await page.screenshot({ path: `test-results/session-peek-${viewport.width}.png` });
-      await toggle.click();
-      assert.ok(await line.isHidden());
-      assert.ok(await page.locator("#reviewScope").isVisible(), "The description comes back");
-      assert.ok(await toggle.isVisible(), "Peek stays to switch back");
-      // Opening a card redraws the sheet: Peek and the line stay, so a request never hides.
+      // Opening a card redraws the sheet; the button keeps the session's state.
       const homeCrumb = page.locator(".crumbs .crumb-home");
       if (await homeCrumb.isEnabled()) await homeCrumb.click();
       const card = page.locator('.sheet[data-front="true"] .node').first();
       await card.click();
       await card.click();
       await page.waitForFunction(() => document.querySelector(".crumbs .crumb-home") && !document.querySelector(".crumbs .crumb-home").disabled);
-      await toggle.waitFor();
-      assert.equal(await page.locator("#peekToggle").count(), 1, "Peek survives the redraw");
-      if (await line.isHidden()) await toggle.click();
-      await line.click();
+      await live.click();
       await log.getByText("Turn 1 is done.").waitFor();
-      assert.ok(await toggle.isHidden(), "Peek hides while the session is on screen");
-      // Closing the sheet on the session itself shows its line, not the selection's description.
+      assert.ok(await live.isHidden(), "Hidden while its session is on screen");
+      // Closing the sheet on the session itself keeps its header row in view.
       if (viewport.width < 900) {
         await page.locator("#sheetHandle").focus();
         await page.keyboard.press("Home");
         await page.waitForFunction(() => document.querySelector("#panel").dataset.height === "peek");
-        await line.waitFor();
-        assert.match(await line.textContent(), /Your turn/);
-        assert.ok(await page.locator("#reviewScope").isHidden(), "No description on the closed session");
-        assert.equal(await page.locator('#peekToggle[aria-label="Open the session"] .peek-mark').count(), 1, "Peek shows the session");
+        assert.ok(await page.locator(".session-head").isVisible(), "The closed session shows its header");
+        assert.match(await page.locator(".session-status").textContent(), /Your turn/);
         await page.screenshot({ path: "test-results/session-closed-390.png" });
-        await line.click();
+        await page.locator("#sheetHandle").click();
         await page.waitForFunction(() => document.querySelector("#panel").dataset.height !== "peek");
         await log.getByText("Turn 1 is done.").waitFor();
-        assert.ok(await line.isHidden(), "The line hides once the session shows again");
       }
       // The dock replies to the session.
       await page.getByLabel("Reply to the agent").fill("Again, please.");
@@ -123,7 +114,16 @@ try {
       assert.match(await log.locator(".session-owner").last().textContent(), /Again, please\./);
       // A link in the conversation moves the map; the conversation keeps its place.
       const later = log.getByRole("button", { name: "module.py" }).last();
-      await later.scrollIntoViewIfNeeded();
+      // A redraw can replace the link while the test scrolls to it (its names become links
+      // once their places are found); try again on the new one.
+      for (let i = 0; ; i++)
+        try {
+          await later.scrollIntoViewIfNeeded();
+          break;
+        } catch (e) {
+          if (i === 4) throw e;
+          await page.waitForTimeout(200);
+        }
       const kept = await page.locator("#reviewScroll").evaluate((n) => n.scrollTop);
       await later.click();
       await page.waitForFunction(() => /module\.py/.test(document.querySelector(".crumbs")?.textContent || ""));
@@ -136,12 +136,10 @@ try {
       await page.getByLabel("Reply to the agent").fill("One more. WAIT_FOR_STOP");
       await page.getByRole("button", { name: "Send to the agent" }).click();
       await log.locator(".session-step").filter({ hasText: "Edited session-notes.txt" }).nth(2).waitFor();
-      await page.getByRole("button", { name: "Back to tasks" }).click();
-      await page.locator("#openTasks").click();
-      const working = page.locator('#sessionLine[data-state="running"]');
-      await working.filter({ hasText: "Edited session-notes.txt" }).waitFor();
-      assert.match(await working.textContent(), /Working\s*Edited session-notes\.txt/);
-      assert.equal(await page.locator('#peekToggle .peek-mark[data-state="working"]').count(), 1);
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
+      const working = page.locator('#liveLine[data-state="running"]');
+      await working.locator('.peek-mark[data-state="working"]').waitFor();
+      await page.waitForFunction(() => /Working: Edited session-notes\.txt/.test(document.querySelector("#liveLine").getAttribute("aria-label")));
       // The map was moved into module.py by the link; at the top level the agent's file shows.
       const home = page.locator(".crumbs .crumb-home");
       if (await home.isEnabled()) await home.click();
@@ -155,11 +153,11 @@ try {
       await page.getByRole("button", { name: "Stop" }).click();
       await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
       assert.equal(await page.locator(".node.agent-here").count(), 0, "The mark leaves the map once the agent stops");
-      // The Tasks list shows the session in its own group.
-      await page.getByRole("button", { name: "Back to tasks" }).click();
-      const group = page.locator(".workflow-group", { hasText: "Sessions" });
-      await group.waitFor();
-      await page.getByRole("button", { name: /Session · Make the change\./ }).click();
+      // Conversations list the open session; it opens from there (Back returns to the list
+      // when the session was opened from it).
+      await page.locator("#viewHead").getByRole("button", { name: "Back", exact: true }).click();
+      if ((await page.locator("#panel").getAttribute("data-view")) !== "conversations") await page.locator("#openConversations").click();
+      await page.locator(".conversation-row", { hasText: "Make the change." }).click();
       await log.getByText("Turn 2 is done.").waitFor();
       // A session opens at its latest message, and its header stays in view.
       await page.waitForFunction(() => {
@@ -185,7 +183,7 @@ try {
       await page.locator(".session-end").waitFor();
       await page.screenshot({ path: `test-results/session-end-${viewport.width}.png` });
       await page.getByRole("button", { name: "Send to review" }).click();
-      await page.locator(".task-heading", { hasText: "Ready for review" }).waitFor();
+      await page.locator("#viewHead .view-title", { hasText: "Ready for review" }).waitFor();
       // The conversation stays with the work.
       await page.getByText("Session conversation").click();
       await page.locator(".session-record .session-log").getByText("Turn 2 is done.").waitFor();

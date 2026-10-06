@@ -4,6 +4,7 @@ import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { createFocus } from "./focus.js";
 import { installContextMenus, closeMenu, menuIsOpen } from "./menu.js";
+import { createNav } from "./nav.js";
 import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
 import { peek } from "./peek.js";
@@ -67,7 +68,9 @@ const tones = {
   removed: "var(--del)",
   unchanged: "var(--faint)",
 };
-let primaryTab = "ask";
+/** The dock's mode on the map: "ask", "comments" (an instruction) or "session". A
+ * preference only; what the sheet shows is the view (see nav.js). */
+let dockMode = "ask";
 let changesOnly = false;
 let relationshipKind = "all",
   violationsOnly = false;
@@ -78,8 +81,7 @@ let metadata,
   selected = null,
   mode = "diff",
   lens = "changes",
-  before = false,
-  tab = "details";
+  before = false;
 let viewingBranch = new URL(location.href).searchParams.get("branch"),
   // The pull request on view, if any; it names the comparison instead of "detached".
   viewingPr = new URL(location.href).searchParams.get("pr"),
@@ -178,8 +180,9 @@ function currentContext() {
   return { anchor, sha: useBefore ? baseRef : headRef };
 }
 /** Compares `base` with `head` (a ref or commit) on the map and opens `anchor` there:
- * a file or folder path, an optional declaration, or the repository root. */
-async function inspectRevision(base, head, anchor) {
+ * a file or folder path, an optional declaration, or the repository root. The map opens as
+ * a view over the current one (Back returns to it); `explore` marks a task's branch. */
+async function inspectRevision(base, head, anchor, { explore = null, aspect = null } = {}) {
   leavePr();
   document.querySelector("#tabs").inert = true;
   try {
@@ -192,34 +195,40 @@ async function inspectRevision(base, head, anchor) {
     const url = new URL(location.href);
     url.searchParams.set("branch", head);
     replaceUrl(url);
+    // The view comes last, from this function; the map moves without changing it.
     if (anchor.path) {
-      await navigate({
-        kind: anchor.kind === "folder" ? "folder" : "file",
-        path: anchor.path,
-      });
+      await navigate(
+        { kind: anchor.kind === "folder" ? "folder" : "file", path: anchor.path },
+        "",
+        { keepTab: true },
+      );
       if (scope.kind === "file") await loadSource();
-    } else await navigate(rootScope());
+    } else await navigate(rootScope(), "", { keepTab: true });
     if (anchor.symbol)
       selected = nodes.find((n) => n.name === anchor.symbol) || null;
-    tab = anchor.path && anchor.kind !== "folder" ? "source" : "changes";
     sourceView = base === head ? "after" : "diff";
-    render();
+    nav.go({
+      name: "inspect",
+      aspect: aspect || (anchor.path && anchor.kind !== "folder" ? "source" : "changes"),
+      ...(explore ? { explore } : {}),
+    });
   } finally {
     document.querySelector("#tabs").inert = false;
   }
 }
-/** Where "Back to task" returns: the branch and manual base before exploring, and the task. */
-let taskReturn = null;
-/** Restores the branch and base from before exploring, then opens the task. */
-async function returnToTask() {
-  const back = taskReturn;
-  taskReturn = null;
-  diffBase = back.base;
-  await switchBranch(back.branch || "HEAD");
-  await workflow.openTask(back.id);
-  return back.id;
-}
-$("#taskReturn").onclick = returnToTask;
+/** The task whose branch the map shows, from the nearest view that explores one, or null.
+ * `{id, branch, base}`: the task, and the branch and manual base to return to. */
+const exploring = () => nav.find((v) => v.explore)?.explore || null;
+/** True while a conversation fills the sheet (Ask, or an open session): the map's selection
+ * is then the subject of its next message, and the conversation stays in view. */
+const onThread = () => {
+  const view = nav.view();
+  return view.name === "ask" || (view.name === "run" && workflow.isLive(view.id));
+};
+/** The comparison that an exploration left, while its views are still on the stack. */
+let explored = null;
+/** "Back to task": back past the explored branch, to the task. */
+$("#taskReturn").onclick = () => nav.backWhile((v) => Boolean(v.explore));
 // The agent, model and effort for Ask and tasks, kept on this device for each repository.
 const agents = createAgents({
   api,
@@ -227,50 +236,67 @@ const agents = createAgents({
 });
 // Where an agent works, on the map: a session, a running task, or an Ask answer (focus.js).
 const focus = createFocus({ followTo });
+/** What the sheet shows, and the way back (nav.js). Every change of view comes here. */
+const nav = createNav({ changed: viewChanged });
+function viewChanged(previous, next) {
+  // The views of an explored branch are gone: the map returns to the comparison it left.
+  const now = exploring();
+  if (explored && !nav.find((v) => v.explore?.id === explored.id)) {
+    const left = explored;
+    explored = now;
+    diffBase = left.base;
+    switchBranch(left.branch || "HEAD").catch((e) => showNotice(e.message, true));
+  } else explored = now;
+  // A page needs room: from the closed sheet it opens to half height.
+  if (next.name !== "inspect" && next.name !== previous.name) expandSheet();
+  workflow.viewChanged(next);
+  if (comparison) renderPanel();
+}
 const workflow = createWorkflow({
   api,
   focus,
   agents,
+  nav,
+  head: viewHead,
+  /** A new instruction: the map, with the dock in Instruction mode (Back returns). */
+  writeInstruction() {
+    dockMode = "comments";
+    nav.toMap();
+    focusComposer();
+  },
   context: reviewContext,
   notice: showNotice,
-  showTab(value) {
-    tab = value;
-    // The Session dock stays while a session (or any task) opens from it.
-    if (value === "comments" || (value === "runs" && primaryTab !== "session")) primaryTab = "comments";
-    expandSheet();
-    renderPanel();
-  },
   redraw() {
     if (comparison) renderTab();
   },
   /** Shows everything a task's agent did on the map: its branch against where the task
    * started. The sheet drops to peek so the map leads, and a chip leads back to the task. */
   async explore(base, branch, id) {
-    taskReturn ??= { branch: viewingBranch, base: diffBase };
-    taskReturn.id = id;
-    await inspectRevision(base, "refs/heads/" + branch, { kind: "repo" });
+    await inspectRevision(base, "refs/heads/" + branch, { kind: "repo" }, { explore: here(id) });
     setSheetHeight("peek");
-    renderPanel();
   },
   inspect: inspectRevision,
   openPlace: (target) => openPlace(target, { keepTab: true }),
-  /** Shows a session's branch on the map, at a file when `path` is given; a chip leads back
+  /** Shows a session's branch on the map, at a file when `path` is given; the chip leads back
    * to the session. */
   async showOnMap(r, path) {
-    taskReturn ??= { branch: viewingBranch, base: diffBase };
-    taskReturn.id = r.id;
-    await inspectRevision(r.base, "refs/heads/" + r.branch, path ? { kind: "file", path } : { kind: "repo" });
+    await inspectRevision(r.base, "refs/heads/" + r.branch, path ? { kind: "file", path } : { kind: "repo" }, {
+      explore: exploring()?.id === r.id ? exploring() : here(r.id),
+    });
     setSheetHeight(path ? "half" : "peek");
-    renderPanel();
   },
   /** The task being explored, when it can still collect changes for a next round. */
-  exploring: () =>
-    taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
+  exploring: () => {
+    const id = exploring()?.id;
+    return id && workflow.revisable(id) ? id : null;
+  },
   // The watched branch moved: show its new commits, as the Refresh button does.
   moved: () => {
-    if (!viewingPr && !taskReturn) boot(true).catch(() => {});
+    if (!viewingPr && !exploring()) boot(true).catch(() => {});
   },
 });
+/** An exploration of task `id` that returns to the branch and base on the map now. */
+const here = (id) => ({ id, branch: viewingBranch, base: diffBase });
 const ask = createAsk({
   api,
   stream: apiStream,
@@ -294,14 +320,16 @@ const ask = createAsk({
   },
   notice: showNotice,
   redraw() {
-    tab = "ask";
-    expandSheet();
-    renderTab();
+    if (comparison) renderTab();
+  },
+  /** A question was sent: its conversation opens, if it is not on screen. */
+  opened() {
+    if (nav.view().name !== "ask") nav.go({ name: "ask" });
   },
   /** Shows a place an answer names: the map moves there and selects it, while the
    * conversation stays in view. */
   async openReference(target) {
-    await openPlace(target, { keepAsk: true });
+    await openPlace(target);
   },
   async makeDraft(draft) {
     await api("/api/comments", {
@@ -310,18 +338,17 @@ const ask = createAsk({
       body: JSON.stringify(draft),
     });
     await workflow.refresh(false);
-    primaryTab = "comments";
-    showDiscussion();
+    showNotice("Saved as a draft instruction. Tasks lists it.");
+    setTimeout(() => showNotice(""), 2500);
     renderPanel();
   },
   /** The task being explored, when it can still take requested changes. */
-  changeTarget: () =>
-    taskReturn && workflow.revisable(taskReturn.id) ? taskReturn.id : null,
+  changeTarget: () => workflow.exploringTask(),
   /** Collects an answer's suggestion, at the place it was asked about, for the explored
    * task's next round; exploring carries on. */
   async addToChanges(message) {
     await workflow.collect(
-      taskReturn.id,
+      exploring().id,
       message.asked.anchor,
       message.asked.sha,
       message.suggestion,
@@ -470,7 +497,7 @@ async function boot(refresh = false, branch = viewingBranch) {
     if (document.documentElement.dataset.access !== "reader")
       ask
         .switchTo(viewingBranch || metadata.initialHead)
-        .then((changed) => changed && tab === "ask" && renderTab())
+        .then((changed) => changed && nav.view().name === "ask" && renderTab())
         .catch(() => {});
     // Most recent first (the server's order). A remote branch with a local copy and the
     // branches of agent tasks (the Tasks view shows those) stay out of the list, unless
@@ -549,14 +576,17 @@ async function switchBranch(branch) {
   scope = rootScope();
   selected = null;
   before = false;
-  tab = "details";
   await boot(true, branch);
   const url = new URL(location.href);
   if (viewingBranch) url.searchParams.set("branch", viewingBranch);
   replaceUrl(url);
 }
 $("#branchPicker").onchange = (event) => {
-  if (event.target.value) switchBranch(event.target.value);
+  if (!event.target.value) return;
+  // A new branch starts again from the map; no explored task waits to be returned to.
+  explored = null;
+  nav.reset();
+  switchBranch(event.target.value);
 };
 /** The branch list entry for what is on the map: none while a PR is open, else the branch
  * or a detached commit. */
@@ -686,7 +716,8 @@ async function openPr(number) {
     before = false;
     scope = rootScope();
     selected = null;
-    tab = "details";
+    explored = null;
+    nav.reset();
     headRef = data.head;
     diffBase = data.base;
     baseRef = data.base;
@@ -923,7 +954,7 @@ function renderDeck() {
   renderGraph(body);
   // The map was drawn again: mark the agents' places again.
   focus.redraw();
-  workflow.updateSessionBar();
+  workflow.cueLive();
   body.querySelector(".map-tools")?.append(mapLegend);
   body.querySelector(".canvas-controls")?.prepend(crumbHost);
   // Before/After belongs to the comparison, not navigation: it sits in the top-left corner.
@@ -1785,9 +1816,10 @@ function drawEdges(canvas, positions, width, height, arcs) {
 function selectNode(node) {
   selected = node;
   held = null;
-  workflow.showSelection();
   workflow.ownerMoved();
-  if (["comments", "runs"].includes(tab)) tab = "details";
+  // A list or a task gives way to the map (Back returns to it); a conversation stays, and
+  // the selection becomes the subject of its next message.
+  if (nav.view().name !== "inspect" && !onThread()) nav.toMap();
   if (node.kind === "symbol") {
     sourceView = node.status === "removed" ? "before" : "diff";
   }
@@ -1813,12 +1845,11 @@ async function followTo(place) {
   await navigate(next, "", { keepTab: true, follow: true });
 }
 /** Shows a place that a message names: the map moves there and selects it, while the
- * conversation stays in view. `keepAsk` keeps Ask's thread; `keepTab` keeps the panel's view
- * (a session). */
-async function openPlace(target, { keepAsk = false, keepTab = false } = {}) {
+ * conversation stays in view. `keepTab` keeps the sheet's view as it is. */
+async function openPlace(target, { keepTab = false } = {}) {
   if (busy) return;
   if (mode === "diff") before = target.side === "before";
-  await navigate({ kind: "file", path: target.path }, "file:" + target.path, { keepAsk, keepTab });
+  await navigate({ kind: "file", path: target.path }, "file:" + target.path, { keepTab });
   if (target.kind === "symbol") {
     refreshModel();
     selected =
@@ -1853,9 +1884,10 @@ function copyText(text) {
  * session mode the selection is the pointer that the next reply carries. */
 function composeAbout(node, mode) {
   selectNode(node);
-  primaryTab = mode;
-  // Pointing the session's agent keeps the map in view: the reply box takes the pointer.
-  if (mode !== "session") showDiscussion();
+  dockMode = mode;
+  // Pointing the open session's agent keeps the session on screen: its reply box takes the
+  // pointer. Anything else writes from the map's dock.
+  if (!(mode === "session" && onThread())) nav.toMap();
   renderPanel();
   focusComposer();
 }
@@ -1883,17 +1915,15 @@ function cardMenu(node) {
   if (relations)
     items.push({ label: "Relations", icon: "relations", hint: String(relations), run: () => {
       selectNode(node);
-      tab = "dependencies";
+      nav.toMap("dependencies");
       expandSheet();
-      renderPanel();
     } });
   if (node.status && node.status !== "unchanged") {
     const changed = files.filter((f) => f.status !== "unchanged").length;
     items.push({ label: "Changes", icon: "changes", hint: files.length ? `${changed} file${changed === 1 ? "" : "s"}` : node.status, run: () => {
       selectNode(node);
-      tab = "changes";
+      nav.toMap("changes");
       expandSheet();
-      renderPanel();
     } });
   }
   if (node.path)
@@ -1907,21 +1937,19 @@ function cardMenu(node) {
 /** The menu for a name in a conversation that names place `place` (a code link). */
 function nameMenu(place, link) {
   const file = place.path.split("/").pop();
-  const inSession = tab === "runs" && workflow.viewingSession();
+  const inSession = nav.view().name === "run" && workflow.isLive(nav.view().id);
   const items = [
     { label: "Show on the map", icon: "pin", key: "Enter", run: () => link.click() },
     { label: "Source", icon: "source", run: async () => {
       await openPlace(place);
-      tab = "source";
+      nav.toMap("source");
       expandSheet();
-      renderPanel();
       if (!sourceData) loadSource();
     } },
     { label: "Ask about this", icon: "ask", key: "A", run: async () => {
-      await openPlace(place, { keepAsk: true });
-      primaryTab = "ask";
-      showDiscussion();
-      renderPanel();
+      await openPlace(place, { keepTab: true });
+      dockMode = "ask";
+      nav.toMap();
       focusComposer();
     } },
   ];
@@ -1956,24 +1984,22 @@ installContextMenus(menuFor);
 /** Drills into a selected directory or file, or opens source for a selected symbol. */
 function openNode(node) {
   if (node.kind === "symbol") {
-    tab = "source";
-    expandSheet();
     sourceView = node.status === "removed" ? "before" : "after";
-    renderPanel();
+    nav.toMap("source");
+    expandSheet();
     if (!sourceData) loadSource();
     return;
   }
   if (node.kind === "edge") {
-    tab = "dependencies";
+    nav.toMap("dependencies");
     expandSheet();
-    renderPanel();
     return;
   }
   if (node.kind === "boundary") return;
   navigate(nodeScope(node), node.key);
 }
 /** Animates a scope change, clears stale selection and source state, and loads file details after entering a file. */
-async function navigate(next, originKey, { keepAsk = false, keepTab = false, follow = false } = {}) {
+async function navigate(next, originKey, { keepTab = false, follow = false } = {}) {
   if (busy) return;
   // Follow's moves keep the owner's anchor; the owner's own moves end it.
   if (follow) held ??= { context: currentContext(), base: baseRef, head: headRef };
@@ -2006,8 +2032,9 @@ async function navigate(next, originKey, { keepAsk = false, keepTab = false, fol
   sourceData = null;
   ++sourceId;
   search = "";
-  // A conversation in view stays in view as the map moves.
-  if (!keepTab) tab = keepAsk || tab === "ask" ? "ask" : "details";
+  // A conversation in view stays in view as the map moves; the map's own sheet starts again
+  // in Details, and a list gives way to it.
+  if (!keepTab && !follow) nav.toMap("details", { thread: onThread() });
   render();
   const body = $(".sheet:not(.peek) .sheet-body");
   if (body) body.scrollTop = 0;
@@ -2065,9 +2092,11 @@ async function restorePlace() {
 }
 function renderPanel() {
   rememberPlace();
-  $("#openTasks").setAttribute("aria-pressed", String(inTasks()));
-  $("#taskReturn").hidden = !taskReturn || inTasks();
-  const view = [tab, scope.path, selected?.id || selected?.name || ""].join("|");
+  const name = nav.view().name;
+  $("#openTasks").setAttribute("aria-pressed", String(["tasks", "history", "prepare"].includes(name)));
+  $("#openConversations").setAttribute("aria-pressed", String(name === "conversations"));
+  $("#taskReturn").hidden = !nav.view().explore;
+  const view = viewKey();
   if (view !== noticeView && $("#notice").classList.contains("error"))
     showNotice("");
   noticeView = view;
@@ -2125,21 +2154,18 @@ function renderPanel() {
   renderSelection();
   renderTab();
 }
-/** True while the panel shows the conversation that belongs to the dock: Ask, or comments here. */
-function discussing() {
-  return tab === "ask" || (tab === "comments" && workflow.scoped()) || (tab === "runs" && workflow.viewingSession());
-}
-/** Shows the dock's conversation for the current selection: the Ask thread or its comments. */
-function showDiscussion() {
-  // Session mode shows the open session; with none, the map stays and the dock starts one.
-  if (primaryTab === "session") {
-    const open = workflow.liveSessionId();
-    if (open) workflow.openTask(open);
-    return;
-  }
-  tab = primaryTab === "ask" ? "ask" : "comments";
-  if (tab === "comments") workflow.scope("here");
-  expandSheet();
+/** What the dock offers in the current view: "ask", "comments" (an instruction), "session",
+ * or null for none. On the map it is the owner's mode; in a conversation, that conversation's
+ * box; on a task that can take changes, the box for them. */
+function dockKind() {
+  const view = nav.view();
+  if (!isOwner()) return null;
+  if (view.name === "inspect") return dockMode;
+  if (view.name === "ask") return "ask";
+  if (view.name === "instructions") return "comments";
+  if (view.name === "run")
+    return workflow.isLive(view.id) ? "session" : workflow.revisable(view.id) ? "comments" : null;
+  return null;
 }
 /** Builds commit history controls and the base-revision picker from the loaded repository history. */
 function renderCommits() {
@@ -2301,9 +2327,8 @@ function directoryCard(path, removed = false) {
   box.append(element("p", "code-description", info.description));
   const read = button("documentation-link link-button", `Read ${leaf(info.path)}`, async () => {
       await navigate({ kind: "file", path: info.path });
-      tab = "source";
       sourceView = before || removed ? "before" : "after";
-      renderPanel();
+      nav.toMap("source");
   });
   read.title = `${info.provenance} · ${info.path} · ${info.revision.slice(0, 7)}`;
   box.append(read);
@@ -2944,7 +2969,8 @@ function showDockAgent() {
   // A read-only device has no dock and may not read the agent list.
   if (!isOwner()) return;
   const chip = $("#dockAgent"),
-    job = primaryTab === "ask" ? "ask" : "task",
+    kind = dockKind(),
+    job = kind === "ask" ? "ask" : "task",
     uses = agents.describe(job);
   // Sessions use the agent chosen for tasks.
   chip.hidden = !uses;
@@ -2953,7 +2979,7 @@ function showDockAgent() {
     return;
   }
   chip.textContent = uses;
-  const what = job === "ask" ? "Ask uses" : primaryTab === "session" ? "Sessions use" : "New tasks use";
+  const what = job === "ask" ? "Ask uses" : kind === "session" ? "Sessions use" : "New tasks use";
   chip.title = `${what} ${uses}. Change`;
   chip.setAttribute("aria-label", chip.title);
   chip.onclick = () => agents.open(job, () => renderTab());
@@ -2967,13 +2993,17 @@ function showDockAgent() {
 const reading = { key: "", top: 0, atEnd: true };
 /** What the review sheet shows, as a key: the same key is the same view. */
 function viewKey() {
-  if (tab === "ask") return `ask:${viewingBranch || ""}`;
-  if (tab === "runs") return `runs:${workflow.viewKey()}`;
-  if (tab === "comments") return `comments:${workflow.scoped() ? "here" : "all"}`;
-  return `${tab}:${scope.kind}:${scope.path}:${selected?.key || ""}`;
+  const view = nav.view();
+  if (view.name === "inspect") return `${view.aspect}:${scope.kind}:${scope.path}:${selected?.key || ""}`;
+  if (view.name === "ask") return `ask:${viewingBranch || ""}`;
+  if (view.name === "run") return `run:${view.id}:${workflow.runShape(view.id)}`;
+  return view.name;
 }
 /** True for a view whose newest part is at its end: Ask, and an open session. */
-const conversationView = () => tab === "ask" || (tab === "runs" && workflow.viewingSession());
+const conversationView = () => {
+  const view = nav.view();
+  return view.name === "ask" || (view.name === "run" && workflow.isLive(view.id));
+};
 /** Remembers the reader's place in the current view, while the sheet shows it. */
 function rememberReading() {
   const scroller = $("#reviewScroll");
@@ -2996,44 +3026,96 @@ function placeReader() {
 $("#reviewScroll").addEventListener("scroll", rememberReading, { passive: true });
 function renderTab() {
   drawTab();
+  // After the title rows are drawn: the live line goes into the one on screen.
+  workflow.cueLive();
   placeReader();
 }
+/** The header row of a page: Back, the title, an optional quiet line, and the page's few
+ * actions. Every page uses it, so the way back is always in the same place. */
+function viewHead(title, { meta = "", actions = [], mood = "" } = {}) {
+  const row = element("div", "view-head"),
+    back = iconButton(element("button", "view-back"), "back", "Back"),
+    text = element("div", "view-text");
+  back.type = "button";
+  back.onclick = () => nav.back();
+  text.append(element("h2", "view-title", title));
+  if (meta) text.append(element("p", "view-meta", meta));
+  row.append(back, text, ...actions);
+  if (mood) row.append(peek(mood, { className: "task-peek" }));
+  $("#viewHead").replaceChildren(row);
+  return row;
+}
+/** The branch on the map, as a short name for titles. */
+const branchName = () =>
+  (viewingBranch || metadata?.branch || "HEAD").replace(/^refs\/heads\//, "");
+/** Conversations: the open sessions, and the Ask conversation of the branch on the map. */
+function renderConversations(body) {
+  viewHead("Conversations");
+  const row = (title, line, open, mark) => {
+    const b = element("button", "conversation-row");
+    b.type = "button";
+    const text = element("span", "conversation-text");
+    text.append(element("strong", "", title), element("small", "", line));
+    b.append(mark, text, glyph("forward"));
+    b.onclick = open;
+    return b;
+  };
+  const sessions = workflow.liveSessions();
+  if (sessions.length)
+    body.append(
+      element("h3", "workflow-group", "Sessions"),
+      ...sessions.map((s) => row(s.title, s.line, () => workflow.openTask(s.id), peek(s.mood, { className: "conversation-peek" }))),
+    );
+  const askMark = element("span", "conversation-icon");
+  askMark.append(glyph("ask"));
+  body.append(
+    element("h3", "workflow-group", "Ask"),
+    row(`Ask · ${branchName()}`, ask.lastQuestion() || "No questions yet", () => nav.go({ name: "ask" }), askMark),
+  );
+}
+/** Under Details: the instructions left on this selection, as one quiet link to them. */
+function renderInstructionsHere(body) {
+  const count = isOwner() ? workflow.instructionsHere() : 0;
+  if (!count) return;
+  const link = button("link-button instructions-here", `${count} instruction${count === 1 ? "" : "s"} here ›`, () =>
+    nav.go({ name: "instructions" }),
+  );
+  body.append(link);
+}
 function drawTab() {
-  // An open session on screen takes the dock: replies go to its agent.
-  if (tab === "runs" && workflow.viewingSession()) primaryTab = "session";
+  const view = nav.view(),
+    page = view.name !== "inspect",
+    panel = $("#panel");
   // The way back to an explored task says how many changes are waiting to go with it.
-  const waiting = taskReturn ? workflow.collected(taskReturn.id) : 0;
-  $("#taskReturn").textContent = waiting
-    ? `Back to task · ${waiting} to send`
-    : "Back to task";
-  // Comments on the selection keep the selection's header and tools; Tasks takes the panel.
-  $("#panel").dataset.view =
-    tab === "comments" && workflow.scoped() ? "discussion" : tab;
-  workflow.updateSessionBar();
+  const waiting = view.explore ? workflow.collected(view.explore.id) : 0;
+  $("#taskReturn").textContent = waiting ? `Back to task · ${waiting} to send` : "Back to task";
+  // A page (a list, a task, a conversation) takes the whole sheet, under its header row; the
+  // map's own views keep the selection's header and the aspect buttons.
+  panel.dataset.view = page ? view.name : view.aspect;
+  panel.dataset.sheet = page ? "page" : "inspect";
   document
     .querySelectorAll("button[data-tab]")
-    .forEach((b) =>
-      b.setAttribute("aria-pressed", String(b.dataset.tab === tab)),
-    );
-  $("#showDiscussion").setAttribute("aria-pressed", String(discussing()));
+    .forEach((b) => b.setAttribute("aria-pressed", String(!page && b.dataset.tab === view.aspect)));
+  // The dock follows the view: its modes on the map, a conversation's own box elsewhere.
+  const kind = dockKind();
+  $("#conversationDock").hidden = !kind;
+  $("#tabs").hidden = page;
   document
     .querySelectorAll("[data-compose]")
-    .forEach((b) =>
-      b.setAttribute("aria-selected", String(b.dataset.compose === primaryTab)),
-    );
+    .forEach((b) => b.setAttribute("aria-selected", String(b.dataset.compose === kind)));
   const body = $("#tabBody");
   body.replaceChildren();
-  // Only an open session fills its header host again (session.js).
-  $("#sessionHead").replaceChildren();
+  $("#viewHead").replaceChildren();
   const composerHost = $("#composerHost");
   // Redraws replace the composer; keep focus and the caret so the keyboard stays open.
   const typing = document.activeElement?.closest?.("#composerHost textarea");
   const caret = typing && [typing.selectionStart, typing.selectionEnd];
   composerHost.replaceChildren();
   const conversation = element("div", "conversation");
-  if (primaryTab === "ask") ask.render(conversation, composerHost);
-  else if (primaryTab === "session") workflow.renderSessionComposer(composerHost);
-  else workflow.renderComposer(composerHost);
+  if (kind === "ask") ask.render(conversation, composerHost);
+  else if (kind === "session")
+    workflow.renderSessionComposer(composerHost, view.name === "run" ? view.id : null);
+  else if (kind === "comments") workflow.renderComposer(composerHost);
   const box = composerHost.querySelector("textarea");
   if (box) {
     // The box grows with its text up to the CSS max-height (four lines), then scrolls.
@@ -3054,23 +3136,24 @@ function drawTab() {
   );
   $("#dockContext").title = anchor || "";
   showDockAgent();
-  $("#selectionDetails").hidden = tab !== "details";
-  if (tab === "details") return;
-  if (tab === "ask") {
-    if (primaryTab !== "ask")
-      ask.render(conversation, document.createElement("div"));
+  $("#selectionDetails").hidden = page || view.aspect !== "details";
+  if (view.name === "ask") {
+    const fresh = iconButton(element("button", "view-action"), "add", "New conversation");
+    fresh.type = "button";
+    fresh.disabled = !ask.hasMessages();
+    fresh.onclick = () => ask.clear();
+    viewHead(`Ask · ${branchName()}`, { actions: [fresh] });
     body.append(conversation);
     return;
   }
-  if (["comments", "runs"].includes(tab)) {
-    workflow.render(body, tab);
-    return;
-  }
-  if (tab === "source") {
+  if (view.name === "conversations") return renderConversations(body);
+  if (page) return workflow.render(body, view);
+  if (view.aspect === "details") return renderInstructionsHere(body);
+  if (view.aspect === "source") {
     renderSource(body);
     return;
   }
-  if (tab === "dependencies") {
+  if (view.aspect === "dependencies") {
     renderDependencies(body);
     return;
   }
@@ -3163,9 +3246,8 @@ function drawTab() {
   if (scope.kind === "file")
     body.append(
       button("btn", "Open full file diff", () => {
-        tab = "source";
         sourceView = "diff";
-        renderPanel();
+        nav.toMap("source");
         if (!sourceData) loadSource();
       }),
     );
@@ -3189,12 +3271,9 @@ function ruleSummary() {
   );
   box.dataset.state = checks.state;
   if (checks.violations) box.classList.add("has-violations");
-  if (tab !== "dependencies")
+  if (nav.view().aspect !== "dependencies")
     box.append(
-      button("btn sm", "Review relationships", () => {
-        tab = "dependencies";
-        renderPanel();
-      }),
+      button("btn sm", "Review relationships", () => nav.toMap("dependencies")),
     );
   box.append(
     element(
@@ -3231,10 +3310,9 @@ async function openEvidence(relation) {
   await navigate({ kind: "file", path: fact.source.path });
   if (!sourceData) await loadSource();
   selected = nodes.find((n) => n.name === fact.source.symbol) || null;
-  tab = "source";
   sourceView = before || !relation.after ? "before" : "after";
   renderDeck();
-  renderPanel();
+  nav.toMap("source");
 }
 /** Lists typed relationships, rule evidence and unresolved targets for the current scope. */
 function renderDependencies(body) {
@@ -3440,7 +3518,7 @@ async function loadSource() {
   } catch (error) {
     if (id === sourceId) {
       showNotice(error.message, true);
-      if (tab === "source")
+      if (nav.view().aspect === "source")
         $("#tabBody").append(element("p", "empty", error.message));
     }
   }
@@ -3594,39 +3672,34 @@ document.querySelectorAll("[data-ba]").forEach(
       render();
     }),
 );
+// The aspect buttons switch the map's view in place; Back from another aspect returns to
+// Details.
 document.querySelectorAll("button[data-tab]").forEach(
   (b) =>
     (b.onclick = () => {
-      tab = b.dataset.tab;
       expandSheet();
-      if (comparison) renderPanel();
-      if (tab === "source" && scope.kind === "file" && !sourceData)
-        loadSource();
+      nav.toMap(b.dataset.tab);
+      if (b.dataset.tab === "source" && scope.kind === "file" && !sourceData) loadSource();
     }),
 );
+// The dock's modes on the map: what the next message is. Only a preference: the view stays.
 document.querySelectorAll("[data-compose]").forEach(
   (b) =>
     (b.onclick = () => {
-      primaryTab = b.dataset.compose;
-      // The conversation on screen follows the dock, so Ask never shows under a comment draft.
-      const switching = discussing();
-      if (switching) showDiscussion();
+      dockMode = b.dataset.compose;
       if (comparison) renderPanel();
       $("#composerHost textarea")?.focus({ preventScroll: true });
     }),
 );
-/** True while the Tasks overview or a task fills the sheet (not instructions on a selection). */
-function inTasks() {
-  return tab === "runs" || (tab === "comments" && !workflow.scoped());
-}
-/** Leaves Tasks for the selection's details, as tapping a card would. */
 /* The phone's back button (and the browser's back) steps back inside the app, one layer at a
  * time, before it leaves. The app keeps two history entries of its own: a base, and a guard
  * on top of it. A back press lands on the base; the app undoes one layer and puts the guard
  * back. Any other history event (a change of only the address's #fragment, say) is not a
- * back press and is left alone. */
+ * back press and is left alone. Escape does the same as Back. */
 const BACK_BASE = { peekumiBase: true };
 const BACK_GUARD = { peekumiBack: true };
+/** Undoes one layer: an open menu, dialog or popover; then the view on top (nav.js); then
+ * the selection; then one map level. False when nothing is left. */
 function goBack() {
   if (menuIsOpen()) {
     closeMenu();
@@ -3634,34 +3707,18 @@ function goBack() {
   }
   const dialog = document.querySelector("dialog[open]");
   if (dialog) {
-    dialog.close();
+    // Through the dialog's own cancel, so its owner tidies up (agents.js, a merge sheet).
+    dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    if (dialog.open) dialog.close();
     return true;
   }
   const popover = document.querySelector("#mapLegend[open], #revisionDetails[open]");
   if (popover) {
     popover.open = false;
+    popover.querySelector("summary")?.focus();
     return true;
   }
-  if (taskReturn) {
-    returnToTask();
-    return true;
-  }
-  if (tab === "runs") {
-    tab = "comments";
-    primaryTab = "comments";
-    workflow.scope("all");
-    renderPanel();
-    workflow.refresh();
-    return true;
-  }
-  if (tab !== "details") {
-    if (inTasks()) closeTasks();
-    else {
-      tab = "details";
-      renderPanel();
-    }
-    return true;
-  }
+  if (nav.back()) return true;
   if (selected) {
     selected = null;
     held = null;
@@ -3689,28 +3746,13 @@ addEventListener("popstate", (event) => {
   // Nothing left inside the app: this back press leaves it.
   else history.back();
 });
-function closeTasks() {
-  tab = "details";
-  renderPanel();
+/** A header button opens its page; pressed again on that page, it goes back. */
+function toggle(name) {
+  if (nav.view().name === name) nav.back();
+  else nav.go({ name });
 }
-$("#openTasks").onclick = () => {
-  // The Tasks button toggles: pressed again, it returns to the map selection.
-  if (inTasks()) return closeTasks();
-  // While an agent runs (or a task stopped partway), it opens that task directly.
-  const focus = workflow.focusRun();
-  if (focus) return workflow.openTask(focus);
-  tab = "comments";
-  primaryTab = "comments";
-  workflow.scope("all");
-  expandSheet();
-  renderPanel();
-  workflow.refresh();
-};
-$("#showDiscussion").onclick = () => {
-  const entering = !discussing();
-  showDiscussion();
-  renderPanel();
-};
+$("#openTasks").onclick = () => toggle("tasks");
+$("#openConversations").onclick = () => toggle("conversations");
 let sheetPointer = null,
   sheetMotion = null;
 const sheetLevels = ["peek", "half", "full"];
@@ -3758,7 +3800,7 @@ function setSheetHeight(height) {
   panel.style.removeProperty("height");
   panel.dataset.height = height;
   // A closed sheet shows the open session's line, also from the session itself.
-  workflow.updateSessionBar();
+  workflow.cueLive();
   const end = panel.getBoundingClientRect().height;
   $("#sheetHandle").setAttribute(
     "aria-label",
@@ -3898,18 +3940,10 @@ $("#closeRevision").onclick = () => {
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.target.closest("input,select,textarea"))
     return;
-  for (const id of ["#mapLegend", "#revisionDetails"])
-    if ($(id).open) {
-      $(id).open = false;
-      $(id + " > summary").focus();
-      return;
-    }
-  if (selected) {
-    selected = null;
-    held = null;
-    renderDeck();
-    renderPanel();
-  } else goUp();
+  // A menu or a dialog handles its own Escape (it closes, and only it).
+  if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
+  // Escape steps back as the Back button does.
+  goBack();
 });
 // Height changes resize the SVG viewport naturally. Rebuild only for width changes,
 // so dragging the sheet preserves the graph DOM, selection and pan/zoom transform.
@@ -4013,7 +4047,8 @@ $("#stage").addEventListener("click", (event) => {
   // (the Follow eye) is no longer the target's ancestor, but it is still in the path.
   const control = '.node, [role="button"], button, a, summary, details, input, select';
   if (dragged || event.composedPath().some((n) => n.matches?.(control))) return;
-  if (inTasks()) closeTasks();
+  // A list or a task gives way to the map; on the map, the selection clears.
+  if (nav.view().name !== "inspect" && !onThread()) nav.back();
   else if (selected) {
     selected = null;
     held = null;

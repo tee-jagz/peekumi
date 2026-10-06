@@ -1,5 +1,5 @@
 /** The back button steps back inside the app, one layer at a time, and leaves it only when
- * nothing is left: a menu, then a sheet view, then a map level, then out. */
+ * nothing is left: a menu, then a page (nav.js), then a map level, then out. */
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import { fixture } from "./workflow-support.mjs";
@@ -24,21 +24,19 @@ try {
         await page.evaluate(() => history.back());
         await page.waitForTimeout(250);
       };
-      // Into backend, Ask open, and a context menu on a card.
+      // Into backend, Conversations open, and a context menu on a card.
       await backend.click();
       await backend.click();
       await page.waitForFunction(() => /backend/.test(document.querySelector(".crumbs")?.textContent || ""));
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      if (viewport.width < 900 && (await page.locator("#panel").getAttribute("data-height")) === "peek") await page.locator("#sheetHandle").click();
-      await page.locator("#showDiscussion").click();
-      await page.waitForFunction(() => document.querySelector("#panel").dataset.view === "ask");
+      await page.locator("#openConversations").click();
+      await page.waitForFunction(() => document.querySelector("#panel").dataset.view === "conversations");
       await page.locator('.sheet[data-front="true"] .node[data-path="backend/lookup.py"]').click({ button: "right" });
       await page.locator(".context-menu").waitFor();
       // Back: the menu closes; nothing else changes.
       await back();
       assert.equal(await page.locator(".context-menu").count(), 0);
-      assert.equal(await page.evaluate(() => document.querySelector("#panel").dataset.view), "ask");
-      // Back: Ask gives way to the details.
+      assert.equal(await page.evaluate(() => document.querySelector("#panel").dataset.view), "conversations");
+      // Back: the page gives way to the map's details.
       await back();
       assert.equal(await page.evaluate(() => document.querySelector("#panel").dataset.view), "details");
       assert.match(await crumbs(), /backend/);

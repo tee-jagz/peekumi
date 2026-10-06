@@ -49,6 +49,9 @@ const glyphs = {
   back: "M12 4l-6 6 6 6",
   chevron: "M5 8l5 5 5-5",
   forward: "M8 4l6 6-6 6",
+  add: "M10 4v12M4 10h12",
+  // Agents: two sliders, for the choice of provider, model and effort.
+  agents: "M3 6h7M14 6h3M3 14h3M10 14h7" + ring(12, 6, 2) + ring(8, 14, 2),
   home: "M3 9l7-6 7 6v8H3ZM8 17v-5h4v5",
   up: "M9 13L4 8l5-5M4 8h8a4 4 0 0 1 4 4v5",
   file: "M4 2h8l4 4v12H4ZM12 2v5h4",
