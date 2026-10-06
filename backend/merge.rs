@@ -61,7 +61,9 @@ impl Workflow {
     /// Uncommitted paths in the inspected folder (changed, staged, deleted or untracked),
     /// with `true` for an untracked one.
     fn uncommitted(&self) -> Result<Vec<(String, bool)>> {
-        let raw = self.git(&[
+        // Exact output: trimming would take the leading space of " M path" and, with it, the
+        // first letter of the path.
+        let raw = self.git_exact(&[
             "status",
             "--porcelain=v1",
             "-z",
@@ -248,6 +250,8 @@ impl Workflow {
             // stay open: they become drafts again, at their place, for a later task.
             for c in v["comments"].as_array_mut().unwrap().iter_mut() {
                 if c["runId"] == id && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or("")) {
+                    // Undo merge puts it back as it was (see unmerge).
+                    c["reopenedFrom"] = json!({"run": id, "status": c["status"], "report": c["report"]});
                     c["status"] = json!("draft");
                     c["report"] = Value::Null;
                     c["runId"] = Value::Null;
@@ -290,6 +294,18 @@ impl Workflow {
             }
             r["mergeHistory"].as_array_mut().unwrap().push(record);
             r["merge"] = Value::Null;
+            // Instructions that the merge made drafts again go back to the task, as they were,
+            // while the owner has not changed them.
+            for c in v["comments"].as_array_mut().unwrap().iter_mut() {
+                if c["reopenedFrom"]["run"] == id && c["status"] == "draft" {
+                    let from = c["reopenedFrom"].take();
+                    c["status"] = from["status"].clone();
+                    c["report"] = from["report"].clone();
+                    c["runId"] = json!(id);
+                    c.as_object_mut().unwrap().remove("reopenedFrom");
+                    crate::workflow::event(c, "owner");
+                }
+            }
             Ok(Value::Null)
         })?;
         self.merge_status(id)
@@ -411,15 +427,19 @@ impl Workflow {
                 crate::workflow::event(c, "owner");
             }
             // Flagged and unfinished instructions stay open, and they go with the latest round,
-            // where the owner sees them; this round does not work on them.
+            // where the owner sees them (its `open` list); this round does not work on them.
+            let mut open = vec![];
             for c in v["comments"].as_array_mut().unwrap().iter_mut() {
                 if c["runId"] == previous && ["flagged", "unreported"].contains(&c["status"].as_str().unwrap_or("")) {
                     c["runId"] = json!(id);
                     crate::workflow::event(c, "owner");
+                    let mut snapshot = c.clone();
+                    snapshot.as_object_mut().unwrap().remove("history");
+                    open.push(snapshot);
                 }
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"open":open,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
             v["runs"].as_array_mut().unwrap().push(next.clone());
             Ok(next)
         })?;

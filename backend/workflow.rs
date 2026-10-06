@@ -145,8 +145,13 @@ impl Workflow {
         Ok(serde_json::from_str(&raw)?)
     }
     /// Runs Git with hooks disabled and literal pathspecs;
-    /// never changes the inspected checkout.
+    /// never changes the inspected checkout. The output is trimmed.
     pub fn git(&self, args: &[&str]) -> Result<String> {
+        Ok(self.git_exact(args)?.trim().into())
+    }
+    /// As `git`, with the output exactly as Git wrote it: for formats where a leading space
+    /// means something (`git status --porcelain`: " M path" is a change in the work tree).
+    pub fn git_exact(&self, args: &[&str]) -> Result<String> {
         let mut a = vec![
             "--no-optional-locks",
             "--literal-pathspecs",
@@ -156,11 +161,7 @@ impl Workflow {
         ];
         a.push(self.repo.to_str().context("Non UTF-8 repository path")?);
         a.extend_from_slice(args);
-        Ok(
-            String::from_utf8(crate::process::run("git", &a, None, vec![])?)?
-                .trim()
-                .into(),
-        )
+        Ok(String::from_utf8(crate::process::run("git", &a, None, vec![])?)?)
     }
     /// Resolves an explicit commit without accepting Git options.
     pub fn resolve(&self, revision: &str) -> Result<String> {

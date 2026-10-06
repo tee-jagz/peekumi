@@ -1,19 +1,17 @@
 /** @module Installable app shell with explicit updates and no offline repository storage. */
 import { peek } from "./peek.js";
-const notice = document.createElement("div");
-notice.className = "pwa-notice";
+// Offline and an update are quiet notes in the header's comparison row: a small Peek, a few
+// words and plain text actions. They never cover the header.
+const notice = document.createElement("span");
+notice.className = "app-note";
 notice.hidden = true;
 notice.setAttribute("role", "status");
-document.body.append(notice);
+(document.querySelector(".title-block") || document.body).append(notice);
 function connectivity() {
   if (!navigator.onLine) {
-    notice.replaceChildren(
-      peek("asleep"),
-      document.createTextNode(
-        "Offline · reconnect to your Peekumi server to inspect code.",
-      ),
-    );
-    notice.className = "pwa-notice is-offline";
+    notice.replaceChildren(peek("asleep"), document.createTextNode("Offline"));
+    notice.title = "Reconnect to your Peekumi server to inspect code.";
+    notice.className = "app-note is-offline";
     notice.hidden = false;
   } else if (notice.classList.contains("is-offline")) {
     // Back online: clear only the offline message, never an update waiting to be applied.
@@ -29,33 +27,26 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
     .register("/sw.js")
     .then((registration) => {
       let updateRequested = false;
-      /** Fills the card: Peek in `state`, a title, a line of detail and its actions. */
+      /** Fills the note: Peek in `state`, a few words, and its actions as plain text
+       * buttons. `detail` is the note's tooltip. */
       function card(state, title, detail, actions = []) {
-        const text = document.createElement("div");
-        text.className = "pwa-text";
-        const strong = document.createElement("strong");
-        strong.textContent = title;
-        const line = document.createElement("span");
-        line.textContent = detail;
-        text.append(strong, line);
-        const buttons = document.createElement("div");
-        buttons.className = "pwa-actions";
-        for (const [label, primary, run] of actions) {
+        const buttons = actions.map(([label, primary, run]) => {
           const b = document.createElement("button");
           b.type = "button";
-          b.className = primary ? "btn primary" : "btn";
+          b.className = primary ? "app-note-action is-main" : "app-note-action";
           b.textContent = label;
           b.onclick = run;
-          buttons.append(b);
-        }
-        notice.className = "pwa-notice is-update";
-        notice.replaceChildren(peek(state), text, ...(actions.length ? [buttons] : []));
+          return b;
+        });
+        notice.className = "app-note is-update";
+        notice.title = detail;
+        notice.replaceChildren(peek(state), document.createTextNode(title), ...buttons);
         notice.hidden = false;
       }
       const later = () => (notice.hidden = true);
       const reload = () => {
         updateRequested = true;
-        card("loading", "Updating Peekumi", "This takes a moment.");
+        card("loading", "Updating", "This takes a moment.");
         registration.waiting?.postMessage("activate-update");
       };
       // Reloading clears anything typed but not yet sent; saved work is on the server.
@@ -66,7 +57,7 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
       function update() {
         if (!registration.waiting || !navigator.serviceWorker.controller)
           return;
-        card("idle", "Peekumi has an update", "Reload to use the new version.", [
+        card("idle", "Update ready", "Reload to use the new version of Peekumi.", [
           ["Later", false, later],
           [
             "Reload",
@@ -75,8 +66,8 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
               unsent()
                 ? card(
                     "thinking",
-                    "You have unsent text",
-                    "Reloading clears what you're typing. Your Ask conversation and saved instructions stay.",
+                    "Unsent text",
+                    "Reloading clears what you type now. Your Ask conversation and saved instructions stay.",
                     [
                       ["Keep editing", false, later],
                       ["Reload anyway", true, reload],

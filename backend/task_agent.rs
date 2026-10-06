@@ -182,12 +182,6 @@ fn converse(
             let name = call["function"]["name"].as_str().unwrap_or("");
             let args: Value = serde_json::from_str(call["function"]["arguments"].as_str().unwrap_or("{}"))
                 .unwrap_or_else(|_| json!({}));
-            let item = match name {
-                "write_file" | "edit_file" | "delete_file" => json!({"type": "file_change", "path": args["path"]}),
-                "finish" => json!({"type": "agent_message", "text": args["summary"]}),
-                _ => json!({"type": "command_execution", "command": format!("{name} {}", args["path"].as_str().or(args["text"].as_str()).unwrap_or("")).trim()}),
-            };
-            event(json!({"item": item}));
             if name == "finish" && !session {
                 finished = Some(args["summary"].as_str().unwrap_or("").to_string());
             }
@@ -200,6 +194,19 @@ fn converse(
                 _ => tool(store, id, token, &root, name, &args),
             }
             .unwrap_or_else(|e| format!("Error: {e}"));
+            // The step goes to the log after its result, so a failed tool shows as failed.
+            let failed = result.starts_with("Error:");
+            let item = match name {
+                "write_file" | "edit_file" | "delete_file" => {
+                    json!({"type": "file_change", "path": args["path"], "status": if failed { "failed" } else { "completed" }})
+                }
+                "finish" => json!({"type": "agent_message", "text": args["summary"]}),
+                _ => json!({"type": "command_execution",
+                    "command": format!("{name} {}", args["path"].as_str().or(args["text"].as_str()).unwrap_or("")).trim(),
+                    "exit_code": if failed { 1 } else { 0 },
+                    "aggregated_output": if failed { result.chars().take(2000).collect::<String>() } else { String::new() }}),
+            };
+            event(json!({"item": item}));
             messages.push(json!({"role": "tool", "tool_call_id": call["id"], "content": bounded(&result)}));
         }
         save(messages)?;

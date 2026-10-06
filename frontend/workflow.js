@@ -30,6 +30,13 @@ const label = (a) =>
       ? `${a.path} → ${a.target} · ${a.relationship}`
       : a.path || "Repository";
 
+/** An agent's error line in plain words: no "Error:" prefix, and each path shortened to its
+ * file name, so no host path (a temporary folder, a home folder) reaches the screen. */
+const plainError = (line = "") =>
+  String(line)
+    .replace(/^\s*(error|Error):\s*/, "")
+    .replace(/(?:~|[A-Za-z]:)?(?:\/[^\s'"`/]+){2,}\/?/g, (path) => path.replace(/\/$/, "").split("/").pop())
+    .slice(0, 300);
 /** Extracts only user-facing agent messages and activity labels from JSONL.
  * Partial lines and tool payloads stay in diagnostics, never in the conversation. */
 export function agentActivity(output = "") {
@@ -41,7 +48,7 @@ export function agentActivity(output = "") {
     try {
       event = JSON.parse(line);
     } catch {
-      if (/^(error:|Error:)/.test(line)) errors.push(line.slice(0, 500));
+      if (/^(error:|Error:)/.test(line)) errors.push(plainError(line));
       continue;
     }
     if (!event || typeof event !== "object") continue;
@@ -62,7 +69,7 @@ export function agentActivity(output = "") {
       event.is_error
     ) {
       const reason = event.error?.message || event.message || event.result;
-      if (typeof reason === "string") errors.push(reason);
+      if (typeof reason === "string") errors.push(plainError(reason));
     }
     if (item?.type === "command_execution") {
       activity = /\b(test|pytest|cargo test|playwright)\b/.test(
@@ -240,17 +247,23 @@ export function createWorkflow({
     references: (body) => write("/api/references", body),
     back: () => nav.back(),
   });
-  /** The open session: the one on screen, else the newest still open. */
+  /** The open session: the one on screen, else the one the owner opened last (while it is
+   * open), else the newest still open. */
+  let lastSession = null;
   function liveSession() {
     const shown = runDetail && runDetail.id === runId() && live(runDetail) ? runDetail : null;
-    return shown || data.runs.slice().reverse().find(live) || null;
+    if (shown) lastSession = shown.id;
+    const last = data.runs.find((r) => r.id === lastSession && live(r));
+    return shown || last || data.runs.slice().reverse().find(live) || null;
   }
   /** The finished task on screen, when it can still collect changes for a next round. */
   function viewedTask() {
     const r = runDetail;
     if (!r || r.id !== runId()) return null;
-    return !active(r) && !live(r) && r.status !== "preview" && !r.revisedBy && !r.applied ? r.id : null;
+    return !active(r) && !live(r) && !endedSession(r) && r.status !== "preview" && !r.revisedBy && !r.applied ? r.id : null;
   }
+  /** A session that the owner ended without review: a closed record, not a failed task. */
+  const endedSession = (r) => r?.kind === "session" && r.status === "cancelled";
   /** Drafts waiting for a new task; those collected for a finished task go back with it. */
   const sendable = (c) => c.status === "draft" && !c.forRun;
   /** Instructions collected for task `id`'s next round while exploring its changes. */
@@ -408,7 +421,8 @@ export function createWorkflow({
         });
     }
     const plain = (t) => t.replace(/[`*#>]/g, "").trim();
-    const label = `${session ? "Session" : "Task"} ${name} · ${now.title}${now.label ? ": " + plain(now.label) : ""}${now.code ? " " + now.code : ""}. Open it`;
+    const what = `${now.title}${now.label ? ": " + plain(now.label) : ""}${now.code ? " " + now.code : ""}`.replace(/[.\s]+$/, "");
+    const label = `${session ? "Session" : "Task"} ${name} · ${what}. Open it`;
     line.setAttribute("aria-label", label);
     line.title = label;
     line.onclick = () => openTask(r.id);
@@ -462,7 +476,7 @@ export function createWorkflow({
     if (!drafts.length && !waiting.length) return;
     const b = action(
       drafts.length
-        ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Prepare run ›`
+        ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Review task ›`
         : `${waiting.length} ready for review ›`,
       () => {
         if (!drafts.length) return nav.go({ name: "tasks" });
@@ -619,6 +633,8 @@ export function createWorkflow({
             true,
           ),
         );
+      // The drafts belong with the button that sends them, under Needs you.
+      renderCards(body, drafts);
       // A task's earlier rounds open from its latest one. Tasks are grouped by what they
       // need from you; applied and closed tasks leave this list for History.
       body.append(...needs.map(taskCard));
@@ -640,7 +656,8 @@ export function createWorkflow({
         )
       : here
         ? data.comments.filter(visible)
-        : data.comments.filter(sendable);
+        : // The Tasks list already shows its drafts under Needs you.
+          [];
     if (here && !items.length) {
       const empty = el(
         "p",
@@ -654,7 +671,7 @@ export function createWorkflow({
     }
     else if (
       overview &&
-      !items.length &&
+      !data.comments.some(sendable) &&
       !data.runs.some((r) => r.status !== "preview" && !r.revisedBy && stageOf(r) !== "history")
     )
       body.append(
@@ -713,9 +730,13 @@ export function createWorkflow({
           const state = el(
             "span",
             "card-state",
-            c.forRun ? "To send with its task" : states[c.status],
+            c.forRun
+              ? "To send with its task"
+              : endedSession(task) && c.status === "unreported"
+                ? "Not reviewed"
+                : states[c.status],
           );
-          state.dataset.state = c.status;
+          state.dataset.state = endedSession(task) && c.status === "unreported" ? "ended" : c.status;
           foot.append(state);
         }
         card.append(richText(c.text, "workflow-text"), foot);
@@ -829,13 +850,17 @@ export function createWorkflow({
               ?.scrollIntoView({ block: "start", behavior: "smooth" }),
           );
         },
-        true,
+        // Once a preview is there, Start task is the next step.
+        !preview,
       ),
     );
     if (preview) {
       const summary = el("section", "task-preview");
+      // A provider that cannot run now says so before the start, not after it fails.
+      const blocked = agents.problem("task");
       summary.append(
-        el("h3", "", "Ready to start"),
+        el("h3", "", blocked ? "Not ready" : "Ready to start"),
+        ...(blocked ? [el("p", "read-note warn-note", `${blocked}. Change it in Agents, or fix it on your computer.`)] : []),
         el(
           "p",
           "workflow-text",
@@ -1024,7 +1049,6 @@ export function createWorkflow({
     step.dataset.state = m.state;
     const heading = (mood, text) => {
       const h = el("h3", "workflow-group");
-      if (mood) h.append(peek(mood));
       h.append(document.createTextNode(text));
       return h;
     };
@@ -1103,7 +1127,9 @@ export function createWorkflow({
     return step;
   }
   /** Every instruction in a task round: its work and any finished ones carried along. */
-  const instructionsOf = (r) => [...(r.comments || []), ...(r.done || [])];
+  /** A round's instructions: its work, the finished work it carries, and (in an update round)
+   * the instructions that stay open for the owner's decision. */
+  const instructionsOf = (r) => [...(r.comments || []), ...(r.done || []), ...(r.open || [])];
   /** A task in words: its first instruction (one line, shortened), how many more, and the
    * round after the first. A session is its title. */
   function taskTitle(r) {
@@ -1221,6 +1247,8 @@ export function createWorkflow({
    * stopped when it ended early; none otherwise. */
   function moodOf(r) {
     if (active(r) && r.status !== "interrupted") return "working";
+    // Ended on purpose: no droop.
+    if (endedSession(r)) return "";
     if (r.applied) return "merged";
     if (r.revisedBy) return "";
     if (reviewed(r)) return "success";
@@ -1238,9 +1266,10 @@ export function createWorkflow({
       const why = ended
         ? "You ended this session without review. Its branch stays, and nothing was merged."
         : r.status === "cancelled"
-          ? `This task stopped: you stopped it, or it reached the one-hour limit. ${again}`
-          : `${progress.errors.join("\n") || r.message || "This task stopped before it finished."} ${again}`;
+          ? "This task stopped: you stopped it, or it reached the one-hour limit."
+          : progress.errors.join("\n") || r.message || "This task stopped before it finished.";
       live.append(el("p", "workflow-text", why));
+      if (!ended) live.append(el("p", "read-note", again));
     }
     const latest = progress.messages.at(-1);
     if (latest && active(r))
@@ -1327,13 +1356,13 @@ export function createWorkflow({
       (c) => c.runId === r.id && c.status === "addressed",
     );
     // An applied task is a settled record: later changes start a new task.
-    const decide = !active(r) && !r.revisedBy && !r.applied,
+    const decide = !active(r) && !r.revisedBy && !r.applied && !endedSession(r),
       batch = decide ? collected(r.id) : [];
-    const agentName = r.agent === "claude" ? "Claude Code" : "Codex";
+    const agentName = agents.label(r.agent);
     if (batch.length) {
       // The list and the button that sends it to the agent, as the next round, sit together.
       body.append(
-        el("h3", "workflow-group", `Requested changes · ${batch.length}`),
+        el("h3", "workflow-group", "Requested changes"),
         Object.assign(action(
           `Send ${batch.length} change${batch.length === 1 ? "" : "s"} to ${agentName}`,
           async () => {
@@ -1401,7 +1430,7 @@ export function createWorkflow({
               .querySelector(".apply-step")
               ?.scrollIntoView({ block: "start", behavior: "smooth" }),
           );
-        }),
+        }, true),
       );
     // What should change is written in the box at the bottom, which adds it to this task's
     // list; the list's own button sends it to the agent as the next round.
@@ -1497,7 +1526,9 @@ export function createWorkflow({
   let idle = 0;
   setInterval(() => {
     if (document.hidden || !loaded) return;
-    if (!data.runs.some(active) && ++idle % 4) return;
+    // While an agent works or a session is open, every 3 s, so its state on the sheet (and a
+    // command request) shows at once; otherwise every 12 s.
+    if (!data.runs.some((r) => active(r) || live(r)) && ++idle % 4) return;
     refresh("poll").catch((e) => notice(e.message, true));
   }, 3000);
   // A session on screen that is working updates faster, so its steps appear as they happen.
@@ -1515,7 +1546,7 @@ export function createWorkflow({
     /** True when a finished task, not yet continued, can collect changes for a next round. */
     revisable(id) {
       const r = data.runs.find((x) => x.id === id);
-      return Boolean(r && !active(r) && !live(r) && r.status !== "preview" && !r.revisedBy && !r.applied);
+      return Boolean(r && !active(r) && !live(r) && !endedSession(r) && r.status !== "preview" && !r.revisedBy && !r.applied);
     },
     /** How many instructions are waiting to go back with task `id`. */
     collected: (id) => collected(id).length,
@@ -1528,7 +1559,10 @@ export function createWorkflow({
     exploringTask: () => exploring(),
     renderComposer,
     /** The dock's Session box: a reply to run `id` (or the open session), or a new session. */
-    renderSessionComposer: (host, id = null) => session.renderComposer(host, id ? runOf(id) : liveSession()),
+    renderSessionComposer: (host, id = null) =>
+      session.renderComposer(host, id ? runOf(id) : liveSession(), { named: data.runs.filter(live).length > 1 }),
+    /** "session" or "task": what run `id` is. */
+    runKind: (id) => (runOf(id)?.kind === "session" ? "session" : "task"),
     /** True when run `id` is an open session (a conversation, not a task). */
     isLive: (id) => Boolean(runOf(id) && live(runOf(id))),
     /** How run `id` shows, for the sheet's scroll rule: "loading", "session" or "task". */

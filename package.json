@@ -14,7 +14,7 @@
   "scripts": {
     "start": "node scripts/start.mjs",
     "test": "npm run build:rust && node --test --test-concurrency=1 test/*.test.mjs",
-    "test:browser": "npm run build:rust && node test/browser.mjs && node test/relationships-browser.mjs && node test/workflow-browser.mjs && node test/session-browser.mjs && node test/focus-browser.mjs && node test/menu-browser.mjs && node test/back-browser.mjs && node test/navigation-browser.mjs && node test/platform-browser.mjs && node test/revisions-browser.mjs && node test/usability-browser.mjs && node test/changes-browser.mjs && node test/edges-browser.mjs",
+    "test:browser": "npm run build:rust && node test/browser.mjs && node test/relationships-browser.mjs && node test/workflow-browser.mjs && node test/session-browser.mjs && node test/focus-browser.mjs && node test/menu-browser.mjs && node test/back-browser.mjs && node test/navigation-browser.mjs && node test/address-browser.mjs && node test/platform-browser.mjs && node test/revisions-browser.mjs && node test/usability-browser.mjs && node test/changes-browser.mjs && node test/edges-browser.mjs",
     "build:rust": "node scripts/cargo.mjs build --release --locked",
     "test:rust": "node scripts/cargo.mjs test --locked",
     "benchmark:rust": "npm run build:rust && node scripts/benchmark-rust.mjs",

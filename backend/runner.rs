@@ -218,7 +218,11 @@ fn supervise(
         if let Some(exit) = child.try_wait()? {
             break (
                 if exit.success() { "completed" } else { "failed" },
-                format!("Agent exited with {exit}. Review each report before verification."),
+                if exit.success() {
+                    format!("Agent exited with {exit}. Review each report before verification.")
+                } else {
+                    format!("The agent stopped with an error ({exit}).")
+                },
             );
         }
         let current = store.run(id)?;

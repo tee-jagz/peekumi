@@ -11,7 +11,8 @@ statusCheckRollup";
 
 fn gh(directory: &Path, executable: &str, args: &[&str]) -> Result<Value> {
     let bytes = crate::process::run(executable, args, Some(directory), vec![])
-        .map_err(|e| anyhow::anyhow!("{e}. PR access requires GitHub CLI and gh auth login on this host"))?;
+        // The command's own path and output stay off the screen.
+        .map_err(|_| anyhow::anyhow!("Peekumi cannot read pull requests. Install the GitHub CLI (gh) on this computer and run gh auth login"))?;
     Ok(serde_json::from_slice(&bytes)?)
 }
 fn git(directory: &Path, args: &[&str]) -> Result<String> {

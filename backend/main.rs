@@ -147,6 +147,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[0].as_str().unwrap_or("HEAD~1"),
             args[1].as_str().unwrap_or("HEAD"),
         ),
+        "commits" => repo.earlier_commits(argument(args, 0)),
         "compare" => repo.compare(
             argument(args, 0),
             argument(args, 1),
@@ -1019,6 +1020,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 .await
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,
+        "/api/commits" => app.engine.call("commits", json!([query.get("before")])).await,
         "/api/source" => {
             app.engine
                 .call("source", json!([base, head, query.get("path")]))

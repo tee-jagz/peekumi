@@ -367,6 +367,57 @@ test("a merge closes the task; instructions that the agent flagged become drafts
   assert.equal(flagged.status, "draft", "The flagged instruction is open again");
   assert.equal(flagged.runId ?? null, null);
   assert.equal(state.comments.find((x) => x.id === a.id).status, "verified");
+  // Undo merge puts it back with the task, flagged, as it was.
+  const undone = await f.req(`/api/runs/${p.id}/unmerge`, {});
+  assert.equal(undone.error, undefined, undone.error);
+  const back = (await f.req("/api/workflow")).comments.find((x) => x.id === b.id);
+  assert.equal(back.status, "flagged");
+  assert.equal(back.runId, p.id);
+  assert.equal(back.reopenedFrom, undefined);
+});
+
+test("an update round keeps a flagged instruction open and in view", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const anchor = { kind: "repo", path: "" };
+  const a = await f.req("/api/comments", { text: "Write the result file", sha: f.sha, anchor });
+  const b = await f.req("/api/comments", { text: "Decide this later", sha: f.sha, anchor });
+  const p = await f.req("/api/runs/preview", { agent: "codex", commentIds: [a.id, b.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+  const done = (await f.req("/api/workflow")).comments.find((x) => x.id === a.id);
+  await f.req("/api/comments/" + a.id, { action: "verify", version: done.version }, "PATCH");
+  // main moves on with the same file, so the update is a round that resolves a conflict.
+  await writeFile(path.join(f.dir, "agent-result.txt"), "main's own notes\n");
+  await f.git("add", "agent-result.txt");
+  await f.git("commit", "-m", "Main writes the file too");
+  const update = await f.req(`/api/runs/${p.id}/update`, {});
+  assert.equal(update.round.kind, "update");
+  assert.deepEqual(update.round.open.map((c) => c.id), [b.id], "The flagged instruction goes with the round");
+  const flagged = (await f.req("/api/workflow")).comments.find((x) => x.id === b.id);
+  assert.equal(flagged.status, "flagged");
+  assert.equal(flagged.runId, update.round.id);
+});
+
+test("an edit to a tracked file that a merge would overwrite blocks it, by its exact path", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  // The task's file is already tracked on main.
+  await writeFile(path.join(f.dir, "agent-result.txt"), "Before the task.\n");
+  await f.git("add", "agent-result.txt");
+  await f.git("commit", "-m", "Track the result file");
+  const sha = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const c = await f.req("/api/comments", { text: "Write the result file", sha, anchor: { kind: "repo", path: "" } });
+  const p = await f.req("/api/runs/preview", { agent: "codex", commentIds: [c.id] });
+  await f.req("/api/runs", { previewId: p.id });
+  await waitFor(async () => (await f.req("/api/runs/" + p.id)).status === "completed");
+  const comment = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  await f.req("/api/comments/" + c.id, { action: "verify", version: comment.version }, "PATCH");
+  // The owner edits the tracked file, and does not commit it.
+  await writeFile(path.join(f.dir, "agent-result.txt"), "The owner's edit.\n");
+  const status = await f.req(`/api/runs/${p.id}/merge`);
+  assert.equal(status.state, "blocked");
+  assert.deepEqual(status.blocking, ["agent-result.txt"]);
 });
 
 test("an approved task merges on the owner's action, never over uncommitted work, and can be undone", async (t) => {
@@ -612,6 +663,9 @@ test("OpenRouter answers Ask with Peekumi's lookups, and its key stays on the se
   await assert.rejects(access(path.join(f.dir, "..", "escape.txt")), "Nothing is written outside the worktree");
   assert.match(run.output, /"agent_message","text":"I will look at the files first\."/);
   assert.match(run.output, /"file_change"/);
+  // Each step goes to the log after its result: a refused write shows as failed.
+  const changes = run.output.split("\n").filter((l) => l.includes('"file_change"')).map((l) => JSON.parse(l).item);
+  assert.deepEqual(changes.map((c) => [c.path, c.status]), [["../escape.txt", "failed"], [".git/hooks/pre-commit", "failed"], ["agent-result.txt", "completed"]]);
   const removed = await f.req("/api/agents/openrouter-key", {}, "DELETE");
   assert.equal(removed.agents.find((a) => a.id === "openrouter").key.set, false);
 });
@@ -700,7 +754,7 @@ test("a session continues one conversation over turns, asks before commands, and
   // A command with several parts cannot get a session rule; "allow all" answers it.
   await f.req(`/api/runs/${session.id}/message`, { text: "RUN: ls; (cargo test 2>&1 | tail -15)" });
   const chained = await waitFor(async () => (await get()).approval);
-  assert.match((await f.req(`/api/runs/${session.id}/approval`, { approval: chained.id, decision: "session" })).error, /several parts/);
+  assert.match((await f.req(`/api/runs/${session.id}/approval`, { approval: chained.id, decision: "session" })).error, /No rule for this command is safe/);
   assert.equal((await f.req(`/api/runs/${session.id}/approval`, { approval: chained.id, decision: "all" })).ok, true);
   run = await waiting(4);
   assert.equal(run.permissions, "allow");

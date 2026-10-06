@@ -309,11 +309,9 @@ try {
           s.status === "changed" && ["function", "method"].includes(s.kind),
       ) || target.symbols.find((s) => ["function", "method"].includes(s.kind));
     assert.ok(selectedSymbol);
+    // A method's card may drop its class's name, so the full name is in the card's title.
     const symbol = front
-      .locator('.node[data-kind="symbol"]')
-      .filter({
-        has: page.locator(".n-name", { hasText: selectedSymbol.name }),
-      })
+      .locator(`.node[data-kind="symbol"][title="${selectedSymbol.name}"]`)
       .first();
     await symbol.focus();
     await symbol.click();
