@@ -8,7 +8,13 @@
  */
 export function tunnelName(args) {
   if (!args.length) return "tailscale";
-  if (args.length === 2 && args[0] === "--tunnel" && ["tailscale", "cloudflare"].includes(args[1]))
+  if (
+    args.length === 2 &&
+    args[0] === "--tunnel" &&
+    ["tailscale", "cloudflare"].includes(args[1])
+  )
     return args[1];
-  throw new Error("Use peekumi share [--tunnel tailscale|cloudflare]; Cloudflare requires explicit --tunnel cloudflare and exposes a public URL");
+  throw new Error(
+    "Use peekumi share [--tunnel tailscale|cloudflare]; Cloudflare requires explicit --tunnel cloudflare and exposes a public URL",
+  );
 }

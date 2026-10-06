@@ -38,9 +38,19 @@ pub fn restricted(file: &str) -> bool {
     let template = [".example", ".sample", ".template", ".dist"]
         .iter()
         .any(|s| name.ends_with(s));
-    let env = name == ".env" || name == ".envrc" || name.starts_with(".env.") || name.ends_with(".env");
+    let env =
+        name == ".env" || name == ".envrc" || name.starts_with(".env.") || name.ends_with(".env");
     let key_file = [
-        ".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".ppk", ".kdbx", ".tfstate",
+        ".pem",
+        ".key",
+        ".p12",
+        ".pfx",
+        ".p8",
+        ".jks",
+        ".keystore",
+        ".ppk",
+        ".kdbx",
+        ".tfstate",
         ".tfvars",
     ]
     .iter()
@@ -51,13 +61,27 @@ pub fn restricted(file: &str) -> bool {
         .any(|k| name.starts_with(k))
         && !name.ends_with(".pub");
     let credentials = [
-        "credentials", "credentials.json", ".npmrc", ".netrc", "_netrc", ".pgpass", ".pypirc",
-        ".git-credentials", ".dockercfg", ".htpasswd", "terraform.tfstate.backup", ".terraformrc",
-        "terraform.rc", ".yarnrc.yml", "application_default_credentials.json",
+        "credentials",
+        "credentials.json",
+        ".npmrc",
+        ".netrc",
+        "_netrc",
+        ".pgpass",
+        ".pypirc",
+        ".git-credentials",
+        ".dockercfg",
+        ".htpasswd",
+        "terraform.tfstate.backup",
+        ".terraformrc",
+        "terraform.rc",
+        ".yarnrc.yml",
+        "application_default_credentials.json",
     ]
     .contains(&name.as_str());
     let service_account = name.ends_with(".json")
-        && (name.contains("service-account") || name.contains("service_account") || name.contains("serviceaccount"));
+        && (name.contains("service-account")
+            || name.contains("service_account")
+            || name.contains("serviceaccount"));
     let lower = file.to_lowercase();
     let tool_config = lower.ends_with(".docker/config.json") || lower.ends_with(".kube/config");
     ((env || key_file) && !template) || ssh_key || credentials || service_account || tool_config

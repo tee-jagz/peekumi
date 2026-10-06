@@ -46,7 +46,9 @@ export function createFocus({ followTo }) {
         (c) =>
           c.dataset.kind === "symbol" &&
           c.dataset.path === place.path &&
-          (c.dataset.key === "symbol:" + name || c.dataset.key.endsWith("." + name) || c.dataset.key.endsWith(" as " + name)),
+          (c.dataset.key === "symbol:" + name ||
+            c.dataset.key.endsWith("." + name) ||
+            c.dataset.key.endsWith(" as " + name)),
       );
       if (symbol) return { card: symbol, exact: true };
     }
@@ -54,10 +56,17 @@ export function createFocus({ followTo }) {
     for (const card of cards) {
       const p = card.dataset.path;
       if (card.dataset.kind === "symbol" || !p) continue;
-      if ((place.path === p || place.path.startsWith(p + "/")) && (!best || p.length > best.dataset.path.length)) best = card;
+      if (
+        (place.path === p || place.path.startsWith(p + "/")) &&
+        (!best || p.length > best.dataset.path.length)
+      )
+        best = card;
     }
-    if (!best && !place.path.includes("/")) best = document.querySelector('.node[data-kind="rootfiles"]');
-    return best ? { card: best, exact: best.dataset.path === place.path && !place.symbol } : null;
+    if (!best && !place.path.includes("/"))
+      best = document.querySelector('.node[data-kind="rootfiles"]');
+    return best
+      ? { card: best, exact: best.dataset.path === place.path && !place.symbol }
+      : null;
   }
 
   /** The source to show: a running one (the latest set), else the latest set. */
@@ -81,21 +90,31 @@ export function createFocus({ followTo }) {
     }
     const here = running && source.current ? cardFor(source.current) : null;
     if (here) want(here.card, "here");
-    const trail = source ? source.trail.concat(running || !source.current ? [] : [source.current]) : [];
+    const trail = source
+      ? source.trail.concat(running || !source.current ? [] : [source.current])
+      : [];
     trail.forEach((place, i) => {
       const found = cardFor(place);
-      if (found && found.card !== here?.card) want(found.card, "trail", running ? i + 1 : i);
+      if (found && found.card !== here?.card)
+        want(found.card, "trail", running ? i + 1 : i);
     });
-    for (const card of document.querySelectorAll(".node.agent-here, .node.agent-trail, .node.agent-changed"))
+    for (const card of document.querySelectorAll(
+      ".node.agent-here, .node.agent-trail, .node.agent-changed",
+    ))
       if (!wanted.has(card)) wanted.set(card, {});
     for (const [card, marks] of wanted) {
       card.classList.toggle("agent-changed", Boolean(marks.changed));
-      card.classList.toggle("agent-trail", marks.trail !== undefined && !marks.here);
-      if (marks.trail !== undefined) card.dataset.trail = String(Math.min(4, marks.trail + 1));
+      card.classList.toggle(
+        "agent-trail",
+        marks.trail !== undefined && !marks.here,
+      );
+      if (marks.trail !== undefined)
+        card.dataset.trail = String(Math.min(4, marks.trail + 1));
       else delete card.dataset.trail;
       card.classList.toggle("agent-here", Boolean(marks.here));
       const badge = card.querySelector(":scope > .agent-badge");
-      if (marks.here && !badge) card.append(peek("working", { className: "agent-badge" }));
+      if (marks.here && !badge)
+        card.append(peek("working", { className: "agent-badge" }));
       if (!marks.here && badge) badge.remove();
     }
     eye(source && (source.running || source.live));
@@ -181,7 +200,10 @@ export function createFocus({ followTo }) {
           changed: [],
           ...source,
           // A source that starts running again comes to the front.
-          at: !before || (source.running && !before.running) ? performance.now() : before.at,
+          at:
+            !before || (source.running && !before.running)
+              ? performance.now()
+              : before.at,
         });
       apply();
     },

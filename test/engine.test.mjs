@@ -276,7 +276,9 @@ export interface Result { name?: string; }
 
 test("blob index persists across restarts, reuses unchanged syntax, and resolves moved imports per snapshot", async (t) => {
   const f = await fixture();
-  const cacheDirectory = await mkdtemp(path.join(os.tmpdir(), "peekumi-index-"));
+  const cacheDirectory = await mkdtemp(
+    path.join(os.tmpdir(), "peekumi-index-"),
+  );
   t.after(async () => {
     await rm(f.directory, { recursive: true, force: true });
     await rm(cacheDirectory, { recursive: true, force: true });
@@ -361,7 +363,8 @@ test("overview preserves every file and edge while symbols and imports arrive wi
 });
 
 test("worker-backed repository preserves API results and reports failures without hanging", async (t) => {
-  const { RepositoryClient } = await import("./reference/repository-client.mjs");
+  const { RepositoryClient } =
+    await import("./reference/repository-client.mjs");
   const f = await fixture();
   const worker = new RepositoryClient(f.directory, { python: f.repo.python });
   t.after(async () => {

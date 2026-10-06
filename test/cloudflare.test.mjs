@@ -7,7 +7,10 @@ import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createCloudflareProvider } from "../scripts/tunnel/cloudflare.mjs";
-import { CLOUDFLARED_VERSION, CLOUDFLARED_ASSETS } from "../scripts/tunnel/cloudflare-release.mjs";
+import {
+  CLOUDFLARED_VERSION,
+  CLOUDFLARED_ASSETS,
+} from "../scripts/tunnel/cloudflare-release.mjs";
 import { tunnelName } from "../scripts/tunnel/select.mjs";
 
 async function fixture(t, options = {}) {
@@ -16,9 +19,20 @@ async function fixture(t, options = {}) {
   const bytes = Buffer.from("fixture cloudflared");
   const calls = { downloads: [], spawns: [], kills: [], children: [] };
   const dependencies = {
-    state, platform: "linux", arch: "x64", startupTimeout: 100,
-    assets: { "linux-x64": { name: "cloudflared-linux-amd64", sha256: createHash("sha256").update(bytes).digest("hex") } },
-    fetcher: async (url) => { calls.downloads.push(url); return new Response(bytes); },
+    state,
+    platform: "linux",
+    arch: "x64",
+    startupTimeout: 100,
+    assets: {
+      "linux-x64": {
+        name: "cloudflared-linux-amd64",
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      },
+    },
+    fetcher: async (url) => {
+      calls.downloads.push(url);
+      return new Response(bytes);
+    },
     spawnProcess: (program, args, settings) => {
       calls.spawns.push({ program, args, settings });
       const child = new EventEmitter();
@@ -50,7 +64,13 @@ test("only explicit share arguments select Cloudflare", () => {
   assert.equal(tunnelName([]), "tailscale");
   assert.equal(tunnelName(["--tunnel", "tailscale"]), "tailscale");
   assert.equal(tunnelName(["--tunnel", "cloudflare"]), "cloudflare");
-  for (const args of [["cloudflare"], ["--tunnel"], ["--tunnel", "other"], ["--tunnel=cloudflare"], ["--tunnel", "cloudflare", "--tunnel", "tailscale"]])
+  for (const args of [
+    ["cloudflare"],
+    ["--tunnel"],
+    ["--tunnel", "other"],
+    ["--tunnel=cloudflare"],
+    ["--tunnel", "cloudflare", "--tunnel", "tailscale"],
+  ])
     assert.throws(() => tunnelName(args), /explicit --tunnel cloudflare/);
 });
 
@@ -60,9 +80,16 @@ test("Cloudflare construction and diagnostics do not download or execute", async
   assert.deepEqual(provider.status(), { publicUrl: undefined });
   assert.deepEqual(await readdir(state), []);
   assert.equal(calls.downloads.length + calls.spawns.length, 0);
-  const unsupported = createCloudflareProvider({ state, platform: "win32", arch: "arm64" });
+  const unsupported = createCloudflareProvider({
+    state,
+    platform: "win32",
+    arch: "arm64",
+  });
   assert.match((await unsupported.available()).detail, /unsupported/);
-  await assert.rejects(unsupported.expose(4317, unsupported.status()), /unsupported/);
+  await assert.rejects(
+    unsupported.expose(4317, unsupported.status()),
+    /unsupported/,
+  );
 });
 
 test("first exposure verifies, runs only the private binary and cleans up; subsequent opt-in reuses verified cache", async (t) => {
@@ -71,15 +98,27 @@ test("first exposure verifies, runs only the private binary and cleans up; subse
   await provider.expose(4317, status);
   assert.equal(provider.url(status), "https://quiet-river.trycloudflare.com");
   assert.equal(calls.downloads.length, 1);
-  assert.match(calls.downloads[0], new RegExp(`/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64$`));
+  assert.match(
+    calls.downloads[0],
+    new RegExp(
+      `/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64$`,
+    ),
+  );
   assert.equal((await provider.available()).ok, true);
   const { program, args, settings } = calls.spawns[0];
   assert.ok(program.startsWith(state));
   assert.equal(args[0], "tunnel");
   assert.ok(args.includes("--no-autoupdate"));
   assert.equal(args[args.indexOf("--url") + 1], "http://127.0.0.1:4317");
-  assert.equal(await readFile(args[args.indexOf("--config") + 1], "utf8"), "{}\n");
-  assert.ok(!Object.keys(settings.env).some((key) => /^(TUNNEL_|CLOUDFLARED_|PEEKUMI_|STRATA_)/.test(key)));
+  assert.equal(
+    await readFile(args[args.indexOf("--config") + 1], "utf8"),
+    "{}\n",
+  );
+  assert.ok(
+    !Object.keys(settings.env).some((key) =>
+      /^(TUNNEL_|CLOUDFLARED_|PEEKUMI_|STRATA_)/.test(key),
+    ),
+  );
   await provider.close();
   assert.equal((await status.done).signal, "SIGTERM");
   assert.throws(() => provider.url(status), /not connected/);
@@ -92,11 +131,23 @@ test("first exposure verifies, runs only the private binary and cleans up; subse
 });
 
 test("bad downloads and HTTP failures never install or execute; staging is removed", async (t) => {
-  for (const response of [new Response("tampered"), new Response("unavailable", { status: 503 })]) {
-    const { provider, calls, state } = await fixture(t, { fetcher: async () => response });
-    await assert.rejects(provider.expose(4317, provider.status()), /checksum mismatch|HTTP 503/);
+  for (const response of [
+    new Response("tampered"),
+    new Response("unavailable", { status: 503 }),
+  ]) {
+    const { provider, calls, state } = await fixture(t, {
+      fetcher: async () => response,
+    });
+    await assert.rejects(
+      provider.expose(4317, provider.status()),
+      /checksum mismatch|HTTP 503/,
+    );
     assert.equal(calls.spawns.length, 0);
-    const cache = join(state, "tunnel", (await readdir(join(state, "tunnel")))[0]);
+    const cache = join(
+      state,
+      "tunnel",
+      (await readdir(join(state, "tunnel")))[0],
+    );
     assert.deepEqual(await readdir(cache), []);
   }
 });
@@ -105,11 +156,18 @@ test("cached artifacts are reverified and corruption never triggers execution or
   const { provider, calls, state, dependencies } = await fixture(t);
   await provider.expose(4317, provider.status());
   await provider.close();
-  const cache = join(state, "tunnel", (await readdir(join(state, "tunnel")))[0]);
+  const cache = join(
+    state,
+    "tunnel",
+    (await readdir(join(state, "tunnel")))[0],
+  );
   await writeFile(join(cache, "cloudflared-linux-amd64"), "corrupted");
   const second = createCloudflareProvider(dependencies);
   assert.match((await second.available()).detail, /checksum mismatch/);
-  await assert.rejects(second.expose(4317, second.status()), /checksum mismatch/);
+  await assert.rejects(
+    second.expose(4317, second.status()),
+    /checksum mismatch/,
+  );
   assert.equal(calls.spawns.length, 1);
   assert.equal(calls.downloads.length, 1);
 });
@@ -119,7 +177,12 @@ test("archive extraction happens only after verification, and failures never spa
   const f = await fixture(t);
   const dependencies = {
     ...f.dependencies,
-    assets: { "linux-x64": { ...f.dependencies.assets["linux-x64"], name: "fixture.tgz" } },
+    assets: {
+      "linux-x64": {
+        ...f.dependencies.assets["linux-x64"],
+        name: "fixture.tgz",
+      },
+    },
     extract: async (archive, directory) => {
       assert.deepEqual(await readFile(archive), f.bytes);
       extractions++;
@@ -131,7 +194,12 @@ test("archive extraction happens only after verification, and failures never spa
   await valid.expose(4317, valid.status());
   await valid.close();
   assert.equal(extractions, 1);
-  const broken = createCloudflareProvider({ ...dependencies, extract: async () => { throw new Error("tar failed"); } });
+  const broken = createCloudflareProvider({
+    ...dependencies,
+    extract: async () => {
+      throw new Error("tar failed");
+    },
+  });
   await assert.rejects(broken.expose(4317, broken.status()), /tar failed/);
   assert.equal(f.calls.spawns.length, 1);
 });
@@ -140,7 +208,10 @@ test("cancellation before download and after readiness closes exposure", async (
   const f = await fixture(t);
   const aborted = new AbortController();
   aborted.abort();
-  await assert.rejects(f.provider.expose(4317, f.provider.status(), { signal: aborted.signal }), /abort/i);
+  await assert.rejects(
+    f.provider.expose(4317, f.provider.status(), { signal: aborted.signal }),
+    /abort/i,
+  );
   assert.equal(f.calls.downloads.length, 0);
   const provider = createCloudflareProvider(f.dependencies);
   const controller = new AbortController();
@@ -154,33 +225,60 @@ test("cancellation before download and after readiness closes exposure", async (
 
 test("cancellation interrupts downloads and pending connections without leaving a child", async (t) => {
   const downloadController = new AbortController();
-  const f = await fixture(t, { fetcher: async (_url, { signal }) => {
-    queueMicrotask(() => downloadController.abort());
-    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
-  } });
-  await assert.rejects(f.provider.expose(4317, f.provider.status(), { signal: downloadController.signal }), /abort/i);
+  const f = await fixture(t, {
+    fetcher: async (_url, { signal }) => {
+      queueMicrotask(() => downloadController.abort());
+      return new Promise((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        }),
+      );
+    },
+  });
+  await assert.rejects(
+    f.provider.expose(4317, f.provider.status(), {
+      signal: downloadController.signal,
+    }),
+    /abort/i,
+  );
   assert.equal(f.calls.spawns.length, 0);
   const connectionController = new AbortController();
   const pending = await fixture(t);
-  const provider = createCloudflareProvider({ ...pending.dependencies, spawnProcess: (...args) => {
-    const child = pending.dependencies.spawnProcess(...args);
-    child.stderr.write = () => true;
-    queueMicrotask(() => connectionController.abort());
-    return child;
-  } });
-  await assert.rejects(provider.expose(4317, provider.status(), { signal: connectionController.signal }), /exited|abort/i);
+  const provider = createCloudflareProvider({
+    ...pending.dependencies,
+    spawnProcess: (...args) => {
+      const child = pending.dependencies.spawnProcess(...args);
+      child.stderr.write = () => true;
+      queueMicrotask(() => connectionController.abort());
+      return child;
+    },
+  });
+  await assert.rejects(
+    provider.expose(4317, provider.status(), {
+      signal: connectionController.signal,
+    }),
+    /exited|abort/i,
+  );
   assert.deepEqual(pending.calls.kills, ["SIGTERM"]);
 });
 
 test("startup requires a registered connection, times out and kills unresponsive children", async (t) => {
   const f = await fixture(t);
-  const provider = createCloudflareProvider({ ...f.dependencies, startupTimeout: 20, shutdownTimeout: 20,
+  const provider = createCloudflareProvider({
+    ...f.dependencies,
+    startupTimeout: 20,
+    shutdownTimeout: 20,
     spawnProcess: (...args) => {
       const child = f.dependencies.spawnProcess(...args);
       child.stderr.write = () => true;
-      setImmediate(() => child.stdout.write("https://quiet-river.trycloudflare.com\n"));
+      setImmediate(() =>
+        child.stdout.write("https://quiet-river.trycloudflare.com\n"),
+      );
       const kill = child.kill;
-      child.kill = (signal) => { if (signal === "SIGKILL") kill(signal); else f.calls.kills.push(signal); };
+      child.kill = (signal) => {
+        if (signal === "SIGKILL") kill(signal);
+        else f.calls.kills.push(signal);
+      };
       return child;
     },
   });
@@ -191,16 +289,22 @@ test("startup requires a registered connection, times out and kills unresponsive
 test("process errors and early exits reject startup; late exits invalidate the URL", async (t) => {
   for (const error of [undefined, new Error("spawn EACCES")]) {
     const f = await fixture(t);
-    const provider = createCloudflareProvider({ ...f.dependencies, spawnProcess: (...args) => {
-      const child = f.dependencies.spawnProcess(...args);
-      queueMicrotask(() => {
-        if (error) child.emit("error", error);
-        child.exitCode = 1;
-        child.emit("close", 1, null);
-      });
-      return child;
-    } });
-    await assert.rejects(provider.expose(4317, provider.status()), /EACCES|exited/);
+    const provider = createCloudflareProvider({
+      ...f.dependencies,
+      spawnProcess: (...args) => {
+        const child = f.dependencies.spawnProcess(...args);
+        queueMicrotask(() => {
+          if (error) child.emit("error", error);
+          child.exitCode = 1;
+          child.emit("close", 1, null);
+        });
+        return child;
+      },
+    });
+    await assert.rejects(
+      provider.expose(4317, provider.status()),
+      /EACCES|exited/,
+    );
   }
   const f = await fixture(t);
   const status = f.provider.status();
@@ -214,6 +318,12 @@ test("process errors and early exits reject startup; late exits invalidate the U
 });
 
 test("pinned assets cover supported distribution platforms with SHA-256 digests", () => {
-  assert.deepEqual(Object.keys(CLOUDFLARED_ASSETS).sort(), ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]);
-  for (const asset of Object.values(CLOUDFLARED_ASSETS)) assert.match(asset.sha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(Object.keys(CLOUDFLARED_ASSETS).sort(), [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+  ]);
+  for (const asset of Object.values(CLOUDFLARED_ASSETS))
+    assert.match(asset.sha256, /^[a-f0-9]{64}$/);
 });

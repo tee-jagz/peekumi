@@ -52,13 +52,29 @@ export function mountCanvas(
   const region = () => {
     const bounds = viewport.getBoundingClientRect();
     let bottom = bounds.height;
-    const tools = controls.isConnected ? controls.getBoundingClientRect() : null;
-    if (tools?.height && tools.top > bounds.top + 40 && tools.top < bounds.bottom)
+    const tools = controls.isConnected
+      ? controls.getBoundingClientRect()
+      : null;
+    if (
+      tools?.height &&
+      tools.top > bounds.top + 40 &&
+      tools.top < bounds.bottom
+    )
       bottom = Math.min(bottom, tools.top - bounds.top - 6);
     const sheet = document.querySelector("#panel")?.getBoundingClientRect();
-    if (sheet && sheet.left < bounds.right && sheet.right > bounds.left && sheet.top > bounds.top + 80)
+    if (
+      sheet &&
+      sheet.left < bounds.right &&
+      sheet.right > bounds.left &&
+      sheet.top > bounds.top + 80
+    )
       bottom = Math.min(bottom, sheet.top - bounds.top);
-    return { left: 0, top: 0, right: bounds.width, bottom: Math.max(40, bottom) };
+    return {
+      left: 0,
+      top: 0,
+      right: bounds.width,
+      bottom: Math.max(40, bottom),
+    };
   };
   /** The view that the map opens with: centered across, and at the top (or in the middle,
    * for short content with `options.center`) of the visible part. */
@@ -66,7 +82,9 @@ export function mountCanvas(
     const r = region();
     view.scale = 1;
     view.x = (r.right - r.left - width) / 2;
-    view.y = options.center ? Math.max(r.top, (r.top + r.bottom - contentHeight) / 2) : r.top;
+    view.y = options.center
+      ? Math.max(r.top, (r.top + r.bottom - contentHeight) / 2)
+      : r.top;
     view.auto = true;
   };
   /** Keeps at least KEEP pixels of the cards in the visible part, so a pan or a fling
@@ -134,7 +152,11 @@ export function mountCanvas(
     view.auto = false;
     view.scale = Math.max(
       0.05,
-      Math.min(1.5, (r.right - r.left - 16) / width, (r.bottom - r.top - 16) / contentHeight),
+      Math.min(
+        1.5,
+        (r.right - r.left - 16) / width,
+        (r.bottom - r.top - 16) / contentHeight,
+      ),
     );
     view.x = r.left + (r.right - r.left - width * view.scale) / 2;
     view.y = r.top + (r.bottom - r.top - contentHeight * view.scale) / 2;
@@ -260,8 +282,7 @@ export function mountCanvas(
       // At the limit the fling stops, as a scroll stops at its end.
       if (limit(frame || region())) vx = vy = 0;
       remember();
-      glide =
-        Math.hypot(vx, vy) > MIN_SPEED ? requestAnimationFrame(step) : 0;
+      glide = Math.hypot(vx, vy) > MIN_SPEED ? requestAnimationFrame(step) : 0;
     };
     if (Math.hypot(vx, vy) > MIN_SPEED) glide = requestAnimationFrame(step);
   };
@@ -370,7 +391,8 @@ export function mountCanvas(
     if (view.auto) place();
     else {
       const selected = layer.querySelector(".node.sel");
-      if (!first && selected) viewport.centerCard(selected, { animate: false, ifHidden: true });
+      if (!first && selected)
+        viewport.centerCard(selected, { animate: false, ifHidden: true });
     }
     remember();
   }).observe(viewport);

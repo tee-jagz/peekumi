@@ -1,0 +1,13 @@
+# Prettier formats the JavaScript, the CSS and the HTML of the app, the scripts and the tests.
+# Documents keep their own layout (tables and STE line breaks).
+*.md
+target/
+dist/
+node_modules/
+.strata/
+.peekumi/
+test-results/
+docs/context/
+docs/mockups/
+test/reference/
+package-lock.json

@@ -41,9 +41,12 @@ test("changed declarations name the parts that differ: signature, documentation 
     ["unchanged", undefined],
     "Whitespace-only edits leave a declaration unchanged",
   );
-  const overview = await get("/api/compare?base=HEAD~1&head=HEAD&view=overview");
-  const preview = overview.files.find((file) => file.path === "lib.rs")
-    .symbolPreview;
+  const overview = await get(
+    "/api/compare?base=HEAD~1&head=HEAD&view=overview",
+  );
+  const preview = overview.files.find(
+    (file) => file.path === "lib.rs",
+  ).symbolPreview;
   assert.ok(
     preview.some((s) => s.changes?.includes("implementation")),
     "The compact map preview carries the classification",

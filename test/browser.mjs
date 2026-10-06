@@ -150,7 +150,9 @@ try {
     const canvas = front.locator(".map-canvas");
     assert.equal(await canvas.count(), 1);
     const transform = () =>
-      canvas.locator(":scope > .map-layer").evaluate((el) => el.style.transform);
+      canvas
+        .locator(":scope > .map-layer")
+        .evaluate((el) => el.style.transform);
     const initialTransform = await transform();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     assert.notEqual(await transform(), initialTransform);
@@ -254,7 +256,9 @@ try {
             const hit = document.elementFromPoint(x, y);
             if (
               hit?.closest(".map-canvas") &&
-              !hit.closest('.node, [role="button"], button, a, summary, details, input, select')
+              !hit.closest(
+                '.node, [role="button"], button, a, summary, details, input, select',
+              )
             )
               return { x, y };
           }
@@ -264,7 +268,11 @@ try {
       await page.mouse.down();
       await page.mouse.move(empty.x + 40, empty.y + 30, { steps: 5 });
       await page.mouse.up();
-      assert.equal(await page.locator(".sel-name").textContent(), folder, "A drag keeps the selection");
+      assert.equal(
+        await page.locator(".sel-name").textContent(),
+        folder,
+        "A drag keeps the selection",
+      );
       await page.mouse.click(empty.x + 40, empty.y + 30);
       await page.locator(".sel-name").waitFor({ state: "detached" });
       await card.click();
@@ -386,7 +394,10 @@ try {
     const returns = page.locator(".metadata-return");
     if (await returns.count())
       assert.match(await returns.textContent(), /^Returns /);
-    assert.doesNotMatch(await page.locator("#selStrip").innerText(), /Unannotated/);
+    assert.doesNotMatch(
+      await page.locator("#selStrip").innerText(),
+      /Unannotated/,
+    );
     await page.locator("#selStrip").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: "test-results/" + viewport.width + "-metadata.png",
@@ -488,7 +499,10 @@ try {
     );
     await page.locator("#base").selectOption(peekSha);
     await page.locator("#notice").waitFor({ state: "hidden" });
-    assert.match(await baseTrigger.textContent(), new RegExp(peekSha.slice(0, 7)));
+    assert.match(
+      await baseTrigger.textContent(),
+      new RegExp(peekSha.slice(0, 7)),
+    );
     await page.locator("#closeRevision").click();
     assert.equal(
       await page.locator("#revisionDetails").evaluate((el) => el.open),
@@ -519,7 +533,10 @@ try {
         field.y + field.height <= 470,
         "The question field stays above the keyboard",
       );
-      assert.ok(sheet.height < 470 * 0.7, "Peek keeps its own size while typing");
+      assert.ok(
+        sheet.height < 470 * 0.7,
+        "Peek keeps its own size while typing",
+      );
       assert.equal(await page.locator(".canvas-controls").isVisible(), false);
       await page.screenshot({ path: "test-results/390-keyboard.png" });
       await page.locator("#composerHost textarea").blur();

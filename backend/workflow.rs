@@ -18,7 +18,8 @@ pub struct Workflow {
     /// Model and effort that Ask uses until the owner chooses others (see the agents module).
     pub ask_default: [String; 2],
     /// The server's private folder for secrets that every repository shares (API keys).
-    pub secrets: PathBuf,    /// The code graph lookup grants of running tasks (see the lookup module), by key.
+    pub secrets: PathBuf,
+    /// The code graph lookup grants of running tasks (see the lookup module), by key.
     pub grants: crate::lookup::Grants,
     /// Writes the repository map of a task's text for its instructions at a commit (see the
     /// graph_brief module). The server sets it; without it, tasks have no map.
@@ -161,7 +162,12 @@ impl Workflow {
         ];
         a.push(self.repo.to_str().context("Non UTF-8 repository path")?);
         a.extend_from_slice(args);
-        Ok(String::from_utf8(crate::process::run("git", &a, None, vec![])?)?)
+        Ok(String::from_utf8(crate::process::run(
+            "git",
+            &a,
+            None,
+            vec![],
+        )?)?)
     }
     /// Resolves an explicit commit without accepting Git options.
     pub fn resolve(&self, revision: &str) -> Result<String> {
@@ -225,19 +231,31 @@ impl Workflow {
             // An instruction written while exploring a finished task joins that task's next round.
             let for_run = body["forRun"].as_str().map(str::to_string);
             return self.update(|v| {
-                ensure!(v["comments"].as_array().unwrap().len()<10000,"Comment limit reached");
+                ensure!(
+                    v["comments"].as_array().unwrap().len() < 10000,
+                    "Comment limit reached"
+                );
                 if let Some(run) = &for_run {
                     let r = find(v, "runs", run)?;
-                    ensure!(!active(r) && r["status"] != "preview", "Wait for this task to finish");
-                    ensure!(!self.applied(r), "This task is applied to main; start a new task for further changes");
-                    ensure!(r["revisedBy"].is_null(), "Changes were already requested; continue from the latest round");
+                    ensure!(
+                        !active(r) && r["status"] != "preview",
+                        "Wait for this task to finish"
+                    );
+                    ensure!(
+                        !self.applied(r),
+                        "This task is applied to main; start a new task for further changes"
+                    );
+                    ensure!(
+                        r["revisedBy"].is_null(),
+                        "Changes were already requested; continue from the latest round"
+                    );
                 }
                 let mut c = comment;
                 if let Some(run) = &for_run {
                     c["forRun"] = json!(run);
                 }
-                event(&mut c,"owner");
-                list(v,"comments").push(c.clone());
+                event(&mut c, "owner");
+                list(v, "comments").push(c.clone());
                 Ok(c)
             });
         }
@@ -410,7 +428,9 @@ impl Workflow {
             text(anchor, "target", 2048)?;
             text(anchor, "relationship", 32)?;
         }
-        Ok(json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}))
+        Ok(
+            json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}),
+        )
     }
     /// The dependency rule configuration at `base`, or a note that there is none.
     pub(crate) fn rules_at(&self, base: &str) -> Result<String> {
@@ -459,7 +479,11 @@ impl Workflow {
             let state = self.read()?;
             let picked: Vec<Value> = ids
                 .iter()
-                .filter_map(|id| find(&state, "comments", id.as_str().unwrap_or("")).ok().cloned())
+                .filter_map(|id| {
+                    find(&state, "comments", id.as_str().unwrap_or(""))
+                        .ok()
+                        .cloned()
+                })
                 .collect();
             self.graph_section(&picked, &base)
         };
@@ -507,7 +531,9 @@ impl Workflow {
             self.repo.file_name().unwrap_or_default().to_string_lossy()
         );
         if !requested.is_empty() {
-            task.push_str(&format!("## Changes requested by the owner\n{requested}\n\n"));
+            task.push_str(&format!(
+                "## Changes requested by the owner\n{requested}\n\n"
+            ));
         }
         task.push_str(&format!("## Brief\n{brief}\n\n## Review comments\n"));
         for c in comments {
@@ -557,7 +583,10 @@ impl Workflow {
         };
         let earlier = self.run(previous)?;
         ensure!(!active(&earlier), "Wait for this task to finish");
-        ensure!(!self.applied(&earlier), "This task is applied to main; start a new task for further changes");
+        ensure!(
+            !self.applied(&earlier),
+            "This task is applied to main; start a new task for further changes"
+        );
         let branch_tip = self.resolve(&format!(
             "refs/heads/{}",
             earlier["branch"].as_str().context("Missing branch")?
@@ -565,7 +594,10 @@ impl Workflow {
         // A round that never created its branch has nothing to build on; start where it did.
         let base = match branch_tip {
             Ok(sha) => sha,
-            Err(_) => earlier["base"].as_str().context("Missing base")?.to_string(),
+            Err(_) => earlier["base"]
+                .as_str()
+                .context("Missing base")?
+                .to_string(),
         };
         let rules = crate::rules::CONFIG_FILES
             .iter()
@@ -746,7 +778,10 @@ impl Workflow {
         if !graph_in_text() {
             return String::new();
         }
-        self.briefing.get().map(|write| write(comments, base)).unwrap_or_default()
+        self.briefing
+            .get()
+            .map(|write| write(comments, base))
+            .unwrap_or_default()
     }
 }
 /// Active and interrupted runs hold the repository slot until the supervisor closes them.

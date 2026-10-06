@@ -30,7 +30,10 @@ function withoutToken() {
 }
 const url = await new Promise((done, fail) => {
   let output = "";
-  const timer = setTimeout(() => fail(new Error("Peekumi did not start")), 60000);
+  const timer = setTimeout(
+    () => fail(new Error("Peekumi did not start")),
+    60000,
+  );
   for (const stream of [server.stdout, server.stderr])
     stream.on("data", (chunk) => {
       output += chunk;
@@ -91,11 +94,17 @@ async function mark(page, items) {
 const shot = async (page, name, items = []) => {
   await page.waitForTimeout(450);
   await mark(page, items);
-  await page.screenshot({ path: join(guide, name + ".jpg"), type: "jpeg", quality: 82 });
+  await page.screenshot({
+    path: join(guide, name + ".jpg"),
+    type: "jpeg",
+    quality: 82,
+  });
   await mark(page, []);
 };
 const settle = (page) =>
-  page.waitForFunction(() => !document.querySelector("#panel").dataset.settling);
+  page.waitForFunction(
+    () => !document.querySelector("#panel").dataset.settling,
+  );
 async function height(page, key) {
   await page.locator("#sheetHandle").focus();
   await page.keyboard.press(key);
@@ -108,11 +117,16 @@ async function openFile(page, path) {
   await page.locator('#helperTools [data-tab="changes"]').click();
   await page.locator("#search").fill(path);
   await page.locator("#changes .row").first().click();
-  await page.locator('.sheet[data-front="true"] .node[data-kind="symbol"]').first().waitFor();
+  await page
+    .locator('.sheet[data-front="true"] .node[data-kind="symbol"]')
+    .first()
+    .waitFor();
   await page.waitForTimeout(400);
 }
 async function pick(page, key) {
-  const node = page.locator(`.sheet[data-front="true"] .node[data-key="${key}"]`);
+  const node = page.locator(
+    `.sheet[data-front="true"] .node[data-key="${key}"]`,
+  );
   await node.focus();
   await page.keyboard.press("Enter");
 }
@@ -178,7 +192,9 @@ try {
     ["#closeRevision", "7"],
   ]);
   await page.locator("#base + .frost-select").click();
-  await shot(page, "04-select-menu", [[".frost-option[aria-selected=true]", "1"]]);
+  await shot(page, "04-select-menu", [
+    [".frost-option[aria-selected=true]", "1"],
+  ]);
   await page.keyboard.press("Escape");
   await page.locator("#closeRevision").click();
 
@@ -236,7 +252,10 @@ try {
   // Changes is clearest at the repository level, where the latest commit's files appear.
   await height(page, "Home");
   await page.locator(".crumbs .crumb-home").click();
-  await page.locator('.sheet[data-front="true"] .node[data-kind="folder"]').first().waitFor();
+  await page
+    .locator('.sheet[data-front="true"] .node[data-kind="folder"]')
+    .first()
+    .waitFor();
   await height(page, "End");
   await page.locator('#helperTools [data-tab="changes"]').click();
   await page.locator("#search").fill("");
@@ -248,7 +267,9 @@ try {
   // 6. Instruction draft and Tasks.
   await height(page, "Home");
   await page.locator("#newComment").click();
-  await page.locator("#composerHost textarea").fill("Document the momentum constants.");
+  await page
+    .locator("#composerHost textarea")
+    .fill("Document the momentum constants.");
   await shot(page, "11-comment", [
     ["#newComment", "1"],
     ["#dockContext", "2"],
@@ -256,7 +277,9 @@ try {
     ['#composerHost .icon-action[aria-label="Cancel"]', "4"],
     ['#composerHost .icon-action[aria-label="Save draft"]', "5"],
   ]);
-  await page.locator('#composerHost .icon-action[aria-label="Save draft"]').click();
+  await page
+    .locator('#composerHost .icon-action[aria-label="Save draft"]')
+    .click();
   await page.locator("#openTasks").click();
   await page.waitForTimeout(500);
   await shot(page, "12-tasks", [
@@ -286,7 +309,10 @@ try {
     colorScheme: "dark",
   });
   await desk.goto(url);
-  await desk.locator('.sheet[data-front="true"] .node').first().waitFor({ timeout: 120000 });
+  await desk
+    .locator('.sheet[data-front="true"] .node')
+    .first()
+    .waitFor({ timeout: 120000 });
   await desk.locator("#notice").waitFor({ state: "hidden" });
   await shot(desk, "14-desktop", [
     ["#repo-name", "1", "tr"],
@@ -313,7 +339,8 @@ try {
   const { fixture } = await import("../test/workflow-support.mjs");
   const f = await fixture({
     files: {
-      "backend/lookup.py": "def route():\n    return 1\n\ndef highlight():\n    return 2\n",
+      "backend/lookup.py":
+        "def route():\n    return 1\n\ndef highlight():\n    return 2\n",
       "backend/graph.py": "def fold():\n    return 3\n",
       "frontend/app.js": "export function start() {}\n",
     },
@@ -327,14 +354,19 @@ try {
     });
     // Claude Code asks before commands. Follow is off, so the map stays where the guide puts it.
     await live.addInitScript(() => {
-      localStorage.setItem("peekumi.agents.default", JSON.stringify({ task: { agent: "claude" } }));
+      localStorage.setItem(
+        "peekumi.agents.default",
+        JSON.stringify({ task: { agent: "claude" } }),
+      );
       localStorage.setItem("peekumi.session.follow", "off");
     });
     await live.goto(f.server.url + "/#token=" + f.server.token);
     const map = live.locator('.sheet[data-front="true"]');
     await map.locator(".node").first().waitFor();
     await live.locator('[data-compose="session"]').click();
-    await live.getByLabel("What do you want to work on?").fill("Check route before we change it.\nRUN: npm install left-pad");
+    await live
+      .getByLabel("What do you want to work on?")
+      .fill("Check route before we change it.\nRUN: npm install left-pad");
     await live.getByRole("button", { name: "Start session" }).click();
     await live.locator(".session-approval").waitFor();
     await shot(live, "16-session", [
@@ -344,11 +376,17 @@ try {
       ["#composerHost textarea", "4"],
     ]);
     await live.screenshot({ path: join(readmeShots, "mobile-session.png") });
-    await live.getByRole("button", { name: "Allow npm install in this session" }).click();
+    await live
+      .getByRole("button", { name: "Allow npm install in this session" })
+      .click();
     await live.locator(".session-status", { hasText: "Your turn" }).waitFor();
-    await live.getByLabel("Reply to the agent").fill("Now read fold and route. FOCUS WAIT_FOR_STOP");
+    await live
+      .getByLabel("Reply to the agent")
+      .fill("Now read fold and route. FOCUS WAIT_FOR_STOP");
     await live.getByRole("button", { name: "Send to the agent" }).click();
-    await live.locator(".session-step.is-current", { hasText: "route" }).waitFor();
+    await live
+      .locator(".session-step.is-current", { hasText: "route" })
+      .waitFor();
     await live.locator("#viewHead .view-back").click();
     await height(live, "Home");
     // At the top level: backend holds the agent's place and a changed file; the repository
@@ -378,12 +416,40 @@ try {
     const m = await import("/icons.js");
     const d = (node) => node.querySelector("path").getAttribute("d");
     const glyphs = [
-      "time", "diff", "tasks", "branch", "before", "after", "home", "up",
-      "filter", "zoomOut", "zoomIn", "fit", "reset", "key", "details", "source",
-      "changes", "relations", "discussion", "ask", "comment", "send", "pin",
-      "check", "close", "copy", "refresh", "agents",
+      "time",
+      "diff",
+      "tasks",
+      "branch",
+      "before",
+      "after",
+      "home",
+      "up",
+      "filter",
+      "zoomOut",
+      "zoomIn",
+      "fit",
+      "reset",
+      "key",
+      "details",
+      "source",
+      "changes",
+      "relations",
+      "discussion",
+      "ask",
+      "comment",
+      "send",
+      "pin",
+      "check",
+      "close",
+      "copy",
+      "refresh",
+      "agents",
     ];
-    const result = glyphs.map((name) => ["glyph-" + name, d(m.glyph(name)), ""]);
+    const result = glyphs.map((name) => [
+      "glyph-" + name,
+      d(m.glyph(name)),
+      "",
+    ]);
     for (const status of ["added", "changed", "removed", "unchanged"])
       result.push(["status-" + status, d(m.statusIcon(status)), status]);
     for (const kind of ["code", "document", "data", "image", "sealed", "file"])
@@ -401,7 +467,11 @@ try {
     for (const part of ["signature", "documentation", "implementation"])
       result.push(["part-" + part, d(m.partIcon(part)), "changed"]);
     for (const direction of ["In", "Out", "Fields"])
-      result.push(["contract-" + direction.toLowerCase(), d(m.interfaceIcon(direction)), ""]);
+      result.push([
+        "contract-" + direction.toLowerCase(),
+        d(m.interfaceIcon(direction)),
+        "",
+      ]);
     return result;
   });
   const tones = {
@@ -415,7 +485,8 @@ try {
       join(icons, name + ".svg"),
       `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="${tones[status] || "#8e8e93"}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>\n`,
     );
-  if (missing.length) throw new Error("Guide markers not found: " + missing.join(", "));
+  if (missing.length)
+    throw new Error("Guide markers not found: " + missing.join(", "));
   console.log("Wrote docs/guide screenshots, icons and README screenshots.");
 } finally {
   await browser.close();

@@ -46,7 +46,9 @@ try {
       await page.locator("#reviewScope .review-parts").textContent(),
       /Implementation changed/,
     );
-    await page.screenshot({ path: `test-results/${viewport.width}-change-parts.png` });
+    await page.screenshot({
+      path: `test-results/${viewport.width}-change-parts.png`,
+    });
     assert.deepEqual(errors, []);
     await page.close();
   }

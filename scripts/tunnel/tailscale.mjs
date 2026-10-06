@@ -11,7 +11,10 @@ export function createTailscaleProvider(run) {
     /** Reports CLI availability and its first version line; failures become an install hint. */
     available() {
       try {
-        return { ok: true, detail: run("tailscale", ["version"]).split("\n")[0] };
+        return {
+          ok: true,
+          detail: run("tailscale", ["version"]).split("\n")[0],
+        };
       } catch {
         return {
           ok: false,

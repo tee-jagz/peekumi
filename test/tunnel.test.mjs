@@ -28,7 +28,13 @@ test("Tailscale availability preserves version and optional-install diagnostics"
 test("Tailscale sharing accepts empty and matching Serve configurations", () => {
   for (const configuration of [
     {},
-    { Web: { "machine.example:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:4317" } } } } },
+    {
+      Web: {
+        "machine.example:443": {
+          Handlers: { "/": { Proxy: "http://127.0.0.1:4317" } },
+        },
+      },
+    },
   ]) {
     for (const host of ["machine.example.", "machine.example"]) {
       const { provider, calls } = fixture([
@@ -55,7 +61,8 @@ test("Tailscale sharing leaves another Serve configuration intact", () => {
   ]);
   const status = provider.status();
   assert.throws(() => provider.expose(4317, status), {
-    message: "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Peekumi.",
+    message:
+      "Tailscale Serve already has another configuration. Keep it intact and configure a separate HTTPS endpoint for Peekumi.",
   });
   assert.equal(calls.length, 2);
 });
@@ -63,7 +70,9 @@ test("Tailscale sharing leaves another Serve configuration intact", () => {
 test("Tailscale sharing requires a DNS host before inspecting Serve", () => {
   for (const value of [{}, { Self: {} }, { Self: { DNSName: "." } }]) {
     const { provider, calls } = fixture([JSON.stringify(value)]);
-    assert.throws(() => provider.status(), { message: "Sign into Tailscale first" });
+    assert.throws(() => provider.status(), {
+      message: "Sign into Tailscale first",
+    });
     assert.deepEqual(calls, [["tailscale", "status", "--json"]]);
   }
 });
@@ -73,7 +82,10 @@ test("Tailscale sharing propagates command and malformed JSON failures", () => {
   const failure = new Error("tailscale: command failed");
   for (const responses of [[failure], [signedIn, failure]]) {
     const { provider } = fixture(responses);
-    assert.throws(() => provider.status(), (error) => error === failure);
+    assert.throws(
+      () => provider.status(),
+      (error) => error === failure,
+    );
   }
   for (const responses of [["invalid JSON"], [signedIn, "invalid JSON"]]) {
     const { provider } = fixture(responses);
@@ -81,5 +93,8 @@ test("Tailscale sharing propagates command and malformed JSON failures", () => {
   }
   const { provider } = fixture([signedIn, "{}", failure]);
   const status = provider.status();
-  assert.throws(() => provider.expose(8080, status), (error) => error === failure);
+  assert.throws(
+    () => provider.expose(8080, status),
+    (error) => error === failure,
+  );
 });

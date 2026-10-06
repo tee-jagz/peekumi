@@ -1,1 +1,26 @@
-{"id":"/","name":"Peekumi","short_name":"Peekumi","description":"Explore and review your local repositories.","start_url":"/","scope":"/","display":"fullscreen","display_override":["fullscreen","standalone"],"background_color":"#102524","theme_color":"#102524","icons":[{"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"}]}
+{
+  "id": "/",
+  "name": "Peekumi",
+  "short_name": "Peekumi",
+  "description": "Explore and review your local repositories.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#102524",
+  "theme_color": "#102524",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

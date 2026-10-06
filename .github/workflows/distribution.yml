@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 permissions:
   contents: read
 jobs:
@@ -29,12 +29,12 @@ jobs:
       # Official Node builds are self-contained, so they can be bundled into the archive.
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - run: npm ci
       - run: npm test
       - run: cargo test --locked

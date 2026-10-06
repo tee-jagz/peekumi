@@ -8,10 +8,7 @@ const glyphs = {
   diff: "M3 3h9v9H3ZM8 8h9v9H8Z",
   tasks: "M3 5l2 2 3-3M10 6h7M3 13l2 2 3-3M10 14h7",
   branch:
-    ring(6, 5, 2) +
-    ring(6, 15, 2) +
-    ring(14, 6, 2) +
-    "M6 7v6M14 8c0 3-8 2-8 5",
+    ring(6, 5, 2) + ring(6, 15, 2) + ring(14, 6, 2) + "M6 7v6M14 8c0 3-8 2-8 5",
   filter: "M3 4h14l-5.5 6.5V16l-3 1.5v-7Z",
   zoomIn: "M10 4v12M4 10h12",
   zoomOut: "M4 10h12",
@@ -37,9 +34,14 @@ const glyphs = {
   stop: "M6 6h8v8H6Z",
   // Commands: a shield (ask before commands); open with a slash (all commands allowed).
   shield: "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7Z",
-  shieldOff: "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7ZM3 3l14 14",
-  eye: "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" + ring(10, 10, 2.5),
-  eyeOff: "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" + ring(10, 10, 2.5) + "M3.5 3.5l13 13",
+  shieldOff:
+    "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7ZM3 3l14 14",
+  eye:
+    "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" + ring(10, 10, 2.5),
+  eyeOff:
+    "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10Z" +
+    ring(10, 10, 2.5) +
+    "M3.5 3.5l13 13",
   structure: "M3 3h5v4H3ZM12 13h5v4h-5ZM5.5 7v8h6.5",
   pin: "M10 18s6-5.3 6-10a6 6 0 0 0-12 0c0 4.7 6 10 6 10Z" + ring(10, 8, 2),
   check: "M4 10.5l4 4 8-9",
@@ -55,7 +57,8 @@ const glyphs = {
   home: "M3 9l7-6 7 6v8H3ZM8 17v-5h4v5",
   up: "M9 13L4 8l5-5M4 8h8a4 4 0 0 1 4 4v5",
   file: "M4 2h8l4 4v12H4ZM12 2v5h4",
-  external: "M12 3h5v5M17 3l-7 7M15 12v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4",
+  external:
+    "M12 3h5v5M17 3l-7 7M15 12v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4",
 };
 const paths = {
   folder: "M2 5h6l2 2h8v10H2Z",

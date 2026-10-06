@@ -169,7 +169,11 @@ fn ask_provider(executable: &str, args: &[&str]) -> Option<String> {
 /// Discovered model lists for ten minutes, by agent and executable.
 fn cached(key: String, find: impl FnOnce() -> Option<Vec<Model>>) -> Option<Vec<Model>> {
     static CACHE: Mutex<Option<HashMap<String, (Instant, Vec<Model>)>>> = Mutex::new(None);
-    if let Some((at, models)) = CACHE.lock().ok()?.get_or_insert_with(HashMap::new).get(&key)
+    if let Some((at, models)) = CACHE
+        .lock()
+        .ok()?
+        .get_or_insert_with(HashMap::new)
+        .get(&key)
         && at.elapsed() < Duration::from_secs(600)
     {
         return Some(models.clone());
@@ -214,7 +218,12 @@ fn help_aliases(help: &str) -> Vec<String> {
         .split('\'')
         .skip(1)
         .step_by(2)
-        .filter(|w| !w.is_empty() && w.len() < 40 && w.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-[]".contains(&b)))
+        .filter(|w| {
+            !w.is_empty()
+                && w.len() < 40
+                && w.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-[]".contains(&b))
+        })
         .map(str::to_string)
         .collect()
 }
@@ -285,7 +294,10 @@ impl Agent for ClaudeCode {
                     reason: Some("Not signed in. Run claude auth login on your computer".into()),
                 }
             }
-            _ => Status { ready: true, reason: None },
+            _ => Status {
+                ready: true,
+                reason: None,
+            },
         }
     }
     fn task_command(&self, launch: &Launch) -> Option<Command> {
@@ -296,10 +308,17 @@ impl Agent for ClaudeCode {
             // user or project settings that could allow more, and Peekumi's approve tool. No
             // command rule goes to Claude Code: every command reaches the approve tool, and
             // Peekumi alone judges it against the list and the owner's rules.
-            let mut allowed: Vec<String> = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__peekumi__get_run"]
-                .iter()
-                .map(|t| t.to_string())
-                .collect();
+            let mut allowed: Vec<String> = [
+                "Read",
+                "Edit",
+                "Write",
+                "Glob",
+                "Grep",
+                "mcp__peekumi__get_run",
+            ]
+            .iter()
+            .map(|t| t.to_string())
+            .collect();
             if launch.graph.is_some() {
                 allowed.extend(GRAPH_TOOLS.iter().map(|t| t.to_string()));
             }
@@ -328,11 +347,23 @@ impl Agent for ClaudeCode {
             &tools,
         ]);
         if let Some(session) = &launch.session {
-            c.args(["--setting-sources", "", "--permission-prompt-tool", "mcp__peekumi__approve"]);
+            c.args([
+                "--setting-sources",
+                "",
+                "--permission-prompt-tool",
+                "mcp__peekumi__approve",
+            ]);
             // The owner may take a while to answer on the phone.
             c.env("MCP_TOOL_TIMEOUT", "1000000");
             let conversation = session.conversation?;
-            c.args([if session.first { "--session-id" } else { "--resume" }, conversation]);
+            c.args([
+                if session.first {
+                    "--session-id"
+                } else {
+                    "--resume"
+                },
+                conversation,
+            ]);
         }
         if let Some(model) = launch.model {
             c.args(["--model", model]);
@@ -346,7 +377,8 @@ impl Agent for ClaudeCode {
         if let Some((url, key)) = launch.graph {
             servers["peekumi_graph"] = json!({"type":"http","url":url,"headers":{"Authorization":format!("Bearer {key}")},"alwaysLoad":true});
         }
-        c.arg("--mcp-config").arg(json!({"mcpServers": servers}).to_string());
+        c.arg("--mcp-config")
+            .arg(json!({"mcpServers": servers}).to_string());
         Some(c)
     }
 }
@@ -384,11 +416,20 @@ impl Agent for Codex {
                 .into_iter()
                 .map(|m| Model {
                     id: m["slug"].as_str().map(str::to_string),
-                    label: m["display_name"].as_str().or(m["slug"].as_str()).unwrap_or("").to_string(),
+                    label: m["display_name"]
+                        .as_str()
+                        .or(m["slug"].as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     note: m["description"].as_str().unwrap_or("").to_string(),
                     efforts: m["supported_reasoning_levels"]
                         .as_array()
-                        .map(|levels| levels.iter().filter_map(|l| l["effort"].as_str().map(str::to_string)).collect())
+                        .map(|levels| {
+                            levels
+                                .iter()
+                                .filter_map(|l| l["effort"].as_str().map(str::to_string))
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     default_effort: m["default_reasoning_level"].as_str().map(str::to_string),
                 })
@@ -417,7 +458,10 @@ impl Agent for Codex {
             };
         }
         match ask_provider(&self.executable, &["login", "status"]) {
-            Some(_) => Status { ready: true, reason: None },
+            Some(_) => Status {
+                ready: true,
+                reason: None,
+            },
             None => Status {
                 ready: false,
                 reason: Some("Not signed in. Run codex login on your computer".into()),
@@ -433,17 +477,21 @@ impl Agent for Codex {
             c.args(["--model", model]);
         }
         if let Some(effort) = launch.effort {
-            c.arg("-c").arg(format!("model_reasoning_effort={}", json!(effort)));
+            c.arg("-c")
+                .arg(format!("model_reasoning_effort={}", json!(effort)));
         }
-        c.arg("-c")
-            .arg(format!("mcp_servers.peekumi.command={}", json!(launch.bridge)));
+        c.arg("-c").arg(format!(
+            "mcp_servers.peekumi.command={}",
+            json!(launch.bridge)
+        ));
         c.arg("-c")
             .arg(format!("mcp_servers.peekumi.args={}", json!(launch.args)));
         c.arg("-c")
             .arg("mcp_servers.peekumi.env_vars=[\"PEEKUMI_REPORT_TOKEN\"]");
         // The code graph over streamable HTTP; Codex reads the run's key from the environment.
         if let Some((url, key)) = launch.graph {
-            c.arg("-c").arg(format!("mcp_servers.peekumi_graph.url={}", json!(url)));
+            c.arg("-c")
+                .arg(format!("mcp_servers.peekumi_graph.url={}", json!(url)));
             c.arg("-c")
                 .arg("mcp_servers.peekumi_graph.bearer_token_env_var=\"PEEKUMI_GRAPH_TOKEN\"");
             c.env("PEEKUMI_GRAPH_TOKEN", key);
@@ -505,9 +553,15 @@ impl OpenRouter {
         limit: Duration,
         mut line: impl FnMut(&str),
     ) -> Result<String> {
-        let mut config = format!("url = \"{}{path}\"\nsilent\nshow-error\nfail-with-body\n", self.base);
+        let mut config = format!(
+            "url = \"{}{path}\"\nsilent\nshow-error\nfail-with-body\n",
+            self.base
+        );
         if let Some(key) = key {
-            ensure!(valid_key(key), "The OpenRouter key has characters that are not allowed");
+            ensure!(
+                valid_key(key),
+                "The OpenRouter key has characters that are not allowed"
+            );
             config.push_str(&format!("header = \"Authorization: Bearer {key}\"\n"));
         }
         let file = match body {
@@ -524,7 +578,9 @@ impl OpenRouter {
                         use std::os::unix::fs::OpenOptionsExt;
                         options.mode(0o600);
                     }
-                    options.open(&file)?.write_all(body.to_string().as_bytes())?;
+                    options
+                        .open(&file)?
+                        .write_all(body.to_string().as_bytes())?;
                 }
                 config.push_str("header = \"Content-Type: application/json\"\n");
                 config.push_str(&format!("data-binary = \"@{}\"\n", file.display()));
@@ -552,7 +608,11 @@ impl OpenRouter {
             // An API error carries a JSON body with a message; show that, not curl's text.
             serde_json::from_str::<Value>(text.trim())
                 .ok()
-                .and_then(|v| v["error"]["message"].as_str().map(|m| anyhow::anyhow!("OpenRouter: {m}")))
+                .and_then(|v| {
+                    v["error"]["message"]
+                        .as_str()
+                        .map(|m| anyhow::anyhow!("OpenRouter: {m}"))
+                })
                 .unwrap_or_else(|| anyhow::anyhow!("Cannot reach OpenRouter: {e}"))
         })?;
         Ok(text)
@@ -586,15 +646,28 @@ impl OpenRouter {
         }
     }
     /// One answer without tools or streaming, for short jobs such as a commit message.
-    pub fn complete(&self, model: &str, effort: Option<&str>, system: &str, user: &str) -> Result<String> {
+    pub fn complete(
+        &self,
+        model: &str,
+        effort: Option<&str>,
+        system: &str,
+        user: &str,
+    ) -> Result<String> {
         let key = self.key_or_error()?;
         let mut request = json!({"model": model, "stream": false, "messages": [
             {"role": "system", "content": system}, {"role": "user", "content": user}]});
         if let Some(effort) = effort {
             request["reasoning"] = json!({"effort": effort});
         }
-        let raw = self.request("/chat/completions", Some(&key), Some(&request), Duration::from_secs(60), |_| {})?;
-        let response: Value = serde_json::from_str(raw.trim()).context("OpenRouter returned invalid JSON")?;
+        let raw = self.request(
+            "/chat/completions",
+            Some(&key),
+            Some(&request),
+            Duration::from_secs(60),
+            |_| {},
+        )?;
+        let response: Value =
+            serde_json::from_str(raw.trim()).context("OpenRouter returned invalid JSON")?;
         response["choices"][0]["message"]["content"]
             .as_str()
             .map(str::to_string)
@@ -609,13 +682,20 @@ impl OpenRouter {
 }
 /// An API key: letters, digits and `-_.`, so it is safe inside the curl configuration.
 fn valid_key(key: &str) -> bool {
-    (10..=300).contains(&key.len()) && key.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    (10..=300).contains(&key.len())
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
 }
 /// "$0.15" for a price per token given as text, per million tokens.
 fn per_million(price: &Value) -> Option<String> {
     let value: f64 = price.as_str()?.parse().ok()?;
     let million = value * 1_000_000.0;
-    Some(if million >= 10.0 { format!("${million:.0}") } else { format!("${million:.2}") })
+    Some(if million >= 10.0 {
+        format!("${million:.0}")
+    } else {
+        format!("${million:.2}")
+    })
 }
 impl Agent for OpenRouter {
     fn id(&self) -> &'static str {
@@ -634,22 +714,32 @@ impl Agent for OpenRouter {
     /// their context size and price. Reasoning models get effort levels.
     fn models(&self, _: Job) -> (Vec<Model>, bool) {
         let found = cached(format!("openrouter:{}", self.base), || {
-            let raw = self.request("/models", None, None, Duration::from_secs(20), |_| {}).ok()?;
+            let raw = self
+                .request("/models", None, None, Duration::from_secs(20), |_| {})
+                .ok()?;
             let list: Value = serde_json::from_str(&raw).ok()?;
             let models: Vec<Model> = list["data"]
                 .as_array()?
                 .iter()
                 .filter(|m| {
-                    m["supported_parameters"].as_array().is_some_and(|p| p.iter().any(|x| x == "tools"))
+                    m["supported_parameters"]
+                        .as_array()
+                        .is_some_and(|p| p.iter().any(|x| x == "tools"))
                         && m["id"].as_str().is_some_and(valid_model)
                 })
                 .map(|m| {
-                    let parameters = m["supported_parameters"].as_array().cloned().unwrap_or_default();
+                    let parameters = m["supported_parameters"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default();
                     let mut note = vec![];
                     if let Some(context) = m["context_length"].as_u64() {
                         note.push(format!("{}K context", context / 1000));
                     }
-                    match (per_million(&m["pricing"]["prompt"]), per_million(&m["pricing"]["completion"])) {
+                    match (
+                        per_million(&m["pricing"]["prompt"]),
+                        per_million(&m["pricing"]["completion"]),
+                    ) {
                         (Some(input), Some(output)) if input == "$0.00" && output == "$0.00" => {
                             note.push("Free".into())
                         }
@@ -660,7 +750,11 @@ impl Agent for OpenRouter {
                     }
                     Model {
                         id: m["id"].as_str().map(str::to_string),
-                        label: m["name"].as_str().or(m["id"].as_str()).unwrap_or("").to_string(),
+                        label: m["name"]
+                            .as_str()
+                            .or(m["id"].as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         note: note.join(" · "),
                         efforts: if parameters.iter().any(|p| p == "reasoning") {
                             ["low", "medium", "high"].map(String::from).to_vec()
@@ -680,7 +774,10 @@ impl Agent for OpenRouter {
     }
     fn status(&self) -> Status {
         match self.secret() {
-            Some(_) => Status { ready: true, reason: None },
+            Some(_) => Status {
+                ready: true,
+                reason: None,
+            },
             None => Status {
                 ready: false,
                 reason: Some("Add your OpenRouter key".into()),
@@ -703,7 +800,9 @@ impl Agent for OpenRouter {
     }
     fn key(&self) -> Option<Value> {
         Some(match self.secret() {
-            Some((key, environment)) => json!({"set": true, "end": &key[key.len().saturating_sub(4)..], "fromEnvironment": environment}),
+            Some((key, environment)) => {
+                json!({"set": true, "end": &key[key.len().saturating_sub(4)..], "fromEnvironment": environment})
+            }
             None => json!({"set": false}),
         })
     }
@@ -712,8 +811,12 @@ impl Agent for OpenRouter {
 /// Every provider this server knows, in the order the app lists them.
 pub fn registry(store: &Workflow) -> Vec<Box<dyn Agent>> {
     vec![
-        Box::new(ClaudeCode { executable: store.claude.clone() }),
-        Box::new(Codex { executable: store.codex.clone() }),
+        Box::new(ClaudeCode {
+            executable: store.claude.clone(),
+        }),
+        Box::new(Codex {
+            executable: store.codex.clone(),
+        }),
         Box::new(OpenRouter::new(store)),
     ]
 }
@@ -729,7 +832,9 @@ fn valid_model(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 100
         && !name.starts_with('-')
-        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._:/@-[]".contains(&b))
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._:/@-[]".contains(&b))
 }
 
 impl Workflow {
@@ -737,7 +842,9 @@ impl Workflow {
     /// Ask, and Codex with its own model for tasks.
     pub fn default_choice(&self, job: Job) -> Value {
         match job {
-            Job::Ask => json!({"agent": "claude", "model": self.ask_default[0], "effort": self.ask_default[1]}),
+            Job::Ask => {
+                json!({"agent": "claude", "model": self.ask_default[0], "effort": self.ask_default[1]})
+            }
             Job::Task => json!({"agent": "codex", "model": null, "effort": "auto"}),
         }
     }
@@ -750,7 +857,11 @@ impl Workflow {
         }
         let id = using["agent"].as_str().context("Choose an agent")?;
         let agent = find(self, id).context("Unknown agent")?;
-        ensure!(agent.jobs().contains(&job), "{} cannot do this job", agent.label());
+        ensure!(
+            agent.jobs().contains(&job),
+            "{} cannot do this job",
+            agent.label()
+        );
         ensure!(
             agent.has_default_model() || using["model"].is_string(),
             "Choose a model for {} in Agents",
@@ -760,14 +871,19 @@ impl Workflow {
             Value::Null => Value::Null,
             Value::String(name) => {
                 let name = name.trim();
-                ensure!(valid_model(name), "Use only letters, digits and ._:/@-[] in a model name");
+                ensure!(
+                    valid_model(name),
+                    "Use only letters, digits and ._:/@-[] in a model name"
+                );
                 json!(name)
             }
             _ => anyhow::bail!("Invalid model"),
         };
         let effort = using["effort"].as_str().unwrap_or("auto");
         ensure!(
-            !effort.is_empty() && effort.len() <= 16 && effort.bytes().all(|b| b.is_ascii_lowercase()),
+            !effort.is_empty()
+                && effort.len() <= 16
+                && effort.bytes().all(|b| b.is_ascii_lowercase()),
             "Unknown effort"
         );
         Ok(json!({"agent": id, "model": model, "effort": effort}))
@@ -786,7 +902,10 @@ impl Workflow {
             }
             return self.agents_route("GET", "/api/agents", &Value::Null);
         }
-        ensure!(method == "GET" && path == "/api/agents", "Unsupported agents operation");
+        ensure!(
+            method == "GET" && path == "/api/agents",
+            "Unsupported agents operation"
+        );
         let agents: Vec<Value> = registry(self)
             .iter()
             .map(|a| {
@@ -821,7 +940,10 @@ impl Workflow {
 pub fn flags(choice: &Value) -> (Option<String>, Option<String>) {
     (
         choice["model"].as_str().map(str::to_string),
-        choice["effort"].as_str().filter(|e| *e != "auto").map(str::to_string),
+        choice["effort"]
+            .as_str()
+            .filter(|e| *e != "auto")
+            .map(str::to_string),
     )
 }
 
@@ -831,7 +953,10 @@ mod tests {
     #[test]
     fn reads_efforts_and_aliases_from_help() {
         let help = "  --effort <level>    Effort level for the current session\n                      (low, medium, high, xhigh, max)\n  --model <model>     Model for the current session. Provide\n                      an alias for the latest model (e.g.\n                      'fable', 'opus', or 'sonnet') or a\n                      model's full name.\n  -n, --name <name>   Set a name\n";
-        assert_eq!(help_efforts(help), ["low", "medium", "high", "xhigh", "max"]);
+        assert_eq!(
+            help_efforts(help),
+            ["low", "medium", "high", "xhigh", "max"]
+        );
         assert_eq!(help_aliases(help), ["fable", "opus", "sonnet"]);
         assert!(help_efforts("no flag here").is_empty());
         assert!(valid_model("claude-opus-4[1m]") && !valid_model("--bad") && !valid_model("a b"));

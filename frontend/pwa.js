@@ -40,7 +40,11 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
         });
         notice.className = "app-note is-update";
         notice.title = detail;
-        notice.replaceChildren(peek(state), document.createTextNode(title), ...buttons);
+        notice.replaceChildren(
+          peek(state),
+          document.createTextNode(title),
+          ...buttons,
+        );
         notice.hidden = false;
       }
       const later = () => (notice.hidden = true);
@@ -57,25 +61,30 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
       function update() {
         if (!registration.waiting || !navigator.serviceWorker.controller)
           return;
-        card("idle", "Update ready", "Reload to use the new version of Peekumi.", [
-          ["Later", false, later],
+        card(
+          "idle",
+          "Update ready",
+          "Reload to use the new version of Peekumi.",
           [
-            "Reload",
-            true,
-            () =>
-              unsent()
-                ? card(
-                    "thinking",
-                    "Unsent text",
-                    "Reloading clears what you type now. Your Ask conversation and saved instructions stay.",
-                    [
-                      ["Keep editing", false, later],
-                      ["Reload anyway", true, reload],
-                    ],
-                  )
-                : reload(),
+            ["Later", false, later],
+            [
+              "Reload",
+              true,
+              () =>
+                unsent()
+                  ? card(
+                      "thinking",
+                      "Unsent text",
+                      "Reloading clears what you type now. Your Ask conversation and saved instructions stay.",
+                      [
+                        ["Keep editing", false, later],
+                        ["Reload anyway", true, reload],
+                      ],
+                    )
+                  : reload(),
+            ],
           ],
-        ]);
+        );
       }
       update();
       registration.addEventListener("updatefound", () =>

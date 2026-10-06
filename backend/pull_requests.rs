@@ -26,7 +26,13 @@ fn git(directory: &Path, args: &[&str]) -> Result<String> {
 /// and resolves its merge base. An open PR is compared with its base branch now; a merged or
 /// closed PR with the base it had, which shows exactly what it changed. The checkout and
 /// existing local branches remain untouched. GitHub credentials stay with gh.
-pub fn route(directory: &Path, executable: &str, method: &str, path: &str, body: Value) -> Result<Value> {
+pub fn route(
+    directory: &Path,
+    executable: &str,
+    method: &str,
+    path: &str,
+    body: Value,
+) -> Result<Value> {
     if method == "GET" && path == "/api/prs" {
         return gh(
             directory,
@@ -51,7 +57,11 @@ pub fn route(directory: &Path, executable: &str, method: &str, path: &str, body:
             .filter(|n| *n > 0)
             .context("Unsupported PR operation")?
             .to_string();
-        return gh(directory, executable, &["pr", "view", &number, "--json", VIEW_FIELDS]);
+        return gh(
+            directory,
+            executable,
+            &["pr", "view", &number, "--json", VIEW_FIELDS],
+        );
     }
     ensure!(
         method == "POST" && path == "/api/prs/open",
@@ -62,7 +72,11 @@ pub fn route(directory: &Path, executable: &str, method: &str, path: &str, body:
         .filter(|n| *n > 0)
         .context("A positive PR number is required")?
         .to_string();
-    let pr = gh(directory, executable, &["pr", "view", &number, "--json", VIEW_FIELDS])?;
+    let pr = gh(
+        directory,
+        executable,
+        &["pr", "view", &number, "--json", VIEW_FIELDS],
+    )?;
     let repo = gh(directory, executable, &["repo", "view", "--json", "url"])?;
     let remote = repo["url"]
         .as_str()
@@ -77,7 +91,8 @@ pub fn route(directory: &Path, executable: &str, method: &str, path: &str, body:
     let base_ref = format!("refs/peekumi/pr/{number}/base");
     // Use gh's credential helper only for this fetch; never write repository Git configuration.
     let command = executable.replace('\'', "'\\''");
-    let credential = format!("credential.https://github.com.helper=!'{command}' auth git-credential");
+    let credential =
+        format!("credential.https://github.com.helper=!'{command}' auth git-credential");
     git(
         directory,
         &[

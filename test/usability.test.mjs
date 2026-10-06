@@ -246,7 +246,11 @@ fi
   assert.equal(details.status, 200);
   assert.equal((await details.json()).title, "Change run");
   assert.equal(
-    (await fetch(server.url + "/api/prs/x", { headers: { Authorization: "Bearer " + server.token } })).status,
+    (
+      await fetch(server.url + "/api/prs/x", {
+        headers: { Authorization: "Bearer " + server.token },
+      })
+    ).status,
     400,
   );
   // A merged PR keeps the base it had while main moves on; it still opens, compared with
@@ -260,7 +264,10 @@ fi
   const merged = join(bin, "github-merged.sh");
   await writeFile(
     merged,
-    (await readFile(gh, "utf8")).replace(prData, JSON.stringify({ ...JSON.parse(prData), state: "MERGED" })),
+    (await readFile(gh, "utf8")).replace(
+      prData,
+      JSON.stringify({ ...JSON.parse(prData), state: "MERGED" }),
+    ),
   );
   await chmod(merged, 0o755);
   const later = await startRust(dir, {
@@ -269,13 +276,20 @@ fi
   t.after(() => later.close());
   const m = await fetch(later.url + "/api/prs/open", {
     method: "POST",
-    headers: { Authorization: "Bearer " + later.token, "Content-Type": "application/json" },
+    headers: {
+      Authorization: "Bearer " + later.token,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ number: 7 }),
   });
   const opened = await m.json();
   assert.equal(m.status, 200, JSON.stringify(opened));
   assert.deepEqual([opened.base, opened.head], [common, head]);
-  assert.notEqual(git(dir, "rev-parse", "refs/peekumi/pr/7/base"), base, "main moved on after the merge");
+  assert.notEqual(
+    git(dir, "rev-parse", "refs/peekumi/pr/7/base"),
+    base,
+    "main moved on after the merge",
+  );
 });
 
 test("workflow migration retains comments and refuses newer schemas", async (t) => {
@@ -334,7 +348,11 @@ test("settings and sessions from before the rename keep working", async (t) => {
   t.after(() => rm(root, { recursive: true, force: true }));
   const dir = await repo(root, "one");
   // Only STRATA_* names are set: the server adopts them for its PEEKUMI_* settings.
-  const server = await startRust(dir, { base: "HEAD", prefix: "STRATA_", token: "former-token" });
+  const server = await startRust(dir, {
+    base: "HEAD",
+    prefix: "STRATA_",
+    token: "former-token",
+  });
   t.after(() => server.close());
   const authorized = await fetch(server.url + "/api/repo", {
     headers: { Authorization: "Bearer former-token" },
@@ -348,13 +366,23 @@ test("settings and sessions from before the rename keep working", async (t) => {
   const [cookie] = paired.headers.get("set-cookie").split(";");
   assert.match(cookie, /^peekumi_session_[0-9a-f]+=/);
   const former = cookie.replace(/^peekumi_session_/, "strata_session_");
-  const signedIn = await fetch(server.url + "/api/repo", { headers: { Cookie: former } });
-  assert.equal(signedIn.status, 200, "A cookie saved before the rename still signs in");
+  const signedIn = await fetch(server.url + "/api/repo", {
+    headers: { Cookie: former },
+  });
+  assert.equal(
+    signedIn.status,
+    200,
+    "A cookie saved before the rename still signs in",
+  );
   // A stale former cookie sent first must not shadow the fresh one.
   const both = await fetch(server.url + "/api/repo", {
     headers: { Cookie: former.replace(/=.*/, "=stale") + "; " + cookie },
   });
-  assert.equal(both.status, 200, "The current cookie wins over a stale former one");
+  assert.equal(
+    both.status,
+    200,
+    "The current cookie wins over a stale former one",
+  );
 });
 
 test("moving the state folder keeps devices signed in", async (t) => {
@@ -363,7 +391,11 @@ test("moving the state folder keeps devices signed in", async (t) => {
   const dir = await repo(root, "one");
   const before = join(root, "state-before"),
     after = join(root, "state-after");
-  const first = await startRust(dir, { base: "HEAD", stateDirectory: before, isolatePrimary: true });
+  const first = await startRust(dir, {
+    base: "HEAD",
+    stateDirectory: before,
+    isolatePrimary: true,
+  });
   const paired = await fetch(first.url + "/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -373,10 +405,20 @@ test("moving the state folder keeps devices signed in", async (t) => {
   await first.close();
   const { rename } = await import("node:fs/promises");
   await rename(before, after);
-  const second = await startRust(dir, { base: "HEAD", stateDirectory: after, isolatePrimary: true });
+  const second = await startRust(dir, {
+    base: "HEAD",
+    stateDirectory: after,
+    isolatePrimary: true,
+  });
   t.after(() => second.close());
-  const response = await fetch(second.url + "/api/repo", { headers: { Cookie: cookie } });
-  assert.equal(response.status, 200, "The saved session works from the moved folder");
+  const response = await fetch(second.url + "/api/repo", {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(
+    response.status,
+    200,
+    "The saved session works from the moved folder",
+  );
 });
 
 test("the owner adds and removes repositories while the server runs; paired devices cannot", async (t) => {
@@ -385,7 +427,11 @@ test("the owner adds and removes repositories while the server runs; paired devi
   const a = await repo(root, "one"),
     b = await repo(root, "two"),
     state = join(root, "state");
-  const server = await startRust(a, { base: "HEAD", stateDirectory: state, isolatePrimary: true });
+  const server = await startRust(a, {
+    base: "HEAD",
+    stateDirectory: state,
+    isolatePrimary: true,
+  });
   t.after(() => server.close());
   const owner = (path, options = {}) =>
     fetch(server.url + path, {
@@ -404,25 +450,49 @@ test("the owner adds and removes repositories while the server runs; paired devi
     body: JSON.stringify({ token: server.token }),
   });
   const [cookie] = paired.headers.get("set-cookie").split(";");
-  assert.equal((await add({ Cookie: cookie })).status, 403, "A paired device cannot add a repository");
+  assert.equal(
+    (await add({ Cookie: cookie })).status,
+    403,
+    "A paired device cannot add a repository",
+  );
   let r = await add({ Authorization: "Bearer " + server.token });
   assert.equal(r.status, 200);
   const added = await r.json();
   assert.deepEqual([added.name, added.added], ["two", true]);
-  assert.equal((await (await add({ Authorization: "Bearer " + server.token })).json()).added, false);
+  assert.equal(
+    (await (await add({ Authorization: "Bearer " + server.token })).json())
+      .added,
+    false,
+  );
   const listed = (await (await owner("/api/repositories")).json()).repositories;
   assert.deepEqual(listed.map((r) => r.name).sort(), ["one", "two"]);
-  const scoped = await owner("/api/repo", { headers: { "X-Peekumi-Repository": added.id } });
+  const scoped = await owner("/api/repo", {
+    headers: { "X-Peekumi-Repository": added.id },
+  });
   assert.equal(scoped.status, 200);
   assert.equal((await scoped.json()).name, "two");
   const primary = listed.find((r) => r.default);
-  assert.equal((await owner("/api/repositories/" + primary.id, { method: "DELETE" })).status, 409);
   assert.equal(
-    (await fetch(server.url + "/api/repositories/" + added.id, { method: "DELETE", headers: { Cookie: cookie } })).status,
+    (await owner("/api/repositories/" + primary.id, { method: "DELETE" }))
+      .status,
+    409,
+  );
+  assert.equal(
+    (
+      await fetch(server.url + "/api/repositories/" + added.id, {
+        method: "DELETE",
+        headers: { Cookie: cookie },
+      })
+    ).status,
     403,
   );
-  assert.equal((await owner("/api/repositories/" + added.id, { method: "DELETE" })).status, 200);
-  const gone = await owner("/api/repo", { headers: { "X-Peekumi-Repository": added.id } });
+  assert.equal(
+    (await owner("/api/repositories/" + added.id, { method: "DELETE" })).status,
+    200,
+  );
+  const gone = await owner("/api/repo", {
+    headers: { "X-Peekumi-Repository": added.id },
+  });
   assert.equal(gone.status, 404);
   // Its state folder lock was released, so it can come straight back.
   r = await add({ Authorization: "Bearer " + server.token });
@@ -442,7 +512,12 @@ test("each repository keeps its Ask conversation for the owner across restarts",
     b = await repo(root, "two"),
     state = join(root, "state");
   const start = () =>
-    startRust(a, { base: "HEAD", repositories: [b], stateDirectory: state, isolatePrimary: true });
+    startRust(a, {
+      base: "HEAD",
+      repositories: [b],
+      stateDirectory: state,
+      isolatePrimary: true,
+    });
   let server = await start();
   t.after(() => server.close());
   const owner = (path, options = {}) =>
@@ -451,10 +526,15 @@ test("each repository keeps its Ask conversation for the owner across restarts",
       headers: { Authorization: "Bearer " + server.token, ...options.headers },
     });
   const { repositories } = await (await owner("/api/repositories")).json();
-  const two = { "X-Peekumi-Repository": repositories.find((r) => r.name === "two").id };
-  assert.deepEqual(await (await owner("/api/ask/history", { headers: two })).json(), {
-    messages: [],
-  });
+  const two = {
+    "X-Peekumi-Repository": repositories.find((r) => r.name === "two").id,
+  };
+  assert.deepEqual(
+    await (await owner("/api/ask/history", { headers: two })).json(),
+    {
+      messages: [],
+    },
+  );
   const messages = [
     { role: "user", text: "What does run do?", subject: "run" },
     { role: "assistant", text: "It returns 1.", references: {}, lookups: [] },
@@ -466,7 +546,10 @@ test("each repository keeps its Ask conversation for the owner across restarts",
       body: JSON.stringify(body),
     });
   assert.equal((await put({ messages })).status, 200);
-  assert.equal((await put({ messages: [{ role: "system", text: "x" }] })).status, 400);
+  assert.equal(
+    (await put({ messages: [{ role: "system", text: "x" }] })).status,
+    400,
+  );
   await server.close();
   server = await start();
   assert.deepEqual(
@@ -481,16 +564,26 @@ test("each repository keeps its Ask conversation for the owner across restarts",
   );
   // Each branch has its own conversation; the watched branch is the default.
   const other = (method, body) =>
-    owner("/api/ask/history?branch=" + encodeURIComponent("refs/heads/peekumi/run-1"), {
-      method,
-      headers: { ...two, "Content-Type": "application/json" },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    owner(
+      "/api/ask/history?branch=" +
+        encodeURIComponent("refs/heads/peekumi/run-1"),
+      {
+        method,
+        headers: { ...two, "Content-Type": "application/json" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      },
+    );
   assert.deepEqual((await (await other("GET")).json()).messages, []);
   assert.equal((await other("PUT", { messages: [messages[0]] })).status, 200);
   assert.deepEqual((await (await other("GET")).json()).messages, [messages[0]]);
   assert.deepEqual(
-    (await (await owner("/api/ask/history?branch=refs%2Fheads%2Fmain", { headers: two })).json()).messages,
+    (
+      await (
+        await owner("/api/ask/history?branch=refs%2Fheads%2Fmain", {
+          headers: two,
+        })
+      ).json()
+    ).messages,
     messages,
     "The watched branch keeps its own conversation",
   );
@@ -498,12 +591,16 @@ test("each repository keeps its Ask conversation for the owner across restarts",
   const one = repositories.find((r) => r.name === "one").id;
   await writeFile(
     join(state, "repositories", one, "ask-history.json"),
-    JSON.stringify({ messages: [{ role: "user", text: "Saved before branches" }] }),
+    JSON.stringify({
+      messages: [{ role: "user", text: "Saved before branches" }],
+    }),
   );
   assert.deepEqual((await (await owner("/api/ask/history")).json()).messages, [
     { role: "user", text: "Saved before branches" },
   ]);
-  const reader = (await readFile(join(state, "read-only/access-token"), "utf8")).trim();
+  const reader = (
+    await readFile(join(state, "read-only/access-token"), "utf8")
+  ).trim();
   const r = await fetch(server.url + "/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -511,7 +608,11 @@ test("each repository keeps its Ask conversation for the owner across restarts",
   });
   const cookie = r.headers.get("set-cookie").split(";")[0];
   assert.equal(
-    (await fetch(server.url + "/api/ask/history", { headers: { Cookie: cookie, ...two } })).status,
+    (
+      await fetch(server.url + "/api/ask/history", {
+        headers: { Cookie: cookie, ...two },
+      })
+    ).status,
     403,
     "Read-only devices cannot read the owner's conversation",
   );

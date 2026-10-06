@@ -201,11 +201,17 @@ struct Fleet {
 }
 impl Fleet {
     fn get(&self, id: &str) -> Option<Arc<App>> {
-        self.repositories.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+        self.repositories
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()
     }
     fn all(&self) -> Vec<(String, Arc<App>)> {
         let map = self.repositories.read().unwrap_or_else(|e| e.into_inner());
-        map.iter().map(|(id, app)| (id.clone(), app.clone())).collect()
+        map.iter()
+            .map(|(id, app)| (id.clone(), app.clone()))
+            .collect()
     }
 }
 /// A repository's stable identifier: the start of a hash of its canonical path.
@@ -216,7 +222,10 @@ fn repository_id(directory: &std::path::Path) -> String {
 /// comparing its latest commit with its parent.
 fn repository_options(base: &Options, directory: PathBuf) -> Options {
     let mut options = base.clone();
-    options.state_dir = base.state_dir.join("repositories").join(repository_id(&directory));
+    options.state_dir = base
+        .state_dir
+        .join("repositories")
+        .join(repository_id(&directory));
     options.directory = directory;
     options.base = "HEAD~1".into();
     options.head = "HEAD".into();
@@ -295,14 +304,17 @@ fn open_repository(
     // A task's text gets the repository map (see the graph_brief module). The
     // workflow store is synchronous; its routes run on blocking threads, which may wait here.
     let weak = Arc::downgrade(&app);
-    let _ = app.workflow.briefing.set(Box::new(move |comments: &[Value], base: &str| {
-        let Some(app) = weak.upgrade() else {
-            return String::new();
-        };
-        tokio::runtime::Handle::try_current()
-            .map(|runtime| runtime.block_on(graph_brief::map(&app, comments, base)))
-            .unwrap_or_default()
-    }));
+    let _ = app
+        .workflow
+        .briefing
+        .set(Box::new(move |comments: &[Value], base: &str| {
+            let Some(app) = weak.upgrade() else {
+                return String::new();
+            };
+            tokio::runtime::Handle::try_current()
+                .map(|runtime| runtime.block_on(graph_brief::map(&app, comments, base)))
+                .unwrap_or_default()
+        }));
     Ok((id, app))
 }
 
@@ -336,7 +348,12 @@ async fn ask_lookup(fleet: &Fleet, request: Request, gzip: bool) -> Response {
         .map(|(_, app)| app)
         .find(|app| lookup::has_grant(app, &key));
     let Some(app) = app else {
-        return error(StatusCode::UNAUTHORIZED, "No Ask answer is in progress", gzip).await;
+        return error(
+            StatusCode::UNAUTHORIZED,
+            "No Ask answer is in progress",
+            gzip,
+        )
+        .await;
     };
     let body = match to_bytes(request.into_body(), 65536).await {
         Ok(body) => body,
@@ -493,21 +510,24 @@ fn ask_history_file(app: &App, branch: Option<&str>) -> Option<PathBuf> {
         return None;
     }
     let id = &engine::hash(branch.as_bytes())[..16];
-    Some(app.options.state_dir.join("ask-history").join(format!("{id}.json")))
+    Some(
+        app.options
+            .state_dir
+            .join("ask-history")
+            .join(format!("{id}.json")),
+    )
 }
 /// Keeps one branch's Ask conversation in the repository's private state folder, so reloading
 /// the page, updating the app or switching device does not lose it. Accepts at most 100
 /// messages; the request size limit bounds the rest. Writes a private file atomically.
 fn save_ask_history(file: &std::path::Path, body: &Value) -> Result<()> {
-    let messages = body["messages"]
-        .as_array()
-        .context("Missing messages")?;
+    let messages = body["messages"].as_array().context("Missing messages")?;
     ensure!(messages.len() <= 100, "Too many messages");
     ensure!(
-        messages
-            .iter()
-            .all(|m| ["user", "assistant"].contains(&m["role"].as_str().unwrap_or(""))
-                && m["text"].is_string()),
+        messages.iter().all(
+            |m| ["user", "assistant"].contains(&m["role"].as_str().unwrap_or(""))
+                && m["text"].is_string()
+        ),
         "Invalid message"
     );
     if let Some(folder) = file.parent() {
@@ -522,7 +542,10 @@ fn save_ask_history(file: &std::path::Path, body: &Value) -> Result<()> {
         options.mode(0o600);
     }
     let mut out = options.open(&staged)?;
-    std::io::Write::write_all(&mut out, json!({"messages": messages}).to_string().as_bytes())?;
+    std::io::Write::write_all(
+        &mut out,
+        json!({"messages": messages}).to_string().as_bytes(),
+    )?;
     out.sync_all()?;
     std::fs::rename(&staged, file)?;
     Ok(())
@@ -768,7 +791,8 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 .write()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&id);
-            return json_response(StatusCode::OK, json!({"id":id,"removed":true}), gzip, None).await;
+            return json_response(StatusCode::OK, json!({"id":id,"removed":true}), gzip, None)
+                .await;
         }
         let body = match to_bytes(request.into_body(), 4096).await {
             Ok(body) => body,
@@ -778,16 +802,35 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             .ok()
             .and_then(|v| v["path"].as_str().map(PathBuf::from));
         let Some(directory) = requested.and_then(|p| p.canonicalize().ok()) else {
-            return error(StatusCode::BAD_REQUEST, "Give the path of a repository on this Mac", gzip).await;
+            return error(
+                StatusCode::BAD_REQUEST,
+                "Give the path of a repository on this Mac",
+                gzip,
+            )
+            .await;
         };
-        let name = directory.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let name = directory
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         let id = repository_id(&directory);
         if fleet.get(&id).is_some() {
-            return json_response(StatusCode::OK, json!({"id":id,"name":name,"added":false}), gzip, None).await;
+            return json_response(
+                StatusCode::OK,
+                json!({"id":id,"name":name,"added":false}),
+                gzip,
+                None,
+            )
+            .await;
         }
         let shared = fleet.shared.clone();
         let opened = tokio::task::spawn_blocking(move || {
-            open_repository(&shared, repository_options(&shared.options, directory), None)
+            open_repository(
+                &shared,
+                repository_options(&shared.options, directory),
+                None,
+            )
         })
         .await;
         return match opened {
@@ -798,10 +841,23 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                     .unwrap_or_else(|e| e.into_inner())
                     .entry(id.clone())
                     .or_insert(repo);
-                json_response(StatusCode::OK, json!({"id":id,"name":name,"added":true}), gzip, None).await
+                json_response(
+                    StatusCode::OK,
+                    json!({"id":id,"name":name,"added":true}),
+                    gzip,
+                    None,
+                )
+                .await
             }
             Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &format!("{e:#}"), gzip).await,
-            Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "Opening the repository failed", gzip).await,
+            Err(_) => {
+                error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Opening the repository failed",
+                    gzip,
+                )
+                .await
+            }
         };
     }
     if path == "/api/repositories" && request.method() == Method::GET {
@@ -913,7 +969,13 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                                 .flatten()
                         })
                         .unwrap_or_else(|| json!({"messages": []}));
-                    json_response(StatusCode::OK, json!({"messages": saved["messages"]}), gzip, None).await
+                    json_response(
+                        StatusCode::OK,
+                        json!({"messages": saved["messages"]}),
+                        gzip,
+                        None,
+                    )
+                    .await
                 }
                 "PUT" => match save_ask_history(&file, &body) {
                     Ok(()) => json_response(StatusCode::OK, json!({"ok": true}), gzip, None).await,
@@ -928,12 +990,25 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
             }
             let text = body["text"].as_str().unwrap_or("");
-            let revision = |v: &Value| v.as_str().is_some_and(|r| !r.is_empty() && r.len() < 256 && !r.starts_with('-'));
+            let revision = |v: &Value| {
+                v.as_str()
+                    .is_some_and(|r| !r.is_empty() && r.len() < 256 && !r.starts_with('-'))
+            };
             if text.len() > 400_000 || !revision(&body["base"]) || !revision(&body["head"]) {
                 return error(StatusCode::BAD_REQUEST, "Send {base, head, text}", gzip).await;
             }
-            return match ask::references_for(&app, &body["base"], &body["head"], body["about"].as_str().unwrap_or(""), text).await {
-                Ok(found) => json_response(StatusCode::OK, json!({"references": found}), gzip, None).await,
+            return match ask::references_for(
+                &app,
+                &body["base"],
+                &body["head"],
+                body["about"].as_str().unwrap_or(""),
+                text,
+            )
+            .await
+            {
+                Ok(found) => {
+                    json_response(StatusCode::OK, json!({"references": found}), gzip, None).await
+                }
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };
         }
@@ -957,9 +1032,8 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                     let _guard = ask_guard;
                     ask::answer_stream(app, body, events).await;
                 });
-                let lines = tokio_stream::wrappers::ReceiverStream::new(received).map(|event| {
-                    Ok::<_, std::convert::Infallible>(format!("{event}\n"))
-                });
+                let lines = tokio_stream::wrappers::ReceiverStream::new(received)
+                    .map(|event| Ok::<_, std::convert::Infallible>(format!("{event}\n")));
                 return Response::builder()
                     .header("content-type", "application/x-ndjson")
                     .header("cache-control", "no-store")
@@ -1020,7 +1094,11 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 .await
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,
-        "/api/commits" => app.engine.call("commits", json!([query.get("before")])).await,
+        "/api/commits" => {
+            app.engine
+                .call("commits", json!([query.get("before")]))
+                .await
+        }
         "/api/source" => {
             app.engine
                 .call("source", json!([base, head, query.get("path")]))
@@ -1095,7 +1173,10 @@ async fn serve() -> Result<()> {
     {
         options.state_dir = ".strata".into();
     }
-    options.directory = options.directory.canonicalize().context("Cannot open repository directory")?;
+    options.directory = options
+        .directory
+        .canonicalize()
+        .context("Cannot open repository directory")?;
     if let Some(id) = &options.report_run {
         let store = workflow::Workflow::new(
             &options.directory,
@@ -1137,8 +1218,15 @@ async fn serve() -> Result<()> {
         return Ok(());
     }
     let access_token = token(&options)?;
-    let server_lock = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(options.state_dir.join("server.lock"))?;
-    server_lock.try_lock().context("Another Peekumi server is using this state directory")?;
+    let server_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(options.state_dir.join("server.lock"))?;
+    server_lock
+        .try_lock()
+        .context("Another Peekumi server is using this state directory")?;
     let mut reader_options = options.clone();
     reader_options.token = None;
     reader_options.state_dir = options.state_dir.join("read-only");
@@ -1225,9 +1313,18 @@ mod tests {
     use super::*;
     #[test]
     fn lookup_origin_uses_loopback_for_unspecified_binds() {
-        assert_eq!(loopback_origin("0.0.0.0:4319".parse().unwrap()), "http://127.0.0.1:4319");
-        assert_eq!(loopback_origin("[::]:4319".parse().unwrap()), "http://[::1]:4319");
-        assert_eq!(loopback_origin("100.64.0.2:80".parse().unwrap()), "http://100.64.0.2:80");
+        assert_eq!(
+            loopback_origin("0.0.0.0:4319".parse().unwrap()),
+            "http://127.0.0.1:4319"
+        );
+        assert_eq!(
+            loopback_origin("[::]:4319".parse().unwrap()),
+            "http://[::1]:4319"
+        );
+        assert_eq!(
+            loopback_origin("100.64.0.2:80".parse().unwrap()),
+            "http://100.64.0.2:80"
+        );
     }
     #[test]
     fn compression_respects_explicit_opt_out() {

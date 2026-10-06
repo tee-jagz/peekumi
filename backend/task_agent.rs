@@ -36,16 +36,66 @@ fn tools() -> Value {
             "parameters": {"type": "object", "properties": properties, "required": required, "additionalProperties": false}}})
     };
     json!([
-        tool("list_files", "List the files in the worktree, optionally under a folder.", json!({"path": text("Optional folder")}), &[]),
-        tool("read_file", "Read up to 400 numbered lines of a file.", json!({"path": text("File path"), "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}), &["path"]),
-        tool("search", "Find lines that contain exact text in the worktree's files, optionally under a folder.", json!({"text": text("Exact text"), "path": text("Optional folder")}), &["text"]),
-        tool("write_file", "Create a file, or replace all of its content.", json!({"path": text("File path"), "content": text("The whole new content")}), &["path", "content"]),
-        tool("edit_file", "Replace one exact, unique piece of text in a file.", json!({"path": text("File path"), "old_text": text("Text that occurs exactly once"), "new_text": text("Its replacement")}), &["path", "old_text", "new_text"]),
-        tool("delete_file", "Delete a file.", json!({"path": text("File path")}), &["path"]),
-        tool("commit", "Commit every change in the worktree, for the instructions it addresses. Returns the commit SHA.", json!({"message": text("Commit message"), "comment_ids": {"type": "array", "items": {"type": "string"}}}), &["message", "comment_ids"]),
-        tool("resolve_comment", "Report an instruction as done, with the commit that does it.", json!({"comment_id": text("Instruction ID"), "commit_sha": text("Commit SHA"), "note": text("What changed"), "checks": text("What you checked; no command can run")}), &["comment_id", "commit_sha", "note", "checks"]),
-        tool("flag_comment", "Report that you could not do an instruction, and why.", json!({"comment_id": text("Instruction ID"), "reason": text("Why")}), &["comment_id", "reason"]),
-        tool("finish", "End the task when every instruction is reported.", json!({"summary": text("A short summary")}), &["summary"]),
+        tool(
+            "list_files",
+            "List the files in the worktree, optionally under a folder.",
+            json!({"path": text("Optional folder")}),
+            &[]
+        ),
+        tool(
+            "read_file",
+            "Read up to 400 numbered lines of a file.",
+            json!({"path": text("File path"), "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}),
+            &["path"]
+        ),
+        tool(
+            "search",
+            "Find lines that contain exact text in the worktree's files, optionally under a folder.",
+            json!({"text": text("Exact text"), "path": text("Optional folder")}),
+            &["text"]
+        ),
+        tool(
+            "write_file",
+            "Create a file, or replace all of its content.",
+            json!({"path": text("File path"), "content": text("The whole new content")}),
+            &["path", "content"]
+        ),
+        tool(
+            "edit_file",
+            "Replace one exact, unique piece of text in a file.",
+            json!({"path": text("File path"), "old_text": text("Text that occurs exactly once"), "new_text": text("Its replacement")}),
+            &["path", "old_text", "new_text"]
+        ),
+        tool(
+            "delete_file",
+            "Delete a file.",
+            json!({"path": text("File path")}),
+            &["path"]
+        ),
+        tool(
+            "commit",
+            "Commit every change in the worktree, for the instructions it addresses. Returns the commit SHA.",
+            json!({"message": text("Commit message"), "comment_ids": {"type": "array", "items": {"type": "string"}}}),
+            &["message", "comment_ids"]
+        ),
+        tool(
+            "resolve_comment",
+            "Report an instruction as done, with the commit that does it.",
+            json!({"comment_id": text("Instruction ID"), "commit_sha": text("Commit SHA"), "note": text("What changed"), "checks": text("What you checked; no command can run")}),
+            &["comment_id", "commit_sha", "note", "checks"]
+        ),
+        tool(
+            "flag_comment",
+            "Report that you could not do an instruction, and why.",
+            json!({"comment_id": text("Instruction ID"), "reason": text("Why")}),
+            &["comment_id", "reason"]
+        ),
+        tool(
+            "finish",
+            "End the task when every instruction is reported.",
+            json!({"summary": text("A short summary")}),
+            &["summary"]
+        ),
     ])
 }
 
@@ -69,7 +119,18 @@ pub fn run(
         json!({"role": "system", "content": INSTRUCTIONS}),
         json!({"role": "user", "content": task["task"]}),
     ];
-    converse(store, id, token, task, worktree, log, cancelled, graph, &mut messages, None)
+    converse(
+        store,
+        id,
+        token,
+        task,
+        worktree,
+        log,
+        cancelled,
+        graph,
+        &mut messages,
+        None,
+    )
 }
 
 /// One session turn with an OpenRouter model: the saved conversation (`saved`), plus the
@@ -92,7 +153,18 @@ pub fn session_turn(
         .unwrap_or_else(|| vec![json!({"role": "system", "content": SESSION_INSTRUCTIONS})]);
     messages.push(json!({"role": "user", "content": prompt}));
     let id = session["id"].as_str().unwrap_or("");
-    converse(store, id, "", session, worktree, log, cancelled, graph, &mut messages, Some(saved))
+    converse(
+        store,
+        id,
+        "",
+        session,
+        worktree,
+        log,
+        cancelled,
+        graph,
+        &mut messages,
+        Some(saved),
+    )
 }
 
 /// The model loop of a task or, with `saved`, a session turn: send the conversation, run
@@ -112,7 +184,9 @@ fn converse(
 ) -> Result<(&'static str, String)> {
     let provider = OpenRouter::new(store);
     let key = provider.key_or_error()?;
-    let model = task["model"].as_str().context("This task has no OpenRouter model")?;
+    let model = task["model"]
+        .as_str()
+        .context("This task has no OpenRouter model")?;
     let root = worktree.canonicalize()?;
     let session = saved.is_some();
     let save = |messages: &Vec<Value>| -> Result<()> {
@@ -134,13 +208,19 @@ fn converse(
     for _ in 0..TURNS {
         if cancelled() || start.elapsed() > Duration::from_secs(3600) {
             save(messages)?;
-            return Ok(("cancelled", "Agent stopped by owner or one-hour time limit.".into()));
+            return Ok((
+                "cancelled",
+                "Agent stopped by owner or one-hour time limit.".into(),
+            ));
         }
         let mut offered = tools();
         if session {
             // A session reports nothing: the owner ends it. Its commits need only a message.
             let list = offered.as_array_mut().unwrap();
-            list.retain(|t| !["resolve_comment", "flag_comment", "finish", "commit"].contains(&t["function"]["name"].as_str().unwrap_or("")));
+            list.retain(|t| {
+                !["resolve_comment", "flag_comment", "finish", "commit"]
+                    .contains(&t["function"]["name"].as_str().unwrap_or(""))
+            });
             list.push(json!({"type": "function", "function": {"name": "commit", "description": "Commit every change in the worktree. Returns the commit SHA.",
                 "parameters": {"type": "object", "properties": {"message": {"type": "string", "description": "Commit message"}}, "required": ["message"], "additionalProperties": false}}}));
         }
@@ -155,14 +235,22 @@ fn converse(
                 }
             }
         }
-        let mut request = json!({"model": model, "messages": messages, "tools": offered, "stream": false});
+        let mut request =
+            json!({"model": model, "messages": messages, "tools": offered, "stream": false});
         if let Some(effort) = task["effort"].as_str().filter(|e| *e != "auto") {
             request["reasoning"] = json!({"effort": effort});
         }
         let raw = provider
-            .request("/chat/completions", Some(&key), Some(&request), Duration::from_secs(300), |_| {})
+            .request(
+                "/chat/completions",
+                Some(&key),
+                Some(&request),
+                Duration::from_secs(300),
+                |_| {},
+            )
             .inspect_err(|e| event(json!({"type": "error", "message": e.to_string()})))?;
-        let response: Value = serde_json::from_str(raw.trim()).context("OpenRouter returned invalid JSON")?;
+        let response: Value =
+            serde_json::from_str(raw.trim()).context("OpenRouter returned invalid JSON")?;
         if let Some(message) = response["error"]["message"].as_str() {
             event(json!({"type": "error", "message": message}));
             bail!("OpenRouter: {message}");
@@ -171,7 +259,10 @@ fn converse(
         if let Some(text) = message["content"].as_str().filter(|t| !t.trim().is_empty()) {
             event(json!({"item": {"type": "agent_message", "text": text}}));
         }
-        let calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
+        let calls = message["tool_calls"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         messages.push(json!({"role": "assistant", "content": message["content"], "tool_calls": if calls.is_empty() { Value::Null } else { json!(calls) }}));
         if calls.is_empty() {
             save(messages)?;
@@ -180,8 +271,9 @@ fn converse(
         let mut finished = None;
         for call in &calls {
             let name = call["function"]["name"].as_str().unwrap_or("");
-            let args: Value = serde_json::from_str(call["function"]["arguments"].as_str().unwrap_or("{}"))
-                .unwrap_or_else(|_| json!({}));
+            let args: Value =
+                serde_json::from_str(call["function"]["arguments"].as_str().unwrap_or("{}"))
+                    .unwrap_or_else(|_| json!({}));
             if name == "finish" && !session {
                 finished = Some(args["summary"].as_str().unwrap_or("").to_string());
             }
@@ -190,7 +282,9 @@ fn converse(
                     graph_call(url, key, name, &args)
                 }
                 ("commit", _) if session => session_commit(&root, id, &args),
-                ("resolve_comment" | "flag_comment" | "finish", _) if session => Err(anyhow::anyhow!("This tool is not part of a session")),
+                ("resolve_comment" | "flag_comment" | "finish", _) if session => {
+                    Err(anyhow::anyhow!("This tool is not part of a session"))
+                }
                 _ => tool(store, id, token, &root, name, &args),
             }
             .unwrap_or_else(|e| format!("Error: {e}"));
@@ -207,20 +301,31 @@ fn converse(
                     "aggregated_output": if failed { result.chars().take(2000).collect::<String>() } else { String::new() }}),
             };
             event(json!({"item": item}));
-            messages.push(json!({"role": "tool", "tool_call_id": call["id"], "content": bounded(&result)}));
+            messages.push(
+                json!({"role": "tool", "tool_call_id": call["id"], "content": bounded(&result)}),
+            );
         }
         save(messages)?;
         if finished.is_some() {
             return Ok(("completed", done.into()));
         }
     }
-    Ok(("failed", format!("The OpenRouter agent did not finish in {TURNS} steps.")))
+    Ok((
+        "failed",
+        format!("The OpenRouter agent did not finish in {TURNS} steps."),
+    ))
 }
 
 /// A session commit: every change in the worktree, with the session's trailers.
 fn session_commit(root: &Path, id: &str, args: &Value) -> Result<String> {
-    let message = args["message"].as_str().filter(|m| !m.trim().is_empty()).context("Missing message")?;
-    let full = format!("{}\n\nPeekumi-Run: {id}\nPeekumi-Agent: openrouter\n", message.trim());
+    let message = args["message"]
+        .as_str()
+        .filter(|m| !m.trim().is_empty())
+        .context("Missing message")?;
+    let full = format!(
+        "{}\n\nPeekumi-Run: {id}\nPeekumi-Agent: openrouter\n",
+        message.trim()
+    );
     git(root, &["add", "-A"])?;
     git(root, &["commit", "--no-verify", "-m", &full])?;
     git(root, &["rev-parse", "HEAD"])
@@ -234,9 +339,13 @@ fn trimmed(messages: &[Value]) -> Vec<Value> {
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            if i < keep_from && m["role"] == "tool" && m["content"].as_str().is_some_and(|c| c.len() > 400) {
+            if i < keep_from
+                && m["role"] == "tool"
+                && m["content"].as_str().is_some_and(|c| c.len() > 400)
+            {
                 let mut m = m.clone();
-                m["content"] = json!("[Earlier tool output, removed to keep the conversation small]");
+                m["content"] =
+                    json!("[Earlier tool output, removed to keep the conversation small]");
                 m
             } else {
                 m.clone()
@@ -246,27 +355,49 @@ fn trimmed(messages: &[Value]) -> Vec<Value> {
 }
 
 /// Runs one tool and returns its text result.
-fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: &Value) -> Result<String> {
+fn tool(
+    store: &Workflow,
+    id: &str,
+    token: &str,
+    root: &Path,
+    name: &str,
+    args: &Value,
+) -> Result<String> {
     let text = |key: &str| -> Result<&str> {
         args[key].as_str().with_context(|| format!("Missing {key}"))
     };
     match name {
         "list_files" => {
-            let mut list = git(root, &["ls-files", "--cached", "--others", "--exclude-standard"])?;
+            let mut list = git(
+                root,
+                &["ls-files", "--cached", "--others", "--exclude-standard"],
+            )?;
             if let Some(folder) = args["path"].as_str().filter(|p| !p.is_empty()) {
                 let prefix = format!("{}/", folder.trim_end_matches('/'));
-                list = list.lines().filter(|l| l.starts_with(&prefix)).collect::<Vec<_>>().join("\n");
+                list = list
+                    .lines()
+                    .filter(|l| l.starts_with(&prefix))
+                    .collect::<Vec<_>>()
+                    .join("\n");
             }
-            Ok(if list.is_empty() { "No files.".into() } else { list })
+            Ok(if list.is_empty() {
+                "No files.".into()
+            } else {
+                list
+            })
         }
         "read_file" => {
             let path = inside(root, text("path")?, false)?;
-            let content = std::fs::read_to_string(&path).context("Cannot read that file as text")?;
+            let content =
+                std::fs::read_to_string(&path).context("Cannot read that file as text")?;
             let lines: Vec<&str> = content.lines().collect();
             let first = args["start_line"].as_u64().unwrap_or(1).max(1) as usize;
-            let last = (args["end_line"].as_u64().map(|n| n as usize).unwrap_or(first + 399))
-                .min(first + 399)
-                .min(lines.len());
+            let last = (args["end_line"]
+                .as_u64()
+                .map(|n| n as usize)
+                .unwrap_or(first + 399))
+            .min(first + 399)
+            .min(lines.len());
             if first > lines.len() {
                 return Ok(format!("The file has {} lines.", lines.len()));
             }
@@ -279,9 +410,15 @@ fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: 
         }
         "search" => {
             let needle = text("text")?;
-            ensure!(!needle.is_empty() && needle.len() <= 1000, "Invalid search text");
+            ensure!(
+                !needle.is_empty() && needle.len() <= 1000,
+                "Invalid search text"
+            );
             let mut command = vec!["grep", "-n", "-I", "-F", "--untracked", "-e", needle, "--"];
-            let folder = args["path"].as_str().filter(|p| !p.is_empty()).map(str::to_string);
+            let folder = args["path"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(str::to_string);
             if let Some(folder) = &folder {
                 inside(root, folder, false)?;
                 command.push(folder);
@@ -298,10 +435,14 @@ fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: 
         "edit_file" => {
             let path = inside(root, text("path")?, true)?;
             let (old, new) = (text("old_text")?, text("new_text")?);
-            let content = std::fs::read_to_string(&path).context("Cannot read that file as text")?;
+            let content =
+                std::fs::read_to_string(&path).context("Cannot read that file as text")?;
             ensure!(!old.is_empty(), "old_text is empty");
             let count = content.matches(old).count();
-            ensure!(count == 1, "old_text occurs {count} times; it must occur exactly once");
+            ensure!(
+                count == 1,
+                "old_text occurs {count} times; it must occur exactly once"
+            );
             let next = content.replacen(old, new, 1);
             ensure!(next.len() <= FILE_LIMIT, "The file is too large");
             std::fs::write(&path, next)?;
@@ -320,10 +461,18 @@ fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: 
                 .iter()
                 .filter_map(Value::as_str)
                 .collect();
-            ensure!(!comments.is_empty(), "Name the instructions this commit addresses");
+            ensure!(
+                !comments.is_empty(),
+                "Name the instructions this commit addresses"
+            );
             let mut full = format!("{}\n\nPeekumi-Run: {id}\n", message.trim());
             for comment in &comments {
-                ensure!(comment.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'), "Invalid comment id");
+                ensure!(
+                    comment
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+                    "Invalid comment id"
+                );
                 full.push_str(&format!("Peekumi-Comment: {comment}\n"));
             }
             full.push_str("Peekumi-Agent: openrouter\n");
@@ -331,9 +480,9 @@ fn tool(store: &Workflow, id: &str, token: &str, root: &Path, name: &str, args: 
             git(root, &["commit", "--no-verify", "-m", &full])?;
             git(root, &["rev-parse", "HEAD"])
         }
-        "resolve_comment" | "flag_comment" => {
-            Ok(store.report(id, token, name, args).map(|_| "Reported.".to_string())?)
-        }
+        "resolve_comment" | "flag_comment" => Ok(store
+            .report(id, token, name, args)
+            .map(|_| "Reported.".to_string())?),
         "finish" => Ok("Finished.".into()),
         other => bail!("Unknown tool {other}"),
     }
@@ -356,7 +505,10 @@ fn graph_call(url: &str, key: &str, name: &str, args: &Value) -> Result<String> 
     )?;
     let reply: Value = serde_json::from_slice(&out).context("The graph returned invalid JSON")?;
     let result = &reply["result"];
-    let text = result["content"][0]["text"].as_str().unwrap_or("").to_string();
+    let text = result["content"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
     ensure!(result["isError"] != true, "{text}");
     Ok(text)
 }
@@ -365,16 +517,21 @@ fn graph_call(url: &str, key: &str, name: &str, args: &Value) -> Result<String> 
 fn git(root: &Path, args: &[&str]) -> Result<String> {
     let mut all = vec!["-c", "core.hooksPath=/dev/null"];
     all.extend_from_slice(args);
-    Ok(String::from_utf8_lossy(&crate::process::run("git", &all, Some(root), vec![])?)
-        .trim()
-        .to_string())
+    Ok(
+        String::from_utf8_lossy(&crate::process::run("git", &all, Some(root), vec![])?)
+            .trim()
+            .to_string(),
+    )
 }
 
 /// A path inside the worktree `root`: relative, without `..` or `.git`, and not a symbolic
 /// link. `write` also creates the missing folders and refuses a folder that leaves the root.
 fn inside(root: &Path, relative: &str, write: bool) -> Result<PathBuf> {
     let path = Path::new(relative);
-    ensure!(!relative.is_empty() && !relative.contains('\0'), "Invalid path");
+    ensure!(
+        !relative.is_empty() && !relative.contains('\0'),
+        "Invalid path"
+    );
     for part in path.components() {
         match part {
             Component::Normal(name) => ensure!(name != ".git", "The .git folder is not allowed"),
@@ -384,7 +541,10 @@ fn inside(root: &Path, relative: &str, write: bool) -> Result<PathBuf> {
     }
     let full = root.join(path);
     if let Ok(meta) = std::fs::symlink_metadata(&full) {
-        ensure!(!meta.file_type().is_symlink(), "Symbolic links are not allowed");
+        ensure!(
+            !meta.file_type().is_symlink(),
+            "Symbolic links are not allowed"
+        );
     }
     let parent = full.parent().context("Invalid path")?;
     if write {
@@ -406,7 +566,11 @@ fn bounded(text: &str) -> String {
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}\n[{} more bytes not shown]", &text[..end], text.len() - end)
+    format!(
+        "{}\n[{} more bytes not shown]",
+        &text[..end],
+        text.len() - end
+    )
 }
 
 #[cfg(test)]
@@ -423,7 +587,10 @@ mod tests {
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink("/tmp", root.join("link")).unwrap();
-            assert!(inside(&root, "link/file.txt", true).is_err(), "No writes through a link");
+            assert!(
+                inside(&root, "link/file.txt", true).is_err(),
+                "No writes through a link"
+            );
             assert!(inside(&root, "link", true).is_err());
         }
     }

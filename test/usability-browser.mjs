@@ -34,9 +34,17 @@ try {
       await r.continue();
     });
     await page.goto(server.url + "/#token=" + server.token);
-    await page.locator("#startLoading .peek-mark[data-state=loading]").waitFor();
-    await page.locator("#startStep", { hasText: "Reading the repository structure…" }).waitFor();
-    assert.equal(await page.locator("#panel").isVisible(), false, "The sheet stays out of view while Peekumi starts");
+    await page
+      .locator("#startLoading .peek-mark[data-state=loading]")
+      .waitFor();
+    await page
+      .locator("#startStep", { hasText: "Reading the repository structure…" })
+      .waitFor();
+    assert.equal(
+      await page.locator("#panel").isVisible(),
+      false,
+      "The sheet stays out of view while Peekumi starts",
+    );
     release(); // Later comparisons pass straight through.
     await page.locator("#panel").waitFor({ state: "visible" });
     await page
@@ -49,34 +57,94 @@ try {
         throw e;
       });
     // OpenRouter for Ask: choosing it asks for a key first; then its models and a privacy note.
-    const routerModels = Array.from({ length: 14 }, (_, i) => ({ id: `vendor/model-${i}`, label: `Model ${i}`, note: "128K context", efforts: i ? [] : ["low", "high"], defaultEffort: null }));
+    const routerModels = Array.from({ length: 14 }, (_, i) => ({
+      id: `vendor/model-${i}`,
+      label: `Model ${i}`,
+      note: "128K context",
+      efforts: i ? [] : ["low", "high"],
+      defaultEffort: null,
+    }));
     const catalog = (keySet) => ({
       agents: [
-        { id: "claude", label: "Claude Code", short: "Claude", jobs: ["ask", "task"], defaultModel: true, key: null, source: "agent", status: { ready: true, reason: null }, models: { ask: [{ id: "sonnet", label: "Sonnet", note: "Latest", efforts: ["low"], defaultEffort: null }], task: [] } },
-        { id: "openrouter", label: "OpenRouter", short: "OpenRouter", jobs: ["ask"], defaultModel: false, source: "agent", key: keySet ? { set: true, end: "7890", fromEnvironment: false } : { set: false }, status: { ready: keySet, reason: keySet ? null : "Add your OpenRouter key" }, models: { ask: routerModels } },
+        {
+          id: "claude",
+          label: "Claude Code",
+          short: "Claude",
+          jobs: ["ask", "task"],
+          defaultModel: true,
+          key: null,
+          source: "agent",
+          status: { ready: true, reason: null },
+          models: {
+            ask: [
+              {
+                id: "sonnet",
+                label: "Sonnet",
+                note: "Latest",
+                efforts: ["low"],
+                defaultEffort: null,
+              },
+            ],
+            task: [],
+          },
+        },
+        {
+          id: "openrouter",
+          label: "OpenRouter",
+          short: "OpenRouter",
+          jobs: ["ask"],
+          defaultModel: false,
+          source: "agent",
+          key: keySet
+            ? { set: true, end: "7890", fromEnvironment: false }
+            : { set: false },
+          status: {
+            ready: keySet,
+            reason: keySet ? null : "Add your OpenRouter key",
+          },
+          models: { ask: routerModels },
+        },
       ],
-      defaults: { ask: { agent: "claude", model: "sonnet", effort: "low" }, task: { agent: "claude", model: null, effort: "auto" } },
+      defaults: {
+        ask: { agent: "claude", model: "sonnet", effort: "low" },
+        task: { agent: "claude", model: null, effort: "auto" },
+      },
     });
     let sentKey = null;
-    await page.route("**/api/agents", (r) => r.fulfill({ json: catalog(false) }));
+    await page.route("**/api/agents", (r) =>
+      r.fulfill({ json: catalog(false) }),
+    );
     await page.route("**/api/agents/openrouter-key", (r) => {
       sentKey = r.request().postDataJSON().key;
       return r.fulfill({ json: catalog(true) });
     });
     await page.locator("#dockAgent:not([hidden])").click();
     const sheet = page.locator("dialog.agents-dialog");
-    await sheet.getByRole("button", { name: "OpenRouter", exact: true }).click();
+    await sheet
+      .getByRole("button", { name: "OpenRouter", exact: true })
+      .click();
     await sheet.getByLabel("OpenRouter API key").fill("sk-or-test-1234567890");
-    await sheet.getByRole("button", { name: "Test and save", exact: true }).click();
+    await sheet
+      .getByRole("button", { name: "Test and save", exact: true })
+      .click();
     await sheet.getByText("API key •••• 7890").waitFor();
     assert.equal(sentKey, "sk-or-test-1234567890"); // gitleaks:allow (a fake test key)
-    assert.match(await sheet.locator(".agents-privacy").innerText(), /sends your question and the code it reads to OpenRouter/);
+    assert.match(
+      await sheet.locator(".agents-privacy").innerText(),
+      /sends your question and the code it reads to OpenRouter/,
+    );
     await sheet.getByLabel("Search models").fill("model-13");
-    assert.equal(await sheet.locator(".agents-option:visible").count(), 2, "The match and Other model");
+    assert.equal(
+      await sheet.locator(".agents-option:visible").count(),
+      2,
+      "The match and Other model",
+    );
     await page.screenshot({ path: `test-results/openrouter-${width}.png` });
     await sheet.getByText("Model 13", { exact: true }).click();
     await page.keyboard.press("Escape");
-    await page.locator("#dockAgent", { hasText: "OpenRouter · Model 13" }).waitFor();
+    await page
+      .locator("#dockAgent", { hasText: "OpenRouter · Model 13" })
+      .waitFor();
     await page.evaluate(() => localStorage.clear());
     await page.unroute("**/api/agents");
     await page.unroute("**/api/agents/openrouter-key");
@@ -84,13 +152,20 @@ try {
     await page.route("**/api/prs", (r) =>
       r.fulfill({
         json: [
-          { number: 7, title: "Review setup", state: "OPEN", author: { login: "octo" } },
+          {
+            number: 7,
+            title: "Review setup",
+            state: "OPEN",
+            author: { login: "octo" },
+          },
           { number: 5, title: "Earlier work", state: "MERGED" },
         ],
       }),
     );
     await page.route("**/api/prs/open", async (r) => {
-      const repo = await (await page.request.get(server.url + "/api/repo")).json();
+      const repo = await (
+        await page.request.get(server.url + "/api/repo")
+      ).json();
       await r.fulfill({
         json: {
           base: repo.initialHead,
@@ -109,7 +184,9 @@ try {
             url: "https://github.com/example/repo/pull/7",
             body: "## Summary\n\nKeep the existing canvas and show the PR in the sheet.\n\n- One\n- Two",
             comments: [],
-            reviews: [{ author: { login: "rev" }, state: "APPROVED", body: "" }],
+            reviews: [
+              { author: { login: "rev" }, state: "APPROVED", body: "" },
+            ],
             statusCheckRollup: [{ name: "Tests", conclusion: "SUCCESS" }],
           },
         },
@@ -125,14 +202,22 @@ try {
     const menu = page.locator(".frost-menu");
     await menu.locator(".frost-filter").waitFor();
     const opened = await menu.evaluate((m) => {
-      const item = m.querySelector('.frost-option[aria-selected="true"]').getBoundingClientRect(),
+      const item = m
+          .querySelector('.frost-option[aria-selected="true"]')
+          .getBoundingClientRect(),
         box = m.getBoundingClientRect();
       return item.top >= box.top && item.bottom <= box.bottom;
     });
     assert.ok(opened, "The current entry is in view when the list opens");
-    assert.match(await menu.locator(".frost-count").innerText(), /^\d+ commits$/);
+    assert.match(
+      await menu.locator(".frost-count").innerText(),
+      /^\d+ commits$/,
+    );
     await menu.locator(".frost-filter").fill("no commit has this text");
-    assert.match(await menu.locator(".frost-count").innerText(), /^0 of \d+ match$/);
+    assert.match(
+      await menu.locator(".frost-count").innerText(),
+      /^0 of \d+ match$/,
+    );
     assert.equal(await menu.locator(".frost-option:visible").count(), 0);
     await page.keyboard.press("Escape");
     await menu.waitFor({ state: "detached" });
@@ -144,33 +229,67 @@ try {
     await page.locator('#viewKind [data-kind="pr"]').click();
     assert.equal(await page.locator("#branchView").isVisible(), false);
     await page.locator(".pr-pick").first().waitFor();
-    assert.deepEqual(
-      await page.locator("#prRows .pr-group").allInnerTexts(),
-      ["Open", "Recently merged"],
+    assert.deepEqual(await page.locator("#prRows .pr-group").allInnerTexts(), [
+      "Open",
+      "Recently merged",
+    ]);
+    assert.match(
+      await page.locator(".pr-pick").first().innerText(),
+      /#7 Review setup[\s\S]*Open · octo/,
     );
-    assert.match(await page.locator(".pr-pick").first().innerText(), /#7 Review setup[\s\S]*Open · octo/);
     await page.locator(".pr-pick", { hasText: "#7" }).click();
     await page.locator("#reviewScope .pr-head").waitFor();
-    assert.match(await page.locator("#reviewScope").innerText(), /Open[\s\S]*PR #7 · setup → main[\s\S]*Review setup[\s\S]*octo/);
+    assert.match(
+      await page.locator("#reviewScope").innerText(),
+      /Open[\s\S]*PR #7 · setup → main[\s\S]*Review setup[\s\S]*octo/,
+    );
     assert.match(await page.locator("#revisionSummary").innerText(), /PR #7/);
-    assert.match(await page.locator(".pr-card").innerText(), /Keep the existing canvas[\s\S]*All 1 passed[\s\S]*1 approved[\s\S]*Open on GitHub/);
+    assert.match(
+      await page.locator(".pr-card").innerText(),
+      /Keep the existing canvas[\s\S]*All 1 passed[\s\S]*1 approved[\s\S]*Open on GitHub/,
+    );
     assert.equal(new URL(page.url()).searchParams.get("pr"), "7");
     // A reload keeps the PR: its details come back without a new fetch.
     await page.route("**/api/prs/7", (r) =>
-      r.fulfill({ json: { number: 7, title: "Review setup", state: "OPEN", body: "", url: "https://github.com/example/repo/pull/7" } }),
+      r.fulfill({
+        json: {
+          number: 7,
+          title: "Review setup",
+          state: "OPEN",
+          body: "",
+          url: "https://github.com/example/repo/pull/7",
+        },
+      }),
     );
     await page.reload();
     await page.locator("#reviewScope .pr-head").waitFor();
-    assert.match(await page.locator(".pr-card").innerText(), /No description\.[\s\S]*None reported/);
+    assert.match(
+      await page.locator(".pr-card").innerText(),
+      /No description\.[\s\S]*None reported/,
+    );
     // The ✕ beside the PR name goes back to the checkout's branch.
     await page.locator("#revisionSummary .rev-leave").click();
-    await page.waitForFunction(() => !new URL(location.href).searchParams.get("pr"));
-    await page.waitForFunction(() => !document.querySelector("#reviewScope .pr-head"));
-    assert.doesNotMatch(await page.locator("#revisionSummary").innerText(), /PR #7/);
+    await page.waitForFunction(
+      () => !new URL(location.href).searchParams.get("pr"),
+    );
+    await page.waitForFunction(
+      () => !document.querySelector("#reviewScope .pr-head"),
+    );
+    assert.doesNotMatch(
+      await page.locator("#revisionSummary").innerText(),
+      /PR #7/,
+    );
     await page.locator("#revisionDetails > summary").click();
-    await page.getByLabel("Repository", { exact: true }).waitFor({ state: "visible" });
+    await page
+      .getByLabel("Repository", { exact: true })
+      .waitFor({ state: "visible" });
     assert.equal(await page.locator("#branchView").isVisible(), true);
-    assert.equal(await page.locator('#viewKind [data-kind="branch"]').getAttribute("aria-pressed"), "true");
+    assert.equal(
+      await page
+        .locator('#viewKind [data-kind="branch"]')
+        .getAttribute("aria-pressed"),
+      "true",
+    );
     await page.locator("#repositoryPicker").selectOption(id);
     await page.waitForURL("**/?repo=" + id);
     await page.locator('.sheet[data-front="true"] .node').first().waitFor();
