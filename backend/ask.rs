@@ -335,13 +335,16 @@ fn open_grant(app: &App, base: &Value, head: &Value) -> Option<String> {
     })
 }
 /// Claude Code arguments: every built-in tool off, the configured effort and model, and the
-/// lookup server when a grant is open. `stream` asks for incremental text events.
+/// lookup server when a grant is open. `stream` asks for incremental text events. `system` is
+/// the system prompt (Ask's, or the proposal agent's) and `turns` the most model turns.
 fn provider_args<'a>(
     model: Option<&'a str>,
     effort: Option<&'a str>,
     lookups: Option<&'a str>,
     tools: &'a str,
     stream: bool,
+    system: &'a str,
+    turns: &'a str,
 ) -> Vec<&'a str> {
     let mut args = vec![
         "-p",
@@ -353,7 +356,7 @@ fn provider_args<'a>(
         "",
         "--no-session-persistence",
         "--system-prompt",
-        INSTRUCTIONS,
+        system,
     ];
     // No model means Claude Code's own default; no effort ("auto") lets it decide.
     if let Some(model) = model {
@@ -379,7 +382,7 @@ fn provider_args<'a>(
             "--allowedTools",
             tools,
             "--max-turns",
-            "10",
+            turns,
         ]),
         None => args.extend(["--mcp-config", "{\"mcpServers\":{}}"]),
     }
@@ -656,9 +659,25 @@ async fn openrouter_answer(
     first: &str,
     relay: Option<mpsc::Sender<Value>>,
 ) -> Result<String> {
-    let draft = openrouter_pass(app, model, effort.clone(), first, relay.clone()).await?;
+    let draft = openrouter_pass(
+        app,
+        model,
+        effort.clone(),
+        INSTRUCTIONS,
+        first,
+        relay.clone(),
+    )
+    .await?;
     if left_unchecked(&draft) {
-        openrouter_pass(app, model, effort, &recheck_prompt(first, &draft)?, relay).await
+        openrouter_pass(
+            app,
+            model,
+            effort,
+            INSTRUCTIONS,
+            &recheck_prompt(first, &draft)?,
+            relay,
+        )
+        .await
     } else {
         Ok(draft)
     }
@@ -670,6 +689,7 @@ async fn openrouter_pass(
     app: &App,
     model: &str,
     effort: Option<String>,
+    system: &str,
     prompt: &str,
     relay: Option<mpsc::Sender<Value>>,
 ) -> Result<String> {
@@ -677,7 +697,7 @@ async fn openrouter_pass(
     let provider = crate::agents::OpenRouter::new(&app.workflow);
     let key = provider.key_or_error()?;
     let mut messages = vec![
-        json!({"role": "system", "content": INSTRUCTIONS}),
+        json!({"role": "system", "content": system}),
         json!({"role": "user", "content": prompt}),
     ];
     let mut reported = 0;
@@ -877,6 +897,8 @@ pub async fn answer(app: &App, body: Value) -> Result<Value> {
             lookups.as_deref(),
             &tools,
             false,
+            INSTRUCTIONS,
+            "10",
         );
         let pass = |prompt: String| -> Result<String> {
             let output = crate::process::run_for(
@@ -954,6 +976,8 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
                 lookups.as_deref(),
                 &tools,
                 true,
+                INSTRUCTIONS,
+                "10",
             );
             let mut reported = 0;
             let mut pass = |prompt: String| -> Result<String> {
@@ -1033,8 +1057,160 @@ pub async fn answer_stream(app: Arc<App>, body: Value, events: mpsc::Sender<Valu
     let _ = events.send(event).await;
 }
 
+/// What the proposal agent is told. It reads the code through the same read-only lookups as
+/// Ask, and it changes nothing.
+const PROPOSE: &str = "You propose fixes for dependency-rule breaks in a Git repository. You read the code only through the lookup tools, and you change nothing. The user message lists the breaks, grouped by rule and by the declaration that they reach. Read the code at those places, and read .peekumi.json to see the groups and the rules. Then propose the smallest set of changes that removes the breaks and keeps the behaviour the same. A good fix names exactly what to move or change, where it goes, which callers change, and which group in .peekumi.json a new file joins. One fix can cover several groups when one change removes all of them. Write each instruction for a coding agent in ASD-STE100 Simplified Technical English: short sentences, one instruction in each sentence, the imperative, the active voice. Reply with JSON only, and no other text: {\"fixes\": [{\"title\": \"<a short name for the change>\", \"instruction\": \"<what the agent must do>\", \"covers\": [\"<group id>\"], \"files\": [\"<path>\"]}]}. Use only the group ids from the user message.";
+
+/// Reads the proposal agent's reply: a JSON object (code fences and text around it are
+/// ignored) with `fixes`. Keeps each fix that has a title, an instruction and at least one
+/// known group, and gives it the anchor of its first group and the breaks it covers.
+fn read_proposals(raw: &str, groups: &[Value]) -> Result<Vec<Value>> {
+    let start = raw.find('{').context("The agent did not reply with JSON")?;
+    let end = raw
+        .rfind('}')
+        .context("The agent did not reply with JSON")?;
+    ensure!(end > start, "The agent did not reply with JSON");
+    let reply: Value =
+        serde_json::from_str(&raw[start..=end]).context("The agent replied with invalid JSON")?;
+    let by_id = |id: &str| groups.iter().find(|g| g["id"] == id);
+    let mut fixes = vec![];
+    for fix in reply["fixes"].as_array().into_iter().flatten().take(20) {
+        let title = text_of(&fix["title"]).trim();
+        let instruction = text_of(&fix["instruction"]).trim();
+        let covers: Vec<&Value> = fix["covers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|id| id.as_str().and_then(by_id))
+            .collect();
+        if title.is_empty() || title.len() > 200 || instruction.is_empty() || covers.is_empty() {
+            continue;
+        }
+        let ids: Vec<&Value> = covers.iter().map(|g| &g["id"]).collect();
+        let rules: std::collections::BTreeSet<&str> =
+            covers.iter().filter_map(|g| g["rule"].as_str()).collect();
+        let files: Vec<&str> = fix["files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|f| !f.is_empty() && f.len() <= 300)
+            .take(20)
+            .collect();
+        fixes.push(json!({
+            "id": &crate::engine::hash(json!([title, ids]).to_string())[..16],
+            "title": title,
+            "text": instruction.chars().take(4000).collect::<String>(),
+            "covers": ids,
+            "rules": rules,
+            "files": files,
+            "count": covers.iter().map(|g| g["count"].as_u64().unwrap_or(0)).sum::<u64>(),
+            "anchor": covers[0]["anchor"],
+        }));
+    }
+    ensure!(!fixes.is_empty(), "The agent proposed no usable fix");
+    Ok(fixes)
+}
+
+/// Proposes fixes for the rule breaks at `body.head` with the agent that the owner chose for
+/// Ask (`body.using`): it reads the code through read-only lookups at that commit, with
+/// Peekumi's grouped breaks (`GET /api/fixes`) as its context. Returns `{fixes, groups,
+/// provider}`; `groups` are Peekumi's own proposals, the fallback when the agent fails.
+pub async fn propose_fixes(app: &App, body: Value) -> Result<Value> {
+    let head = body["head"]
+        .as_str()
+        .filter(|h| !h.is_empty())
+        .context("Name the commit to fix")?;
+    let data = app
+        .engine
+        .call("fixes", json!([head]))
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let groups = data["fixes"].as_array().cloned().unwrap_or_default();
+    if groups.is_empty() {
+        return Ok(json!({"fixes": [], "groups": [], "provider": null}));
+    }
+    let sha = data["head"].clone();
+    let context: Vec<Value> = groups
+        .iter()
+        .take(40)
+        .map(|g| json!({"id": g["id"], "rule": g["rule"], "message": g["message"], "target": g["target"], "kinds": g["kinds"], "breaks": g["count"], "from": g["sources"]}))
+        .collect();
+    let prompt = format!(
+        "These dependency-rule breaks are at commit {sha}, grouped by rule and by the declaration that they reach. Propose the fixes.\n\n{}",
+        serde_json::to_string_pretty(&context)?
+    );
+    let engine = ask_engine(app, &body)?;
+    let lookups = open_grant(app, &sha, &sha);
+    let _closes = Closes(app);
+    let (raw, provider) = match engine {
+        Engine::OpenRouter(model, effort) => {
+            lookup::open(app, &sha, &sha);
+            let raw = openrouter_pass(app, &model, effort, PROPOSE, &prompt, None).await?;
+            (raw, format!("OpenRouter · {model}"))
+        }
+        Engine::Claude(executable, model, effort) => {
+            let cwd = app.workflow.state.join("ask");
+            std::fs::create_dir_all(&cwd)?;
+            let raw = tokio::task::spawn_blocking(move || -> Result<String> {
+                let tools = lookup::TOOLS.join(",");
+                let args = provider_args(
+                    model.as_deref(),
+                    effort.as_deref(),
+                    lookups.as_deref(),
+                    &tools,
+                    false,
+                    PROPOSE,
+                    "24",
+                );
+                let output = crate::process::run_for(
+                    &executable,
+                    &args,
+                    Some(&cwd),
+                    prompt.into_bytes(),
+                    std::time::Duration::from_secs(360),
+                )?;
+                let response: Value =
+                    serde_json::from_slice(&output).context("The agent returned invalid JSON")?;
+                ensure!(
+                    response["is_error"] != true,
+                    "The agent could not propose fixes"
+                );
+                Ok(response["result"]
+                    .as_str()
+                    .context("The agent returned no proposal")?
+                    .to_string())
+            })
+            .await??;
+            (raw, "Claude Code".to_string())
+        }
+    };
+    Ok(json!({"fixes": read_proposals(&raw, &groups)?, "groups": groups, "provider": provider}))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn proposals_keep_only_fixes_for_known_groups() {
+        let groups = vec![
+            json!({"id":"a1","rule":"ui-no-db","count":2,"anchor":{"kind":"symbol","path":"db/store.py","symbol":"save"}}),
+            json!({"id":"b2","rule":"layers","count":3,"anchor":{"kind":"file","path":"x.py"}}),
+        ];
+        let raw = "Here you are:\n```json\n{\"fixes\":[{\"title\":\"Add a service\",\"instruction\":\"Create services/store.py.\",\"covers\":[\"a1\",\"b2\",\"zz\"],\"files\":[\"services/store.py\"]},{\"title\":\"\",\"instruction\":\"No title\",\"covers\":[\"a1\"]},{\"title\":\"Unknown\",\"instruction\":\"x\",\"covers\":[\"zz\"]}]}\n```";
+        let fixes = read_proposals(raw, &groups).unwrap();
+        assert_eq!(
+            fixes.len(),
+            1,
+            "Fixes with no title or no known group are left out"
+        );
+        assert_eq!(fixes[0]["covers"], json!(["a1", "b2"]));
+        assert_eq!(fixes[0]["count"], 5);
+        assert_eq!(fixes[0]["anchor"]["path"], "db/store.py");
+        assert_eq!(fixes[0]["rules"], json!(["layers", "ui-no-db"]));
+        assert!(read_proposals("I cannot help.", &groups).is_err());
+        assert!(read_proposals("{\"fixes\":[]}", &groups).is_err());
+    }
+
     use super::*;
     #[test]
     fn ask_errors_are_plain_sentences_without_host_paths() {

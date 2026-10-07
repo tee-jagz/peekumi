@@ -18,7 +18,8 @@ The old Node backend is in `test/reference/`. It is an equivalence oracle and a 
 
 - `POST /api/session`: exchanges the access token for a session cookie.
 - `GET /api/repo`: the name, the branch, the latest 80 first-parent commits (`moreCommits` is true when older commits exist) and the initial revisions.
-- `GET /api/fixes?head=`: proposed fixes for the dependency-rule breaks at a revision. Peekumi groups the breaks by the rule and the declaration that they reach. Each fix has an instruction text and an anchor.
+- `GET /api/fixes?head=`: the dependency-rule breaks at a revision, grouped by the rule and the declaration that they reach. Each group has an instruction text and an anchor.
+- `POST /api/fixes/propose`: the Ask agent reads the code with read-only lookups, with these groups as its context, and proposes fixes. The reply has `fixes`, the `groups` and the `provider`. It waits for no Ask answer, and it returns 409 while an Ask answer runs.
 - `GET /api/commits?before=`: the next 80 first-parent commits after commit `before`, and `more`.
 - `GET /api/compare?base=&head=`: the complete comparison, for compatibility. Add `view=overview` to get file statuses, dependency edges, counts and compact colour previews of symbols.
 - `GET /api/directories?base=&head=`: directory README summaries or Python package docstrings for a specific revision, with provenance and adapter capabilities.

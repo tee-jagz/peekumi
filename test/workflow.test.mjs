@@ -2267,10 +2267,28 @@ test("Peekumi proposes one fix for each rule and declaration that its breaks rea
     text: fix.text,
   });
   assert.equal(draft.status, "draft");
+  // The agent proposes the fixes, with Peekumi's groups as context and as the fallback.
+  const proposed = await f.req("/api/fixes/propose", {
+    head: f.sha,
+    using: { agent: "claude" },
+  });
+  assert.equal(proposed.provider, "Claude Code");
+  assert.equal(proposed.groups.length, 1);
+  assert.equal(proposed.fixes.length, 1);
+  assert.equal(proposed.fixes[0].title, "Reach the store through a service");
+  assert.deepEqual(proposed.fixes[0].covers, [fix.id]);
+  assert.equal(proposed.fixes[0].count, 2);
+  assert.deepEqual(proposed.fixes[0].anchor, fix.anchor);
+  assert.match(proposed.fixes[0].text, /^Create services\/store\.py/);
   // A repository with no rules has nothing to fix.
   const g = await fixture();
   t.after(() => g.close());
   const none = await g.req(`/api/fixes?head=${g.sha}`);
   assert.equal(none.checks.state, "not configured");
   assert.deepEqual(none.fixes, []);
+  const nothing = await g.req("/api/fixes/propose", {
+    head: g.sha,
+    using: { agent: "claude" },
+  });
+  assert.deepEqual([nothing.fixes, nothing.provider], [[], null]);
 });

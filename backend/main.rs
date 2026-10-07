@@ -892,6 +892,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         }
     };
     if path == "/api/ask"
+        || path == "/api/fixes/propose"
         || path == "/api/references"
         || path == "/api/ask/history"
         || path == "/api/workflow"
@@ -1012,6 +1013,24 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                     json_response(StatusCode::OK, json!({"references": found}), gzip, None).await
                 }
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            };
+        }
+        if path == "/api/fixes/propose" {
+            if method != "POST" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
+            }
+            // The proposal agent uses Ask's lookup grant, so it waits for no Ask answer.
+            let Ok(_ask_guard) = app.ask_lock.clone().try_lock_owned() else {
+                return error(
+                    StatusCode::CONFLICT,
+                    "An Ask answer is in progress. Try again when it ends",
+                    gzip,
+                )
+                .await;
+            };
+            return match ask::propose_fixes(&app, body).await {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &ask::plain_error(&e), gzip).await,
             };
         }
         if path == "/api/ask" {

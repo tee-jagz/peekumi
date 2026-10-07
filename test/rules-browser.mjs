@@ -163,10 +163,24 @@ try {
       const rows = page.locator(".fix-row");
       await rows.first().waitFor();
       assert.equal(await rows.count(), 1);
-      assert.match(
+      assert.equal(
         await page.locator("#viewHead .view-meta").innerText(),
-        /^1 fix for 1 rule break$/,
+        "1 rule break in 1 place",
       );
+      // The agent read the code and proposed the fix; Peekumi's group is its context.
+      assert.match(
+        await page.locator("#tabBody .read-note").first().innerText(),
+        /^Claude Code read the code and proposed these fixes/,
+      );
+      assert.equal(
+        await rows.first().locator("strong").innerText(),
+        "Reach the store through a service",
+      );
+      assert.match(
+        await rows.first().locator("textarea").inputValue(),
+        /^Create services\/store\.py/,
+      );
+      assert.equal(await page.locator(".fix-context").count(), 1);
       const send = page.locator(".fix-buttons .primary");
       assert.equal(await send.innerText(), "Send 1 fix to an agent");
       await rows.first().locator("input[type=checkbox]").uncheck();

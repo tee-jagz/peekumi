@@ -33,6 +33,7 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 ### Where your code goes
 
 - **Ask** sends the selected code and its context to Anthropic through the Claude Code client on your computer. All built-in tools of Claude Code are disabled for Ask. While one answer runs, Ask can use read-only lookups through a key that is valid only for that answer. The lookups read committed code and cannot run code or change files.
+- **Proposed fixes** use the same agent, the same restrictions and the same read-only lookups as Ask. The agent gets the rule breaks and reads the code at that commit. It changes nothing. Its proposals become instructions only when you save or send them.
 - **Tasks** and **sessions** run Codex or Claude Code, which send code to OpenAI or Anthropic. If you choose OpenRouter for Ask, Ask sends your question and the code that it reads to OpenRouter, which sends them to the provider of the model that you chose. An OpenRouter task or session runs in Peekumi's own task agent. It can change files only in the worktree of the task, and it cannot run commands. The server keeps the OpenRouter key in its private state folder and never sends it to the browser. Do not use Ask or tasks on code that must not leave your computer.
 
 ### Agent tasks and sessions

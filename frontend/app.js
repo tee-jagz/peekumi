@@ -360,6 +360,9 @@ const fixes = createFixes({
     }),
   head: (title, options) => viewHead(title, options),
   revision: () => headRef,
+  // The proposals come from the agent that the owner chose for Ask (read-only lookups).
+  using: () => agents.using("ask"),
+  agentName: () => agents.label(agents.current("ask")?.agent),
   send: (ids) => workflow.prepareWith(ids),
   saved: (n) => {
     workflow.refresh(false);
@@ -1126,11 +1129,22 @@ function nodeBreaks(node) {
     return fact.violations.map((v) => ({
       rule: v.id,
       message: v.message,
+      source: fact.source.path,
       target,
       kind,
       count: fact.count || 1,
     }));
   });
+}
+/** `n` relationships of `kind` in words: "1 call", "6 calls", "2 imports". */
+function kindCount(n, kind) {
+  const nouns = {
+    calls: ["call", "calls"],
+    imports: ["import", "imports"],
+    implements: ["implementation", "implementations"],
+    inherits: ["inheritance", "inheritances"],
+  }[kind] || ["relationship", "relationships"];
+  return `${n} ${nouns[n === 1 ? 0 : 1]}`;
 }
 /** One line for the sheet about `breaks` (see nodeBreaks): the rule, or how many rules, and
  * what breaks it, for example "Breaks ui-no-db · 3 calls to store.py". */
@@ -4109,17 +4123,57 @@ async function openEvidence(relation) {
 /** Lists typed relationships, rule evidence and unresolved targets for the current scope. */
 function renderDependencies(body) {
   body.append(ruleSummary());
-  // The breaks at this commit become proposed fixes, which the owner can send to an agent.
-  // The link stays outside the summary, so it shows without opening it.
+  // The breaks at this commit become proposed fixes: the view's one primary action.
   const after = comparison.relationshipData?.checks?.after;
   if (!before && after?.state === "evaluated" && after.violations && isOwner())
     body.append(
       button(
-        "link-button propose-fixes",
-        `Propose fixes for ${after.violations} rule break${after.violations === 1 ? "" : "s"} ›`,
+        "btn primary propose-fixes",
+        `Propose fixes for ${after.violations} rule break${after.violations === 1 ? "" : "s"}`,
         () => nav.go({ name: "fixes" }),
       ),
     );
+  // The breaks that start inside the selection. The list below shows only the lines between
+  // cards on this level, so breaks between files inside a folder would not show there.
+  const inside =
+    selected && selected.kind !== "edge" ? nodeBreaks(selected) : [];
+  if (inside.length) {
+    const pairs = new Map();
+    for (const b of inside) {
+      const key = `${b.source}→${b.target}:${b.kind}`;
+      const entry = pairs.get(key) || { ...b, rules: new Set(), count: 0 };
+      entry.rules.add(b.rule);
+      entry.count = Math.max(entry.count, b.count);
+      pairs.set(key, entry);
+    }
+    const breaks = element("ul", "break-list");
+    for (const b of [...pairs.values()].sort((a, c) => c.count - a.count)) {
+      const row = button("break-row", "", () =>
+        navigate({ kind: "file", path: b.source }),
+      );
+      const text = element("span", "row-text");
+      text.append(
+        element(
+          "span",
+          "rt",
+          `${b.source.split("/").pop()} → ${b.target.split("/").pop()}`,
+        ),
+        element(
+          "span",
+          "rd",
+          `${kindCount(b.count, b.kind)} · ${[...b.rules].join(", ")}`,
+        ),
+      );
+      row.append(glyph("broken"), text, glyph("forward"));
+      const li = element("li");
+      li.append(row);
+      breaks.append(li);
+    }
+    body.append(
+      element("h3", "workflow-group", "Rule breaks from this selection"),
+      breaks,
+    );
+  }
   const controls = element("div", "relationship-controls"),
     filter = element("select");
   filter.setAttribute("aria-label", "Relationship kind");
@@ -4137,7 +4191,7 @@ function renderDependencies(body) {
     relationshipKind = filter.value;
     render();
   };
-  const violations = button("btn", "Violations only", () => {
+  const violations = button("violations-toggle", "Violations only", () => {
     violationsOnly = !violationsOnly;
     render();
   });
@@ -4190,7 +4244,13 @@ function renderDependencies(body) {
   }
   if (!relevant.length)
     list.append(
-      element("li", "empty", "No resolved connections in this selection."),
+      element(
+        "li",
+        "empty",
+        inside.length
+          ? "No other connections on this level."
+          : "No resolved connections in this selection.",
+      ),
     );
   if (scope.kind !== "file") {
     body.append(

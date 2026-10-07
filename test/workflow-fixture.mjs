@@ -84,6 +84,43 @@ if (values.includes("--tools")) {
     );
     process.exit(0);
   }
+  // Proposed fixes: the agent reads the grouped breaks and replies with JSON fixes. It runs
+  // like Ask: no built-in tools, only the read-only lookups.
+  if (
+    values[values.indexOf("--system-prompt") + 1]?.startsWith(
+      "You propose fixes for dependency-rule breaks",
+    )
+  ) {
+    if (
+      values[values.indexOf("--tools") + 1] !== "" ||
+      !values.includes("--strict-mcp-config")
+    )
+      throw Error("The proposal agent must have no built-in tools");
+    if (process.env.PEEKUMI_TOKEN || process.env.PEEKUMI_REPORT_TOKEN)
+      throw Error("The proposal agent inherited a Peekumi credential");
+    const ids = [...task.matchAll(/"id": "([0-9a-f]{16})"/g)].map((m) => m[1]);
+    if (!ids.length) throw Error("The proposal agent got no groups");
+    console.log(
+      JSON.stringify({
+        is_error: false,
+        result:
+          "```json\n" +
+          JSON.stringify({
+            fixes: [
+              {
+                title: "Reach the store through a service",
+                instruction:
+                  "Create services/store.py with a save function that calls db.store.save. Change ui/view.py and ui/panel.py to call services.store.save. Add services/** to a new group in .peekumi.json.",
+                covers: [ids[0]],
+                files: ["services/store.py", "ui/view.py", "ui/panel.py"],
+              },
+            ],
+          }) +
+          "\n```",
+      }),
+    );
+    process.exit(0);
+  }
   if (
     values[values.indexOf("--tools") + 1] !== "" ||
     !values.includes("--strict-mcp-config") ||

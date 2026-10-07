@@ -2,31 +2,40 @@
  * @module Proposed fixes: the page that turns the dependency-rule breaks at the map's commit
  * into instructions for an agent.
  *
- * The server proposes the fixes (`GET /api/fixes?head=`): the breaks grouped by the rule and
- * the declaration they reach, each with an instruction text. On this page the owner selects
- * fixes (all at first), edits their text and clears the ones to leave out. Then one button
- * saves the selected fixes as draft instructions and opens the task form with them selected
- * (a batch of fixes in one task), and another only saves them. A fix that became a draft
- * shows as drafted, so a second visit does not draft it again.
+ * Peekumi groups the breaks first (`GET /api/fixes?head=`): one group for each rule and each
+ * declaration that the breaks reach. Then the agent that the owner chose for Ask reads the
+ * code, with those groups as its context, and proposes the fixes
+ * (`POST /api/fixes/propose`). While it works, the groups show as context. If the agent
+ * fails, the owner can try again, or use Peekumi's groups as the proposals.
+ *
+ * The owner selects fixes (all at first), edits their text and clears the ones to leave out.
+ * One button saves the selected fixes as draft instructions and opens the task form with them
+ * selected (a batch of fixes in one task); another only saves them. A drafted fix is not
+ * drafted again.
  */
+import { peek } from "./peek.js";
 
-/** Makes the page. `api` reads JSON; `write(route, body)` posts it and returns the reply;
+/** Makes the page. `api(route, options)` reads JSON; `write(route, body)` posts it;
  * `head(title, {meta})` draws the page's header row; `revision()` is the map's head commit;
- * `send(ids)` opens the task form with the draft instructions `ids` selected; `saved(n)`
- * tells the owner that `n` drafts were saved; `redraw()` draws the page again. */
+ * `using()` and `agentName()` are the Ask agent's choice and name; `send(ids)` opens the task
+ * form with the draft instructions `ids` selected; `saved(n)` tells the owner that `n` drafts
+ * were saved; `redraw()` draws the page again. */
 export function createFixes({
   api,
   write,
   head,
   revision,
+  using,
+  agentName,
   send,
   saved,
   redraw,
 }) {
-  // The fixes of one commit: its data, and the owner's choice and text for each fix.
-  let shown = { commit: null, data: null, loading: false, error: "" };
+  // One commit's state: Peekumi's groups, the agent's proposal, and which list shows.
+  let shown = null;
+  // The owner's choice and text for each proposal, and the fixes already drafted, by key.
   const choices = new Map(),
-    drafted = new Map();
+    drafted = new Set();
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -37,84 +46,217 @@ export function createFixes({
     `${n} ${n === 1 ? word : word.endsWith("x") ? word + "es" : word + "s"}`;
 
   function load(commit) {
-    shown = { commit, data: null, loading: true, error: "" };
-    choices.clear();
+    shown = {
+      commit,
+      groups: null,
+      state: null,
+      error: "",
+      agent: { status: "idle", fixes: [], provider: "", error: "" },
+      mode: "agent",
+    };
     api("/api/fixes?head=" + encodeURIComponent(commit))
       .then((data) => {
         if (shown.commit !== commit) return;
-        shown = { commit, data, loading: false, error: "" };
+        shown.groups = data.fixes;
+        shown.state = data.checks?.state;
+        if (shown.groups.length) propose();
+        else redraw();
+      })
+      .catch((error) => {
+        if (shown.commit !== commit) return;
+        shown.error = error.message;
+        redraw();
+      });
+  }
+
+  /** Asks the agent for proposals; Peekumi's groups go with the request as context. */
+  function propose() {
+    const commit = shown.commit;
+    shown.mode = "agent";
+    shown.agent = { status: "running", fixes: [], provider: "", error: "" };
+    redraw();
+    api("/api/fixes/propose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ head: commit, using: using() }),
+    })
+      .then((data) => {
+        if (shown.commit !== commit) return;
+        shown.agent = {
+          status: "done",
+          fixes: data.fixes,
+          provider: data.provider || "",
+          error: "",
+        };
         for (const fix of data.fixes)
-          choices.set(fix.id, {
-            selected: !drafted.has(`${commit}:${fix.id}`),
+          choices.set(`${commit}:a:${fix.id}`, {
+            selected: true,
             text: fix.text,
           });
         redraw();
       })
       .catch((error) => {
         if (shown.commit !== commit) return;
-        shown = { commit, data: null, loading: false, error: error.message };
+        shown.agent = {
+          status: "failed",
+          fixes: [],
+          provider: "",
+          error: error.message,
+        };
         redraw();
       });
   }
 
-  /** The selected fixes that are not drafted yet. */
+  /** Uses Peekumi's own groups as the proposals. */
+  function usePeekumi() {
+    shown.mode = "peekumi";
+    for (const group of shown.groups)
+      if (!choices.has(`${shown.commit}:p:${group.id}`))
+        choices.set(`${shown.commit}:p:${group.id}`, {
+          selected: true,
+          text: group.text,
+        });
+    redraw();
+  }
+
+  /** The proposals in the list that shows: `{key, title, line, anchor}`. */
+  function items() {
+    if (shown.mode === "peekumi")
+      return shown.groups.map((g) => ({
+        key: `${shown.commit}:p:${g.id}`,
+        title: g.target.symbol
+          ? `${g.target.symbol} in ${g.target.path.split("/").pop()}`
+          : g.target.path,
+        line: `${g.rule} · ${plural(g.count, "break")} from ${plural(g.sources.length, "file")}`,
+        anchor: g.anchor,
+      }));
+    return shown.agent.fixes.map((f) => ({
+      key: `${shown.commit}:a:${f.id}`,
+      title: f.title,
+      line: [
+        f.rules.join(", "),
+        plural(f.count, "break"),
+        ...(f.files.length ? [f.files.join(", ")] : []),
+      ].join(" · "),
+      anchor: f.anchor,
+    }));
+  }
+
+  /** The selected proposals that are not drafted yet. */
   const picked = () =>
-    (shown.data?.fixes || []).filter(
-      (fix) =>
-        choices.get(fix.id)?.selected &&
-        !drafted.has(`${shown.commit}:${fix.id}`),
+    items().filter(
+      (item) => choices.get(item.key)?.selected && !drafted.has(item.key),
     );
 
-  /** Saves the selected fixes as draft instructions; returns their IDs. */
+  /** Saves the selected proposals as draft instructions; returns their IDs. */
   async function draft() {
     const ids = [];
-    for (const fix of picked()) {
+    for (const item of picked()) {
       const comment = await write("/api/comments", {
-        anchor: fix.anchor,
+        anchor: item.anchor,
         sha: shown.commit,
-        text: choices.get(fix.id).text.trim(),
+        text: choices.get(item.key).text.trim(),
       });
-      drafted.set(`${shown.commit}:${fix.id}`, comment.id);
-      choices.get(fix.id).selected = false;
+      drafted.add(item.key);
+      choices.get(item.key).selected = false;
       ids.push(comment.id);
     }
     return ids;
   }
 
+  /** What Peekumi found, as plain lines: the agent's context, and the fallback. */
+  function context(open) {
+    const box = el("details", "fix-context");
+    box.open = open;
+    box.append(
+      el(
+        "summary",
+        "",
+        `What Peekumi found (${plural(shown.groups.length, "place")})`,
+      ),
+    );
+    for (const g of shown.groups) {
+      const target = g.target.symbol
+        ? `${g.target.symbol} in ${g.target.path}`
+        : g.target.path;
+      box.append(
+        el(
+          "p",
+          "fix-context-row",
+          `${target} · ${g.rule} · ${plural(g.count, "break")} from ${g.sources.join(", ")}`,
+        ),
+      );
+    }
+    return box;
+  }
+
   /** Draws the page in `body`. */
   function render(body) {
     const commit = revision();
-    if (shown.commit !== commit) load(commit);
-    const fixes = shown.data?.fixes || [];
-    const breaks = fixes.reduce((sum, fix) => sum + fix.count, 0);
+    if (shown?.commit !== commit) load(commit);
+    const breaks = (shown.groups || []).reduce((sum, g) => sum + g.count, 0);
     head("Proposed fixes", {
-      meta: shown.data
-        ? `${plural(fixes.length, "fix")} for ${plural(breaks, "rule break")}`
+      meta: shown.groups?.length
+        ? `${plural(breaks, "rule break")} in ${plural(shown.groups.length, "place")}`
         : "",
     });
-    if (shown.loading)
-      return body.append(el("p", "read-note", "Reading the rule breaks…"));
     if (shown.error) return body.append(el("p", "rule-error", shown.error));
-    const state = shown.data.checks?.state;
-    if (state !== "evaluated")
+    if (!shown.groups)
+      return body.append(el("p", "read-note", "Reading the rule breaks…"));
+    if (shown.state !== "evaluated")
       return body.append(
         el(
           "p",
           "read-note",
-          state === "invalid"
+          shown.state === "invalid"
             ? "The rule configuration (.peekumi.json) is invalid. Fix it first."
             : "This repository has no dependency rules (.peekumi.json).",
         ),
       );
-    if (!fixes.length)
+    if (!shown.groups.length)
       return body.append(
         el("p", "read-note", "No rule breaks at this commit. Nothing to fix."),
       );
+
+    const agent = shown.agent;
+    if (shown.mode === "agent" && agent.status === "running") {
+      const working = el("div", "fix-working");
+      working.append(
+        peek("thinking", { className: "fix-peek" }),
+        el(
+          "p",
+          "",
+          `${agentName() || "The agent"} reads the code and proposes fixes. This can take a minute or two.`,
+        ),
+      );
+      return body.append(working, context(true));
+    }
+    if (shown.mode === "agent" && agent.status === "failed") {
+      const tryAgain = el("button", "btn primary", "Try again"),
+        fallback = el("button", "btn", "Use Peekumi's own proposals");
+      tryAgain.type = fallback.type = "button";
+      tryAgain.onclick = propose;
+      fallback.onclick = usePeekumi;
+      const buttons = el("div", "sel-acts fix-buttons");
+      buttons.append(tryAgain, fallback);
+      return body.append(
+        el(
+          "p",
+          "rule-error",
+          `The agent could not propose fixes: ${agent.error}`,
+        ),
+        buttons,
+        context(true),
+      );
+    }
+
     body.append(
       el(
         "p",
         "read-note",
-        "Each fix is an instruction for an agent. Select the fixes to make, edit their text, then send them together as one task.",
+        shown.mode === "agent"
+          ? `${agent.provider} read the code and proposed these fixes. Select the fixes to make, edit their text, then send them together as one task.`
+          : "Peekumi's own proposals, one for each place. Select the fixes to make, edit their text, then send them together as one task.",
       ),
     );
     const list = el("div", "fix-list");
@@ -128,9 +270,9 @@ export function createFixes({
       saveButton.textContent = "Save as drafts";
       sendButton.disabled = saveButton.disabled = !n;
     };
-    for (const fix of fixes) {
-      const choice = choices.get(fix.id);
-      const done = drafted.has(`${shown.commit}:${fix.id}`);
+    for (const item of items()) {
+      const choice = choices.get(item.key);
+      const done = drafted.has(item.key);
       const row = el("div", "fix-row" + (done ? " is-drafted" : ""));
       const label = el("label", "fix-head");
       const check = el("input");
@@ -142,23 +284,16 @@ export function createFixes({
         update();
       };
       const title = el("span", "fix-title");
-      const target = fix.target.symbol
-        ? `${fix.target.symbol} in ${fix.target.path.split("/").pop()}`
-        : fix.target.path;
       title.append(
-        el("strong", "", target),
-        el(
-          "small",
-          "",
-          `${fix.rule} · ${plural(fix.count, "break")} from ${plural(fix.sources.length, "file")}${done ? " · drafted" : ""}`,
-        ),
+        el("strong", "", item.title),
+        el("small", "", item.line + (done ? " · drafted" : "")),
       );
       label.append(check, title);
       const text = el("textarea", "fix-text");
       text.value = choice.text;
-      text.rows = 4;
+      text.rows = 5;
       text.disabled = done;
-      text.setAttribute("aria-label", `Instruction for ${target}`);
+      text.setAttribute("aria-label", `Instruction for ${item.title}`);
       text.oninput = () => (choice.text = text.value);
       row.append(label, text);
       list.append(row);
@@ -177,7 +312,14 @@ export function createFixes({
     const buttons = el("div", "sel-acts fix-buttons");
     buttons.append(sendButton, saveButton);
     update();
-    body.append(list, buttons);
+    const other = el(
+      "button",
+      "link-button fix-other",
+      shown.mode === "agent" ? "Propose again ›" : "Ask the agent instead ›",
+    );
+    other.type = "button";
+    other.onclick = propose;
+    body.append(list, buttons, other, context(false));
   }
 
   return { render };

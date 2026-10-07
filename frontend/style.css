@@ -7836,3 +7836,123 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   font-family: var(--font);
   font-size: 13.5px;
 }
+
+/* Relations (app.js renderDependencies), plain: the rule summary is a line, not a card; the
+   one primary button proposes fixes; "Violations only" is a quiet toggle; the breaks that start
+   in the selection are plain rows under hairlines. */
+.panel details.rule-summary {
+  margin: 2px 0 8px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.panel details.rule-summary > summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  font-size: 13.5px;
+}
+.panel .propose-fixes {
+  display: block;
+  margin: 4px 0 14px;
+}
+.panel .relationship-controls .violations-toggle {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line) !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+}
+.panel .relationship-controls .violations-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--del) 55%, transparent) !important;
+  color: var(--del);
+}
+.break-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.panel .break-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 0;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  text-align: left;
+  color: var(--ink);
+  font: inherit;
+}
+.panel .break-row > .glyph:first-child {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--del);
+}
+.panel .break-row .row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.panel .break-row .rd {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* While the agent proposes fixes: Peek and one line, then what Peekumi found as context. */
+.fix-working {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 12px;
+  font-size: 14px;
+}
+.fix-working .fix-peek {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+.panel details.fix-context {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.panel details.fix-context > summary {
+  min-height: 34px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.fix-context-row {
+  margin: 6px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.panel .fix-other {
+  display: block;
+  margin: 10px 0 0;
+  font-family: var(--font);
+  font-size: 13px;
+}
