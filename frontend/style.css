@@ -7780,3 +7780,59 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   height: 16px;
   color: var(--del);
 }
+
+/* Proposed fixes (fixes.js): plain rows under hairlines. A checkbox and the target on one line,
+   the rule and the count below it, and the editable instruction. */
+.fix-row {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.fix-row.is-drafted {
+  opacity: 0.55;
+}
+.fix-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.fix-head input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+.fix-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fix-title strong {
+  overflow-wrap: anywhere;
+}
+.fix-title small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.fix-text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 92px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  resize: vertical;
+}
+.fix-buttons {
+  margin-top: 12px;
+}
+.panel .propose-fixes {
+  display: block;
+  margin: 2px 0 10px;
+  font-family: var(--font);
+  font-size: 13.5px;
+}

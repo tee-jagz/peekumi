@@ -1903,6 +1903,14 @@ export function createWorkflow({
     /** The task whose branch is explored, when it can still take requested changes. */
     exploringTask: () => exploring(),
     renderComposer,
+    /** Opens the task form with the draft instructions `ids` selected (and no others): a batch
+     * of proposed fixes in one task. */
+    async prepareWith(ids) {
+      await refresh();
+      picks = new Set(ids);
+      preview = null;
+      nav.go({ name: "prepare" });
+    },
     /** Starts a new instruction at the current selection with `text`, for the owner to edit. */
     prefill(text) {
       editing = null;

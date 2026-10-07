@@ -2216,3 +2216,61 @@ test("a task agent checks its committed work against the rules, and the comparis
   );
   assert.deepEqual(back.checks.added, []);
 });
+
+test("Peekumi proposes one fix for each rule and declaration that its breaks reach", async (t) => {
+  const f = await fixture({
+    files: {
+      ".peekumi.json": JSON.stringify({
+        version: 1,
+        groups: { ui: ["ui/**"], db: ["db/**"] },
+        rules: [
+          {
+            id: "ui-no-db",
+            from: "ui",
+            to: ["db"],
+            kinds: ["calls"],
+            message: "The UI goes through services.",
+          },
+        ],
+      }),
+      "ui/__init__.py": "",
+      "ui/view.py":
+        "from db.store import save\n\ndef show():\n    return save()\n",
+      "ui/panel.py":
+        "from db.store import save\n\ndef draw():\n    return save()\n",
+      "db/__init__.py": "",
+      "db/store.py": "def save():\n    return 2\n",
+    },
+  });
+  t.after(() => f.close());
+  const data = await f.req(`/api/fixes?head=${f.sha}`);
+  assert.equal(data.checks.state, "evaluated");
+  assert.equal(data.fixes.length, 1, JSON.stringify(data.fixes));
+  const [fix] = data.fixes;
+  assert.equal(fix.rule, "ui-no-db");
+  assert.deepEqual(fix.target, { path: "db/store.py", symbol: "save" });
+  assert.equal(fix.count, 2);
+  assert.deepEqual(fix.sources, ["ui/panel.py", "ui/view.py"]);
+  assert.deepEqual(fix.anchor, {
+    kind: "symbol",
+    path: "db/store.py",
+    symbol: "save",
+  });
+  assert.match(
+    fix.text,
+    /^Fix the ui-no-db rule break at save in store\.py: 2 calls from ui\/panel\.py and ui\/view\.py reach it\. The rule says: "The UI goes through services\." Move save to a place/,
+  );
+  // The fix is a valid instruction anchor, as the page saves it.
+  const draft = await f.req("/api/comments", {
+    anchor: fix.anchor,
+    sha: f.sha,
+    text: fix.text,
+  });
+  assert.equal(draft.status, "draft");
+  // A repository with no rules has nothing to fix.
+  const g = await fixture();
+  t.after(() => g.close());
+  const none = await g.req(`/api/fixes?head=${g.sha}`);
+  assert.equal(none.checks.state, "not configured");
+  assert.deepEqual(none.fixes, []);
+});

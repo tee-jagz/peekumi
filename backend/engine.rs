@@ -580,6 +580,12 @@ impl Repository {
             json!({"base":a.sha,"head":b.sha,"relationships":crate::relationships::compare(&left,&right),"checks":{"before":a.checks,"after":b.checks,"added":added_breaks(&a.relationships,&b.relationships)}}),
         )
     }
+    /// The proposed fixes for the rule breaks at `head` (see [`propose_fixes`]), and the state of
+    /// its rule configuration.
+    pub fn fixes(&mut self, head: &str) -> Result<Value> {
+        let b = self.snapshot(head)?;
+        Ok(json!({"head": b.sha, "checks": b.checks, "fixes": propose_fixes(&b.relationships)}))
+    }
     /// Compares two Git revisions and returns file statuses and dependency changes.
     /// `overview` replaces full symbol lists with counts and compact previews for the initial map.
     /// Caches up to six comparison results; invalid revisions or snapshot failures return an error.
@@ -914,6 +920,93 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
             .collect::<Vec<_>>()
     );
     (values, checks)
+}
+/// Proposed fixes for the rule breaks at revision `head`: the breaks grouped by the rule and the
+/// declaration they reach, because one change there (move it, or reach it through an allowed
+/// module) fixes them all. Each fix is `{id, rule, message, target, kinds, count, sources,
+/// anchor, text}`, most breaks first. `text` is an instruction for an agent, which the owner can
+/// edit; `anchor` is the target declaration (or its file). No model writes them: the same
+/// breaks give the same fixes.
+pub fn propose_fixes(relationships: &[Value]) -> Vec<Value> {
+    #[derive(Default)]
+    struct Group {
+        message: String,
+        kinds: BTreeSet<String>,
+        count: usize,
+        sources: BTreeSet<String>,
+    }
+    let mut groups: BTreeMap<(String, String, String), Group> = BTreeMap::new();
+    for r in relationships {
+        for v in array(&r["violations"]) {
+            let target = &r["targets"][0];
+            let key = (
+                v["id"].as_str().unwrap_or("").to_string(),
+                target["path"].as_str().unwrap_or("").to_string(),
+                target["symbol"].as_str().unwrap_or("").to_string(),
+            );
+            let group = groups.entry(key).or_default();
+            group.message = v["message"].as_str().unwrap_or("").to_string();
+            group
+                .kinds
+                .insert(r["kind"].as_str().unwrap_or("").to_string());
+            // One for each relationship, as the map counts them (a relationship can have
+            // several call lines).
+            group.count += 1;
+            group
+                .sources
+                .insert(r["source"]["path"].as_str().unwrap_or("").to_string());
+        }
+    }
+    let mut fixes: Vec<Value> = groups
+        .into_iter()
+        .map(|((rule, path, symbol), g)| {
+            let file = path.rsplit('/').next().unwrap_or(&path).to_string();
+            // A method is moved with its type: `Engine.call` → `Engine`.
+            let owner = symbol.split('.').next().unwrap_or(&symbol).to_string();
+            let target = if symbol.is_empty() {
+                file.clone()
+            } else {
+                format!("{symbol} in {file}")
+            };
+            let noun = match (g.kinds.len(), g.kinds.iter().next().map(String::as_str)) {
+                (1, Some("calls")) => ["call", "calls"],
+                (1, Some("imports")) => ["import", "imports"],
+                (1, Some("implements")) => ["implementation", "implementations"],
+                (1, Some("inherits")) => ["inheritance", "inheritances"],
+                _ => ["relationship", "relationships"],
+            }[usize::from(g.count != 1)];
+            let names: Vec<&str> = g.sources.iter().map(String::as_str).collect();
+            let from = match names.len() {
+                1 => names[0].to_string(),
+                n if n <= 3 => format!("{} and {}", names[..n - 1].join(", "), names[n - 1]),
+                n => format!("{} and {} other files", names[..2].join(", "), n - 2),
+            };
+            let what = if symbol.is_empty() { file.clone() } else { owner.clone() };
+            let text = format!(
+                "Fix the {rule} rule break at {target}: {count} {noun} from {from} reach it. The rule says: \"{message}\" Move {what} to a place that the rule allows, for example a module in a lower layer that both sides can use, or reach it through a module that the rule allows. If you add a file, add it to the right group in .peekumi.json. Keep the behaviour the same, and run the tests.",
+                count = g.count,
+                message = g.message,
+            );
+            let anchor = if symbol.is_empty() {
+                json!({"kind": "file", "path": path})
+            } else {
+                json!({"kind": "symbol", "path": path, "symbol": symbol})
+            };
+            json!({
+                "id": hash(json!([rule, path, symbol]).to_string())[..16],
+                "rule": rule,
+                "message": g.message,
+                "target": {"path": path, "symbol": symbol},
+                "kinds": g.kinds,
+                "count": g.count,
+                "sources": names,
+                "anchor": anchor,
+                "text": text,
+            })
+        })
+        .collect();
+    fixes.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
+    fixes
 }
 /// The rule breaks in `after` that `before` did not have: the same relationship (by its stable
 /// identity) breaking the same rule counts once, so old breaks stay out of a review. Each is

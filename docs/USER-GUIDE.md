@@ -197,7 +197,7 @@ Only the open view button has a label. The other view buttons show only their ic
 | 5 | Resolved evidence | Each relationship that Peekumi found in the code, with a link that opens the exact source line. |
 | 6 | Unresolved targets | References that Peekumi cannot resolve with certainty, and the reason. Peekumi lists these references and does not guess. |
 
-A card that starts a dependency rule break shows a red broken-link icon and the number of breaks. When you select it, one red line under its kind says which rule it breaks, for example **Breaks backend-layers · 6 calls to main.rs**. Tap the line to see only the breaks in Relations.
+A card that starts a dependency rule break shows a red broken-link icon and the number of breaks. When you select it, one red line under its kind says which rule it breaks, for example **Breaks backend-layers · 6 calls to main.rs**. Tap the line to see only the breaks in Relations. There, **Propose fixes** lists one fix for each rule and declaration. Select, edit or clear the fixes, then send them together to an agent as one task.
 
 When you select a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it. Edit the text, then save the draft. A task that adds rule breaks names them before **Approve**.
 

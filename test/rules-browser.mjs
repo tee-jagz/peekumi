@@ -146,6 +146,53 @@ try {
       await page.screenshot({
         path: `test-results/rules-forbid-${viewport.width}.png`,
       });
+
+      // Proposed fixes: from Relations, one fix for the break; it can be cleared, edited and
+      // sent; the task form opens with that draft selected.
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Cancel" })
+        .click()
+        .catch(() => {});
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator('#helperTools [data-tab="dependencies"]').click();
+      await page
+        .getByRole("button", { name: /^Propose fixes for 1 rule break/ })
+        .click();
+      const rows = page.locator(".fix-row");
+      await rows.first().waitFor();
+      assert.equal(await rows.count(), 1);
+      assert.match(
+        await page.locator("#viewHead .view-meta").innerText(),
+        /^1 fix for 1 rule break$/,
+      );
+      const send = page.locator(".fix-buttons .primary");
+      assert.equal(await send.innerText(), "Send 1 fix to an agent");
+      await rows.first().locator("input[type=checkbox]").uncheck();
+      assert.ok(await send.isDisabled(), "Nothing selected, nothing to send");
+      await rows.first().locator("input[type=checkbox]").check();
+      await rows
+        .first()
+        .locator("textarea")
+        .fill("Move save behind a service in a new services/ folder.");
+      await page.screenshot({
+        path: `test-results/rules-fixes-${viewport.width}.png`,
+      });
+      await send.click();
+      await page.waitForFunction(
+        () => document.querySelector("#panel").dataset.view === "prepare",
+      );
+      const picked = page.locator(".workflow-pick", {
+        hasText: "Move save behind a service",
+      });
+      await picked.waitFor();
+      assert.ok(await picked.locator("input").isChecked());
+      assert.equal(
+        await page.locator(".workflow-pick input:checked").count(),
+        1,
+        "Only the sent fix is selected",
+      );
       assert.deepEqual(errors, []);
       console.log(`PASS rules ${viewport.width}`);
     } finally {

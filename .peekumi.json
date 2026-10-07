@@ -42,7 +42,8 @@
       "frontend/ask.js",
       "frontend/agents.js",
       "frontend/focus.js",
-      "frontend/pwa.js"
+      "frontend/pwa.js",
+      "frontend/fixes.js"
     ],
     "product": ["backend/**", "frontend/**"],
     "tests": ["test/**"],

@@ -9,6 +9,7 @@
  * - `{name: "tasks"}`, `{name: "history"}`: current work, and closed work.
  * - `{name: "prepare"}`: the form that makes a task from drafts.
  * - `{name: "instructions"}`: the instructions on the map's selection.
+ * - `{name: "fixes"}`: proposed fixes for the dependency-rule breaks (fixes.js).
  * - `{name: "run", id}`: a task, or a session (a run whose kind is "session").
  *
  * Opening a view pushes it; a view equal to the one on top replaces it instead (a new aspect,

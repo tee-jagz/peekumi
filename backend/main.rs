@@ -148,6 +148,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[1].as_str().unwrap_or("HEAD"),
         ),
         "commits" => repo.earlier_commits(argument(args, 0)),
+        "fixes" => repo.fixes(argument(args, 0)),
         "compare" => repo.compare(
             argument(args, 0),
             argument(args, 1),
@@ -403,6 +404,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/focus.js" => Some(("text/javascript", include_bytes!("../frontend/focus.js"))),
         "/menu.js" => Some(("text/javascript", include_bytes!("../frontend/menu.js"))),
         "/nav.js" => Some(("text/javascript", include_bytes!("../frontend/nav.js"))),
+        "/fixes.js" => Some(("text/javascript", include_bytes!("../frontend/fixes.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -1094,6 +1096,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 .await
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,
+        "/api/fixes" => app.engine.call("fixes", json!([head])).await,
         "/api/commits" => {
             app.engine
                 .call("commits", json!([query.get("before")]))
@@ -1310,6 +1313,33 @@ async fn serve() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// Every frontend file is served and cached for the offline shell. A new module that is
+    /// missing here returns 404, and the app does not start (its import fails).
+    #[test]
+    fn every_frontend_file_is_served_and_cached() {
+        let main = include_str!("main.rs");
+        let worker = include_str!("../frontend/sw.js");
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("frontend");
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            if name == "README.md" || name == "sw.js" {
+                continue;
+            }
+            assert!(
+                main.contains(&format!("include_bytes!(\"../frontend/{name}\")")),
+                "frontend/{name} is not served: add it to the static files in main.rs"
+            );
+            let route = if name == "index.html" {
+                "/".to_string()
+            } else {
+                format!("/{name}")
+            };
+            assert!(
+                worker.contains(&format!("\"{route}\"")),
+                "frontend/{name} is not in the offline shell: add {route} to SHELL in sw.js"
+            );
+        }
+    }
     use super::*;
     #[test]
     fn lookup_origin_uses_loopback_for_unspecified_binds() {

@@ -2,6 +2,7 @@
 import { createAsk } from "./ask.js";
 import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
+import { createFixes } from "./fixes.js";
 import { createFocus } from "./focus.js";
 import { installContextMenus, closeMenu, menuIsOpen } from "./menu.js";
 import { createNav } from "./nav.js";
@@ -346,6 +347,28 @@ const here = (id) => ({
   base: diffBase,
   mode,
   place: placeOf(),
+});
+// Proposed fixes for the rule breaks at the map's commit (fixes.js): a page that saves the
+// fixes the owner selects as instructions, and opens the task form with them.
+const fixes = createFixes({
+  api,
+  write: (route, body) =>
+    api(route, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  head: (title, options) => viewHead(title, options),
+  revision: () => headRef,
+  send: (ids) => workflow.prepareWith(ids),
+  saved: (n) => {
+    workflow.refresh(false);
+    showNotice(
+      `Saved ${n} draft instruction${n === 1 ? "" : "s"}. Tasks lists them.`,
+    );
+    setTimeout(() => showNotice(""), 2500);
+  },
+  redraw: () => renderPanel(),
 });
 const ask = createAsk({
   api,
@@ -3882,6 +3905,7 @@ function drawTab() {
     return;
   }
   if (view.name === "conversations") return renderConversations(body);
+  if (view.name === "fixes") return fixes.render(body);
   if (page) return workflow.render(body, view);
   if (view.aspect === "details") return renderInstructionsHere(body);
   if (view.aspect === "source") {
@@ -4018,6 +4042,7 @@ function ruleSummary() {
     box.append(
       button("btn sm", "Review relationships", () => nav.toMap("dependencies")),
     );
+
   box.append(
     element(
       "p",
@@ -4084,6 +4109,17 @@ async function openEvidence(relation) {
 /** Lists typed relationships, rule evidence and unresolved targets for the current scope. */
 function renderDependencies(body) {
   body.append(ruleSummary());
+  // The breaks at this commit become proposed fixes, which the owner can send to an agent.
+  // The link stays outside the summary, so it shows without opening it.
+  const after = comparison.relationshipData?.checks?.after;
+  if (!before && after?.state === "evaluated" && after.violations && isOwner())
+    body.append(
+      button(
+        "link-button propose-fixes",
+        `Propose fixes for ${after.violations} rule break${after.violations === 1 ? "" : "s"} ›`,
+        () => nav.go({ name: "fixes" }),
+      ),
+    );
   const controls = element("div", "relationship-controls"),
     filter = element("select");
   filter.setAttribute("aria-label", "Relationship kind");
