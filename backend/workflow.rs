@@ -351,7 +351,7 @@ impl Workflow {
                 let r = find_mut(v, "runs", id)?;
                 r["status"] = json!("starting");
                 r["startedAt"] = json!(now());
-                r["reportHash"] = json!(crate::engine::hash(token.as_bytes()));
+                r["reportHash"] = json!(crate::hash::hash(token.as_bytes()));
                 Ok(json!({"id":id,"status":"starting"}))
             })?;
             if run["existing"] != true {
@@ -688,7 +688,7 @@ impl Workflow {
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::hash::hash(token.as_bytes())});
             list(v, "runs").push(next.clone());
             Ok(next)
         })?;
@@ -731,7 +731,7 @@ impl Workflow {
     pub fn report(&self, id: &str, token: &str, tool: &str, args: &Value) -> Result<Value> {
         self.update(|v|{
             let run=find(v,"runs",id)?.clone();
-            ensure!(active(&run) && crate::equal(run["reportHash"].as_str().unwrap_or(""),&crate::engine::hash(token.as_bytes())),"Run reporting credential rejected");
+            ensure!(active(&run) && crate::equal(run["reportHash"].as_str().unwrap_or(""),&crate::hash::hash(token.as_bytes())),"Run reporting credential rejected");
             if tool=="get_run" { let mut r=run;
                 r.as_object_mut().unwrap().remove("reportHash");
                 return Ok(r);

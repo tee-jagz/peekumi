@@ -1098,7 +1098,7 @@ fn read_proposals(raw: &str, groups: &[Value]) -> Result<Vec<Value>> {
             .take(20)
             .collect();
         fixes.push(json!({
-            "id": &crate::engine::hash(json!([title, ids]).to_string())[..16],
+            "id": &crate::hash::hash(json!([title, ids]).to_string())[..16],
             "title": title,
             "text": instruction.chars().take(4000).collect::<String>(),
             "covers": ids,

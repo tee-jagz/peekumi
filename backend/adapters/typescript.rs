@@ -35,7 +35,7 @@ impl LanguageAdapter for TypeScript {
                 None,
                 vec![]
             )),
-            &crate::engine::hash(include_str!("typescript_ast.mjs"))[..12]
+            &crate::hash::hash(include_str!("typescript_ast.mjs"))[..12]
         )
     }
     /// Sends committed source batches to the TypeScript helper through JSON stdin.

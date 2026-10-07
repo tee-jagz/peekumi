@@ -243,7 +243,7 @@ impl Workflow {
             active(&run)
                 && crate::equal(
                     run["reportHash"].as_str().unwrap_or(""),
-                    &crate::engine::hash(token.as_bytes())
+                    &crate::hash::hash(token.as_bytes())
                 ),
             "Run reporting credential rejected"
         );

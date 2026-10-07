@@ -1,21 +1,17 @@
 //! Committed Git snapshots, comparisons, directory documentation and language-adapter coordination.
 use crate::{
     adapters::{self, Config},
+    hash::hash,
     index::Index,
     process::run,
 };
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     path::{Path, PathBuf},
     sync::Arc,
 };
-/// Computes a hexadecimal SHA-256 fingerprint for cache namespaces, parser versions and symbol identities.
-pub fn hash(data: impl AsRef<[u8]>) -> String {
-    format!("{:x}", Sha256::digest(data))
-}
 /// Decodes subprocess output as UTF-8, replacing invalid bytes rather than failing repository inspection.
 fn string(data: Vec<u8>) -> String {
     String::from_utf8_lossy(&data).into_owned()

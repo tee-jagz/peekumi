@@ -5,6 +5,7 @@ mod agents;
 mod ask;
 mod engine;
 mod graph_brief;
+mod hash;
 mod index;
 mod lookup;
 mod merge;
@@ -15,7 +16,9 @@ mod rules;
 mod runner;
 mod sessions;
 mod task_agent;
+mod worker;
 mod workflow;
+use crate::worker::Engine;
 use anyhow::{Context, Result, ensure};
 use axum::{
     Router,
@@ -35,7 +38,7 @@ use std::{
     sync::Arc,
 };
 use subtle::ConstantTimeEq;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc};
 use tokio_stream::StreamExt as _;
 
 #[derive(Parser, Clone)]
@@ -91,48 +94,6 @@ struct Options {
     github: String,
     #[arg(long, hide = true)]
     report_run: Option<String>,
-}
-/// One queued repository operation with JSON arguments and a channel for its result.
-struct Work {
-    method: String,
-    args: Value,
-    reply: oneshot::Sender<Result<Value, String>>,
-}
-#[derive(Clone)]
-/// An asynchronous handle to the dedicated repository worker.
-/// Keeps blocking Git, parser and SQLite work off the HTTP runtime threads.
-struct Engine {
-    sender: mpsc::Sender<Work>,
-}
-impl Engine {
-    /// Moves the repository into a worker thread and creates a queue capped at 32 operations.
-    fn start(mut repo: Repository) -> Self {
-        let (sender, mut receiver) = mpsc::channel::<Work>(32);
-        std::thread::spawn(move || {
-            while let Some(work) = receiver.blocking_recv() {
-                let result =
-                    dispatch(&mut repo, &work.method, &work.args).map_err(|e| e.to_string());
-                let _ = work.reply.send(result);
-            }
-        });
-        Self { sender }
-    }
-    /// Queues a named repository operation and asynchronously waits for its JSON result.
-    /// Returns operation errors or a worker-stopped error if either channel closes.
-    async fn call(&self, method: &str, args: Value) -> Result<Value, String> {
-        let (reply, receive) = oneshot::channel();
-        self.sender
-            .send(Work {
-                method: method.into(),
-                args,
-                reply,
-            })
-            .await
-            .map_err(|_| "Repository worker stopped".to_string())?;
-        receive
-            .await
-            .map_err(|_| "Repository worker stopped".to_string())?
-    }
 }
 /// Reads a positional string argument from the internal JSON protocol, defaulting to empty.
 fn argument(args: &Value, index: usize) -> &str {
@@ -217,7 +178,7 @@ impl Fleet {
 }
 /// A repository's stable identifier: the start of a hash of its canonical path.
 fn repository_id(directory: &std::path::Path) -> String {
-    engine::hash(directory.to_string_lossy().as_bytes())[..16].to_string()
+    hash::hash(directory.to_string_lossy().as_bytes())[..16].to_string()
 }
 /// Options for a repository served beside the primary one: its own private state folder,
 /// comparing its latest commit with its parent.
@@ -295,7 +256,12 @@ fn open_repository(
         workflow,
         ask_lock: Arc::new(Mutex::new(())),
         ask_grant: std::sync::Mutex::new(None),
-        engine: Engine::start(repository),
+        engine: {
+            let mut repo = repository;
+            Engine::start(move |method, args| {
+                dispatch(&mut repo, method, args).map_err(|e| e.to_string())
+            })
+        },
         token: shared.access_token.clone(),
         reader_token: shared.reader_token.clone(),
         sessions: shared.sessions.clone(),
@@ -511,7 +477,7 @@ fn ask_history_file(app: &App, branch: Option<&str>) -> Option<PathBuf> {
     if branch.is_empty() || branch.len() > 256 || branch.contains('\0') {
         return None;
     }
-    let id = &engine::hash(branch.as_bytes())[..16];
+    let id = &hash::hash(branch.as_bytes())[..16];
     Some(
         app.options
             .state_dir
@@ -591,7 +557,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         .chain(include_bytes!("../frontend/sw.js").iter().copied())
         .collect();
         let script = include_str!("../frontend/sw.js")
-            .replace("__PEEKUMI_BUILD__", &engine::hash(&assets)[..16]);
+            .replace("__PEEKUMI_BUILD__", &hash::hash(&assets)[..16]);
         return respond(
             StatusCode::OK,
             "text/javascript",
@@ -1265,7 +1231,7 @@ async fn serve() -> Result<()> {
             } else {
                 repo.directory.clone()
             };
-            let derived = engine::hash(binding.to_string_lossy().as_bytes())[..12].to_string();
+            let derived = hash::hash(binding.to_string_lossy().as_bytes())[..12].to_string();
             std::fs::write(&identity_path, &derived)?;
             derived
         }
@@ -1281,7 +1247,7 @@ async fn serve() -> Result<()> {
         primary_options.state_dir = options
             .state_dir
             .join("repositories")
-            .join(&engine::hash(repo.directory.to_string_lossy().as_bytes())[..16]);
+            .join(&hash::hash(repo.directory.to_string_lossy().as_bytes())[..16]);
         repo = Repository::new(
             options.directory.clone(),
             &primary_options.state_dir,

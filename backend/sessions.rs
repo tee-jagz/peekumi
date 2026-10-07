@@ -38,7 +38,7 @@ fn now() -> u64 {
 impl Sessions {
     /// Restores sessions for the same repository and token; rejects unreadable or malformed state.
     pub fn load(path: PathBuf, token: &str, repository: &str) -> Result<Self> {
-        let bound = |name: &str| crate::engine::hash(format!("{name}\0{token}").as_bytes());
+        let bound = |name: &str| crate::hash::hash(format!("{name}\0{token}").as_bytes());
         let binding = bound(repository);
         // Sessions saved before the rename were bound to the cookie's former name; renaming
         // must not sign every device out, so that binding is accepted and updated.
@@ -72,7 +72,7 @@ impl Sessions {
             && self
                 .saved
                 .sessions
-                .get(&crate::engine::hash(session.as_bytes()))
+                .get(&crate::hash::hash(session.as_bytes()))
                 .is_some_and(|expires| *expires > now())
     }
 
@@ -94,12 +94,12 @@ impl Sessions {
         {
             sessions.remove(&oldest);
         }
-        sessions.insert(crate::engine::hash(session.as_bytes()), now() + MAX_AGE);
+        sessions.insert(crate::hash::hash(session.as_bytes()), now() + MAX_AGE);
         let mut roles = self.saved.roles.clone();
         let mut names = self.saved.names.clone();
         roles.retain(|id, _| sessions.contains_key(id));
         names.retain(|id, _| sessions.contains_key(id));
-        let id = crate::engine::hash(session.as_bytes());
+        let id = crate::hash::hash(session.as_bytes());
         roles.insert(id.clone(), role.into());
         names.insert(id, name.chars().take(100).collect());
         let saved = Saved {
@@ -128,7 +128,7 @@ impl Sessions {
         self.contains(session).then(|| {
             self.saved
                 .roles
-                .get(&crate::engine::hash(session.as_bytes()))
+                .get(&crate::hash::hash(session.as_bytes()))
                 .map(String::as_str)
                 .unwrap_or("owner")
         })
@@ -191,7 +191,7 @@ mod tests {
         restored
             .saved
             .sessions
-            .insert(crate::engine::hash(b"browser-secret"), now() - 1);
+            .insert(crate::hash::hash(b"browser-secret"), now() - 1);
         assert!(!restored.contains("browser-secret"));
     }
     #[test]

@@ -2,7 +2,8 @@
 
 The Rust backend serves the authenticated API. It reads committed Git objects, compares revisions and keeps a cache of syntax analysis. It controls the language adapters and supplies directory documentation to the frontend. It does not execute the inspected code.
 
-- `main.rs`: The Axum HTTP server, authentication, the embedded frontend and the repository worker.
+- `main.rs`: The Axum HTTP server, authentication, the embedded frontend and the operations of the repository worker.
+- `worker.rs`: The worker thread. It runs queued operations in order through one handler that it gets from `main.rs`.
 - `engine.rs`: Git snapshots, comparisons, directory descriptions and the control of the adapters.
 - `relationships.rs`: Shared relationship evidence, relationship resolution and comparisons of revisions.
 - `rules.rs`: Validation of the committed dependency configuration, and checks for violations.
@@ -13,6 +14,7 @@ The Rust backend serves the authenticated API. It reads committed Git objects, c
 - `agent_session.rs`: Sessions, a live conversation with an agent on its own branch. It starts a session, keeps the owner's messages for the next turn, stores the agent's command requests and the owner's decisions, and ends a session in the normal review.
 - `index.rs`: The persistent SQLite syntax cache.
 - `process.rs`: Limited execution of Git and parser subprocesses.
+- `hash.rs`: The SHA-256 fingerprint for cache keys, parser versions, declaration identities and stored secrets.
 - `adapters/`: The common language interface and its implementations.
 
 Run `cargo build --release --locked` from the repository root to build the backend. The build embeds the browser assets and the Python helper. The TypeScript helper stays next to the deployed parser root.

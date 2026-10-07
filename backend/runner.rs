@@ -321,8 +321,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
         );
     }
     let token = crate::random_token();
-    let Some((turn, messages, run)) =
-        store.take_turn(id, &crate::engine::hash(token.as_bytes()))?
+    let Some((turn, messages, run)) = store.take_turn(id, &crate::hash::hash(token.as_bytes()))?
     else {
         return Ok(false);
     };

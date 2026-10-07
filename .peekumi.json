@@ -62,7 +62,7 @@
       "backend/merge.rs"
     ],
     "backend-map-tools": ["backend/lookup.rs", "backend/graph_brief.rs"],
-    "backend-platform": ["backend/process.rs"],
+    "backend-platform": ["backend/process.rs", "backend/hash.rs", "backend/worker.rs"],
     "adapter-contract": ["backend/adapters/mod.rs"],
     "frontend-root": ["frontend/app.js"],
     "shipped-scripts": [

@@ -154,7 +154,7 @@ pub fn normalize(file: &str, raw: &Value, targets: Vec<Value>) -> Value {
     let source = raw["source"].as_str().unwrap_or("");
     let target = raw["target"].as_str().unwrap_or("");
     let kind = raw["kind"].as_str().unwrap_or("calls");
-    let id = crate::engine::hash(json!([file, source, kind, target]).to_string());
+    let id = crate::hash::hash(json!([file, source, kind, target]).to_string());
     json!({"id":id,"source":{"path":file,"symbol":source},"target":target,"kind":kind,"resolution":status,"targets":targets,"sites":[raw["line"].clone()],"reason":if status=="resolved" {"Static declaration match"}else if status=="ambiguous"{"Multiple declarations match"}else{raw["reason"].as_str().unwrap_or("No declaration found in the committed tree")},"violations":[]})
 }
 /// Compares relationship evidence and rule outcomes, ignoring source-line-only movement.
@@ -217,7 +217,7 @@ pub fn overview(relations: &[Value]) -> Vec<Value> {
     pairs
         .into_iter()
         .map(|(key, mut value)| {
-            value["id"] = json!(crate::engine::hash(key));
+            value["id"] = json!(crate::hash::hash(key));
             value
         })
         .collect()

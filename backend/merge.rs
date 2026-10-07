@@ -495,7 +495,7 @@ impl Workflow {
                 }
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"open":open,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::engine::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"open":open,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::hash::hash(token.as_bytes())});
             v["runs"].as_array_mut().unwrap().push(next.clone());
             Ok(next)
         })?;
@@ -546,7 +546,7 @@ impl Workflow {
                 text.push('\n');
             }
         }
-        let hash = crate::engine::hash(format!("{head}\n{text}").as_bytes());
+        let hash = crate::hash::hash(format!("{head}\n{text}").as_bytes());
         Ok((json!({"files": files, "head": head, "hash": hash}), text))
     }
     /// Asks the agent chosen for Ask (`using`, see the agents module) for a commit message for

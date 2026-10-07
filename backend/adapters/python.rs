@@ -27,7 +27,7 @@ impl LanguageAdapter for Python {
             "{}:{}:{}",
             config.python,
             version(run(&config.python, &["--version"], None, vec![])),
-            &crate::engine::hash(include_str!("python_ast.py"))[..12]
+            &crate::hash::hash(include_str!("python_ast.py"))[..12]
         )
     }
     /// Sends committed source batches to the Python helper through JSON stdin.

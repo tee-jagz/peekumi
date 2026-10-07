@@ -65,7 +65,7 @@ fn add(
 ) {
     let tokens = node.to_token_stream();
     let span = node.span();
-    symbols.push(json!({"name":name,"kind":kind,"start":span.start().line,"end":span.end().line,"hash":crate::engine::hash(tokens.to_string()),"body":crate::engine::hash(body),"details":details}));
+    symbols.push(json!({"name":name,"kind":kind,"start":span.start().line,"end":span.end().line,"hash":crate::hash::hash(tokens.to_string()),"body":crate::hash::hash(body),"details":details}));
 }
 /// Flattens Rust use trees, including groups and aliases, into import specifiers.
 fn use_paths(tree: &UseTree, prefix: &str, imports: &mut Vec<Value>) {
