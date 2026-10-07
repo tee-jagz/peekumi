@@ -37,15 +37,43 @@
       "frontend/menu.js"
     ],
     "frontend-features": [
-      "frontend/app.js",
       "frontend/workflow.js",
       "frontend/session.js",
       "frontend/ask.js",
       "frontend/agents.js",
-      "frontend/focus.js"
+      "frontend/focus.js",
+      "frontend/pwa.js"
     ],
     "product": ["backend/**", "frontend/**"],
-    "tests": ["test/**"]
+    "tests": ["test/**"],
+    "backend-root": ["backend/main.rs"],
+    "backend-services": [
+      "backend/ask.rs",
+      "backend/pull_requests.rs",
+      "backend/sessions.rs"
+    ],
+    "backend-agents": [
+      "backend/workflow.rs",
+      "backend/runner.rs",
+      "backend/agents.rs",
+      "backend/agent_session.rs",
+      "backend/task_agent.rs",
+      "backend/merge.rs"
+    ],
+    "backend-map-tools": ["backend/lookup.rs", "backend/graph_brief.rs"],
+    "backend-platform": ["backend/process.rs"],
+    "adapter-contract": ["backend/adapters/mod.rs"],
+    "frontend-root": ["frontend/app.js"],
+    "shipped-scripts": [
+      "scripts/manage.mjs",
+      "scripts/package.mjs",
+      "scripts/start.mjs",
+      "scripts/cargo.mjs",
+      "scripts/release.mjs",
+      "scripts/release-notes.mjs",
+      "scripts/lint-docs.mjs",
+      "scripts/tunnel/**"
+    ]
   },
   "rules": [
     {
@@ -70,18 +98,44 @@
       "message": "Repository analysis must not depend on the agent workflow (dependency inversion)."
     },
     {
-      "id": "shared-ui-independent-of-features",
-      "from": "frontend-shared",
-      "to": ["frontend-features"],
-      "kinds": ["imports", "calls"],
-      "message": "Shared frontend modules must not depend on feature modules (stable dependencies)."
-    },
-    {
       "id": "product-not-test-code",
       "from": "product",
       "to": ["tests"],
       "kinds": ["imports", "calls"],
       "message": "Production code must not import test code (separation of concerns)."
+    },
+    {
+      "id": "backend-layers",
+      "layers": [
+        "backend-root",
+        "backend-services",
+        "backend-agents",
+        "backend-map-tools",
+        "analysis",
+        "backend-platform"
+      ],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "Backend dependencies point down: entry point, services, agent workflow, map tools, analysis, platform (stable dependencies, no cycles)."
+    },
+    {
+      "id": "adapters-use-the-contract",
+      "from": "concrete-adapters",
+      "only": ["adapter-contract", "backend-platform"],
+      "kinds": ["imports", "calls"],
+      "message": "A language adapter uses only the adapter contract and the platform, so a new language changes nothing else (open for extension)."
+    },
+    {
+      "id": "frontend-layers",
+      "layers": ["frontend-root", "frontend-features", "frontend-shared"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "Frontend dependencies point down: app.js, then feature modules, then shared modules (stable dependencies, no cycles)."
+    },
+    {
+      "id": "shipped-scripts-standalone",
+      "from": "shipped-scripts",
+      "to": ["tests", "product"],
+      "kinds": ["imports", "calls"],
+      "message": "Scripts that ship in the release use neither test code nor product source; they talk to the server over HTTP and the command line."
     }
   ]
 }
