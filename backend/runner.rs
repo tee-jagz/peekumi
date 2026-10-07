@@ -94,7 +94,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
     // the run ends, whatever happens.
     let graph_url = crate::local_origin().map(|origin| format!("{origin}/mcp/ask"));
     let graph_key = (run["graph"] == true && graph_url.is_some()).then(crate::random_token);
-    let _grant = GraphGrant::open(store, graph_key.clone(), &run["base"]);
+    let _grant = GraphGrant::open(store, graph_key.clone(), &run);
     let graph = graph_url.as_deref().zip(graph_key.as_deref());
     let (status, message) = if agent.runs_in_process() {
         // A provider that is only an API: Peekumi's own agent runs the model here, with its
@@ -392,7 +392,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
         .context("This session's agent is not available on this server")?;
     let graph_url = crate::local_origin().map(|origin| format!("{origin}/mcp/ask"));
     let graph_key = (run["graph"] == true && graph_url.is_some()).then(crate::random_token);
-    let _grant = GraphGrant::open(store, graph_key.clone(), &run["base"]);
+    let _grant = GraphGrant::open(store, graph_key.clone(), &run);
     let graph = graph_url.as_deref().zip(graph_key.as_deref());
     let (status, message) = if agent.runs_in_process() {
         let mut out = std::fs::OpenOptions::new().append(true).open(&path)?;
@@ -549,7 +549,7 @@ fn last_message(log: &str) -> Option<String> {
 /// A task run's code graph grant: open while the run lasts, closed on drop.
 struct GraphGrant<'a>(&'a Workflow, Option<String>);
 impl<'a> GraphGrant<'a> {
-    fn open(store: &'a Workflow, key: Option<String>, base: &Value) -> Self {
+    fn open(store: &'a Workflow, key: Option<String>, run: &Value) -> Self {
         if let Some(key) = &key {
             store
                 .grants
@@ -557,10 +557,10 @@ impl<'a> GraphGrant<'a> {
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(
                     key.clone(),
-                    crate::lookup::Grant::with_limit(
+                    crate::lookup::Grant::for_task(
                         key.clone(),
-                        base.clone(),
-                        base.clone(),
+                        run["base"].clone(),
+                        run["branch"].as_str().map(String::from),
                         crate::lookup::TASK_CALLS,
                     ),
                 );

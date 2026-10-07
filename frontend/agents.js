@@ -98,10 +98,18 @@ export function createAgents({ api, repo }) {
       ? `${name} · ${choice.effort}`
       : name;
   }
+  /** A name before the agent list has loaded: the ID with a capital, such as "Codex". It
+   * starts the list loading, so the next drawing has the real name. */
+  const fallback = (id) => {
+    if (!catalog) load().catch(() => {});
+    return id ? id[0].toUpperCase() + id.slice(1) : "";
+  };
   /** The full name of the agent with `id`, such as "Claude Code". */
-  const label = (id) => catalog?.agents.find((a) => a.id === id)?.label || id;
+  const label = (id) =>
+    catalog?.agents.find((a) => a.id === id)?.label || fallback(id);
   /** The short name of the agent with `id`, such as "Claude". */
-  const short = (id) => catalog?.agents.find((a) => a.id === id)?.short || id;
+  const short = (id) =>
+    catalog?.agents.find((a) => a.id === id)?.short || fallback(id);
   /** True when the agent with `id` asks the owner before commands in a session (the server's
    * `asksBeforeCommands`). Until the list loads it is false, and the list starts to load. */
   const asksBeforeCommands = (id) => {

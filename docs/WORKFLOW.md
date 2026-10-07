@@ -215,6 +215,8 @@ The task text tells the agent to use the map and these tools before it searches 
 
 **What the graph resolves.** The graph records static calls, not runtime calls. In Rust, it resolves calls on `self`, `Self::name`, `Type::name`, parameters with a written type, struct fields with a written type, and calls inside macros such as `json!` and `format!`. A call on a `dyn Trait` value goes to each implementation of that trait. In Python, it resolves calls on `self` and `cls`, and calls through an import inside the function. When a package `__init__.py` imports a name again, the graph follows that import to the declaration. In JavaScript and TypeScript, it resolves calls on `this` in a class. Other calls stay unresolved. Calls into libraries also stay unresolved.
 
+
+The task agent also gets `check_rules`. It checks the dependency rules (`.peekumi.json`) on the work that the agent committed, and it returns the breaks that the work adds to the start commit. The task tells the agent to call it before it reports. The owner sees the breaks that a task adds before **Approve** and in the merge sheet. See [RELATIONSHIPS.md](RELATIONSHIPS.md#rules).
 ### Tasks with OpenRouter
 
 OpenRouter is a provider on its own, and it does not need a different program. For an OpenRouter task, Peekumi runs its own task agent (`backend/task_agent.rs`). The agent sends the task to the model with a fixed set of tools, and it runs each tool in the worktree of the task:

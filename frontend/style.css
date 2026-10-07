@@ -7707,3 +7707,31 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 .edges.dense path.e.dim {
   opacity: 0.05;
 }
+
+/* Rule summary (app.js ruleSummary): plain lines. A warning about a rule that checks nothing,
+   then the breaks this comparison adds, then each rule's coverage. */
+.rule-summary .rule-warning {
+  color: var(--mod);
+}
+.rule-summary .rule-added {
+  margin: 2px 0;
+  color: var(--del);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+.rule-summary .rule-coverage {
+  margin: 2px 0;
+  color: var(--muted);
+  font: 12px var(--mono);
+}
+/* A task that adds a rule break says so before Approve and in the merge sheet: plain text. */
+.rule-added-note {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--del);
+}
+/* "Forbid this dependency" reads like the other quiet links, not like code. */
+.panel .selection-facts .forbid-edge {
+  font-family: var(--font);
+  font-size: 13px;
+}

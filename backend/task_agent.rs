@@ -227,8 +227,8 @@ fn converse(
         if graph.is_some() {
             // The code graph at the start commit: open parts of the map and follow calls;
             // read_file and search stay on the worktree.
-            for tool in crate::lookup::function_tools().as_array().unwrap() {
-                if ["highlight", "route", "find_declarations"]
+            for tool in crate::lookup::task_function_tools().as_array().unwrap() {
+                if ["highlight", "route", "find_declarations", "check_rules"]
                     .contains(&tool["function"]["name"].as_str().unwrap_or(""))
                 {
                     offered.as_array_mut().unwrap().push(tool.clone());
@@ -278,7 +278,7 @@ fn converse(
                 finished = Some(args["summary"].as_str().unwrap_or("").to_string());
             }
             let result = match (name, graph) {
-                ("highlight" | "route" | "find_declarations", Some((url, key))) => {
+                ("highlight" | "route" | "find_declarations" | "check_rules", Some((url, key))) => {
                     graph_call(url, key, name, &args)
                 }
                 ("commit", _) if session => session_commit(&root, id, &args),

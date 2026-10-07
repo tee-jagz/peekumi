@@ -109,7 +109,8 @@ pub const SESSION_COMMANDS: [&str; 14] = [
     "Bash(node --test:*)",
 ];
 /// The graph tools as an agent sees them through the `peekumi_graph` MCP server.
-pub const GRAPH_TOOLS: [&str; 7] = [
+pub const GRAPH_TOOLS: [&str; 8] = [
+    "mcp__peekumi_graph__check_rules",
     "mcp__peekumi_graph__highlight",
     "mcp__peekumi_graph__route",
     "mcp__peekumi_graph__find_declarations",

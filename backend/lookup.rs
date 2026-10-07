@@ -36,6 +36,9 @@ pub struct Grant {
     /// The app marks it on the map while Ask answers.
     pub places: Vec<Value>,
     limit: usize,
+    /// A task run's branch (`peekumi/run-…`): `check_rules` compares its committed work with
+    /// the start commit. `None` for Ask.
+    branch: Option<String>,
 }
 impl Grant {
     /// An Ask answer's grant, with [`MAX_CALLS`].
@@ -51,8 +54,37 @@ impl Grant {
             calls: vec![],
             places: vec![],
             limit,
+            branch: None,
         }
     }
+    /// A task run's grant: the code graph of its start commit, and `check_rules` on `branch`.
+    pub fn for_task(key: String, base: Value, branch: Option<String>, limit: usize) -> Self {
+        Self {
+            branch,
+            ..Self::with_limit(key, base.clone(), base, limit)
+        }
+    }
+}
+
+/// The task-only tool: the dependency rules on the work that the agent committed.
+fn check_rules_tool() -> Value {
+    json!({"name":"check_rules","description":"Check the repository's dependency rules (.peekumi.json) on the work you committed on this task's branch, compared with the start commit. Returns each rule break that your commits add (old breaks are left out), and warnings about rules that check nothing. Commit first: uncommitted changes are not checked. Static relationships only.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+}
+
+/// The tools for the grant of `key`: a task's grant also has `check_rules`.
+fn tools_for(app: &App, key: &str) -> Value {
+    let mut tools = tool_list();
+    let task = app
+        .workflow
+        .grants
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(key)
+        .is_some_and(|g| g.branch.is_some());
+    if task {
+        tools.as_array_mut().unwrap().push(check_rules_tool());
+    }
+    tools
 }
 
 fn tool_list() -> Value {
@@ -80,7 +112,7 @@ pub async fn handle(app: &App, key: &str, request: Value) -> Option<Value> {
             "serverInfo": {"name": "peekumi-ask", "version": env!("CARGO_PKG_VERSION")}
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({"tools": tool_list()})),
+        "tools/list" => Ok(json!({"tools": tools_for(app, key)})),
         "tools/call" => Ok(call(app, key, &request["params"]).await),
         _ => Err(method),
     };
@@ -118,6 +150,15 @@ pub fn function_tools() -> Value {
         .iter()
         .map(|t| json!({"type":"function","function":{"name":t["name"],"description":t["description"],"parameters":t["inputSchema"]}}))
         .collect::<Vec<_>>())
+}
+
+/// The tools in function-calling form for Peekumi's own task agent: the lookups and
+/// `check_rules`.
+pub fn task_function_tools() -> Value {
+    let mut tools = function_tools();
+    let t = check_rules_tool();
+    tools.as_array_mut().unwrap().push(json!({"type":"function","function":{"name":t["name"],"description":t["description"],"parameters":t["inputSchema"]}}));
+    tools
 }
 
 /// Runs one lookup for an Ask engine that calls the tools itself, under the open grant and its
@@ -163,7 +204,7 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
         Some(g) => {
             g.calls.push(describe(name, args));
             g.places.push(place_of(args));
-            Ok((g.base.clone(), g.head.clone()))
+            Ok((g.base.clone(), g.head.clone(), g.branch.clone()))
         }
     };
     let revisions = {
@@ -185,10 +226,57 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
         Ok(revisions) => revisions,
         Err(error) => return error,
     };
-    match run(app, name, args, &revisions.0, &revisions.1).await {
+    let result = if name == "check_rules" {
+        check_rules(app, &revisions.0, revisions.2.as_deref()).await
+    } else {
+        run(app, name, args, &revisions.0, &revisions.1).await
+    };
+    match result {
         Ok(value) => json!({"content":[{"type":"text","text":value.to_string()}]}),
         Err(e) => tool_error(&e.to_string()),
     }
+}
+
+/// `check_rules`: the rule breaks that the task's committed work adds to its start commit, with
+/// the rules' warnings. Errors outside a task, and says so when nothing is committed yet.
+async fn check_rules(app: &App, base: &Value, branch: Option<&str>) -> Result<Value> {
+    let branch = branch.context("check_rules works only in a task")?;
+    let head = app
+        .engine
+        .call("resolve", json!([format!("refs/heads/{branch}")]))
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    if head == *base {
+        return Ok(
+            json!({"result":"No commits on the task branch yet. Commit your work, then check again."}),
+        );
+    }
+    let data = app
+        .engine
+        .call("relationships", json!([base, head, "", "overview"]))
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let checks = &data["checks"];
+    let after = &checks["after"];
+    if after["state"] != "evaluated" {
+        return Ok(json!({"result": if after["state"] == "invalid" {
+            format!("The rule configuration is invalid: {}", after["errors"])
+        } else {
+            "This repository has no .peekumi.json, so there are no rules to check.".into()
+        }}));
+    }
+    let added = checks["added"].as_array().cloned().unwrap_or_default();
+    Ok(json!({
+        "result": if added.is_empty() {
+            "Your commits add no rule break.".to_string()
+        } else {
+            format!("Your commits add {} rule break{}. Fix each one, or explain it in your report.", added.len(), if added.len() == 1 { "" } else { "s" })
+        },
+        "head": head,
+        "rules": after["rules"],
+        "added": added.into_iter().take(50).collect::<Vec<_>>(),
+        "warnings": after["warnings"],
+    }))
 }
 
 /// A short, human description of a call, shown under the answer.
@@ -212,6 +300,7 @@ fn describe(name: &str, args: &Value) -> String {
     let file = |key: &str| s(key).rsplit('/').next().unwrap_or("").to_string();
     match name {
         "find_declarations" => format!("Searched for “{}”", s("query")),
+        "check_rules" => "Checked the dependency rules".to_string(),
         "search_code" => format!("Searched the code for “{}”", s("text")),
         "read_declaration" => format!("Read {} in {}", s("name"), file("path")),
         "read_file" => format!("Read {}", file("path")),

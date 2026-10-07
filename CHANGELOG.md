@@ -4,6 +4,14 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+### Dependency rules
+
+- Two new rule forms: `only` (a group may use only the listed groups, so a new folder is outside until you decide) and `layers` (a layer must not use a layer above it).
+- The rule panel shows each rule's coverage (checked, broke, unresolved), warns about groups that match no file and rules that check nothing, and lists the breaks that a comparison adds.
+- A task shows the rule breaks that it adds before Approve and in the merge sheet. Task agents get a `check_rules` tool to check their committed work before they report.
+- **Forbid this dependency** on a relationship starts an instruction that asks for a rule against it.
+- Peekumi's own `.peekumi.json` states three principles: the analysis code does not use the agent workflow, shared frontend modules do not use feature modules, and product code does not use test code.
+
 ### Fixed
 
 - The one-line installer downloads a public release without a token. Before, it got the file's description in place of the file, and the checksum check failed.

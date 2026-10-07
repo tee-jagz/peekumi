@@ -35,13 +35,30 @@ Commit a `.peekumi.json` at the repository root. The viewer never executes the f
 }
 ```
 
-A rule prohibits the specified directed relationship from a file in the source group to a file in the destination groups. Groups can overlap, and they do not change the real directory hierarchy. An implementation edge points from the type that implements to its interface/trait. Inheritance points from child to parent. Frontend HTTP calls are not source imports or inferred backend calls.
+A rule has one of three forms. Each form applies only to the relationship `kinds` of the rule:
+
+- `from` and `to`: a file in the `from` group must not use a file in a `to` group.
+- `from` and `only`: a file in the `from` group can use only files in the `from` group or in an `only` group. A file in a new folder is outside the allowed groups until you add it. Thus, this form also catches code in places that nobody planned.
+- `layers`: a list of groups, from the top layer to the bottom layer. A file in a layer must not use a file in a layer above it. A file that is in no layer is not checked.
+
+```json
+{ "id": "services-only", "from": "services", "only": ["store", "shared"], "kinds": ["imports", "calls"] }
+{ "id": "layered", "layers": ["routes", "services", "store"], "kinds": ["imports", "calls"] }
+```
+
+Groups can overlap, and they do not change the real directory hierarchy. An implementation edge points from the type that implements to its interface/trait. Inheritance points from child to parent. Frontend HTTP calls are not source imports or inferred backend calls.
 
 Paths are relative to the repository. `*` matches in one segment, and `**` crosses directories. `**/` also matches zero directories. `?` matches one byte in a segment. Patterns do not support regexes, negation, absolute paths or parent traversal.
 
 The configuration has these limits: 64 KiB, 100 groups/rules, 100 patterns for each group and 256 bytes for each pattern. Unknown fields, groups, kinds and duplicate rule IDs cause configuration errors, not a result that looks clean.
 
-Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps. If there is no configuration, the panel shows “not configured.” Peekumi shows an invalid configuration as an error. A change to a rule alone can change the comparison status of a relationship.
+Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps.
+
+For each rule, the panel shows how many relationships the rule checked, how many broke it, and how many in its scope stayed unresolved. Peekumi warns about a group that matches no file and a rule that checked no relationship. A typo in a pattern can make a rule pass silently, so read these warnings first.
+
+The panel also lists the breaks that the comparison adds. Such a relationship breaks a rule on the after side, but not on the before side. Old breaks are not in this list, so a review shows only what the change did. A task shows the breaks that it adds before **Approve** and in the merge sheet. On a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it.
+
+Each task agent gets the rules in its task and a `check_rules` tool. The tool compares the work that the agent committed with the start commit, and it returns the breaks that the work adds. The task tells the agent to fix each added break, or to explain it in its report. If there is no configuration, the panel shows “not configured.” Peekumi shows an invalid configuration as an error. A change to a rule alone can change the comparison status of a relationship.
 
 ### Principles as rules
 

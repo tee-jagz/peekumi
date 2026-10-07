@@ -2147,3 +2147,72 @@ test("branch inspection reads selected history without switching or changing the
   assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
   assert.equal((await f.git("status", "--porcelain")).toString(), before);
 });
+
+test("a task agent checks its committed work against the rules, and the comparison names the breaks it adds", async (t) => {
+  const rules = {
+    version: 1,
+    groups: { ui: ["ui/**"], db: ["db/**"], typo: ["uii/**"] },
+    rules: [
+      {
+        id: "ui-no-db",
+        from: "ui",
+        to: ["db"],
+        kinds: ["imports", "calls"],
+        message: "The UI goes through services.",
+      },
+    ],
+  };
+  const f = await fixture({
+    files: {
+      ".peekumi.json": JSON.stringify(rules),
+      "ui/__init__.py": "",
+      "ui/view.py": "def show():\n    return 1\n",
+      "db/__init__.py": "",
+      "db/store.py": "def save():\n    return 2\n",
+    },
+  });
+  t.after(() => f.close());
+  const c = await f.req("/api/comments", {
+    text: "Write the result file. CHECK_RULES",
+    sha: f.sha,
+    anchor: { kind: "repo", path: "" },
+  });
+  const p = await f.req("/api/runs/preview", {
+    commentIds: [c.id],
+    using: { agent: "claude" },
+  });
+  assert.match(p.task, /call it before you report: fix each rule break/);
+  await f.req("/api/runs", { previewId: p.id });
+  const run = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + p.id);
+    return r.status === "completed" && r;
+  });
+  // The agent saw check_rules among its map tools, and it named the break its commit adds.
+  const used = JSON.parse(
+    await readFile(path.join(f.state, "agent-rules.json"), "utf8"),
+  );
+  assert.ok(used.tools.includes("check_rules"), used.tools.join(","));
+  assert.equal(used.error, false);
+  assert.match(used.result.result, /add 1 rule break/);
+  assert.deepEqual(
+    used.result.added.map((b) => [b.rule, b.source.path, b.target.path]),
+    [["ui-no-db", "ui/view.py", "db/store.py"]],
+  );
+  assert.match(used.result.warnings.join(" "), /"typo" matches no file/);
+  // The comparison of the task gives coverage for each rule, and the breaks it adds.
+  const head = run.results.at(-1);
+  const data = await f.req(
+    `/api/relationships?base=${f.sha}&head=${head}&view=overview`,
+  );
+  assert.equal(data.checks.added.length, 1);
+  const coverage = data.checks.after.coverage[0];
+  assert.equal(coverage.id, "ui-no-db");
+  assert.equal(coverage.broke, 1);
+  assert.ok(coverage.checked >= 1);
+  assert.equal(data.checks.before.coverage[0].broke, 0);
+  // The same comparison the other way adds nothing.
+  const back = await f.req(
+    `/api/relationships?base=${head}&head=${f.sha}&view=overview`,
+  );
+  assert.deepEqual(back.checks.added, []);
+});

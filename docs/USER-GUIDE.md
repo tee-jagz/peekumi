@@ -190,12 +190,14 @@ Only the open view button has a label. The other view buttons show only their ic
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Rule summary | Results of the dependency rules committed in `.peekumi.json`. Expand it to see configuration details and analysis gaps. If there is no rules file, it says that rules are not configured. |
+| 1 | Rule summary | Results of the dependency rules committed in `.peekumi.json`. The first part counts the breaks that this comparison adds. Expand it to see warnings about rules that check nothing, the added breaks, and for each rule what it checked, what broke it and what stayed unresolved. If there is no rules file, it says that rules are not configured. |
 | 2 | Relationship kind | Show all relationships, or only imports, calls, implementations or inheritance. |
 | 3 | Violations only | Show only relationships that break a dependency rule. |
 | 4 | Relationship | `from → to`, with its kind, its change status, and the number of sites before and after. Tap it to select it and to see a button for each file that it involves. |
 | 5 | Resolved evidence | Each relationship that Peekumi found in the code, with a link that opens the exact source line. |
 | 6 | Unresolved targets | References that Peekumi cannot resolve with certainty, and the reason. Peekumi lists these references and does not guess. |
+
+When you select a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it. Edit the text, then save the draft. A task that adds rule breaks names them before **Approve**.
 
 ## Pages and the way back
 

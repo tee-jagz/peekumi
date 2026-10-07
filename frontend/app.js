@@ -2094,6 +2094,22 @@ function copyText(text) {
 }
 /** Selects `node` and opens the dock in `mode` (ask, comments or session) about it. In
  * session mode the selection is the pointer that the next reply carries. */
+/** Starts an instruction, about relationship `edge`, that asks for a dependency rule which
+ * forbids it: a folder becomes `folder/**`, the repository's top-level files `*`, and a file
+ * or a declaration its file's path. The owner can edit the text before saving it. */
+function forbid(edge) {
+  const group = (end) =>
+    end.kind === "folder"
+      ? `${end.path}/**`
+      : end.kind === "rootfiles"
+        ? "*"
+        : end.path;
+  const kind = edge.relationshipKind;
+  workflow.prefill(
+    `Add a rule to .peekumi.json that forbids ${kind} from ${group(edge.from)} to ${group(edge.to)}, with a message that says why. Then fix the code that breaks the new rule, or list it in your report.`,
+  );
+  composeAbout(edge, "comments");
+}
 function composeAbout(node, mode) {
   selectNode(node);
   dockMode = mode;
@@ -3306,6 +3322,14 @@ function renderSelection() {
         () => openNode(selected),
       ),
     );
+  // A relationship that should not exist becomes a rule: an instruction draft that asks for
+  // it in .peekumi.json, through the normal review.
+  if (selected.kind === "edge" && isOwner())
+    facts.append(
+      button("link-button forbid-edge", "Forbid this dependency ›", () =>
+        forbid(selected),
+      ),
+    );
   box.append(facts);
   if (scope.kind === "file") box.append(adapterCard());
   strip.append(box);
@@ -3896,10 +3920,13 @@ function drawTab() {
       }),
     );
 }
-/** Shows configuration health without implying that unresolved code passed a rule check. */
+/** Shows configuration health without implying that unresolved code passed a rule check: the
+ * breaks that this comparison adds (on the after side), the warnings about rules that check
+ * nothing, and for each rule what it checked, what broke it and what stayed unresolved. */
 function ruleSummary() {
   const phase = before ? "before" : "after",
-    checks = comparison.relationshipData?.checks?.[phase];
+    checks = comparison.relationshipData?.checks?.[phase],
+    added = before ? [] : comparison.relationshipData?.checks?.added || [];
   const box = element("details", "rule-summary p-section");
   if (!checks) return box;
   box.append(
@@ -3910,9 +3937,10 @@ function ruleSummary() {
         ? "Rule configuration error"
         : checks.state === "not configured"
           ? "Dependency rules · not configured"
-          : `${checks.violations ? `${checks.violations} rule violation${checks.violations === 1 ? "" : "s"}` : "No rule violations"} · ${checks.rules} rule${checks.rules === 1 ? "" : "s"}`,
+          : `${added.length ? `${added.length} new rule break${added.length === 1 ? "" : "s"} · ` : ""}${checks.violations ? `${checks.violations} rule violation${checks.violations === 1 ? "" : "s"}` : "No rule violations"} · ${checks.rules} rule${checks.rules === 1 ? "" : "s"}`,
     ),
   );
+  if (added.length) box.classList.add("has-added");
   box.dataset.state = checks.state;
   if (checks.violations) box.classList.add("has-violations");
   if (nav.view().aspect !== "dependencies")
@@ -3928,6 +3956,30 @@ function ruleSummary() {
   );
   for (const error of checks.errors)
     box.append(element("p", "rule-error", error));
+  // A rule that checks nothing passes silently, so its warning comes first.
+  for (const warning of checks.warnings || [])
+    box.append(element("p", "rule-warning", warning));
+  if (added.length) {
+    box.append(element("p", "rule-added-head", "Added by this comparison:"));
+    for (const b of added.slice(0, 20))
+      box.append(
+        element(
+          "p",
+          "rule-added",
+          `${b.rule}: ${b.source.path} → ${b.target.path} (${b.kind})`,
+        ),
+      );
+    if (added.length > 20)
+      box.append(element("p", "", `${added.length - 20} more`));
+  }
+  for (const c of checks.coverage || [])
+    box.append(
+      element(
+        "p",
+        "rule-coverage",
+        `${c.id}: checked ${c.checked}, broke ${c.broke}, unresolved ${c.unresolved}`,
+      ),
+    );
   if (checks.state === "not configured")
     box.append(
       element(

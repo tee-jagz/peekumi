@@ -1090,6 +1090,45 @@ export function createWorkflow({
       await refresh();
     }
   }
+  /** The dependency-rule breaks that a task's work adds to its start commit (the server's
+   * `checks.added` for the start commit and the last result), loaded once for each pair of
+   * commits. Empty while it loads, and when the repository has no rules. */
+  const ruleBreaks = new Map();
+  function addedBreaks(r) {
+    const head = r.results?.at(-1);
+    if (!r.base || !head) return [];
+    const key = `${r.base}:${head}`;
+    if (!ruleBreaks.has(key)) {
+      ruleBreaks.set(key, []);
+      api(`/api/relationships?base=${r.base}&head=${head}&view=overview`)
+        .then((d) => {
+          const found =
+            d.checks?.after?.state === "evaluated" ? d.checks.added || [] : [];
+          ruleBreaks.set(key, found);
+          if (found.length) redraw();
+        })
+        .catch(() => {});
+    }
+    return ruleBreaks.get(key);
+  }
+  /** One plain line that names the rule breaks a task adds, or null when it adds none. */
+  function breaksNote(r, ending) {
+    const found = addedBreaks(r);
+    if (!found.length) return null;
+    const names = found
+      .slice(0, 3)
+      .map(
+        (b) =>
+          `${b.rule} (${b.source.path.split("/").pop()} → ${b.target.path.split("/").pop()})`,
+      )
+      .join(", ");
+    const more = found.length > 3 ? ` and ${found.length - 3} more` : "";
+    return el(
+      "p",
+      "rule-added-note",
+      `This task adds ${plural(found.length, "dependency rule break")}: ${names}${more}. ${ending}`,
+    );
+  }
   /** Asks the owner to confirm the merge, with the files it changes and what happens to
    * their checkout. Sends the exact state shown, so a change in between stops the merge. */
   function confirmMerge(r, m) {
@@ -1141,6 +1180,9 @@ export function createWorkflow({
         ),
         fileList(m.files || []),
         el("p", "merge-note", note),
+        ...[
+          breaksNote(r, "A merge brings them into the target branch."),
+        ].filter(Boolean),
         buttons,
         el(
           "p",
@@ -1673,6 +1715,10 @@ export function createWorkflow({
         body.append(card);
       }
     }
+    // A rule break that the task adds shows before Approve, in plain words.
+    const broken =
+      decide && ready.length && breaksNote(r, "Check them before you approve.");
+    if (broken) actions.append(broken);
     // Approve covers the finished instructions only; say which ones stay open.
     const left = undecided(r).length;
     if (decide && ready.length && left)
@@ -1857,6 +1903,12 @@ export function createWorkflow({
     /** The task whose branch is explored, when it can still take requested changes. */
     exploringTask: () => exploring(),
     renderComposer,
+    /** Starts a new instruction at the current selection with `text`, for the owner to edit. */
+    prefill(text) {
+      editing = null;
+      composer = context();
+      draft = text;
+    },
     /** The dock's Session box: a reply to run `id` (or the open session), or a new session. */
     renderSessionComposer: (host, id = null) =>
       session.renderComposer(host, id ? runOf(id) : liveSession(), {

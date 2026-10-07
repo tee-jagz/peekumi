@@ -302,6 +302,7 @@ writeFileSync(
 );
 // The code graph: Claude gets it as an HTTP MCP server in --mcp-config, Codex as -c options
 // with its key in the environment. Record one lookup so tests can check the grant.
+let graphAccess = null;
 {
   let graph = null;
   if (values.includes("--mcp-config")) {
@@ -321,6 +322,7 @@ writeFileSync(
       };
   }
   const state = args[args.indexOf("--state-dir") + 1];
+  graphAccess = graph && { ...graph, state };
   if (graph) {
     const reply = await (
       await fetch(graph.url, {
@@ -609,8 +611,44 @@ writeFileSync(
     : "A deterministic agent fixture completed this change.\n",
 );
 git("add", "agent-result.txt");
+// CHECK_RULES: the change also adds an import that breaks the repository's rule ui-no-db.
+const checkRules = graphAccess && first.text.includes("CHECK_RULES");
+if (checkRules) {
+  writeFileSync(
+    "ui/view.py",
+    readFileSync("ui/view.py", "utf8") + "from db.store import save\n",
+  );
+  git("add", "ui/view.py");
+}
 git("commit", "-m", "Fixture change without attribution");
 let sha = git("rev-parse", "HEAD");
+// The agent checks its committed work against the rules, as the task text asks.
+if (checkRules) {
+  const rpc = async (method, params) =>
+    (
+      await (
+        await fetch(graphAccess.url, {
+          method: "POST",
+          headers: {
+            Authorization: graphAccess.auth,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        })
+      ).json()
+    ).result;
+  const tools = (await rpc("tools/list", {})).tools.map((t) => t.name);
+  const reply = await rpc("tools/call", { name: "check_rules", arguments: {} });
+  writeFileSync(
+    graphAccess.state + "/agent-rules.json",
+    JSON.stringify({
+      tools,
+      error: reply.isError === true,
+      result: JSON.parse(reply.content[0].text),
+    }),
+  );
+}
 if (
   !call("resolve_comment", {
     comment_id: first.id,

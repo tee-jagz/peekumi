@@ -573,11 +573,11 @@ impl Repository {
         let right = select(&b);
         if overview {
             return Ok(
-                json!({"base":a.sha,"head":b.sha,"compact":true,"pairs":crate::relationships::compact(&left,&right),"checks":{"before":a.checks,"after":b.checks}}),
+                json!({"base":a.sha,"head":b.sha,"compact":true,"pairs":crate::relationships::compact(&left,&right),"checks":{"before":a.checks,"after":b.checks,"added":added_breaks(&a.relationships,&b.relationships)}}),
             );
         }
         Ok(
-            json!({"base":a.sha,"head":b.sha,"relationships":crate::relationships::compare(&left,&right),"checks":{"before":a.checks,"after":b.checks}}),
+            json!({"base":a.sha,"head":b.sha,"relationships":crate::relationships::compare(&left,&right),"checks":{"before":a.checks,"after":b.checks,"added":added_breaks(&a.relationships,&b.relationships)}}),
         )
     }
     /// Compares two Git revisions and returns file statuses and dependency changes.
@@ -880,6 +880,10 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
                 rules.apply(&mut values);
                 checks["state"] = json!("evaluated");
                 checks["rules"] = json!(rules.count());
+                let paths: Vec<&str> = files.keys().map(String::as_str).collect();
+                let (coverage, warnings) = rules.coverage(&values, &paths);
+                checks["coverage"] = json!(coverage);
+                checks["warnings"] = json!(warnings);
             }
             Err(error) => {
                 checks["state"] = json!("invalid");
@@ -910,6 +914,30 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
             .collect::<Vec<_>>()
     );
     (values, checks)
+}
+/// The rule breaks in `after` that `before` did not have: the same relationship (by its stable
+/// identity) breaking the same rule counts once, so old breaks stay out of a review. Each is
+/// `{rule, message, kind, source, target}`.
+pub fn added_breaks(before: &[Value], after: &[Value]) -> Vec<Value> {
+    let old: BTreeSet<(String, String)> = before
+        .iter()
+        .flat_map(|r| {
+            array(&r["violations"])
+                .iter()
+                .map(|v| (r["id"].to_string(), v["id"].to_string()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    after
+        .iter()
+        .flat_map(|r| {
+            array(&r["violations"])
+                .iter()
+                .filter(|v| !old.contains(&(r["id"].to_string(), v["id"].to_string())))
+                .map(|v| json!({"rule":v["id"],"message":v["message"],"kind":r["kind"],"source":r["source"],"target":r["targets"][0]}))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 /// Delegates every file's imports to its registered language adapter.
 /// Updates resolved targets and unique non-self dependency edges using only the current snapshot.
