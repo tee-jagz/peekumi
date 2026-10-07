@@ -1,6 +1,7 @@
 /** Dependency rules in the browser: a task that adds a rule break says so before Approve; the
- * rule summary shows the breaks a comparison adds and each rule's coverage; and "Forbid this
- * dependency" on a relationship starts an instruction that asks for a rule. Phone and desktop. */
+ * rule summary shows the breaks a comparison adds and each rule's coverage; a card counts its
+ * breaks, and the sheet names them in one line; and "Forbid this dependency" on a
+ * relationship starts an instruction that asks for a rule. Phone and desktop. */
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
@@ -92,6 +93,37 @@ try {
         await page.locator(".rule-summary .rule-coverage").first().innerText(),
         /^ui-no-db: checked \d+, broke 1, unresolved \d+$/,
       );
+
+      // The card that breaks the rule counts its breaks in its own row (no badge), and the
+      // sheet says what it breaks in one line, which opens only the breaks.
+      const ui = front.locator('.node[data-path="ui"]');
+      assert.equal(
+        await ui.locator(".n-breaks").getAttribute("aria-label"),
+        "1 dependency rule break",
+      );
+      assert.equal(await page.locator(".rule-badge").count(), 0);
+      await ui.click();
+      const line = page.locator("#reviewScope .review-breaks");
+      assert.match(
+        await line.innerText(),
+        /^Breaks ui-no-db · 1 import of store\.py/,
+      );
+      await line.click();
+      assert.equal(
+        await page.evaluate(
+          () => document.querySelector("#panel").dataset.view,
+        ),
+        "dependencies",
+      );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "Violations only" })
+          .getAttribute("aria-pressed"),
+        "true",
+      );
+      await page.screenshot({
+        path: `test-results/rules-breaks-${viewport.width}.png`,
+      });
 
       // "Forbid this dependency" on the relationship starts an instruction draft.
       await page.evaluate(() =>

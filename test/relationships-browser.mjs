@@ -58,7 +58,7 @@ try {
       .waitFor();
     const front = page.locator('.sheet[data-front="true"]'),
       web = front.locator('.node[data-path="web"]');
-    assert.ok(await web.locator(".rule-badge").count());
+    assert.ok(await web.locator(".n-breaks").count());
     await page
       .getByRole("button", { name: "Changes only", exact: true })
       .click();
@@ -70,10 +70,10 @@ try {
     await web.click();
     const consumer = front.locator('.node[data-path="web/consumer.ts"]');
     await consumer.waitFor();
-    assert.ok(await consumer.locator(".rule-badge").count());
+    assert.ok(await consumer.locator(".n-breaks").count());
     assert.ok(await front.locator("path.e.violation").count());
     await page.locator('[data-ba="before"]').click();
-    assert.equal(await front.locator(".rule-badge").count(), 0);
+    assert.equal(await front.locator(".n-breaks").count(), 0);
     await page.locator('[data-ba="after"]').click();
     await consumer.click();
     await consumer.click();

@@ -2165,15 +2165,6 @@ button {
 .rule-summary[data-state="invalid"] {
   color: var(--del);
 }
-.rule-badge {
-  color: white;
-  background: var(--del);
-  border-radius: 50%;
-  min-width: 16px;
-  height: 16px;
-  text-align: center;
-  font-weight: bold;
-}
 .e.violation {
   stroke: var(--del) !important;
 }
@@ -7734,4 +7725,58 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 .panel .selection-facts .forbid-edge {
   font-family: var(--font);
   font-size: 13px;
+}
+
+/* Rule breaks (app.js). On a card: a red broken-link icon and the count, in the card's own
+   top row, as plain text. In the sheet: one red line under the kind that opens the breaks. */
+.n-breaks {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--del);
+}
+.n-meta ~ .n-breaks,
+.n-parts ~ .n-breaks {
+  margin-left: 6px;
+}
+.n-breaks .glyph {
+  width: 14px;
+  height: 14px;
+}
+.panel #reviewScope .review-breaks {
+  display: flex;
+  order: 4;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--del);
+  cursor: pointer;
+}
+.panel #reviewScope .review-breaks .glyph {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+.panel #reviewScope .review-breaks .go {
+  margin-left: auto;
+}
+.legend-breaks .glyph {
+  width: 16px;
+  height: 16px;
+  color: var(--del);
 }

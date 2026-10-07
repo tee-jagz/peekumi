@@ -1081,21 +1081,63 @@ function nodeRelations(node) {
       .some((f) => touches(f.source) || f.targets.some(touches)),
   );
 }
-function nodeViolations(node) {
-  return nodeRelations(node).flatMap((r) => {
+/** The rule breaks that `node` causes, one for each broken rule on each relationship that
+ * starts in it: `{rule, message, target, kind, count}`, on the shown side of the comparison.
+ * The map's overview merges the relationships between two files into one pair, so `count` is
+ * how many relationships the entry stands for. For a selected relationship (an edge between
+ * two cards), the breaks from its source card to its target card. */
+function nodeBreaks(node) {
+  const edge = node.kind === "edge";
+  const from = edge ? node.from : node;
+  const inside = (end, path) =>
+    end.kind === "rootfiles"
+      ? !path.includes("/")
+      : path === end.path || path.startsWith(end.path + "/");
+  return nodeRelations(from).flatMap((r) => {
     const fact = r[before ? "before" : "after"];
-    if (!fact) return [];
-    const source = fact.source;
-    const owns =
-      node.kind === "symbol"
-        ? source.path === scope.path && source.symbol === node.name
-        : node.kind === "rootfiles"
-          ? !source.path.includes("/")
-          : source.path === node.path ||
-            source.path.startsWith(node.path + "/");
-    return owns ? fact.violations : [];
+    if (!fact || !startsIn(from, fact.source)) return [];
+    const target = fact.targets?.[0]?.path || "";
+    const kind = r.kind || fact.kind;
+    if (edge && (kind !== node.relationshipKind || !inside(node.to, target)))
+      return [];
+    return fact.violations.map((v) => ({
+      rule: v.id,
+      message: v.message,
+      target,
+      kind,
+      count: fact.count || 1,
+    }));
   });
 }
+/** One line for the sheet about `breaks` (see nodeBreaks): the rule, or how many rules, and
+ * what breaks it, for example "Breaks ui-no-db · 3 calls to store.py". */
+function breaksLine(breaks) {
+  const rules = [...new Set(breaks.map((b) => b.rule))];
+  const targets = [...new Set(breaks.map((b) => b.target))];
+  const kinds = [...new Set(breaks.map((b) => b.kind))];
+  const n = breaks.reduce((sum, b) => sum + b.count, 0);
+  const nouns = {
+    calls: ["call", "calls", "to"],
+    imports: ["import", "imports", "of"],
+    implements: ["implementation", "implementations", "of"],
+    inherits: ["inheritance", "inheritances", "from"],
+  };
+  const noun = kinds.length === 1 && nouns[kinds[0]];
+  const what =
+    noun && targets.length === 1
+      ? `${n} ${noun[n === 1 ? 0 : 1]} ${noun[2]} ${targets[0].split("/").pop()}`
+      : `${n} relationship${n === 1 ? "" : "s"}`;
+  return rules.length === 1
+    ? `Breaks ${rules[0]} · ${what}`
+    : `Breaks ${rules.length} rules · ${what}`;
+}
+/** True when a relationship that starts at `source` starts in `node`. */
+const startsIn = (node, source) =>
+  node.kind === "symbol"
+    ? source.path === scope.path && source.symbol === node.name
+    : node.kind === "rootfiles"
+      ? !source.path.includes("/")
+      : source.path === node.path || source.path.startsWith(node.path + "/");
 /** Lays out the current directory or symbol scope and its import neighbours inside the SVG viewport. */
 function renderGraph(body) {
   const width = Math.max(240, body.clientWidth),
@@ -1442,12 +1484,18 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
     parts.append(...node.changes.map(partIcon));
     top.append(parts);
   }
-  const violations = nodeViolations(node);
-  if (violations.length) {
-    const badge = element("span", "rule-badge", "!");
-    badge.title = violations.map((v) => v.message).join("; ");
-    badge.setAttribute("aria-label", "Dependency rule violation");
-    top.append(badge);
+  // Rule breaks: a red broken-link icon and how many, in the card's own row (no badge).
+  const found = nodeBreaks(node);
+  const total = found.reduce((sum, b) => sum + b.count, 0);
+  if (total) {
+    const breaks = element("span", "n-breaks");
+    breaks.append(glyph("broken"), document.createTextNode(total));
+    breaks.title = [...new Set(found.map((b) => b.message))].join("; ");
+    breaks.setAttribute(
+      "aria-label",
+      `${total} dependency rule break${total === 1 ? "" : "s"}`,
+    );
+    top.append(breaks);
   }
   card.append(top);
   if (node.files) {
@@ -2555,6 +2603,22 @@ function renderPanel() {
       ? `${selected.symbolKind} · ${scope.path}`
       : kindWords[kind] || kind;
   scopeBar.append(element("span", "review-kind", caption));
+  // A selection that breaks a rule says so in one line; it opens only the breaks.
+  const breaks = selected ? nodeBreaks(selected) : [];
+  if (breaks.length) {
+    const line = button("review-breaks", "", () => {
+      violationsOnly = true;
+      nav.toMap("dependencies");
+      render();
+    });
+    line.append(
+      glyph("broken"),
+      element("span", "", breaksLine(breaks)),
+      element("span", "go", "›"),
+    );
+    line.title = [...new Set(breaks.map((b) => b.message))].join("; ");
+    scopeBar.append(line);
+  }
   if (selected?.changes?.length) {
     // Say what changed inside a modified declaration, so the reader knows what to inspect.
     const parts = element("span", "review-parts");
@@ -3513,6 +3577,13 @@ function renderMapLegend() {
     );
     lines.append(row);
   }
+  // The card's mark for a rule break: the broken-link icon and how many.
+  const breakRow = element("div", "legend-row legend-breaks");
+  breakRow.append(
+    glyph("broken"),
+    element("span", "", "Rule breaks that start in a card, and how many"),
+  );
+  lines.append(breakRow);
   host.append(
     lines,
     element(

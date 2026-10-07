@@ -34,6 +34,9 @@ const glyphs = {
   stop: "M6 6h8v8H6Z",
   // Commands: a shield (ask before commands); open with a slash (all commands allowed).
   shield: "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7Z",
+  // A chain link in two halves, with sparks at the break: a dependency rule break.
+  broken:
+    "M8.5 11.5 6.8 13.2a2.6 2.6 0 0 1-3.7-3.7l1.7-1.7M11.5 8.5l1.7-1.7a2.6 2.6 0 0 1 3.7 3.7l-1.7 1.7M7 3.5l.6 2.1M3.5 7l2.1.6M13 16.5l-.6-2.1M16.5 13l-2.1-.6",
   shieldOff:
     "M10 2.5l6 2.2v4.6c0 4-2.6 6.9-6 8.2-3.4-1.3-6-4.2-6-8.2V4.7ZM3 3l14 14",
   eye:
