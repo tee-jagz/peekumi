@@ -43,6 +43,24 @@ The configuration has these limits: 64 KiB, 100 groups/rules, 100 patterns for e
 
 Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps. If there is no configuration, the panel shows “not configured.” Peekumi shows an invalid configuration as an error. A change to a rule alone can change the comparison status of a relationship.
 
+### Principles as rules
+
+A rule forbids one group of files from using another group. With this, you can state several engineering principles. Peekumi then marks each break on the map, and each agent task contains the rules.
+
+| Principle | Rule pattern |
+| --- | --- |
+| Dependency inversion: layers | Put the layers in order. Forbid each layer to use a layer above it, for example `store` → `services` and `routes`. |
+| Dependency inversion: abstractions | Put the interfaces in one group and the implementations in another. Forbid the callers to use the implementations. |
+| Acyclic dependencies | A complete order of layers also prevents cycles between those groups. For two modules: if A uses B, forbid B → A. |
+| Stable dependencies | Forbid shared code (`shared`, `utils`, `lib`) to use feature groups. |
+| Encapsulation | Make a group for the internals of a module, and a group for the other modules. Patterns have no exclusion, so name the other modules. |
+| Composition over inheritance | Forbid only `inherits` from your code to concrete base classes. Keep `implements`, so code can still implement an interface. |
+| Separation of concerns | Forbid the user interface to use the data store directly, and forbid production code to use test code. |
+
+These rules do not measure size, complexity or duplicated code, so they cannot state KISS or DRY. They do not apply to libraries outside the repository. To keep code away from a library, put the library behind your own module, and forbid the use of that module.
+
+Peekumi's own `.peekumi.json` uses some of these patterns. The analysis code does not use the agent workflow. The shared frontend modules do not use the feature modules. The product code does not use the test code.
+
 ## Inspecting evidence
 
 Open Dependencies to filter imports, calls, implementations or inheritance, or to show only violations. Select a symbol to focus on its incoming/outgoing relationships. Resolved edges show on the map, and uncertain relationships stay in a list that you can expand.

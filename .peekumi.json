@@ -9,7 +9,43 @@
       "backend/adapters/typescript.rs",
       "backend/adapters/rust.rs",
       "backend/adapters/rust_relationships.rs"
-    ]
+    ],
+    "analysis": [
+      "backend/engine.rs",
+      "backend/relationships.rs",
+      "backend/rules.rs",
+      "backend/index.rs",
+      "backend/adapters/**"
+    ],
+    "agent-workflow": [
+      "backend/workflow.rs",
+      "backend/runner.rs",
+      "backend/agents.rs",
+      "backend/agent_session.rs",
+      "backend/task_agent.rs",
+      "backend/merge.rs",
+      "backend/ask.rs"
+    ],
+    "frontend-shared": [
+      "frontend/icons.js",
+      "frontend/text.js",
+      "frontend/nav.js",
+      "frontend/select.js",
+      "frontend/peek.js",
+      "frontend/canvas.js",
+      "frontend/model.js",
+      "frontend/menu.js"
+    ],
+    "frontend-features": [
+      "frontend/app.js",
+      "frontend/workflow.js",
+      "frontend/session.js",
+      "frontend/ask.js",
+      "frontend/agents.js",
+      "frontend/focus.js"
+    ],
+    "product": ["backend/**", "frontend/**"],
+    "tests": ["test/**"]
   },
   "rules": [
     {
@@ -25,6 +61,27 @@
       "to": ["concrete-adapters"],
       "kinds": ["imports", "calls"],
       "message": "The repository engine must use the shared adapter registry and interface."
+    },
+    {
+      "id": "analysis-independent-of-agents",
+      "from": "analysis",
+      "to": ["agent-workflow"],
+      "kinds": ["imports", "calls"],
+      "message": "Repository analysis must not depend on the agent workflow (dependency inversion)."
+    },
+    {
+      "id": "shared-ui-independent-of-features",
+      "from": "frontend-shared",
+      "to": ["frontend-features"],
+      "kinds": ["imports", "calls"],
+      "message": "Shared frontend modules must not depend on feature modules (stable dependencies)."
+    },
+    {
+      "id": "product-not-test-code",
+      "from": "product",
+      "to": ["tests"],
+      "kinds": ["imports", "calls"],
+      "message": "Production code must not import test code (separation of concerns)."
     }
   ]
 }
