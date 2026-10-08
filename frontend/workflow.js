@@ -167,6 +167,8 @@ export function createWorkflow({
   head = () => {},
   // Opens the map's dock in Instruction mode, for a new instruction (app.js).
   writeInstruction = () => {},
+  // More buttons for the Tasks page's header row (the notifications bell, see notify.js).
+  taskActions = () => [],
   redraw,
   notice,
   inspect,
@@ -715,7 +717,7 @@ export function createWorkflow({
       choose.type = "button";
       choose.id = "openAgents";
       choose.onclick = () => agents.open(null, () => redraw());
-      head("Tasks", { actions: [choose] });
+      head("Tasks", { actions: [...taskActions().filter(Boolean), choose] });
       const uses = agents.describe("task");
       if (uses)
         body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));

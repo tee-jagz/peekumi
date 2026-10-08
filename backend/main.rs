@@ -11,6 +11,7 @@ mod lookup;
 mod merge;
 mod process;
 mod pull_requests;
+mod push;
 mod relationships;
 mod rules;
 mod runner;
@@ -250,6 +251,7 @@ fn open_repository(
     )?;
     workflow.ask_default = [config.ask_model.clone(), config.ask_effort.clone()];
     workflow.secrets = shared.options.state_dir.canonicalize()?;
+    workflow.repository_id = id.clone();
     runner::recover(workflow.clone())?;
     let app = Arc::new(App {
         cookie_name: shared.cookie_name.clone(),
@@ -371,6 +373,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/menu.js" => Some(("text/javascript", include_bytes!("../frontend/menu.js"))),
         "/nav.js" => Some(("text/javascript", include_bytes!("../frontend/nav.js"))),
         "/fixes.js" => Some(("text/javascript", include_bytes!("../frontend/fixes.js"))),
+        "/notify.js" => Some(("text/javascript", include_bytes!("../frontend/notify.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
@@ -676,6 +679,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             || path.starts_with("/api/agents")
             || path == "/api/ask/history"
             || path.starts_with("/api/runs")
+            || path.starts_with("/api/push")
             || path.starts_with("/api/comments"))
     {
         return error(
@@ -867,6 +871,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         || path.starts_with("/api/prs/")
         || path.starts_with("/api/comments")
         || path.starts_with("/api/runs")
+        || path.starts_with("/api/push/")
     {
         let method = request.method().to_string();
         // Ask conversations are kept per branch; the query names the branch viewed.
@@ -978,6 +983,27 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 Ok(found) => {
                     json_response(StatusCode::OK, json!({"references": found}), gzip, None).await
                 }
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            };
+        }
+        // Notifications on the owner's devices when agents finish (see the push module).
+        if path.starts_with("/api/push/") {
+            let secrets = &app.workflow.secrets;
+            let done = match (path.as_str(), method.as_str()) {
+                ("/api/push/key", "GET") => {
+                    push::public_key(secrets).map(|key| json!({"key": key}))
+                }
+                ("/api/push/subscribe", "POST") => {
+                    push::subscribe(secrets, &body).map(|()| json!({"ok": true}))
+                }
+                ("/api/push/subscribe", "DELETE") => {
+                    push::unsubscribe(secrets, body["endpoint"].as_str().unwrap_or(""))
+                        .map(|()| json!({"ok": true}))
+                }
+                _ => return error(StatusCode::NOT_FOUND, "Not found", gzip).await,
+            };
+            return match done {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };
         }

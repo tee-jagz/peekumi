@@ -4,6 +4,11 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+### Notifications
+
+- Turn on notifications with the bell on the Tasks page. The phone then tells you when a task is ready for review or needs you. It also tells you when a session agent asks to run a command or waits for your message. This also works when the app is closed. Tap a notification to open the task or session.
+- Peekumi sends notifications with Web Push. It encrypts each one for its device. It accepts only the push services of Apple, Google, Mozilla and Microsoft (`GET /api/push/key`, `POST` and `DELETE /api/push/subscribe`).
+
 ### Dependency rules
 
 - Two new rule forms: `only` (a group may use only the listed groups, so a new folder is outside until you decide) and `layers` (a layer must not use a layer above it).

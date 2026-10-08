@@ -290,6 +290,13 @@ impl Workflow {
             r["approval"] = approval;
             Ok(Value::Null)
         })?;
+        if let Ok(run) = self.run(id) {
+            self.notify(
+                &run,
+                "Session needs you",
+                &format!("The agent asks to run: {shown}"),
+            );
+        }
         let start = Instant::now();
         loop {
             std::thread::sleep(Duration::from_millis(600));
@@ -485,7 +492,18 @@ impl Workflow {
                     .iter()
                     .any(|m| m["delivered"] != true);
             r["status"] = json!(if more { "running" } else { "waiting" });
-            Ok(more)
+            // The owner who stopped the turn knows that it stopped.
+            Ok((more, !more && !stopped))
+        })
+        .map(|(more, tell)| {
+            if tell && let Ok(run) = self.run(id) {
+                let reply = run["summary"]
+                    .as_str()
+                    .or(run["message"].as_str())
+                    .unwrap_or("");
+                self.notify(&run, "Your turn", reply);
+            }
+            more
         })
     }
 

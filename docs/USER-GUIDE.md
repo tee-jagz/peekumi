@@ -24,6 +24,7 @@ The command `node scripts/guide-screenshots.mjs` makes the screenshots and icon 
 - [Typing on a phone](#typing-on-a-phone)
 - [Desktop layout](#desktop-layout)
 - [Icon reference](#icon-reference)
+- [Notifications](#notifications)
 - [Offline and updates](#offline-and-updates)
 
 ## The map at a glance
@@ -427,6 +428,14 @@ A modified declaration shows which parts changed, on its card and in the sheet. 
 | <img src="guide/icons/contract-in.svg" width="20" alt=""> | Inputs: parameters |
 | <img src="guide/icons/contract-out.svg" width="20" alt=""> | Outputs: return type or description |
 | <img src="guide/icons/contract-fields.svg" width="20" alt=""> | Fields declared on a class |
+
+## Notifications
+
+Peekumi can tell your phone when an agent finishes, also when the app is closed. Open **Tasks**, then tap the bell. Allow notifications when the browser asks. The bell shows a slash when notifications are off. Tap the bell again to turn them off.
+
+You get a notification when a task is ready for review or needs you. You also get one when a session agent asks to run a command or waits for your message. When Peekumi is open on the screen, you see the change in the app and get no notification. Tap a notification to open its task or session.
+
+On an iPhone or iPad, notifications work only in the Home Screen app. In Safari, tap **Share**, then **Add to Home Screen**. Open Peekumi from the Home Screen, and then tap the bell. Notifications need HTTPS, for example `peekumi share` with Tailscale.
 
 ## Offline and updates
 

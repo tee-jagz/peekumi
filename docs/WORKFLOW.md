@@ -89,6 +89,8 @@ Authenticated owner writes must use same-origin JSON. Untrusted repository text,
 - `GET /api/runs/<id>` and `GET /api/runs/<id>/tail` of a session also return `changed`: the files that the session changed since its start commit, committed or not, and its new files.
 - `POST /api/references`: `{base, head, text, about?}`. It returns `references`, the place of each code span in `text` that names exactly one file or declaration in the comparison, in the same form as Ask's `references`. A dotted name such as `Workflow.route` names a method by its type.
 - `POST /api/runs/<id>/end`: `{review}`. It ends a waiting session. With `review: true`, the session's instruction gets a report with the last commit of the branch, and it goes to the normal review.
+- `GET /api/push/key`: the server's VAPID public key, for a push subscription (owner only).
+- `POST /api/push/subscribe`: a browser's push subscription, `{endpoint, keys: {p256dh, auth}}`. Peekumi accepts only the endpoints of the push services of Apple, Google, Mozilla and Microsoft. `DELETE` on the same path with `{endpoint}` removes it (owner only).
 - `POST /api/runs/<id>/revise`: `{feedback?}` (necessary if no instructions were collected for the task). It starts the next round of a finished run that is not yet revised, and returns that round (`round`, `revises`, `feedback`). Peekumi rejects the request while a run is active or when nothing remains to change.
 
 The viewer polls every three seconds while an agent works, and every ten seconds otherwise, so a run started from a different device also shows. Peekumi does not have SSE. The usual comparison/source APIs can get completed work by commit SHA. They do not change the checkout that you examine.
@@ -97,7 +99,7 @@ The viewer polls every three seconds while an agent works, and every ten seconds
 
 The deterministic integration agent makes real Git commits and reports through the production MCP transport. The tests cover exact preview delivery, stale drafts and refs, duplicate dispatch, concurrency, invalid attribution and unrelated comments. They also cover flags, unanswered comments, verification, reopen, follow-up rounds, persistence, cancellation and missing executables. The browser tests complete the loop on phone and desktop. These tests do not show a paid Codex or Claude session. For a first real run, local agent authentication and permissions are still necessary.
 
-These items are outside this slice: automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE, merges without an owner action, and push. Each task includes the dependency rules. Owners can use a draft to explicitly ask the agent to propose changes to `.peekumi.json`.
+These items are outside this slice: automatic brief generation, automatic dependency-rule creation from comments, commit-timeline attribution badges, historical comment-state projection, SSE, merges without an owner action, and Git pushes. Each task includes the dependency rules. Owners can use a draft to explicitly ask the agent to propose changes to `.peekumi.json`.
 
 ## Sessions
 
@@ -143,6 +145,20 @@ A place that Follow showed is not a pointer. Follow moves the map, but it never 
 **End a session.** **End session** shows the commits on the branch. **Send to review** reports the session's instruction with the last commit, and the work then goes through the normal review: **Approve**, then **Merge** with **Undo**. The conversation stays with the work, under **Session conversation**. **End without review** keeps the branch, and the instruction stays unreported. The session then says that you ended it, and that nothing was merged.
 
 Peekumi never pushes a session branch and never changes your checkout. A turn has a time limit of one hour.
+
+## Notifications
+
+The bell on the Tasks page turns notifications on or off for one device. When notifications are on, the device gets a notification in these cases:
+
+- A task is complete: **Task ready for review**.
+- A task fails, or a restart interrupts it: **Task needs you**.
+- A task reaches its one-hour limit: **Task stopped**.
+- A session agent asks to run a command: **Session needs you**.
+- A session turn ends and the agent waits for your message: **Your turn**.
+
+Peekumi sends no notification for a task or a turn that you stop yourself. The service worker shows a notification only when no Peekumi window is on the screen. Tap the notification to open the task or the session. A newer notification about the same run replaces the older one.
+
+The server sends each notification with Web Push. It encrypts the message for the device (RFC 8291). It signs a VAPID token (RFC 8292) with a key that it makes at the first use. The key and the subscriptions are in `push/` in the server's private state folder, and every repository of the server uses them. When the push service says that a device is gone (404 or 410), Peekumi removes it. A failed notification never stops the work that sent it.
 
 ## The context menu
 

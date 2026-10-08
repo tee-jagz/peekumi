@@ -3,6 +3,7 @@ import { createAsk } from "./ask.js";
 import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { createFixes } from "./fixes.js";
+import { createNotifications } from "./notify.js";
 import { createFocus } from "./focus.js";
 import { installContextMenus, closeMenu, menuIsOpen } from "./menu.js";
 import { createNav } from "./nav.js";
@@ -287,12 +288,17 @@ function viewChanged(previous, next) {
   workflow.viewChanged(next);
   if (comparison) renderPanel();
 }
+const notifications = createNotifications({
+  api,
+  notice: (text, error = false) => showNotice(text, error),
+});
 const workflow = createWorkflow({
   api,
   focus,
   agents,
   nav,
   head: viewHead,
+  taskActions: () => (isOwner() ? [notifications.button()] : []),
   /** A new instruction: the map, with the dock in Instruction mode (Back returns). */
   writeInstruction() {
     dockMode = "comments";
@@ -2567,10 +2573,24 @@ async function goToPlace(place) {
   render();
 }
 /** Opens what the address keeps (see `rememberPlace`), once, after the first map: the place,
- * and the way back from a task's branch. */
+ * the way back from a task's branch, then the run that a notification links to. */
 async function restorePlace() {
   if (placeRestored) return;
   placeRestored = true;
+  await restoreMapPlace();
+  openLinkedRun();
+}
+/** Opens the run that a notification links to (`?task=`). The address then drops it, so a
+ * reload does not open the run again. */
+function openLinkedRun() {
+  const url = new URL(location.href),
+    id = url.searchParams.get("task");
+  if (!id) return;
+  url.searchParams.delete("task");
+  replaceUrl(url);
+  if (isOwner()) workflow.openTask(id).catch(() => {});
+}
+async function restoreMapPlace() {
   if (!comparison) return;
   const url = new URL(location.href);
   const id = url.searchParams.get("explore");

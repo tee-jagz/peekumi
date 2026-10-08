@@ -17,6 +17,7 @@ const SHELL = [
   "/menu.js",
   "/nav.js",
   "/fixes.js",
+  "/notify.js",
   "/style.css",
   "/pwa.js",
   "/manifest.webmanifest",
@@ -56,5 +57,54 @@ self.addEventListener("fetch", (event) => {
       const response = await caches.match(url.pathname, { cacheName: CACHE });
       return response || Response.error();
     }),
+  );
+});
+// A notification from the Peekumi server: an agent finished or needs the owner. It shows only
+// when no Peekumi window is on the screen, because the app shows the same change itself.
+self.addEventListener("push", (event) => {
+  let message = {};
+  try {
+    message = event.data?.json() || {};
+  } catch {
+    return;
+  }
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      if (windows.some((w) => w.visibilityState === "visible")) return;
+      await self.registration.showNotification(message.title || "Peekumi", {
+        body: message.body || "",
+        tag: message.tag,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        data: { url: message.url || "/" },
+      });
+    })(),
+  );
+});
+// Opens the run that the notification is about: in an open Peekumi window, or in a new one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(
+    event.notification.data?.url || "/",
+    self.location.origin,
+  );
+  if (target.origin !== self.location.origin) return;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      const open = windows.find((w) => "navigate" in w);
+      if (open) {
+        await open.focus();
+        return open.navigate(target.href);
+      }
+      return self.clients.openWindow(target.href);
+    })(),
   );
 });

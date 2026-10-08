@@ -19,6 +19,9 @@ pub struct Workflow {
     pub ask_default: [String; 2],
     /// The server's private folder for secrets that every repository shares (API keys).
     pub secrets: PathBuf,
+    /// The repository's ID in the server's list. A notification's link opens this repository;
+    /// it is empty for the primary repository of a test store.
+    pub repository_id: String,
     /// The code graph lookup grants of running tasks (see the lookup module), by key.
     pub grants: crate::lookup::Grants,
     /// Writes the repository map of a task's text for its instructions at a commit (see the
@@ -87,6 +90,7 @@ impl Workflow {
             claude: claude.into(),
             ask_default: ["sonnet".into(), "low".into()],
             secrets: state.canonicalize()?,
+            repository_id: String::new(),
             grants: Default::default(),
             briefing: Default::default(),
         };
@@ -711,8 +715,10 @@ impl Workflow {
     /// Ends a run and marks every unanswered comment Unreported;
     /// reports are never auto-verified.
     pub fn finish(&self, id: &str, status: &str, message: &str, results: Value) -> Result<Value> {
-        self.update(|v| {
+        let mut stopped_by_owner = false;
+        let done = self.update(|v| {
             let r = find_mut(v, "runs", id)?;
+            stopped_by_owner = r["cancelRequested"] == true;
             r["status"] = json!(status);
             r["message"] = json!(message);
             r["finishedAt"] = json!(now());
@@ -725,7 +731,46 @@ impl Workflow {
                 }
             }
             Ok(json!({"ok":true}))
-        })
+        })?;
+        // The owner who stopped a run knows that it stopped.
+        if !stopped_by_owner && let Ok(run) = self.run(id) {
+            let (title, body) = match status {
+                "completed" => (
+                    "Task ready for review",
+                    "The agent finished. Review its work.",
+                ),
+                "cancelled" => ("Task stopped", "The task reached its one-hour limit."),
+                _ => ("Task needs you", message),
+            };
+            self.notify(&run, title, body);
+        }
+        Ok(done)
+    }
+    /// Tells the owner's devices about `run` (see the push module): `title`, then the run's
+    /// name and `detail`. The notification opens the run; a newer one for the same run
+    /// replaces it.
+    pub fn notify(&self, run: &Value, title: &str, detail: &str) {
+        let name = run["title"]
+            .as_str()
+            .or_else(|| run["comments"][0]["text"].as_str())
+            .unwrap_or("");
+        let name: String = name.lines().next().unwrap_or("").chars().take(80).collect();
+        let detail: String = detail.chars().take(160).collect();
+        let body = [name.trim(), detail.trim()]
+            .into_iter()
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let id = run["id"].as_str().unwrap_or("");
+        let mut url = String::from("/?");
+        if !self.repository_id.is_empty() {
+            url += &format!("repo={}&", self.repository_id);
+        }
+        url += &format!("task={id}");
+        crate::push::notify(
+            &self.secrets,
+            json!({"title": title, "body": body, "url": url, "tag": format!("run-{id}")}),
+        );
     }
     /// Accepts only reports for this active run and commits actually reachable from its branch.
     pub fn report(&self, id: &str, token: &str, tool: &str, args: &Value) -> Result<Value> {

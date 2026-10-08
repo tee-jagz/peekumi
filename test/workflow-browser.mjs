@@ -923,6 +923,17 @@ try {
       await page
         .locator(".tasks-uses", { hasText: "New tasks use Codex · Default" })
         .waitFor();
+      // The bell beside Agents: notifications are off until the owner turns them on.
+      const bell = page.locator("#notifications");
+      assert.equal(await bell.getAttribute("aria-pressed"), "false");
+      // Headless Chromium always reports notifications as blocked.
+      assert.match(
+        await bell.getAttribute("aria-label"),
+        /^(Turn on notifications|Notifications are blocked in the browser settings)$/,
+      );
+      await page.screenshot({
+        path: `test-results/tasks-bell-${viewport.width}.png`,
+      });
       await page.locator("#openAgents").click();
       const agentsSheet = page.locator("dialog.agents-dialog");
       await agentsSheet.locator(".agents-row", { hasText: /^Ask/ }).waitFor();

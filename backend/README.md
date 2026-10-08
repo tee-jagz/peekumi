@@ -14,6 +14,7 @@ The Rust backend serves the authenticated API. It reads committed Git objects, c
 - `agent_session.rs`: Sessions, a live conversation with an agent on its own branch. It starts a session, keeps the owner's messages for the next turn, stores the agent's command requests and the owner's decisions, and ends a session in the normal review.
 - `index.rs`: The persistent SQLite syntax cache.
 - `process.rs`: Limited execution of Git and parser subprocesses.
+- `push.rs`: Web Push notifications to the owner's devices. It keeps the subscriptions and the VAPID key in the server's private folder. It encrypts each message for its device (RFC 8291) and sends it with `curl`. It accepts only the endpoints of known push services.
 - `hash.rs`: The SHA-256 fingerprint for cache keys, parser versions, declaration identities and stored secrets.
 - `adapters/`: The common language interface and its implementations.
 
