@@ -138,12 +138,36 @@ const nodeScope = (node) => ({
   kind: node.kind === "stub" ? node.targetKind : node.kind,
   path: node.path,
 });
-const commit = (sha) =>
-  metadata?.commits.find((c) => c.sha === sha) || {
-    sha,
-    short: sha?.slice(0, 7),
-    subject: "Selected revision",
-  };
+/** The newest commit, when the checkout has uncommitted changes on top of it: its
+ * `uncommitted` is `{sha, paths}`, a private snapshot (see backend/worktree.rs). */
+const pending = () =>
+  metadata?.commits[0]?.uncommitted ? metadata.commits[0] : null;
+/** The revision that the map shows for commit `sha`: the newest commit shows with the
+ * uncommitted changes, so the map is the code as it is now. */
+const shownRevision = (sha) => {
+  const newest = pending();
+  return newest && sha === newest.sha ? newest.uncommitted.sha : sha;
+};
+/** The paths with uncommitted changes, while the map shows them; otherwise null. */
+const uncommittedPaths = () => {
+  const newest = pending();
+  return newest && headRef === newest.uncommitted.sha && !before
+    ? newest.uncommitted.paths
+    : null;
+};
+/** A commit's short name in the interface: "uncommitted" for the snapshot. */
+const revisionName = (sha) =>
+  commit(sha).worktree ? "uncommitted" : String(sha).slice(0, 7);
+/** The commit `sha` from the list. The snapshot is the newest commit with `worktree` set: it
+ * has that commit's name, and its parent, so it is compared with the same commit. */
+const commit = (sha) => {
+  const found = metadata?.commits.find((c) => c.sha === sha);
+  if (found) return found;
+  const newest = pending();
+  if (newest && sha === newest.uncommitted.sha)
+    return { ...newest, sha, worktree: true };
+  return { sha, short: sha?.slice(0, 7), subject: "Selected revision" };
+};
 /** The owner's anchor while Follow moves the map for an agent: `{context, base, head}`.
  * Follow never chooses for the owner, so the dock keeps what they selected until they select,
  * move the map or change the comparison themselves. */
@@ -299,6 +323,7 @@ const workflow = createWorkflow({
   nav,
   head: viewHead,
   taskActions: () => (isOwner() ? [notifications.button()] : []),
+  revisionName: (sha) => revisionName(sha),
   /** A new instruction: the map, with the dock in Instruction mode (Back returns). */
   writeInstruction() {
     dockMode = "comments";
@@ -380,6 +405,7 @@ const fixes = createFixes({
   redraw: () => renderPanel(),
 });
 const ask = createAsk({
+  revisionName: (sha) => revisionName(sha),
   api,
   stream: apiStream,
   /** The places an Ask answer read, oldest first, and whether it still works: the map
@@ -649,7 +675,12 @@ async function boot(refresh = false, branch = viewingBranch) {
     document.title = metadata.name + " · Peekumi";
     $("#repo-sub").textContent =
       `${metadata.branch} · ${metadata.commits.length}${metadata.moreCommits ? " recent" : ""} commits`;
-    headRef = refresh ? metadata.initialHead : headRef || metadata.initialHead;
+    // The newest commit opens with the uncommitted changes, as a new snapshot.
+    headRef = shownRevision(
+      refresh || commit(headRef).worktree
+        ? metadata.initialHead
+        : headRef || metadata.initialHead,
+    );
     baseRef = diffBase || parentRevision(headRef);
     await loadComparison();
     if (document.documentElement.dataset.access !== "reader")
@@ -1113,6 +1144,17 @@ function nodeRelations(node) {
       .some((f) => touches(f.source) || f.targets.some(touches)),
   );
 }
+/** True when the map shows uncommitted changes and `node` has some: a file that the owner
+ * changed, a folder with such a file, or the repository files at the top. */
+function uncommittedMark(node) {
+  const paths = uncommittedPaths();
+  if (!paths) return false;
+  if (node.kind === "file") return paths.includes(node.path);
+  if (node.kind === "folder")
+    return paths.some((p) => p.startsWith(node.path + "/"));
+  if (node.kind === "rootfiles") return paths.some((p) => !p.includes("/"));
+  return false;
+}
 /** The rule breaks that `node` causes, one for each broken rule on each relationship that
  * starts in it: `{rule, message, target, kind, count}`, on the shown side of the comparison.
  * The map's overview merges the relationships between two files into one pair, so `count` is
@@ -1482,6 +1524,8 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
   card.dataset.kind = node.kind;
   card.dataset.path = node.path || "";
   card.dataset.status = node.status || "unchanged";
+  // Uncommitted changes in it: a dashed outline (see uncommittedMark).
+  if (uncommittedMark(node)) card.dataset.uncommitted = "true";
   card.dataset.relationshipChanged = String(
     nodeRelations(node).some((r) => r.status !== "unchanged"),
   );
@@ -1489,7 +1533,7 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
     node.files?.filter((f) => f.status !== "unchanged").length || 0;
   card.setAttribute(
     "aria-label",
-    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
+    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${card.dataset.uncommitted ? ", uncommitted changes" : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
   );
   card.title = node.name;
   Object.assign(card.style, {
@@ -2535,7 +2579,10 @@ function rememberPlace() {
     ["item", item],
     [
       "head",
-      metadata && !viewingPr && headRef && headRef !== metadata.initialHead
+      metadata &&
+      !viewingPr &&
+      headRef &&
+      headRef !== shownRevision(metadata.initialHead)
         ? headRef
         : null,
     ],
@@ -2782,9 +2829,18 @@ function renderCommits() {
       () => chooseHead(c.sha),
     );
     b.dataset.sha = c.sha;
-    b.setAttribute("aria-selected", String(c.sha === headRef));
+    b.setAttribute("aria-selected", String(shownRevision(c.sha) === headRef));
     b.title = c.subject;
-    b.append(element("b", "", c.short), element("span", "subject", c.subject));
+    // The newest commit names the uncommitted changes that its map includes.
+    const changes = c.uncommitted?.paths.length;
+    b.append(
+      element("b", "", c.short),
+      element(
+        "span",
+        "subject",
+        changes ? `+ ${changes} uncommitted` : c.subject,
+      ),
+    );
     strip.append(b);
   }
   const rail = $("#timeRail");
@@ -2813,16 +2869,22 @@ function renderCommits() {
     headPicker.id = "headRevision";
     headPicker.dataset.noun = "commits";
     headPicker.setAttribute("aria-label", "Head revision");
-    const candidates = metadata.commits.some((c) => c.sha === headRef)
+    const chosen = commit(headRef).worktree ? pending().sha : headRef;
+    const candidates = metadata.commits.some((c) => c.sha === chosen)
       ? metadata.commits
       : [commit(headRef), ...metadata.commits];
     for (const c of candidates) {
-      const option = element("option", "", `${c.short} ${c.subject}`);
+      const changes = c.uncommitted?.paths.length;
+      const option = element(
+        "option",
+        "",
+        `${c.short} ${c.subject}${changes ? ` + ${changes} uncommitted` : ""}`,
+      );
       option.value = c.sha;
       headPicker.append(option);
     }
     if (metadata.moreCommits) headPicker.append(earlierOption());
-    headPicker.value = headRef;
+    headPicker.value = chosen;
     headPicker.onchange = () =>
       headPicker.value === EARLIER
         ? loadEarlier()
@@ -2877,7 +2939,7 @@ function renderCommits() {
   const meta = element(
     "p",
     "c-meta",
-    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
+    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"}${c.worktree ? ` + ${c.uncommitted.paths.length} uncommitted` : ""} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
   );
   head.append(meta);
   // A long branch name (such as an agent's run branch) shortens with an ellipsis; the
@@ -2897,7 +2959,7 @@ function renderCommits() {
     element(
       "span",
       "rev-compare",
-      ` · ${baseRef.slice(0, 7)} → ${c.sha.slice(0, 7)}`,
+      ` · ${baseRef.slice(0, 7)} → ${revisionName(c.sha)}`,
     ),
   );
   if (viewingPr && !metadata.selectedBranch) {
@@ -3910,7 +3972,8 @@ function drawTab() {
   const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
   // The place's name stays readable on a phone: the commit after it shortens first.
   const [, place = anchor, commit] =
-    anchor?.match(/^(.*?)( · [0-9a-f]{7,}| · [^·]+\/[^·]+)?$/) || [];
+    anchor?.match(/^(.*?)( · [0-9a-f]{7,}| · uncommitted| · [^·]+\/[^·]+)?$/) ||
+    [];
   $("#dockContext").replaceChildren(
     ...(anchor
       ? [
@@ -4531,7 +4594,7 @@ function renderSource(body) {
 /** Changes the commit under review and reloads the appropriate Time or Diff comparison. */
 function chooseHead(sha) {
   if (busy) return;
-  headRef = sha;
+  headRef = shownRevision(sha);
   before = false;
   baseRef = diffBase || parentRevision(sha);
   loadComparison();
@@ -4829,6 +4892,24 @@ sheetHandle.onkeydown = (e) => {
   }
 };
 $("#refresh").onclick = () => boot(true);
+// Back in the app on the newest commit: read the uncommitted changes again, because files may
+// have changed.
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || busy || viewingPr || !metadata)
+    return;
+  if (headRef !== shownRevision(metadata.initialHead)) return;
+  const fresh = await api(
+    "/api/repo" +
+      (viewingBranch ? "?" + new URLSearchParams({ head: viewingBranch }) : ""),
+  ).catch(() => null);
+  const snapshot = (data) => data?.commits[0]?.uncommitted?.sha || null;
+  if (
+    fresh &&
+    (fresh.initialHead !== metadata.initialHead ||
+      snapshot(fresh) !== snapshot(metadata))
+  )
+    boot(true).catch(() => {});
+});
 // Header and map popovers close when the owner interacts elsewhere.
 document.addEventListener("pointerdown", (event) => {
   // A select menu belongs to the popover that opened it, though it renders in <body>.

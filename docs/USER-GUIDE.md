@@ -131,6 +131,12 @@ Each picker opens a menu like this one. A check mark (1) shows the current choic
 
 In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows, compared with its parent. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits. Peekumi loads 80 commits at a time. When older commits exist, the first card is **Earlier**: tap it to load the next 80. In **Diff**, the last item of each commit list is **Earlier commits…**.
 
+### Uncommitted changes
+
+When the checked-out branch has changes that you did not commit, the map of the newest commit includes them. It shows the code as it is on your disk now. A file or folder with uncommitted changes has a dashed outline. The newest commit card says how many files, for example **+ 4 uncommitted**. Older commits show without them. Ignored files stay out. Peekumi does not change your files or your Git index.
+
+Peekumi reads the changes when it loads the branch. Tap **Refresh** to read them again. When you come back to the app, Peekumi also reads them again. An instruction on uncommitted code is kept, but an agent starts from the last commit, so it does not have your uncommitted changes. Commit them first if the agent must use them.
+
 ## Selecting something
 
 <img src="guide/06-selection-peek.jpg" width="340" alt="A selected function, with its summary and inputs in the sheet">

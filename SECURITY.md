@@ -28,6 +28,7 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 ### Inspection
 
 - Inspection is read-only. Peekumi reads committed Git objects. It does not change, switch or push the checkout, and it does not follow symlinks.
+- To show uncommitted changes, Peekumi reads the files that `git status` names, but not ignored files. It keeps a copy of them as a private commit in its state folder, never in the repository. Peekumi runs no Git filter to read a file. `git status` itself can run the clean filters of your Git configuration (for example Git LFS), as it does in a terminal.
 - Peekumi labels binary files, large files, submodules and common secret filenames, and it does not show their content or send it to Ask. The secret filenames are environment files (`.env`, `.env.*`, `*.env`, `.envrc`, except examples and templates), private keys and keystores (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.p8`, `*.jks`, `*.keystore`, `*.ppk`, `*.kdbx`, and `id_rsa`, `id_dsa`, `id_ecdsa` and `id_ed25519` with any suffix except `.pub`), and the credential files of common tools (`credentials`, `credentials.json`, `.npmrc`, `.netrc`, `.pgpass`, `.pypirc`, `.git-credentials`, `.dockercfg`, `.docker/config.json`, `.kube/config`, `.htpasswd`, `.yarnrc.yml`, `.terraformrc`, cloud service-account and `application_default_credentials.json` files, Terraform state and `*.tfvars`). This is not a secret scanner. Other files can contain sensitive code or data.
 
 ### Where your code goes

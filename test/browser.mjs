@@ -17,9 +17,12 @@ try {
   base = head;
 }
 const token = "browser-test-token";
+// The commit, not the branch: the map of a branch's newest commit includes uncommitted
+// changes, and a developer's checkout can have some.
 const server = await startRust(repo.directory, {
   token,
   base,
+  head,
   python: repo.python,
 });
 const url = server.url;

@@ -1,6 +1,6 @@
 # Backend
 
-The Rust backend serves the authenticated API. It reads committed Git objects, compares revisions and keeps a cache of syntax analysis. It controls the language adapters and supplies directory documentation to the frontend. It does not execute the inspected code.
+The Rust backend serves the authenticated API. It reads committed Git objects and the uncommitted changes, compares revisions and keeps a cache of syntax analysis. It controls the language adapters and supplies directory documentation to the frontend. It does not execute the inspected code.
 
 - `main.rs`: The Axum HTTP server, authentication, the embedded frontend and the operations of the repository worker.
 - `worker.rs`: The worker thread. It runs queued operations in order through one handler that it gets from `main.rs`.
@@ -15,6 +15,7 @@ The Rust backend serves the authenticated API. It reads committed Git objects, c
 - `index.rs`: The persistent SQLite syntax cache.
 - `process.rs`: Limited execution of Git and parser subprocesses.
 - `push.rs`: Web Push notifications to the owner's devices. It keeps the subscriptions and the VAPID key in the server's private folder. It encrypts each message for its device (RFC 8291) and sends it with `curl`. It accepts only the endpoints of known push services.
+- `worktree.rs`: Uncommitted changes as a private commit on top of `HEAD`. Its objects go to a folder in the state folder, never to the repository. Only read-only Git commands read that folder.
 - `hash.rs`: The SHA-256 fingerprint for cache keys, parser versions, declaration identities and stored secrets.
 - `adapters/`: The common language interface and its implementations.
 

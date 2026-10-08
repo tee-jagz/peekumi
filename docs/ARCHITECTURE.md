@@ -31,7 +31,7 @@ All API requests, except pairing, need a session or a bearer token. Peekumi uses
 
 ## Boundaries
 
-Repository inspection is read-only. An explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects, not from a traversal of the working tree. Peekumi does not follow symlinks. Restricted filenames, binary content, large files and submodules keep their labels.
+Repository inspection is read-only. An explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects. Uncommitted changes are an exception: `backend/worktree.rs` records them as a private commit on top of `HEAD`, in an object folder in the state folder. Only read-only Git commands read that folder. Peekumi does not follow symlinks. Restricted filenames, binary content, large files and submodules keep their labels.
 
 Diffs disable external drivers and text conversion. Static dependencies do not prove runtime coupling. Peekumi does not invent architecture scores or health scores.
 

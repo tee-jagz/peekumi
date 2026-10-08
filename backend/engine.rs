@@ -3,7 +3,6 @@ use crate::{
     adapters::{self, Config},
     hash::hash,
     index::Index,
-    process::run,
 };
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
@@ -135,6 +134,9 @@ struct Snapshot {
 /// Owns repository-specific state on the worker thread; inspected source is never executed.
 pub struct Repository {
     pub directory: PathBuf,
+    /// The private state folder, which also keeps the snapshots of uncommitted changes (see the
+    /// worktree module).
+    state: PathBuf,
     parser_config: Config,
     index: Index,
     cache: VecDeque<Arc<Snapshot>>,
@@ -188,6 +190,7 @@ impl Repository {
         );
         Ok(Self {
             directory,
+            state: state.to_path_buf(),
             parser_config: Config {
                 python,
                 node,
@@ -204,12 +207,23 @@ impl Repository {
         })
     }
     /// Runs Git against this repository with explicit arguments and captures stdout.
-    /// Returns subprocess errors; callers choose the read-only Git operation.
+    /// Returns subprocess errors; callers choose the read-only Git operation. Git also reads
+    /// the snapshots of uncommitted changes, so it must never write objects here.
     fn git(&self, args: &[&str]) -> Result<Vec<u8>> {
+        self.git_with(args, vec![])
+    }
+    fn git_with(&self, args: &[&str], input: Vec<u8>) -> Result<Vec<u8>> {
         let directory = self.directory.to_string_lossy();
         let mut command = vec!["-C", &directory];
         command.extend_from_slice(args);
-        run("git", &command, None, vec![])
+        crate::process::run_env(
+            "git",
+            &command,
+            None,
+            input,
+            std::time::Duration::from_secs(30),
+            &crate::worktree::read_env(&self.state),
+        )
     }
     /// Resolves a branch, tag or commit reference to a full commit SHA.
     /// Rejects empty, option-like, oversized or NUL-containing references and returns Git resolution errors.
@@ -268,7 +282,25 @@ impl Repository {
                         && text(&b["name"]) == branch.trim())
             })
             .cloned();
-        let (commits, more) = self.first_parents(&initial_head, false)?;
+        let (mut commits, more) = self.first_parents(&initial_head, false)?;
+        // The checked-out branch also has its uncommitted changes.
+        let checked_out = head == "HEAD"
+            || selected_branch.as_ref().is_some_and(|b| {
+                !b["remote"].as_bool().unwrap_or(true) && text(&b["name"]) == branch.trim()
+            });
+        // A snapshot that fails (too many files, say) leaves out only the uncommitted changes.
+        let snapshot = checked_out
+            .then(|| crate::worktree::snapshot(&self.directory, &self.state))
+            .and_then(|done| {
+                done.unwrap_or_else(|e| {
+                    eprintln!("Uncommitted changes: {e}");
+                    None
+                })
+            });
+        // The newest commit carries them: its map includes them (see the frontend).
+        if let (Some((sha, paths)), Some(newest)) = (snapshot, commits.first_mut()) {
+            newest["uncommitted"] = json!({"sha": sha, "paths": paths});
+        }
         let base = self.resolve(base).or_else(|_| {
             commits
                 .last()
@@ -374,17 +406,7 @@ impl Repository {
                 .iter()
                 .map(|p| format!("{}\n", files[p].oid))
                 .collect::<String>();
-            let data = run(
-                "git",
-                &[
-                    "-C",
-                    &self.directory.to_string_lossy(),
-                    "cat-file",
-                    "--batch",
-                ],
-                None,
-                input.into_bytes(),
-            )?;
+            let data = self.git_with(&["cat-file", "--batch"], input.into_bytes())?;
             let mut offset = 0;
             let mut batches: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
             for path in candidates {

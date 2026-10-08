@@ -2,7 +2,7 @@
 
 This document tells you how to build, run, test and benchmark Peekumi from a checkout. It also tells you what the analysis covers and does not cover. For everyday installation, see [SETUP.md](SETUP.md). For the interface, see [USER-GUIDE.md](USER-GUIDE.md).
 
-Peekumi uses a Rust backend (Axum/Tokio and SQLite). This backend reads committed Git objects and serves the current SVG mobile web interface. Inspection does not change the working tree, the branches or the hooks. An explicit agent dispatch creates a separate run branch and worktree.
+Peekumi uses a Rust backend (Axum/Tokio and SQLite). This backend reads committed Git objects, and a private commit of the uncommitted changes. It serves the current SVG mobile web interface. Inspection does not change the working tree, the branches or the hooks. An explicit agent dispatch creates a separate run branch and worktree.
 
 ## Code layout
 

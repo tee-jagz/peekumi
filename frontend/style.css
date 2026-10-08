@@ -7956,3 +7956,10 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   font-family: var(--font);
   font-size: 13px;
 }
+
+/* Uncommitted changes (app.js uncommittedMark): the newest commit's map includes them, and a
+   card with some has a dashed outline. No badge. */
+.node[data-uncommitted="true"] {
+  border-style: dashed !important;
+  border-width: 1.5px !important;
+}

@@ -283,7 +283,7 @@ async fn prepare(app: &App, body: &Value) -> Result<Prepared> {
         .iter()
         .find_map(|name| {
             app.workflow
-                .git(&["show", &format!("{head_sha}:{name}")])
+                .git_read(&["show", &format!("{head_sha}:{name}")])
                 .ok()
         })
         .unwrap_or_else(|| "No rule configuration".into());

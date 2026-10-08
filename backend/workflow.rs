@@ -173,6 +173,23 @@ impl Workflow {
             vec![],
         )?)?)
     }
+    /// As `git`, for read-only commands that may name a snapshot of uncommitted changes (see the
+    /// worktree module). A command that can write objects must use `git`.
+    pub fn git_read(&self, args: &[&str]) -> Result<String> {
+        let mut a = vec!["--no-optional-locks", "--literal-pathspecs", "-C"];
+        a.push(self.repo.to_str().context("Non UTF-8 repository path")?);
+        a.extend_from_slice(args);
+        Ok(String::from_utf8(crate::process::run_env(
+            "git",
+            &a,
+            None,
+            vec![],
+            std::time::Duration::from_secs(30),
+            &crate::worktree::read_env(&self.state),
+        )?)?
+        .trim()
+        .into())
+    }
     /// Resolves an explicit commit without accepting Git options.
     pub fn resolve(&self, revision: &str) -> Result<String> {
         ensure!(
@@ -405,7 +422,20 @@ impl Workflow {
     /// exists, and the anchor names a path that exists at that commit. Not stored yet.
     pub(crate) fn checked_comment(&self, body: &Value) -> Result<Value> {
         let content = text(body, "text", 12000)?;
-        let sha = self.resolve(text(body, "sha", 256)?)?;
+        // An instruction can be about uncommitted changes: their snapshot is not in the
+        // repository, so the task text says so (see `task_text`).
+        let revision = text(body, "sha", 256)?;
+        ensure!(
+            !revision.starts_with('-') && revision.len() < 256,
+            "Invalid revision"
+        );
+        let sha = self.git_read(&[
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{revision}^{{commit}}"),
+        ])?;
+        let uncommitted = self.git(&["cat-file", "-e", &sha]).is_err();
         let anchor = &body["anchor"];
         let kind = text(anchor, "kind", 32)?;
         ensure!(
@@ -422,7 +452,7 @@ impl Workflow {
         );
         if kind != "repo" {
             ensure!(!path.is_empty(), "Missing anchor path");
-            self.git(&["cat-file", "-e", &format!("{sha}:{path}")])?;
+            self.git_read(&["cat-file", "-e", &format!("{sha}:{path}")])?;
         }
         ensure!(anchor.to_string().len() <= 6000, "Anchor too large");
         if kind == "symbol" {
@@ -433,7 +463,7 @@ impl Workflow {
             text(anchor, "relationship", 32)?;
         }
         Ok(
-            json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}),
+            json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"uncommitted":uncommitted,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}),
         )
     }
     /// The dependency rule configuration at `base`, or a note that there is none.
@@ -541,11 +571,15 @@ impl Workflow {
         }
         task.push_str(&format!("## Brief\n{brief}\n\n## Review comments\n"));
         for c in comments {
+            let left_on = if c["uncommitted"] == true {
+                "uncommitted changes of the owner, which are not in this worktree".to_string()
+            } else {
+                c["sha"].as_str().unwrap().to_string()
+            };
             task.push_str(&format!(
-                "\n[{}] {} (left on {})\n{}\n",
+                "\n[{}] {} (left on {left_on})\n{}\n",
                 c["id"].as_str().unwrap(),
                 c["anchor"],
-                c["sha"].as_str().unwrap(),
                 c["text"].as_str().unwrap()
             ));
             let earlier = &c["report"];

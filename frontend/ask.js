@@ -23,6 +23,8 @@ export function createAsk({
   using = () => null,
   // The places the answer reads, oldest first, and whether it still works (see focus.js).
   lookedAt = () => {},
+  // A commit's short name: "uncommitted" for the snapshot of uncommitted changes.
+  revisionName = (sha) => sha.slice(0, 7),
 }) {
   const chat = {
     messages: [],
@@ -378,7 +380,7 @@ export function createAsk({
       };
       const anchor = el(
         "p",
-        `${[c.anchor.path?.split("/").at(-1) || rootSubject?.() || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${c.sha.slice(0, 7)}`,
+        `${[c.anchor.path?.split("/").at(-1) || rootSubject?.() || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${revisionName(c.sha)}`,
       );
       anchor.className = "composer-anchor";
       anchor.title = anchor.textContent;

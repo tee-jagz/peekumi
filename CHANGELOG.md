@@ -4,6 +4,11 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+### Uncommitted changes
+
+- The map of the newest commit on the checked-out branch includes the uncommitted changes. A file or folder with uncommitted changes has a dashed outline, and the newest commit card counts them (**+ 4 uncommitted**). The source, relations, rule breaks and Ask include them too.
+- Peekumi records the changes as a private commit in its state folder. It does not change the repository's files, index, objects or branches.
+
 ### Notifications
 
 - Turn on notifications with the bell on the Tasks page. The phone then tells you when a task is ready for review or needs you. It also tells you when a session agent asks to run a command or waits for your message. This also works when the app is closed. Tap a notification to open the task or session.

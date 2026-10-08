@@ -27,8 +27,20 @@ pub fn run_for(
     input: Vec<u8>,
     limit: Duration,
 ) -> Result<Vec<u8>> {
+    run_env(program, args, cwd, input, limit, &[])
+}
+/// [`run_for`] with more environment variables for the child (`env`).
+pub fn run_env(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    input: Vec<u8>,
+    limit: Duration,
+    env: &[(std::ffi::OsString, std::ffi::OsString)],
+) -> Result<Vec<u8>> {
     let mut command = Command::new(program);
     command
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .env_remove("PEEKUMI_TOKEN")
         .env_remove("PEEKUMI_REPORT_TOKEN")
         .env_remove("STRATA_TOKEN")

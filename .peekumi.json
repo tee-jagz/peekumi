@@ -67,6 +67,7 @@
       "backend/process.rs",
       "backend/hash.rs",
       "backend/push.rs",
+      "backend/worktree.rs",
       "backend/worker.rs"
     ],
     "adapter-contract": ["backend/adapters/mod.rs"],

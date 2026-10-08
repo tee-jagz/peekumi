@@ -19,6 +19,7 @@ mod sessions;
 mod task_agent;
 mod worker;
 mod workflow;
+mod worktree;
 use crate::worker::Engine;
 use anyhow::{Context, Result, ensure};
 use axum::{

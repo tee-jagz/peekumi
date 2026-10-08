@@ -169,6 +169,8 @@ export function createWorkflow({
   writeInstruction = () => {},
   // More buttons for the Tasks page's header row (the notifications bell, see notify.js).
   taskActions = () => [],
+  // A commit's short name: "uncommitted" for the snapshot of uncommitted changes.
+  revisionName = (sha) => sha.slice(0, 7),
   redraw,
   notice,
   inspect,
@@ -612,7 +614,7 @@ export function createWorkflow({
             " · " +
             (composer.sha.startsWith("refs/heads/")
               ? composer.sha.slice(11)
-              : composer.sha.slice(0, 7)),
+              : revisionName(composer.sha)),
         ),
         field("What should change, and why", draft, (v) => (draft = v), 1),
       );
@@ -852,7 +854,7 @@ export function createWorkflow({
           inspect(c.sha, c.sha, c.anchor),
         );
         anchor.classList.add("link-button");
-        anchor.title = `Open ${label(c.anchor)} · left on ${c.sha.slice(0, 7)}, ${new Date(c.createdAt).toLocaleString()}`;
+        anchor.title = `Open ${label(c.anchor)} · left on ${c.uncommitted ? "uncommitted changes" : c.sha.slice(0, 7)}, ${new Date(c.createdAt).toLocaleString()}`;
         foot.append(anchor);
         // Inside a task its status line already says this, so only exceptions are labelled.
         if (!task || !["with_agent", "addressed"].includes(c.status)) {
