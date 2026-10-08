@@ -8,6 +8,8 @@ Build a mobile-first repository map with coloured Git comparisons and drill-down
 - Typed import, call, implementation and inheritance edges describe static declarations, not runtime execution. Unresolved or ambiguous targets must remain explicit.
 - Never commit inspected repository source, snapshots, credentials, or local access tokens.
 - Run npm test for engine/server changes and npm run test:browser for interface changes. Inspect mobile and desktop screenshots.
+- Run `npm run format` and `npm run lint` before you commit. CI fails on unformatted files (also `.peekumi.json`), on clippy warnings and on documents that break the writing rules.
+- Do not add a `Co-Authored-By` line to commit messages. The `Peekumi-Agent` trailer names the agent.
 - The next authorized slice includes anchored comments, frozen task previews, isolated agent runs, reports and owner verification. Contextual Ask is now authorized with read-only repository lookups at the compared revisions only; it cannot run code, change files or state, or dispatch work. Sessions (a live, multi-turn conversation with a coding agent in a dedicated worktree) are now authorized. Health scoring remains deferred.
 
 - Keep production module and API documentation readable in Peekumi: Rust `//!` and `///`, JavaScript `@module` and JSDoc, and Python docstrings. Explain responsibility and meaningful inputs, outputs, errors and side effects; keep directory READMEs aligned with the implementation.

@@ -90,6 +90,12 @@ pub struct SessionTurn<'a> {
     pub allow_all: bool,
 }
 
+/// Claude Code settings for task and session commits: no co-author line. `includeCoAuthoredBy`
+/// is the older name of the setting and `attribution` the newer one; Claude Code reads the one it
+/// knows.
+pub const NO_COAUTHOR: &str =
+    r#"{"includeCoAuthoredBy":false,"attribution":{"commit":"","pr":""}}"#;
+
 /// Commands a session agent may run with no question: Git on its own branch and common test
 /// runners. Any other command waits for the owner (Claude Code), see the runner's `approve`.
 pub const SESSION_COMMANDS: [&str; 14] = [
@@ -356,6 +362,10 @@ impl Agent for ClaudeCode {
             "--strict-mcp-config",
             "--allowedTools",
             &tools,
+            // No "Co-Authored-By: Claude" line in its commits: the Peekumi-Agent trailer already
+            // names the agent, and the owner decides who is credited in the repository.
+            "--settings",
+            NO_COAUTHOR,
         ]);
         if let Some(session) = &launch.session {
             c.args([

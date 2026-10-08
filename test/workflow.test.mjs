@@ -2182,6 +2182,8 @@ test("a task agent checks its committed work against the rules, and the comparis
     using: { agent: "claude" },
   });
   assert.match(p.task, /call it before you report: fix each rule break/);
+  assert.match(p.task, /Do not add a Co-Authored-By line/);
+  assert.doesNotMatch(p.task, /Co-Authored-By: </);
   await f.req("/api/runs", { previewId: p.id });
   const run = await waitFor(async () => {
     const r = await f.req("/api/runs/" + p.id);

@@ -11,6 +11,7 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 - A task shows the rule breaks that it adds before Approve and in the merge sheet. Task agents get a `check_rules` tool to check their committed work before they report.
 - **Forbid this dependency** on a relationship starts an instruction that asks for a rule against it.
 - **Propose fixes**: Peekumi groups the rule breaks at a commit by rule and declaration. The Ask agent reads the code with these groups as context, and it proposes the fixes. Select, edit and clear fixes, then send them together to an agent as one task, or save them as drafts. Peekumi's groups are the fallback (`GET /api/fixes`, `POST /api/fixes/propose`).
+- Agent commits have no `Co-Authored-By` line: Peekumi starts Claude Code with the setting that turns it off, and the task text asks every agent not to add one. The `Peekumi-Agent` trailer names the agent.
 - Relations: the rule summary is a plain line, Propose fixes is the primary button, and a selection lists the rule breaks that start inside it.
 - A card counts its rule breaks with a red broken-link icon, in place of the filled "!" badge. A selection that breaks a rule says which rule in one red line in the sheet, and the line opens only the breaks.
 - Peekumi's own `.peekumi.json` states three principles: the analysis code does not use the agent workflow, shared frontend modules do not use feature modules, and product code does not use test code.

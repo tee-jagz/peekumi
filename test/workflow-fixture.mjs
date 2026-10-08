@@ -337,6 +337,16 @@ writeFileSync(
   args[args.indexOf("--state-dir") + 1] + "/agent-argv.json",
   JSON.stringify(values),
 );
+// A Claude Code task or session never credits Claude as a co-author in its commits.
+if (values.includes("--mcp-config")) {
+  const settings = values[values.indexOf("--settings") + 1];
+  if (
+    !values.includes("--settings") ||
+    JSON.parse(settings).includeCoAuthoredBy !== false ||
+    JSON.parse(settings).attribution?.commit !== ""
+  )
+    throw Error("Claude Code tasks must turn off the Co-Authored-By line");
+}
 // The code graph: Claude gets it as an HTTP MCP server in --mcp-config, Codex as -c options
 // with its key in the environment. Record one lookup so tests can check the grant.
 let graphAccess = null;
