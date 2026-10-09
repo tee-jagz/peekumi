@@ -343,10 +343,10 @@ Before you propose a rule, use the lookups to see whether the code breaks it now
 
 Write plain as one sentence that a new developer understands, with the file or folder names, for example \"frontend/model.js must not use other frontend files\". Give each rule a value: high when the mistake it stops is expensive or hard to see (security, the release, a cycle in the core), medium when it keeps a boundary clear, low otherwise. Write why, now and message in ASD-STE100 Simplified Technical English: short sentences, the active voice, approved words. In why, say what the rule protects and what goes wrong without it, in two or three sentences.
 
-Propose at most 5 rules, the most valuable first. Do not propose a rule that is only a part of another rule that you propose. Reply with JSON only, and no other text: {\"rules\": [{\"principle\": \"<principle>\", \"title\": \"<a short name>\", \"plain\": \"<one plain sentence>\", \"value\": \"high, medium or low\", \"why\": \"<why>\", \"now\": \"<the breaks now, or empty>\", \"groups\": {\"<name>\": [\"<glob>\"]}, \"rule\": {<the rule>}}]}. In groups, give every group that the rule names.";
+Propose every rule that passes this bar, and no other, the most valuable first. Do not propose a rule that is only a part of another rule that you propose. Reply with JSON only, and no other text: {\"rules\": [{\"principle\": \"<principle>\", \"title\": \"<a short name>\", \"plain\": \"<one plain sentence>\", \"value\": \"high, medium or low\", \"why\": \"<why>\", \"now\": \"<the breaks now, or empty>\", \"groups\": {\"<name>\": [\"<glob>\"]}, \"rule\": {<the rule>}}]}. In groups, give every group that the rule names.";
 
 /// Reads the rule audit agent's reply: a JSON object (text around it is ignored) with
-/// `rules`. Keeps the first six proposals with a known principle, a title, groups and a rule
+/// `rules`. Keeps each proposal (at most 40) with a known principle, a title, groups and a rule
 /// object, each with its plain sentence (the title when it has none), its value (`high`,
 /// `medium` or `low`) and its note on the breaks now.
 fn read_rule_proposals(raw: &str) -> Result<Vec<Value>> {
@@ -367,7 +367,9 @@ fn read_rule_proposals(raw: &str) -> Result<Vec<Value>> {
                 && p["groups"].is_object()
                 && p["rule"].is_object()
         })
-        .take(6)
+        // No limit on the number of rules: the bar in the instructions decides. This ceiling
+        // only protects the server from a broken or runaway reply.
+        .take(40)
         .map(|p| {
             let short = |v: &Value, n: usize| text_of(v).trim().chars().take(n).collect::<String>();
             let title = short(&p["title"], 200);
@@ -533,4 +535,25 @@ async fn propose_rules(app: &App, body: Value) -> Result<Value> {
         "configured": config.is_some(),
         "configFile": found.map(|(name, _)| name),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn an_audit_keeps_every_rule_that_the_agent_proposes() {
+        let rule = |n: usize| json!({"principle": "Layering", "title": format!("Rule {n}"), "groups": {}, "rule": {"id": format!("r{n}")}});
+        let raw = json!({"rules": (0..8).map(rule).collect::<Vec<_>>()}).to_string();
+        assert_eq!(
+            read_rule_proposals(&raw).unwrap().len(),
+            8,
+            "No fixed number"
+        );
+        let many = json!({"rules": (0..60).map(rule).collect::<Vec<_>>()}).to_string();
+        assert_eq!(
+            read_rule_proposals(&many).unwrap().len(),
+            40,
+            "Only a runaway reply meets the ceiling"
+        );
+    }
 }
