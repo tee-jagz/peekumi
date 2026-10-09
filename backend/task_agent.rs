@@ -11,7 +11,7 @@
 //! and no write through a symbolic link. Progress goes to the run's output log as JSON lines
 //! in the form the task view reads (`item.type` `agent_message`, `file_change`,
 //! `command_execution`).
-use crate::{agents::OpenRouter, workflow::Workflow};
+use crate::{agents::OpenRouter, run_store::RunStore};
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -106,7 +106,7 @@ const SESSION_INSTRUCTIONS: &str = "You are a coding agent in a live session wit
 /// the run's final status and message.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
-    store: &Workflow,
+    store: &impl RunStore,
     id: &str,
     token: &str,
     task: &Value,
@@ -138,7 +138,7 @@ pub fn run(
 /// after each step, so a stopped turn keeps what it did.
 #[allow(clippy::too_many_arguments)]
 pub fn session_turn(
-    store: &Workflow,
+    store: &impl RunStore,
     session: &Value,
     worktree: &Path,
     saved: &Path,
@@ -171,7 +171,7 @@ pub fn session_turn(
 /// the tools it calls, and repeat until it stops or calls `finish` (tasks only).
 #[allow(clippy::too_many_arguments)]
 fn converse(
-    store: &Workflow,
+    store: &impl RunStore,
     id: &str,
     token: &str,
     task: &Value,
@@ -182,7 +182,7 @@ fn converse(
     messages: &mut Vec<Value>,
     saved: Option<&Path>,
 ) -> Result<(&'static str, String)> {
-    let provider = OpenRouter::new(store);
+    let provider = OpenRouter::new(store.agents().secrets);
     let key = provider.key_or_error()?;
     let model = task["model"]
         .as_str()
@@ -356,7 +356,7 @@ fn trimmed(messages: &[Value]) -> Vec<Value> {
 
 /// Runs one tool and returns its text result.
 fn tool(
-    store: &Workflow,
+    store: &impl RunStore,
     id: &str,
     token: &str,
     root: &Path,

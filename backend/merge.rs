@@ -607,7 +607,7 @@ impl Workflow {
             .ok(),
             // OpenRouter returns the message text itself; wrap it in the shape Claude prints.
             Some("openrouter") => model.as_deref().and_then(|model| {
-                crate::agents::OpenRouter::new(self)
+                crate::agents::OpenRouter::new(&self.secrets)
                     .complete(model, effort.as_deref(), COMMIT_MESSAGE, &clipped)
                     .ok()
                     .map(|text| json!({"result": text}).to_string().into_bytes())

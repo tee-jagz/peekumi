@@ -1,7 +1,7 @@
 //! Isolated agent processes and a run-scoped stdio MCP reporting bridge.
 //! Agents retain their own permission controls. Peekumi never pushes their branches; the
 //! owner merges an approved one explicitly (see the merge module).
-use crate::workflow::{Workflow, active};
+use crate::run_store::RunStore;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -12,7 +12,7 @@ use std::{
 };
 /// Launches a supervisor without blocking the HTTP runtime;
 /// startup failures close the run.
-pub fn launch(store: Workflow, id: String, token: String) {
+pub fn launch<S: RunStore + Clone + Send + Sync + 'static>(store: S, id: String, token: String) {
     std::thread::spawn(move || {
         if let Err(e) = execute(&store, &id, &token) {
             let _ = store.finish(&id, "failed", &e.to_string(), json!([]));
@@ -22,9 +22,9 @@ pub fn launch(store: Workflow, id: String, token: String) {
     });
 }
 /// Creates one worktree from the frozen SHA, then supervises a bounded agent session.
-fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
+fn execute(store: &impl RunStore, id: &str, token: &str) -> Result<()> {
     let common = store.git(&["rev-parse", "--git-common-dir"])?;
-    let common = store.repo.join(common);
+    let common = store.repo().join(common);
     let mut repo_lock = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -54,10 +54,10 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
     }
     // The log and the bytes it may still take.
     let log = Arc::new(Mutex::new((
-        std::fs::File::create(store.state.join(format!("run-{id}.log")))?,
+        std::fs::File::create(store.state().join(format!("run-{id}.log")))?,
         TASK_LOG,
     )));
-    let dir = store.state.join("runs").join(id);
+    let dir = store.state().join("runs").join(id);
     std::fs::create_dir_all(&dir)?;
     #[cfg(unix)]
     {
@@ -65,7 +65,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
     }
     std::fs::rename(
-        store.state.join(format!("run-{id}.log")),
+        store.state().join(format!("run-{id}.log")),
         dir.join("output.log"),
     )?;
     let worktree = dir.join("worktree");
@@ -80,15 +80,15 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
     std::fs::write(dir.join("task.md"), run["task"].as_str().unwrap())?;
     let exe = std::env::current_exe()?;
     let args = vec![
-        store.repo.to_string_lossy().to_string(),
+        store.repo().to_string_lossy().to_string(),
         "--state-dir".into(),
-        store.state.to_string_lossy().to_string(),
+        store.state().to_string_lossy().to_string(),
         "--report-run".into(),
         id.into(),
     ];
     // The agent's own command line comes from the agents module; the model and effort are
     // the ones this task started with.
-    let agent = crate::agents::find(store, run["agent"].as_str().unwrap_or(""))
+    let agent = crate::agents::find(store.agents(), run["agent"].as_str().unwrap_or(""))
         .context("This task's agent is not available on this server")?;
     // The code graph for this run: a read-only lookup grant on its start commit, closed when
     // the run ends, whatever happens.
@@ -185,7 +185,7 @@ fn execute(store: &Workflow, id: &str, token: &str) -> Result<()> {
 /// an hour passes. `patch` is saved with the process ID. Returns the status and message.
 #[allow(clippy::too_many_arguments)]
 fn supervise(
-    store: &Workflow,
+    store: &impl RunStore,
     id: &str,
     repo_lock: &mut std::fs::File,
     command: &mut Command,
@@ -263,7 +263,7 @@ fn supervise(
 
 /// Runs a session's turns in the background, one agent process per turn, while the owner's
 /// messages wait. A failure ends the turn, not the session: it waits for the next message.
-pub fn launch_session(store: Workflow, id: String) {
+pub fn launch_session<S: RunStore + Clone + Send + Sync + 'static>(store: S, id: String) {
     std::thread::spawn(move || {
         loop {
             match session_turn(&store, &id) {
@@ -284,7 +284,7 @@ pub fn launch_session(store: Workflow, id: String) {
                     );
                     // Messages sent during a failed turn wait for the owner's next message.
                     let _ = store.update(|v| {
-                        let r = crate::workflow::find_mut(v, "runs", &id)?;
+                        let r = S::find_mut(v, "runs", &id)?;
                         r["status"] = json!("waiting");
                         Ok(Value::Null)
                     });
@@ -299,9 +299,9 @@ pub fn launch_session(store: Workflow, id: String) {
 /// One session turn: takes the waiting messages, prepares the worktree on the first turn,
 /// runs the agent so that it continues its conversation, and closes the turn. Returns true
 /// when more messages wait.
-fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
+fn session_turn<S: RunStore>(store: &S, id: &str) -> Result<bool> {
     let common = store
-        .repo
+        .repo()
         .join(store.git(&["rev-parse", "--git-common-dir"])?);
     let mut repo_lock = std::fs::OpenOptions::new()
         .read(true)
@@ -325,7 +325,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     else {
         return Ok(false);
     };
-    let dir = store.state.join("runs").join(id);
+    let dir = store.state().join("runs").join(id);
     std::fs::create_dir_all(&dir)?;
     #[cfg(unix)]
     {
@@ -378,7 +378,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     append(
         store,
         id,
-        json!({"type": "peekumi.owner", "turn": turn, "at": crate::workflow::now(), "messages": messages}),
+        json!({"type": "peekumi.owner", "turn": turn, "at": S::now(), "messages": messages}),
     )?;
     let path = dir.join("output.log");
     let file = std::fs::OpenOptions::new()
@@ -387,7 +387,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
         .open(&path)?;
     let used = file.metadata().map(|m| m.len() as usize).unwrap_or(0);
     let log = Arc::new(Mutex::new((file, SESSION_LOG.saturating_sub(used))));
-    let agent = crate::agents::find(store, run["agent"].as_str().unwrap_or(""))
+    let agent = crate::agents::find(store.agents(), run["agent"].as_str().unwrap_or(""))
         .context("This session's agent is not available on this server")?;
     let graph_url = crate::local_origin().map(|origin| format!("{origin}/mcp/ask"));
     let graph_key = (run["graph"] == true && graph_url.is_some()).then(crate::random_token);
@@ -415,9 +415,9 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     } else {
         let exe = std::env::current_exe()?;
         let args = vec![
-            store.repo.to_string_lossy().to_string(),
+            store.repo().to_string_lossy().to_string(),
             "--state-dir".into(),
-            store.state.to_string_lossy().to_string(),
+            store.state().to_string_lossy().to_string(),
             "--report-run".into(),
             id.into(),
         ];
@@ -481,7 +481,7 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     append(
         store,
         id,
-        json!({"type": "peekumi.turn", "turn": turn, "status": status, "at": crate::workflow::now()}),
+        json!({"type": "peekumi.turn", "turn": turn, "status": status, "at": S::now()}),
     )?;
     let note = match status {
         "completed" => None,
@@ -491,8 +491,8 @@ fn session_turn(store: &Workflow, id: &str) -> Result<bool> {
     store.close_turn(id, current_results(store, id), summary, conversation, note)
 }
 /// Appends one Peekumi event line to a session's log.
-fn append(store: &Workflow, id: &str, event: Value) -> Result<()> {
-    let dir = store.state.join("runs").join(id);
+fn append(store: &impl RunStore, id: &str, event: Value) -> Result<()> {
+    let dir = store.state().join("runs").join(id);
     std::fs::create_dir_all(&dir)?;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -502,7 +502,7 @@ fn append(store: &Workflow, id: &str, event: Value) -> Result<()> {
     Ok(())
 }
 /// The commits on a run's branch after its start commit, oldest first.
-fn current_results(store: &Workflow, id: &str) -> Value {
+fn current_results(store: &impl RunStore, id: &str) -> Value {
     let Ok(run) = store.run(id) else {
         return json!([]);
     };
@@ -546,12 +546,12 @@ fn last_message(log: &str) -> Option<String> {
     last.map(|t| t.chars().take(12000).collect())
 }
 /// A task run's code graph grant: open while the run lasts, closed on drop.
-struct GraphGrant<'a>(&'a Workflow, Option<String>);
-impl<'a> GraphGrant<'a> {
-    fn open(store: &'a Workflow, key: Option<String>, run: &Value) -> Self {
+struct GraphGrant<'a, S: RunStore>(&'a S, Option<String>);
+impl<'a, S: RunStore> GraphGrant<'a, S> {
+    fn open(store: &'a S, key: Option<String>, run: &Value) -> Self {
         if let Some(key) = &key {
             store
-                .grants
+                .grants()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(
@@ -567,11 +567,11 @@ impl<'a> GraphGrant<'a> {
         Self(store, key)
     }
 }
-impl Drop for GraphGrant<'_> {
+impl<S: RunStore> Drop for GraphGrant<'_, S> {
     fn drop(&mut self) {
         if let Some(key) = &self.1 {
             self.0
-                .grants
+                .grants()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(key);
@@ -651,9 +651,9 @@ fn stop_group(pid: u32) {
 /// Recovers runs after a service restart without launching duplicate agents or trusting a reused PID.
 /// Interrupted runs hold their slot while their process exists;
 /// no automatic PID-based killing occurs.
-pub fn recover(store: Workflow) -> Result<()> {
+pub fn recover<S: RunStore + Clone + Send + Sync + 'static>(store: S) -> Result<()> {
     for run in store.read()?["runs"].as_array().unwrap() {
-        if !active(run) {
+        if !S::active(run) {
             continue;
         }
         let id = run["id"].as_str().unwrap().to_string();
@@ -714,7 +714,7 @@ pub fn recover(store: Workflow) -> Result<()> {
 }
 /// Serves a minimal stdio MCP transport with only three run-scoped reporting tools.
 /// Credentials are inherited from the dispatcher, never supplied by an HTTP owner request.
-pub fn mcp(store: Workflow, id: &str) -> Result<()> {
+pub fn mcp(store: impl RunStore, id: &str) -> Result<()> {
     let token = std::env::var("PEEKUMI_REPORT_TOKEN").context("Missing reporting credential")?;
     ensure!(!token.is_empty(), "Empty reporting credential");
     for line in std::io::stdin().lock().lines() {

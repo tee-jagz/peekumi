@@ -17,7 +17,6 @@
 //! models itself. To add a provider (for example an API such as OpenRouter), implement
 //! [`Agent`] and add it to [`registry`]. A provider that answers questions over an API, not
 //! through a CLI, also needs its own Ask engine in the ask module, which today runs Claude Code.
-use crate::workflow::Workflow;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -540,13 +539,14 @@ pub struct OpenRouter {
     pub key_file: std::path::PathBuf,
 }
 impl OpenRouter {
-    pub fn new(store: &Workflow) -> Self {
+    /// The provider with its key file in `secrets`, the server's private folder for secrets.
+    pub fn new(secrets: &Path) -> Self {
         Self {
             base: std::env::var("PEEKUMI_OPENROUTER_URL")
                 .unwrap_or_else(|_| "https://openrouter.ai/api/v1".into())
                 .trim_end_matches('/')
                 .to_string(),
-            key_file: store.secrets.join("openrouter-key"),
+            key_file: secrets.join("openrouter-key"),
         }
     }
     /// The key from `PEEKUMI_OPENROUTER_KEY`, else from the key file, with `true` for the
@@ -829,133 +829,55 @@ impl Agent for OpenRouter {
     }
 }
 
+/// What the providers read from the server's settings.
+#[derive(Clone, Copy)]
+pub struct Settings<'a> {
+    /// The Claude Code executable.
+    pub claude: &'a str,
+    /// The Codex executable.
+    pub codex: &'a str,
+    /// The server's private folder for secrets that every repository shares (API keys).
+    pub secrets: &'a Path,
+}
+
 /// Every provider this server knows, in the order the app lists them.
-pub fn registry(store: &Workflow) -> Vec<Box<dyn Agent>> {
+pub fn registry(settings: Settings) -> Vec<Box<dyn Agent>> {
     vec![
         Box::new(ClaudeCode {
-            executable: store.claude.clone(),
+            executable: settings.claude.to_string(),
         }),
         Box::new(Codex {
-            executable: store.codex.clone(),
+            executable: settings.codex.to_string(),
         }),
-        Box::new(OpenRouter::new(store)),
+        Box::new(OpenRouter::new(settings.secrets)),
     ]
 }
 
 /// The agent with `id`, if this server has it.
-pub fn find(store: &Workflow, id: &str) -> Option<Box<dyn Agent>> {
-    registry(store).into_iter().find(|a| a.id() == id)
+pub fn find(settings: Settings, id: &str) -> Option<Box<dyn Agent>> {
+    registry(settings).into_iter().find(|a| a.id() == id)
+}
+
+/// The default choice for `job`: Claude Code with the server's Ask model and effort
+/// (`ask_default`) for Ask, and Codex with its own model for tasks.
+pub fn default_choice(job: Job, ask_default: &[String; 2]) -> Value {
+    match job {
+        Job::Ask => {
+            json!({"agent": "claude", "model": ask_default[0], "effort": ask_default[1]})
+        }
+        Job::Task => json!({"agent": "codex", "model": null, "effort": "auto"}),
+    }
 }
 
 /// A typed model name: letters, digits and `._:/@-[]`, at most 100 characters, so it is safe
 /// as one command argument.
-fn valid_model(name: &str) -> bool {
+pub(crate) fn valid_model(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 100
         && !name.starts_with('-')
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._:/@-[]".contains(&b))
-}
-
-impl Workflow {
-    /// The default choice for `job`: Claude Code with the server's Ask model and effort for
-    /// Ask, and Codex with its own model for tasks.
-    pub fn default_choice(&self, job: Job) -> Value {
-        match job {
-            Job::Ask => {
-                json!({"agent": "claude", "model": self.ask_default[0], "effort": self.ask_default[1]})
-            }
-            Job::Task => json!({"agent": "codex", "model": null, "effort": "auto"}),
-        }
-    }
-    /// The choice the app sent for `job` (`using: {agent, model, effort}`), checked: a known
-    /// agent that can do the job, a safe model name or none, and `auto` or an effort word that
-    /// the agent itself checks. Without one, the default.
-    pub fn choice(&self, job: Job, using: &Value) -> Result<Value> {
-        if using.is_null() {
-            return Ok(self.default_choice(job));
-        }
-        let id = using["agent"].as_str().context("Choose an agent")?;
-        let agent = find(self, id).context("Unknown agent")?;
-        ensure!(
-            agent.jobs().contains(&job),
-            "{} cannot do this job",
-            agent.label()
-        );
-        ensure!(
-            agent.has_default_model() || using["model"].is_string(),
-            "Choose a model for {} in Agents",
-            agent.label()
-        );
-        let model = match &using["model"] {
-            Value::Null => Value::Null,
-            Value::String(name) => {
-                let name = name.trim();
-                ensure!(
-                    valid_model(name),
-                    "Use only letters, digits and ._:/@-[] in a model name"
-                );
-                json!(name)
-            }
-            _ => anyhow::bail!("Invalid model"),
-        };
-        let effort = using["effort"].as_str().unwrap_or("auto");
-        ensure!(
-            !effort.is_empty()
-                && effort.len() <= 16
-                && effort.bytes().all(|b| b.is_ascii_lowercase()),
-            "Unknown effort"
-        );
-        Ok(json!({"agent": id, "model": model, "effort": effort}))
-    }
-    /// `GET /api/agents`: every provider with its jobs, status and models for each job (each
-    /// model with its effort levels), and the default choice for each job.
-    /// `PUT /api/agents/openrouter-key` with `{key}` tests and saves an OpenRouter key;
-    /// `DELETE` on the same path removes it. Both return the `GET` body.
-    pub fn agents_route(&self, method: &str, path: &str, body: &Value) -> Result<Value> {
-        if path == "/api/agents/openrouter-key" {
-            let provider = OpenRouter::new(self);
-            match method {
-                "PUT" => provider.save_key(body["key"].as_str().context("Paste the key")?)?,
-                "DELETE" => provider.remove_key()?,
-                _ => anyhow::bail!("Unsupported key operation"),
-            }
-            return self.agents_route("GET", "/api/agents", &Value::Null);
-        }
-        ensure!(
-            method == "GET" && path == "/api/agents",
-            "Unsupported agents operation"
-        );
-        let agents: Vec<Value> = registry(self)
-            .iter()
-            .map(|a| {
-                let status = a.status();
-                let mut models = json!({});
-                let mut discovered = true;
-                for job in a.jobs() {
-                    let (list, found) = a.models(*job);
-                    discovered &= found;
-                    models[job.key()] = json!(list.iter().map(|m| json!({"id": m.id, "label": m.label, "note": m.note, "efforts": m.efforts, "defaultEffort": m.default_effort})).collect::<Vec<_>>());
-                }
-                json!({
-                    "id": a.id(), "label": a.label(), "short": a.short(),
-                    "jobs": a.jobs().iter().map(|j| j.key()).collect::<Vec<_>>(),
-                    "defaultModel": a.has_default_model(),
-                    "notes": {"ask": a.note(Job::Ask), "task": a.note(Job::Task)},
-                    "key": a.key(),
-                    "asksBeforeCommands": a.asks_before_commands(),
-                    "models": models,
-                    "source": if discovered { "agent" } else { "built-in" },
-                    "status": {"ready": status.ready, "reason": status.reason},
-                })
-            })
-            .collect();
-        Ok(json!({
-            "agents": agents,
-            "defaults": {"ask": self.default_choice(Job::Ask), "task": self.default_choice(Job::Task)},
-        }))
-    }
 }
 
 /// The model and effort flags of a choice: `None` for the agent's default model, and for `auto`.
@@ -988,17 +910,13 @@ mod tests {
     /// only what each provider declares: no provider command runs and no network is used.
     #[test]
     fn registered_agents_keep_the_contract() {
-        let state = std::env::temp_dir().join(format!("peekumi-agents-{}", std::process::id()));
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let store = Workflow::new(
-            repo,
-            &state,
-            "HEAD",
-            "codex-not-installed",
-            "claude-not-installed",
-        )
-        .unwrap();
-        let agents = registry(&store);
+        let secrets = std::env::temp_dir().join(format!("peekumi-agents-{}", std::process::id()));
+        let settings = Settings {
+            claude: "claude-not-installed",
+            codex: "codex-not-installed",
+            secrets: &secrets,
+        };
+        let agents = registry(settings);
         let mut ids = std::collections::BTreeSet::new();
         for agent in &agents {
             let id = agent.id();
@@ -1015,13 +933,13 @@ mod tests {
                 "{id} has no name"
             );
             assert!(!agent.jobs().is_empty(), "{id} does no job");
-            assert_eq!(find(&store, id).map(|a| a.id()), Some(id));
+            assert_eq!(find(settings, id).map(|a| a.id()), Some(id));
         }
         // The server's defaults name a provider that can do that job.
         for job in [Job::Ask, Job::Task] {
-            let default = store.default_choice(job);
+            let default = default_choice(job, &["sonnet".into(), "low".into()]);
             let id = default["agent"].as_str().unwrap();
-            let agent = find(&store, id)
+            let agent = find(settings, id)
                 .unwrap_or_else(|| panic!("The {} default {id} is not registered", job.key()));
             assert!(
                 agent.jobs().contains(&job),
@@ -1029,6 +947,5 @@ mod tests {
                 job.key()
             );
         }
-        let _ = std::fs::remove_dir_all(state);
     }
 }

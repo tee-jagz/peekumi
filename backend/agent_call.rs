@@ -122,7 +122,7 @@ pub(crate) async fn openrouter_pass(
     relay: Option<mpsc::Sender<Value>>,
 ) -> Result<String> {
     const TURNS: usize = 12;
-    let provider = crate::agents::OpenRouter::new(&app.workflow);
+    let provider = crate::agents::OpenRouter::new(&app.workflow.secrets);
     let key = provider.key_or_error()?;
     let mut messages = vec![
         json!({"role": "system", "content": system}),

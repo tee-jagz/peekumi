@@ -65,7 +65,8 @@
       "backend/agent_session.rs",
       "backend/task_agent.rs",
       "backend/merge.rs",
-      "backend/agent_call.rs"
+      "backend/agent_call.rs",
+      "backend/run_store.rs"
     ],
     "backend-map-tools": ["backend/lookup.rs", "backend/graph_brief.rs"],
     "backend-platform": [
@@ -112,7 +113,7 @@
     ],
     "agent-runner": ["backend/runner.rs"],
     "agent-executor": ["backend/task_agent.rs"],
-    "agent-providers": ["backend/agents.rs"],
+    "agent-providers": ["backend/agents.rs", "backend/run_store.rs"],
     "analysis-support": [
       "backend/relationships.rs",
       "backend/rules.rs",
