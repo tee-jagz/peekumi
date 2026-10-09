@@ -28,6 +28,7 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ### Fixed
 
+- A call inside one file no longer breaks a rule whose `to` groups contain that file. Before, a rule such as "a feature module must not use another feature module" counted each call inside a module as a break.
 - The one-line installer downloads a public release without a token. Before, it got the file's description in place of the file, and the checksum check failed.
 
 ### Contributing

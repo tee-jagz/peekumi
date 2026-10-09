@@ -52,7 +52,7 @@ Paths are relative to the repository. `*` matches in one segment, and `**` cross
 
 The configuration has these limits: 64 KiB, 100 groups/rules, 100 patterns for each group and 256 bytes for each pattern. Unknown fields, groups, kinds and duplicate rule IDs cause configuration errors, not a result that looks clean.
 
-Rules apply only to resolved relationships. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps.
+Rules apply only to resolved relationships. A file that uses itself, for example a call inside one file, never breaks a rule. “0 observed violations” is not proof of compliance. The panel reports external/unresolved/ambiguous relationships and files with analysis gaps.
 
 For each rule, the panel shows how many relationships the rule checked, how many broke it, and how many in its scope stayed unresolved. Peekumi warns about a group that matches no file and a rule that checked no relationship. A typo in a pattern can make a rule pass silently, so read these warnings first.
 

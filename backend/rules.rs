@@ -196,7 +196,12 @@ impl Rules {
             }
     }
     /// True when a resolved relationship from `source` to `target`, in scope, breaks the rule.
+    /// A file that uses itself (a call inside one file) never does: a rule is about one part
+    /// using another, also when its `to` groups hold the file.
     fn breaks(&self, rule: &Value, source: &str, target: &str) -> bool {
+        if source == target {
+            return false;
+        }
         if rule.get("layers").is_some() {
             return matches!(
                 (self.layer(rule, source), self.layer(rule, target)),
@@ -346,6 +351,19 @@ mod tests {
             "A layer may use those below it"
         );
         assert_eq!(broken(&rules, "store/b.py", "routes/r.py"), ["layered"]);
+        let overlapping = parse(
+            r#"{"version":1,"groups":{"features":["features/**"]},
+            "rules":[{"id":"apart","from":"features","to":["features"],"kinds":["imports"]}]}"#,
+        )
+        .unwrap();
+        assert!(
+            broken(&overlapping, "features/a.js", "features/a.js").is_empty(),
+            "A file that uses itself is not a break"
+        );
+        assert_eq!(
+            broken(&overlapping, "features/a.js", "features/b.js"),
+            ["apart"]
+        );
         assert!(
             broken(&rules, "newfolder/x.py", "routes/r.py").is_empty(),
             "Outside every layer"
