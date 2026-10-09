@@ -14,7 +14,7 @@ The Rust backend serves the authenticated API. It reads committed Git objects an
 - `agent_call.rs`: The read-only agent. It runs the agent that the owner chose for Ask, with every built-in tool off and only the read-only lookups. Ask, the rule audit and Proposed fixes use it, so no service uses another service.
 - `workflow.rs`: Durable draft instructions (the backend keeps them as comments), frozen task previews, agent reports and owner verification.
 - `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP. It also runs the turns of a session, and its bridge has the `approve` tool for a session agent's command requests.
-- `run_store.rs`: The `RunStore` trait. The runner and the task agent use it to read and change runs, and they do not use the `Workflow` type. `workflow.rs` implements it for `Workflow`.
+- `run_store.rs`: The `RunStore` trait. The runner and the task agent use it to read and change runs, and they do not use the `Workflow` type. `run_store_impl.rs` implements it for `Workflow`.
 - `agent_session.rs`: Sessions, a live conversation with an agent on its own branch. It starts a session, keeps the owner's messages for the next turn, stores the agent's command requests and the owner's decisions, and ends a session in the normal review.
 - `index.rs`: The persistent SQLite syntax cache.
 - `process.rs`: Limited execution of Git and parser subprocesses.

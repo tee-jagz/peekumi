@@ -25,7 +25,8 @@
       "backend/task_agent.rs",
       "backend/merge.rs",
       "backend/ask.rs",
-      "backend/agent_call.rs"
+      "backend/agent_call.rs",
+      "backend/run_store_impl.rs"
     ],
     "frontend-shared": [
       "frontend/icons.js",
@@ -66,7 +67,8 @@
       "backend/task_agent.rs",
       "backend/merge.rs",
       "backend/agent_call.rs",
-      "backend/run_store.rs"
+      "backend/run_store.rs",
+      "backend/run_store_impl.rs"
     ],
     "backend-map-tools": ["backend/lookup.rs", "backend/graph_brief.rs"],
     "backend-platform": [

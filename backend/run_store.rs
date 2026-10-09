@@ -2,7 +2,7 @@
 //! that starts, supervises and closes agent runs.
 //!
 //! The runner and the task agent are below the workflow core, so they use this trait and not
-//! the `Workflow` type. The workflow module implements it for `Workflow`; each method calls the
+//! the `Workflow` type. The run_store_impl module implements it for `Workflow`; each method calls the
 //! `Workflow` method or function with the same name.
 use anyhow::Result;
 use serde_json::Value;
