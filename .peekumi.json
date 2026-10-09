@@ -119,7 +119,11 @@
       "backend/rules.rs",
       "backend/index.rs"
     ],
-    "language-adapters": ["backend/adapters/**"],
+    "language-adapters": [
+      "backend/adapters/python.rs",
+      "backend/adapters/typescript.rs",
+      "backend/adapters/rust.rs"
+    ],
     "rule-checker": ["backend/rules.rs"],
     "auth-sessions": ["backend/sessions.rs"],
     "frontend-model": ["frontend/model.js"],
@@ -294,6 +298,13 @@
       "to": ["frontend"],
       "kinds": ["imports", "calls"],
       "message": "sw.js must not use other frontend modules. The service worker runs with no DOM and no application state."
+    },
+    {
+      "id": "language-adapters-apart",
+      "from": "language-adapters",
+      "to": ["language-adapters"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "A language adapter must not use a different language adapter. Put shared code in the adapter contract."
     }
   ]
 }
