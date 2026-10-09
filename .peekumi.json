@@ -83,7 +83,43 @@
       "scripts/release-notes.mjs",
       "scripts/lint-docs.mjs",
       "scripts/tunnel/**"
-    ]
+    ],
+    "graph-brief": ["backend/graph_brief.rs"],
+    "lookup-tools": ["backend/lookup.rs"],
+    "single-file-adapters": [
+      "backend/adapters/python.rs",
+      "backend/adapters/typescript.rs"
+    ],
+    "rust-adapter": [
+      "backend/adapters/rust.rs",
+      "backend/adapters/rust_relationships.rs"
+    ],
+    "reference-oracle": ["test/reference/**"],
+    "test-suites": ["test/*"],
+    "dev-scripts": [
+      "scripts/benchmark.mjs",
+      "scripts/benchmark-rust.mjs",
+      "scripts/guide-screenshots.mjs"
+    ],
+    "scripts": ["scripts/**"],
+    "agent-workflow-core": [
+      "backend/workflow.rs",
+      "backend/agent_session.rs",
+      "backend/merge.rs"
+    ],
+    "agent-runner": ["backend/runner.rs"],
+    "agent-executor": ["backend/task_agent.rs"],
+    "agent-providers": ["backend/agents.rs"],
+    "analysis-support": [
+      "backend/relationships.rs",
+      "backend/rules.rs",
+      "backend/index.rs"
+    ],
+    "language-adapters": ["backend/adapters/**"],
+    "rule-checker": ["backend/rules.rs"],
+    "auth-sessions": ["backend/sessions.rs"],
+    "frontend-model": ["frontend/model.js"],
+    "frontend-service-worker": ["frontend/sw.js"]
   },
   "rules": [
     {
@@ -146,6 +182,114 @@
       "to": ["tests", "product"],
       "kinds": ["imports", "calls"],
       "message": "Scripts that ship in the release use neither test code nor product source; they talk to the server over HTTP and the command line."
+    },
+    {
+      "id": "frontend-features-independent",
+      "from": "frontend-features",
+      "to": ["frontend-features"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "A frontend feature module must not use a different feature module. Connect the features in app.js or move the shared code to a shared module."
+    },
+    {
+      "id": "graph-brief-not-lookup",
+      "from": "graph-brief",
+      "to": ["lookup-tools"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "The map brief must not use the lookup tools. The lookup tools use the map brief."
+    },
+    {
+      "id": "backend-services-independent",
+      "from": "backend-services",
+      "to": ["backend-services"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "A backend service must not use a different backend service. Move the shared code to a lower layer."
+    },
+    {
+      "id": "adapter-contract-stable",
+      "from": "adapter-contract",
+      "only": ["concrete-adapters", "backend-platform"],
+      "kinds": ["imports", "calls"],
+      "message": "The adapter contract uses only the registered adapters and the platform. Do not use the engine or other backend parts from it."
+    },
+    {
+      "id": "single-file-adapters-independent",
+      "from": "single-file-adapters",
+      "to": ["concrete-adapters"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "The Python and TypeScript adapters must not use a different language adapter. Put shared code in the adapter contract."
+    },
+    {
+      "id": "rust-adapter-independent",
+      "from": "rust-adapter",
+      "to": ["single-file-adapters"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "The Rust adapter must not use the Python or TypeScript adapter. Put shared code in the adapter contract."
+    },
+    {
+      "id": "reference-oracle-standalone",
+      "from": "reference-oracle",
+      "to": ["test-suites"],
+      "kinds": ["imports", "calls"],
+      "message": "The reference backend must not use the test suites or their fixtures. Tests use the reference, not the opposite."
+    },
+    {
+      "id": "shipped-scripts-not-dev-tools",
+      "from": "shipped-scripts",
+      "to": ["dev-scripts"],
+      "kinds": ["imports", "calls"],
+      "message": "A shipped script must not use a benchmark or screenshot script. These tools do not ship in the release."
+    },
+    {
+      "id": "product-not-scripts",
+      "from": "product",
+      "to": ["scripts"],
+      "kinds": ["imports", "calls"],
+      "message": "The backend and the frontend must not use the scripts. The scripts control the product from outside."
+    },
+    {
+      "id": "agent-workflow-layers",
+      "layers": [
+        "agent-workflow-core",
+        "agent-runner",
+        "agent-executor",
+        "agent-providers"
+      ],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "Agent dependencies point down: workflow core, runner, task agent, agent registry. Give the lower part the data it needs. Do not use the Workflow type from below."
+    },
+    {
+      "id": "analysis-layers",
+      "layers": ["engine", "analysis-support", "language-adapters"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "Analysis dependencies point down: engine, then relationships, rules and index, then language adapters."
+    },
+    {
+      "id": "rule-checker-pure",
+      "from": "rule-checker",
+      "only": ["backend-platform"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "rules.rs uses only the platform modules. Give it the groups, rules and relationships as data."
+    },
+    {
+      "id": "auth-sessions-isolated",
+      "from": "auth-sessions",
+      "only": ["backend-platform"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "sessions.rs uses only the platform modules. Authentication must not depend on agents, analysis or other services."
+    },
+    {
+      "id": "frontend-model-pure",
+      "from": "frontend-model",
+      "to": ["frontend"],
+      "kinds": ["imports", "calls", "implements", "inherits"],
+      "message": "model.js must not use other frontend modules. Keep the map model pure data logic."
+    },
+    {
+      "id": "service-worker-standalone",
+      "from": "frontend-service-worker",
+      "to": ["frontend"],
+      "kinds": ["imports", "calls"],
+      "message": "sw.js must not use other frontend modules. The service worker runs with no DOM and no application state."
     }
   ]
 }
