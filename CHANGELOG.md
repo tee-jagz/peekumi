@@ -32,8 +32,14 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 - A card counts its rule breaks with a red broken-link icon, in place of the filled "!" badge. A selection that breaks a rule says which rule in one red line in the sheet, and the line opens only the breaks.
 - Peekumi's own `.peekumi.json` states three principles: the analysis code does not use the agent workflow, shared frontend modules do not use feature modules, and product code does not use test code.
 
+### Changed
+
+- The code that runs the read-only agent moved from `ask.rs` to `agent_call.rs`. The rule audit and Proposed fixes keep their own instructions. No backend service uses another service now, so the rule `backend-services-independent` has no break.
+- `app.js` gives the session functions to the Tasks code. No frontend feature module imports another one now, so the rule `frontend-features-independent` has no break.
+
 ### Fixed
 
+- Proposed fixes run on the server in the background. Before, the page waited on one long request. When the phone left the app or lost its connection, the page said "Cannot reach Peekumi", and the proposal was lost. Now the page keeps the last proposal, and a notification says when it is ready.
 - A call inside one file no longer breaks a rule whose `to` groups contain that file. Before, a rule such as "a feature module must not use another feature module" counted each call inside a module as a break.
 - The one-line installer downloads a public release without a token. Before, it got the file's description in place of the file, and the checksum check failed.
 

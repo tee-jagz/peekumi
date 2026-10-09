@@ -2,6 +2,7 @@
 import { createAsk } from "./ask.js";
 import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
+import * as sessions from "./session.js";
 import { createFixes } from "./fixes.js";
 import { createAudit } from "./audit.js";
 import { createNotifications } from "./notify.js";
@@ -319,6 +320,8 @@ const notifications = createNotifications({
 });
 const workflow = createWorkflow({
   api,
+  // The Tasks page shows sessions too; app.js connects the two features.
+  sessions,
   focus,
   agents,
   nav,
@@ -404,6 +407,7 @@ const fixes = createFixes({
     setTimeout(() => showNotice(""), 2500);
   },
   redraw: () => renderPanel(),
+  showing: () => nav.view().name === "fixes",
 });
 // Proposed rules from an audit of the architecture (audit.js): a page that saves the rules
 // the owner selects as instructions on the rule file, and opens the task form with them.
@@ -2653,20 +2657,20 @@ async function restorePlace() {
   await restoreMapPlace();
   openLinkedRun();
 }
-/** Opens what a notification links to: a run (`?task=`) or the Proposed rules page
- * (`?audit=1`). The address then drops it, so a reload does not open it again. */
+/** Opens what a notification links to: a run (`?task=`), the Proposed rules page
+ * (`?audit=1`) or the Proposed fixes page (`?fixes=1`). The address then drops it, so a reload does not open it again. */
 function openLinkedRun() {
   const url = new URL(location.href),
     id = url.searchParams.get("task"),
-    rules = url.searchParams.get("audit");
-  if (!id && !rules) return;
-  url.searchParams.delete("task");
-  url.searchParams.delete("audit");
+    rules = url.searchParams.get("audit"),
+    fixed = url.searchParams.get("fixes");
+  if (!id && !rules && !fixed) return;
+  for (const key of ["task", "audit", "fixes"]) url.searchParams.delete(key);
   replaceUrl(url);
   if (!isOwner()) return;
   if (id) workflow.openTask(id).catch(() => {});
-  // The rule audit ended: its notification opens the Proposed rules page.
-  else nav.go({ name: "audit" });
+  // A rule audit or a fix proposal ended: its notification opens its page.
+  else nav.go({ name: rules ? "audit" : "fixes" });
 }
 async function restoreMapPlace() {
   if (!comparison) return;

@@ -2269,11 +2269,25 @@ test("Peekumi proposes one fix for each rule and declaration that its breaks rea
     text: fix.text,
   });
   assert.equal(draft.status, "draft");
-  // The agent proposes the fixes, with Peekumi's groups as context and as the fallback.
-  const proposed = await f.req("/api/fixes/propose", {
-    head: f.sha,
-    using: { agent: "claude" },
+  // The agent proposes the fixes in the background, with Peekumi's groups as context and as
+  // the fallback; the saved proposal has the result for its commit only.
+  const propose = async (fx) => {
+    assert.deepEqual(
+      await fx.req("/api/fixes/propose", {
+        head: fx.sha,
+        using: { agent: "claude" },
+      }),
+      { status: 200, running: true },
+    );
+    return waitFor(async () => {
+      const state = await fx.req(`/api/fixes/proposal?head=${fx.sha}`);
+      return !state.running && state;
+    });
+  };
+  assert.deepEqual(await f.req(`/api/fixes/proposal?head=${f.sha}`), {
+    status: 200,
   });
+  const proposed = await propose(f);
   assert.equal(proposed.provider, "Claude Code");
   assert.equal(proposed.groups.length, 1);
   assert.equal(proposed.fixes.length, 1);
@@ -2288,11 +2302,11 @@ test("Peekumi proposes one fix for each rule and declaration that its breaks rea
   const none = await g.req(`/api/fixes?head=${g.sha}`);
   assert.equal(none.checks.state, "not configured");
   assert.deepEqual(none.fixes, []);
-  const nothing = await g.req("/api/fixes/propose", {
-    head: g.sha,
-    using: { agent: "claude" },
-  });
+  const nothing = await propose(g);
   assert.deepEqual([nothing.fixes, nothing.provider], [[], null]);
+  assert.deepEqual(await g.req(`/api/fixes/proposal?head=${f.sha}`), {
+    status: 200,
+  });
 });
 test("an agent audits the architecture in the background; the saved list keeps each check once, and the owner's choices", async (t) => {
   const f = await fixture({

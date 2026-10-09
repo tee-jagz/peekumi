@@ -4,9 +4,12 @@
  *
  * Peekumi groups the breaks first (`GET /api/fixes?head=`): one group for each rule and each
  * declaration that the breaks reach. Then the agent that the owner chose for Ask reads the
- * code, with those groups as its context, and proposes the fixes
- * (`POST /api/fixes/propose`). While it works, the groups show as context. If the agent
- * fails, the owner can try again, or use Peekumi's groups as the proposals.
+ * code, with those groups as its context, and proposes the fixes. The proposal runs on the
+ * server in the background (`POST /api/fixes/propose`), because it can take minutes: the
+ * owner can leave the app, and a notification says when it ends. The page reads the saved
+ * proposal for its commit (`GET /api/fixes/proposal?head=`) and starts one only when there is
+ * none. While the agent works, the groups show as context. If the agent fails, the owner can
+ * try again, or use Peekumi's groups as the proposals.
  *
  * The owner selects fixes (all at first), edits their text and clears the ones to leave out.
  * One button saves the selected fixes as draft instructions and opens the task form with them
@@ -30,9 +33,12 @@ export function createFixes({
   send,
   saved,
   redraw,
+  // True while the page is open: it reads the proposal's state only then.
+  showing = () => true,
 }) {
   // One commit's state: Peekumi's groups, the agent's proposal, and which list shows.
-  let shown = null;
+  let shown = null,
+    polling = false;
   // The owner's choice and text for each proposal, and the fixes already drafted, by key.
   const choices = new Map(),
     drafted = new Set();
@@ -59,7 +65,7 @@ export function createFixes({
         if (shown.commit !== commit) return;
         shown.groups = data.fixes;
         shown.state = data.checks?.state;
-        if (shown.groups.length) propose();
+        if (shown.groups.length) follow(commit, true);
         else redraw();
       })
       .catch((error) => {
@@ -69,7 +75,59 @@ export function createFixes({
       });
   }
 
-  /** Asks the agent for proposals; Peekumi's groups go with the request as context. */
+  /** Reads the saved proposal for `commit`. With `first`, a commit with no proposal yet
+   * starts one. While the proposal runs, the page reads it again every three seconds. */
+  async function follow(commit, first = false) {
+    let state;
+    try {
+      state = await api(
+        "/api/fixes/proposal?head=" + encodeURIComponent(commit),
+      );
+    } catch (error) {
+      if (shown.commit !== commit) return;
+      shown.agent = {
+        status: "failed",
+        fixes: [],
+        provider: "",
+        error: error.message,
+      };
+      return redraw();
+    }
+    if (shown.commit !== commit) return;
+    if (state.running) {
+      shown.agent = { status: "running", fixes: [], provider: "", error: "" };
+      if (!polling) {
+        polling = true;
+        setTimeout(() => {
+          polling = false;
+          if (shown?.commit === commit && showing()) follow(commit);
+        }, 3000);
+      }
+    } else if (state.fixes) {
+      shown.agent = {
+        status: "done",
+        fixes: state.fixes,
+        provider: state.provider || "",
+        error: "",
+      };
+      for (const fix of state.fixes)
+        if (!choices.has(`${commit}:a:${fix.id}`))
+          choices.set(`${commit}:a:${fix.id}`, {
+            selected: true,
+            text: fix.text,
+          });
+    } else if (state.error)
+      shown.agent = {
+        status: "failed",
+        fixes: [],
+        provider: "",
+        error: state.error,
+      };
+    else if (first) return propose();
+    redraw();
+  }
+
+  /** Starts a proposal on the server; Peekumi's groups go with it as context. */
   function propose() {
     const commit = shown.commit;
     shown.mode = "agent";
@@ -80,20 +138,8 @@ export function createFixes({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ head: commit, using: using() }),
     })
-      .then((data) => {
-        if (shown.commit !== commit) return;
-        shown.agent = {
-          status: "done",
-          fixes: data.fixes,
-          provider: data.provider || "",
-          error: "",
-        };
-        for (const fix of data.fixes)
-          choices.set(`${commit}:a:${fix.id}`, {
-            selected: true,
-            text: fix.text,
-          });
-        redraw();
+      .then(() => {
+        if (shown.commit === commit) follow(commit);
       })
       .catch((error) => {
         if (shown.commit !== commit) return;
@@ -194,6 +240,8 @@ export function createFixes({
   function render(body) {
     const commit = revision();
     if (shown?.commit !== commit) load(commit);
+    // Back on the page while the proposal runs: read its state again until it ends.
+    else if (shown.agent.status === "running" && !polling) follow(commit);
     const breaks = (shown.groups || []).reduce((sum, g) => sum + g.count, 0);
     head("Proposed fixes", {
       meta: shown.groups?.length
@@ -226,7 +274,7 @@ export function createFixes({
         el(
           "p",
           "",
-          `${agentName() || "The agent"} reads the code and proposes fixes. This can take a minute or two.`,
+          `${agentName() || "The agent"} reads the code and proposes fixes. This can take a few minutes. You can leave this page: Peekumi tells you when the fixes are ready, if notifications are on.`,
         ),
       );
       return body.append(working, context(true));

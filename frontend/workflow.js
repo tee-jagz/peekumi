@@ -2,7 +2,6 @@
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
-import { createSession, live, activity, timeline, focusOf } from "./session.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   n.className = cls || "";
@@ -184,7 +183,11 @@ export function createWorkflow({
   openPlace = async () => {},
   // The map's agent focus (focus.js), which shows where a run's agent is.
   focus = { set() {}, ownerMoved() {}, moving: () => false },
+  // The session feature (session.js), which app.js gives here: one feature module never
+  // imports another, so each one can change alone.
+  sessions,
 }) {
+  const { createSession, live, activity, timeline, focusOf } = sessions;
   let data = { comments: [], runs: [] },
     loaded = false,
     lastSignature = "",

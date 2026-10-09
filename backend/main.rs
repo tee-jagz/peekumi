@@ -1,10 +1,12 @@
 //! Authenticated HTTP API, embedded frontend and repository worker.
 mod adapters;
+mod agent_call;
 mod agent_session;
 mod agents;
 mod ask;
 mod audit;
 mod engine;
+mod fix_proposals;
 mod graph_brief;
 mod hash;
 mod index;
@@ -687,6 +689,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             || path.starts_with("/api/runs")
             || path.starts_with("/api/push")
             || path.starts_with("/api/rules/audit")
+            || path == "/api/fixes/proposal"
             || path.starts_with("/api/comments"))
     {
         return error(
@@ -870,6 +873,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     };
     if path == "/api/ask"
         || path == "/api/fixes/propose"
+        || path == "/api/fixes/proposal"
         || path == "/api/rules/propose"
         || path == "/api/rules/check"
         || path.starts_with("/api/rules/audit")
@@ -1066,22 +1070,23 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };
         }
+        // Proposed fixes run in the background; the saved proposal has the result.
         if path == "/api/fixes/propose" {
             if method != "POST" {
                 return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
             }
-            // The proposal agent uses Ask's lookup grant, so it waits for no Ask answer.
-            let Ok(_ask_guard) = app.ask_lock.clone().try_lock_owned() else {
-                return error(
-                    StatusCode::CONFLICT,
-                    "An Ask answer is in progress. Try again when it ends",
-                    gzip,
-                )
-                .await;
-            };
-            return match ask::propose_fixes(&app, body).await {
+            return match fix_proposals::start(app.clone(), body) {
                 Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
-                Err(e) => error(StatusCode::BAD_REQUEST, &ask::plain_error(&e), gzip).await,
+                Err(e) => error(StatusCode::CONFLICT, &e.to_string(), gzip).await,
+            };
+        }
+        if path == "/api/fixes/proposal" {
+            if method != "GET" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use GET", gzip).await;
+            }
+            return match fix_proposals::read(&app, &head) {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };
         }
         if path == "/api/ask" {
@@ -1118,7 +1123,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             let _ask_guard = ask_guard;
             return match ask::answer(&app, body).await {
                 Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
-                Err(e) => error(StatusCode::BAD_REQUEST, &ask::plain_error(&e), gzip).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &agent_call::plain_error(&e), gzip).await,
             };
         }
         let store = app.workflow.clone();

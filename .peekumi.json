@@ -24,7 +24,8 @@
       "backend/agent_session.rs",
       "backend/task_agent.rs",
       "backend/merge.rs",
-      "backend/ask.rs"
+      "backend/ask.rs",
+      "backend/agent_call.rs"
     ],
     "frontend-shared": [
       "frontend/icons.js",
@@ -53,6 +54,7 @@
     "backend-services": [
       "backend/ask.rs",
       "backend/audit.rs",
+      "backend/fix_proposals.rs",
       "backend/pull_requests.rs",
       "backend/sessions.rs"
     ],
@@ -62,7 +64,8 @@
       "backend/agents.rs",
       "backend/agent_session.rs",
       "backend/task_agent.rs",
-      "backend/merge.rs"
+      "backend/merge.rs",
+      "backend/agent_call.rs"
     ],
     "backend-map-tools": ["backend/lookup.rs", "backend/graph_brief.rs"],
     "backend-platform": [
