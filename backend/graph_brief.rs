@@ -63,7 +63,7 @@ pub fn names(comments: &[Value]) -> Vec<String> {
     out
 }
 
-/// The names-only tree of the files under `prefix` (see `lookup::names_tree`), in at most
+/// The names-only tree of the files under `prefix` (see `names_tree`), in at most
 /// `budget` characters. While it is too long, one part becomes one line: a whole subtree, or
 /// only the files of one folder (its subfolders stay listed). A subtree that holds a `focus`
 /// folder stays, and a `focus` folder keeps its files. Each step takes the smallest fold that
@@ -72,7 +72,7 @@ pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (
     let inside =
         |folder: &str, root: &str| folder == root || folder.starts_with(&format!("{root}/"));
     // Each entry: folder, text, and whether it is a fold.
-    let mut entries: Vec<(String, String, bool)> = crate::lookup::names_tree(files, prefix)
+    let mut entries: Vec<(String, String, bool)> = names_tree(files, prefix)
         .into_iter()
         .map(|(f, t)| (f, t, false))
         .collect();
@@ -174,6 +174,51 @@ pub fn fold(files: &[Value], prefix: &str, focus: &[String], budget: usize) -> (
             .join("\n"),
         folded,
     )
+}
+
+/// The names-only tree of files and declarations under `prefix` ("" for the whole
+/// repository): one line per folder, then one line per file with its declaration names.
+/// Files without declarations are counted on their folder's line.
+fn names_tree(files: &[Value], prefix: &str) -> Vec<(String, String)> {
+    let mut folders: std::collections::BTreeMap<String, (Vec<String>, usize)> = Default::default();
+    for file in files {
+        let path = file["path"].as_str().unwrap_or("");
+        if !path.starts_with(prefix) {
+            continue;
+        }
+        let (folder, name) = path.rsplit_once('/').unwrap_or(("", path));
+        let entry = folders.entry(folder.to_string()).or_default();
+        let symbols: Vec<&str> = file["symbols"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["name"].as_str())
+            .collect();
+        if symbols.is_empty() {
+            entry.1 += 1;
+        } else {
+            entry.0.push(format!("  {name}: {}", symbols.join(" ")));
+        }
+    }
+    folders
+        .into_iter()
+        .map(|(folder, (lines, others))| {
+            let mut head = format!("{}/", if folder.is_empty() { "." } else { &folder });
+            if others > 0 {
+                head.push_str(&format!(
+                    " ({others} file{} without declarations)",
+                    if others == 1 { "" } else { "s" }
+                ));
+            }
+            (
+                folder,
+                std::iter::once(head)
+                    .chain(lines)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        })
+        .collect()
 }
 
 /// The folder of a path ("" at the top).

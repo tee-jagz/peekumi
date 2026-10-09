@@ -581,51 +581,6 @@ pub async fn relationship_summary(
     }))
 }
 
-/// The names-only tree of files and declarations under `prefix` ("" for the whole
-/// repository): one line per folder, then one line per file with its declaration names.
-/// Files without declarations are counted on their folder's line.
-pub fn names_tree(files: &[Value], prefix: &str) -> Vec<(String, String)> {
-    let mut folders: std::collections::BTreeMap<String, (Vec<String>, usize)> = Default::default();
-    for file in files {
-        let path = file["path"].as_str().unwrap_or("");
-        if !path.starts_with(prefix) {
-            continue;
-        }
-        let (folder, name) = path.rsplit_once('/').unwrap_or(("", path));
-        let entry = folders.entry(folder.to_string()).or_default();
-        let symbols: Vec<&str> = file["symbols"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|s| s["name"].as_str())
-            .collect();
-        if symbols.is_empty() {
-            entry.1 += 1;
-        } else {
-            entry.0.push(format!("  {name}: {}", symbols.join(" ")));
-        }
-    }
-    folders
-        .into_iter()
-        .map(|(folder, (lines, others))| {
-            let mut head = format!("{}/", if folder.is_empty() { "." } else { &folder });
-            if others > 0 {
-                head.push_str(&format!(
-                    " ({others} file{} without declarations)",
-                    if others == 1 { "" } else { "s" }
-                ));
-            }
-            (
-                folder,
-                std::iter::once(head)
-                    .chain(lines)
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-        })
-        .collect()
-}
-
 /// Line `number` of a file's source data, numbered as in the other results.
 fn line_at(data: &Value, number: u64) -> Option<String> {
     let text = data["after"]
