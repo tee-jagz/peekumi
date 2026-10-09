@@ -16,6 +16,9 @@ use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 /// Rule configuration files, preferred first: `.peekumi.json`, then `.strata.json` from before the rename.
 pub const CONFIG_FILES: [&str; 2] = [".peekumi.json", ".strata.json"];
+/// The kinds of a rule and the pairs of files (source, target) that would break it (see
+/// [`Rules::breaking_pairs`]).
+pub type Breaks<'a> = (Vec<String>, Vec<(&'a str, &'a str)>);
 /// Compiled path groups and directional deny rules from the committed root configuration.
 pub struct Rules {
     groups: BTreeMap<String, Vec<String>>,
@@ -285,13 +288,14 @@ impl Rules {
     pub fn count(&self) -> usize {
         self.rules.len()
     }
-    /// The ID of a rule in `current` that already covers the only rule of `self`: each pair of
-    /// `paths` and each kind that would break the new rule also breaks that rule, so the new
-    /// rule adds nothing. A rule that no pair breaks is not covered (nothing shows that it adds
-    /// nothing), and more than 200,000 pairs are not compared.
-    pub fn covered_by(&self, current: &Rules, paths: &[&str]) -> Option<String> {
+    /// The pairs of `paths` (source, target) that would break the only rule of `self`, and its
+    /// kinds. `None` when it has no rule, or more than 200,000 pairs would need a check.
+    pub fn breaking_pairs<'a>(&self, paths: &[&'a str]) -> Option<Breaks<'a>> {
         let rule = self.rules.first()?;
-        let kinds = Self::names(rule, "kinds");
+        let kinds: Vec<String> = Self::names(rule, "kinds")
+            .into_iter()
+            .map(String::from)
+            .collect();
         let first = json!(kinds.first()?);
         let sources: Vec<&str> = paths
             .iter()
@@ -301,24 +305,43 @@ impl Rules {
         if sources.len().saturating_mul(paths.len()) > 200_000 {
             return None;
         }
-        let breaks: Vec<(&str, &str)> = sources
+        let pairs = sources
             .iter()
             .flat_map(|s| paths.iter().map(move |t| (*s, *t)))
             .filter(|(s, t)| self.breaks(rule, s, t))
             .collect();
-        if breaks.is_empty() {
+        Some((kinds, pairs))
+    }
+    /// True when `rule` breaks for each of `pairs` and each of `kinds`.
+    fn breaks_each(&self, rule: &Value, kinds: &[String], pairs: &[(&str, &str)]) -> bool {
+        kinds.iter().all(|kind| {
+            pairs
+                .iter()
+                .all(|(s, t)| self.in_scope(rule, &json!(kind), s) && self.breaks(rule, s, t))
+        })
+    }
+    /// True when the only rule of `self` breaks for each of `pairs` and each of `kinds` (see
+    /// [`Rules::breaking_pairs`]): it covers a rule with those breaks. A rule with no break
+    /// is never covered, because nothing shows that it adds nothing.
+    pub fn covers(&self, kinds: &[String], pairs: &[(&str, &str)]) -> bool {
+        !pairs.is_empty()
+            && self
+                .rules
+                .first()
+                .is_some_and(|rule| self.breaks_each(rule, kinds, pairs))
+    }
+    /// The ID of a rule in `current` that already covers the only rule of `self`: each pair of
+    /// `paths` and each kind that would break the new rule also breaks that rule, so the new
+    /// rule adds nothing.
+    pub fn covered_by(&self, current: &Rules, paths: &[&str]) -> Option<String> {
+        let (kinds, pairs) = self.breaking_pairs(paths)?;
+        if pairs.is_empty() {
             return None;
         }
         current
             .rules
             .iter()
-            .find(|other| {
-                kinds.iter().all(|kind| {
-                    breaks.iter().all(|(s, t)| {
-                        current.in_scope(other, &json!(kind), s) && current.breaks(other, s, t)
-                    })
-                })
-            })
+            .find(|other| current.breaks_each(other, &kinds, &pairs))
             .map(|other| other["id"].as_str().unwrap_or("").to_string())
     }
 }

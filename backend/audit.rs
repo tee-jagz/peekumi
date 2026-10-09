@@ -53,13 +53,26 @@ fn change<T>(app: &App, change: impl FnOnce(&mut Value) -> Result<T>) -> Result<
 ///
 /// # Errors
 /// An Ask answer or another audit in progress.
-pub fn start(app: Arc<App>, body: Value) -> Result<Value> {
+pub fn start(app: Arc<App>, mut body: Value) -> Result<Value> {
     let guard = app
         .ask_lock
         .clone()
         .try_lock_owned()
         .ok()
         .context("An Ask answer or a rule audit is in progress. Try again when it ends")?;
+    // The agent gets the rules that earlier audits proposed, so it proposes only what is
+    // missing.
+    body["known"] = json!(
+        load(&app)["rules"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|r| {
+                let plain = r["plain"].as_str().filter(|p| !p.is_empty());
+                json!({"plain": plain.or(r["title"].as_str()), "rule": r["rule"]})
+            })
+            .collect::<Vec<_>>()
+    );
     change(&app, |list| {
         list["running"] = json!({
             "head": body["head"],
@@ -110,6 +123,15 @@ fn finish(app: &App, result: Result<Value>) {
                             .any(|k| kinds(&proposal["rule"]).contains(k)))
             }) {
                 Some(known) => {
+                    // The latest words for the rule: an older entry gets the plain sentence,
+                    // value and notes of this audit. The check and the owner's choice stay.
+                    if known["status"] != "drafted" {
+                        for key in ["title", "plain", "value", "why", "now", "principle"] {
+                            if proposal[key].as_str().is_some_and(|text| !text.is_empty()) {
+                                known[key] = proposal[key].clone();
+                            }
+                        }
+                    }
                     known["lastSeen"] = json!(now);
                     known["runs"] = json!(known["runs"].as_u64().unwrap_or(1) + 1);
                 }
@@ -134,14 +156,23 @@ fn finish(app: &App, result: Result<Value>) {
             list[key] = audit[key].clone();
         }
         list["lastRun"] = json!(now);
+        list["lastAdded"] = json!(added);
         list["error"] = Value::Null;
-        Ok((
-            "Rules proposed".to_string(),
-            format!(
-                "{added} new rule{} from the audit, {total} in the list.",
-                if added == 1 { "" } else { "s" }
-            ),
-        ))
+        Ok(if added == 0 {
+            (
+                "No missing rule".to_string(),
+                "The audit found no rule that is missing. The current rules are enough."
+                    .to_string(),
+            )
+        } else {
+            (
+                "Rules proposed".to_string(),
+                format!(
+                    "{added} new rule{} from the audit, {total} in the list.",
+                    if added == 1 { "" } else { "s" }
+                ),
+            )
+        })
     });
     if let Ok((title, body)) = told {
         app.workflow
@@ -151,7 +182,8 @@ fn finish(app: &App, result: Result<Value>) {
 
 /// The saved list, with each rule tried again at `head`: `trial` has its numbers there, or
 /// `problem` says why the engine refuses it (`added` when the configuration has it now).
-/// `running` is the audit in progress, if any.
+/// `partOf` names a rule in the list that covers it. `running` is the audit in progress, if
+/// any.
 pub async fn read(app: &App, head: &str) -> Result<Value> {
     let mut list = {
         let _one = LIST.lock().unwrap_or_else(|e| e.into_inner());
@@ -185,6 +217,36 @@ pub async fn read(app: &App, head: &str) -> Result<Value> {
                         || problem.contains("already covers")
                 );
                 rule["problem"] = json!(problem);
+            }
+        }
+    }
+    // A rule that another rule in the list covers joins it (`partOf`): the list shows each
+    // idea once.
+    let rules = list["rules"].as_array_mut().context("Damaged rule list")?;
+    let open: Vec<usize> = (0..rules.len())
+        .filter(|&i| rules[i]["problem"].is_null())
+        .collect();
+    let proposals: Vec<Value> = open
+        .iter()
+        .map(|&i| {
+            let r = &rules[i];
+            let groups = if r["trial"]["groups"].is_object() {
+                &r["trial"]["groups"]
+            } else {
+                &r["groups"]
+            };
+            json!({"groups": groups, "rule": r["rule"]})
+        })
+        .collect();
+    if let Ok(found) = app
+        .engine
+        .call("rule_overlaps", json!([head, proposals]))
+        .await
+    {
+        for (k, by) in found.as_array().into_iter().flatten().enumerate() {
+            if let Some(j) = by.as_u64() {
+                let parent = rules[open[j as usize]]["id"].clone();
+                rules[open[k]]["partOf"] = parent;
             }
         }
     }

@@ -50,8 +50,6 @@ export function createAudit({
     return node;
   };
   const plural = (n, word) => `${n} ${n === 1 ? word : word + "s"}`;
-  const sentence = (text) =>
-    text ? text[0].toUpperCase() + text.slice(1) + "." : "";
   const sendJson = (route, body, method = "POST") =>
     api(route, {
       method,
@@ -152,11 +150,50 @@ export function createAudit({
   }
 
   const usable = (r) => !r.problem && !editOf(r).error;
-  /** The selected rules that can go to an agent. */
+  /** The selected rules that can go to an agent. A rule that another rule covers goes with
+   * that rule. */
   const picked = () =>
     (shown.data?.rules || []).filter(
-      (r) => r.status === "selected" && usable(r),
+      (r) => r.status === "selected" && usable(r) && !r.partOf,
     );
+  /** Files in words: "frontend/" for "frontend/**", "a.js, b.js and 7 more in frontend/" for
+   * files in one folder, or the first names and how many more. */
+  function describe(patterns = []) {
+    const names = patterns.map((p) => p.replace(/\/\*\*$/, "/"));
+    const list = (items) =>
+      items.length <= 3
+        ? items.length > 1
+          ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
+          : items[0] || ""
+        : `${items.slice(0, 2).join(", ")} and ${items.length - 2} more`;
+    const folders = new Set(
+      names.map((n) =>
+        /[*?]|\/$/.test(n) ? null : n.slice(0, n.lastIndexOf("/")),
+      ),
+    );
+    const [folder] = folders;
+    if (names.length > 1 && folders.size === 1 && folder)
+      return `${list(names.map((n) => n.slice(folder.length + 1)))} in ${folder}/`;
+    return list(names);
+  }
+  /** The rule in one plain sentence: the agent's sentence, or one that Peekumi makes from the
+   * rule and its groups (for rules from before the agent wrote one). */
+  function plainOf(r) {
+    if (r.plain) return r.plain;
+    const groups = r.trial?.groups || r.groups || {};
+    const rule = r.rule;
+    // The files of one or more groups, as one list.
+    const files = (...names) => describe(names.flatMap((n) => groups[n] || []));
+    if (rule.layers)
+      return `${rule.layers.map((l) => files(l)).join(" → ")}: a lower part must not use a part above it`;
+    if (rule.only)
+      return `${files(rule.from)} may use only ${files(...rule.only)}`;
+    if (rule.to?.length === 1 && rule.to[0] === rule.from)
+      return `${files(rule.from)} must not use each other`;
+    return `${files(rule.from)} must not use ${files(...rule.to)}`;
+  }
+  // The order of values: the most valuable rules come first in each section.
+  const rank = { high: 0, medium: 1, low: 2 };
 
   /** The instruction that adds one rule to the rule file. */
   function instruction(r, edited) {
@@ -166,6 +203,7 @@ export function createAudit({
       data.configured
         ? `Add the dependency rule "${edited.rule.id}" to ${file}.`
         : `Create ${file} at the repository root with {"version": 1, "groups": {}, "rules": []} if it does not exist. Then add the dependency rule "${edited.rule.id}" to it.`,
+      `The rule: ${plainOf(r)}`,
       `Principle: ${r.principle}. ${r.why}`,
       "Add these groups if the file does not have them, with exactly these patterns:",
       "```json\n" + JSON.stringify(edited.groups, null, 2) + "\n```",
@@ -194,9 +232,11 @@ export function createAudit({
     return ids;
   }
 
-  /** One rule: its choice, name, numbers, reason, breaks now and the rule to edit. `fresh`
-   * marks a rule that the last audit added to a list from earlier audits. */
-  function row(r, update, fresh) {
+  /** One rule: its choice, its plain sentence, its numbers, why, the breaks now with the
+   * agent's view of them, the rules that it covers and the rule to edit. `fresh` marks a rule
+   * that the last audit added to a list from earlier audits; `parts` are the rules in the list
+   * that it covers. */
+  function row(r, update, fresh, parts = []) {
     const edit = editOf(r);
     const trial = edit.trial || r.trial || {};
     const done = r.status === "drafted" || r.added;
@@ -210,12 +250,7 @@ export function createAudit({
       mark(r, tick.checked ? "selected" : "proposed");
       update();
     };
-    let id = r.rule.id;
-    try {
-      id = JSON.parse(edit.text).rule.id;
-    } catch {
-      // The edited text shows its own error below.
-    }
+    const id = r.rule.id;
     // What the rule checks now, and what it cannot check: a relationship that the engine
     // cannot resolve can never break a rule, so "no break" is only as good as this number.
     const numbers = r.added
@@ -233,12 +268,13 @@ export function createAudit({
           ];
     const title = el("span", "fix-title");
     title.append(
-      el("strong", "", r.title),
+      el("strong", "", plainOf(r)),
       el(
         "small",
         "",
         [
-          id,
+          r.principle,
+          ...(r.value ? [`${r.value} value`] : []),
           ...numbers,
           ...(fresh ? ["new"] : []),
           ...(r.status === "drafted" ? ["drafted"] : []),
@@ -247,6 +283,9 @@ export function createAudit({
     );
     label.append(tick, title);
     box.append(label, el("p", "audit-why", r.why));
+    // The agent's view of the breaks now: on purpose or a mistake, and the cost of a fix. It
+    // shows only when Peekumi measured a break.
+    if (trial.broke && r.now) box.append(el("p", "audit-now", `Now: ${r.now}`));
     if (r.problem)
       box.append(el("p", r.added ? "rule-coverage" : "rule-error", r.problem));
     for (const warning of trial.warnings || [])
@@ -257,6 +296,10 @@ export function createAudit({
       );
     if (trial.broke > 3)
       box.append(el("p", "rule-coverage", `${trial.broke - 3} more breaks`));
+    if (parts.length)
+      box.append(
+        el("p", "audit-parts", `Also covers: ${parts.map(plainOf).join("; ")}`),
+      );
     if (edit.error) box.append(el("p", "rule-error", edit.error));
     if (!done) {
       const details = el("details", "audit-edit");
@@ -287,9 +330,13 @@ export function createAudit({
     // Back on the page while an audit runs: read the list again until it ends.
     if (data?.running) poll(commit);
     const rules = data?.rules || [];
+    // Each idea once: a rule that another rule covers shows under that rule.
+    const ids = new Set(rules.map((r) => r.id));
+    const roots = rules.filter((r) => !r.partOf || !ids.has(r.partOf));
+    const breaking = (r) => !r.problem && (r.trial?.broke || 0) > 0;
     head("Proposed rules", {
-      meta: rules.length
-        ? `${plural(rules.length, "rule")} under ${plural(new Set(rules.map((r) => r.principle)).size, "principle")}`
+      meta: roots.length
+        ? `${plural(roots.length, "rule")} · ${roots.filter(breaking).length} find a problem now`
         : "",
     });
     if (shown.error) body.append(el("p", "rule-error", shown.error));
@@ -309,8 +356,21 @@ export function createAudit({
       body.append(
         el("p", "rule-error", `The last audit failed: ${data.error}`),
       );
+    // An audit can find that nothing is missing: that is a good result, not an error.
+    if (!data.running && !data.error && data.lastRun && data.lastAdded === 0)
+      body.append(
+        el(
+          "p",
+          "read-note audit-none",
+          "The last audit found no missing rule. The current rules are enough.",
+        ),
+      );
     if (!rules.length && !data.running) {
-      const first = el("button", "btn primary", "Audit the architecture");
+      const first = el(
+        "button",
+        "btn primary",
+        data.lastRun ? "Audit again" : "Audit the architecture",
+      );
       first.type = "button";
       first.onclick = () => start(commit);
       return body.append(first);
@@ -320,7 +380,7 @@ export function createAudit({
         el(
           "p",
           "read-note",
-          `${data.provider || "The agent"} proposed these rules from the architecture and from engineering principles, not from the imports that exist now. A break now is work to do, not a reason to leave a rule out. "Cannot check" counts the relationships that Peekumi cannot resolve: they never break a rule. Select the rules to add. Each audit adds to this list, and your selection stays.`,
+          `${data.provider || "The agent"} proposed these rules from the architecture, not from the imports that exist now. Each rule says which files must not use which. Select the rules to add; your selection stays. "Cannot check" counts relationships that Peekumi cannot resolve: they never break a rule.`,
         ),
       );
     const sendButton = el("button", "btn primary"),
@@ -331,18 +391,38 @@ export function createAudit({
       saveButton.textContent = "Save as drafts";
       sendButton.disabled = saveButton.disabled = !n;
     };
-    const meanings = new Map(
-      (data.principles || []).map((p) => [p.name, p.meaning]),
-    );
     // "New" only means something when earlier audits made the rest of the list.
     const earlier = rules.some((r) => r.firstSeen < data.lastRun);
-    for (const principle of new Set(rules.map((r) => r.principle))) {
+    const order = (a, b) =>
+      (rank[a.value] ?? 1) - (rank[b.value] ?? 1) ||
+      (b.trial?.broke || 0) - (a.trial?.broke || 0);
+    // Two sections: rules that find a problem now, and rules that stop a later mistake.
+    for (const [heading, note, members] of [
+      [
+        "Finds a problem now",
+        "The code breaks these rules now. A break can be a mistake, or a design that you chose: then leave the rule out.",
+        roots.filter(breaking),
+      ],
+      [
+        "Guards against future mistakes",
+        "Nothing breaks these rules now. They stop a mistake later.",
+        roots.filter((r) => !breaking(r)),
+      ],
+    ]) {
+      if (!members.length) continue;
       body.append(
-        el("h3", "workflow-group", principle),
-        el("p", "audit-principle", sentence(meanings.get(principle) || "")),
+        el("h3", "workflow-group", heading),
+        el("p", "audit-principle", note),
       );
-      for (const r of rules.filter((r) => r.principle === principle))
-        body.append(row(r, update, earlier && r.firstSeen === data.lastRun));
+      for (const r of members.sort(order))
+        body.append(
+          row(
+            r,
+            update,
+            earlier && r.firstSeen === data.lastRun,
+            rules.filter((c) => c.partOf === r.id),
+          ),
+        );
     }
     if (rules.length) {
       sendButton.type = saveButton.type = "button";

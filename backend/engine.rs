@@ -722,6 +722,27 @@ impl Repository {
             "config": config,
         }))
     }
+    /// For each of `proposals` (`[{groups, rule}]`) at `head`: the index of a different
+    /// proposal that covers it (each of its breaks also breaks that one), or null. Of two
+    /// proposals that cover each other, the first one stays. A group name that the committed
+    /// rule file has keeps the file's patterns, as in [`Repository::rule_trial`].
+    pub fn rule_overlaps(&mut self, head: &str, proposals: &Value) -> Result<Value> {
+        let b = self.snapshot(head)?;
+        let groups = crate::rules::CONFIG_FILES
+            .iter()
+            .find_map(|name| b.files.get(*name)?.source.as_deref())
+            .filter(|source| crate::rules::parse(source).is_ok())
+            .and_then(|source| serde_json::from_str::<Value>(source).ok())
+            .map(|config| config["groups"].clone())
+            .unwrap_or_else(|| json!({}));
+        let code: Vec<&str> = b
+            .files
+            .keys()
+            .map(String::as_str)
+            .filter(|path| adapters::for_path(path).is_some())
+            .collect();
+        Ok(json!(overlaps(&groups, &array(proposals), &code)))
+    }
     /// The dependency cycles between files at `head`: each group of two or more files that
     /// reach each other through resolved relationships, the largest first (at most 10, each
     /// with at most 10 of its files and its `size`).
@@ -1141,6 +1162,39 @@ fn rule_shape(groups: &Value, rule: &Value, paths: &[&str], with_kinds: bool) ->
     hash(shape.to_string().as_bytes())[..16].to_string()
 }
 
+/// See [`Repository::rule_overlaps`]: `groups` are the rule file's groups and `code` the files
+/// that a language adapter reads.
+fn overlaps(groups: &Value, proposals: &[Value], code: &[&str]) -> Vec<Option<usize>> {
+    let rules: Vec<Option<crate::rules::Rules>> = proposals
+        .iter()
+        .map(|p| {
+            let mut all = groups.clone();
+            for (name, patterns) in p["groups"].as_object()? {
+                if all.get(name).is_none() {
+                    all[name] = patterns.clone();
+                }
+            }
+            crate::rules::parse(
+                &json!({"version": 1, "groups": all, "rules": [p["rule"]]}).to_string(),
+            )
+            .ok()
+        })
+        .collect();
+    let breaks: Vec<Option<crate::rules::Breaks>> = rules
+        .iter()
+        .map(|r| r.as_ref()?.breaking_pairs(code))
+        .collect();
+    let covers = |by: usize, of: usize| -> bool {
+        match (&rules[by], &breaks[of]) {
+            (Some(rule), Some((kinds, pairs))) => rule.covers(kinds, pairs),
+            _ => false,
+        }
+    };
+    (0..proposals.len())
+        .map(|i| (0..proposals.len()).find(|&j| j != i && covers(j, i) && !(j > i && covers(i, j))))
+        .collect()
+}
+
 /// The groups of files that depend on each other in a cycle (strongly connected components of
 /// the resolved file graph, Kosaraju's method without recursion). A file that uses itself is
 /// not a cycle.
@@ -1367,6 +1421,35 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_proposal_that_another_covers_joins_it() {
+        let groups = json!({"ui":["ui/**"],"db":["db/**"]});
+        let code = ["ui/a.py", "ui/b.py", "db/c.py", "lib/d.py"];
+        let proposal = |groups: Value, rule: Value| json!({"groups": groups, "rule": rule});
+        let proposals = [
+            proposal(
+                json!({}),
+                json!({"id":"wide","from":"ui","to":["db"],"kinds":["calls","imports"]}),
+            ),
+            proposal(
+                json!({"a":["ui/a.py"]}),
+                json!({"id":"part","from":"a","to":["db"],"kinds":["calls"]}),
+            ),
+            proposal(
+                json!({"lib":["lib/**"]}),
+                json!({"id":"other","from":"lib","to":["ui"],"kinds":["calls"]}),
+            ),
+            proposal(
+                json!({"front":["ui/**"]}),
+                json!({"id":"same","from":"front","to":["db"],"kinds":["imports","calls"]}),
+            ),
+        ];
+        assert_eq!(
+            overlaps(&groups, &proposals, &code),
+            vec![None, Some(0), None, Some(0)],
+            "A part joins the wider rule; of two equal rules, the first stays"
+        );
+    }
     #[test]
     fn cycles_are_groups_of_files_that_reach_each_other() {
         let r = |a: &str, b: &str| json!({"resolution":"resolved","source":{"path":a},"targets":[{"path":b}]});

@@ -115,6 +115,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
         "fixes" => repo.fixes(argument(args, 0)),
         "rule_trial" => repo.rule_trial(argument(args, 0), &args[1]),
         "cycles" => repo.cycles(argument(args, 0)),
+        "rule_overlaps" => repo.rule_overlaps(argument(args, 0), &args[1]),
         "compare" => repo.compare(
             argument(args, 0),
             argument(args, 1),

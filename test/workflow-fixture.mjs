@@ -94,6 +94,8 @@ if (values.includes("--tools")) {
       !values.includes("--strict-mcp-config")
     )
       throw Error("The audit agent must have no built-in tools");
+    if (!system.includes("Do not be pedantic"))
+      throw Error("The audit agent must propose only missing rules");
     if (!system.includes("Do not copy the current dependencies"))
       throw Error("The audit agent must not copy the current dependencies");
     if (!system.includes("- Open-closed:"))
@@ -103,6 +105,7 @@ if (values.includes("--tools")) {
       "## Folder descriptions",
       "## Dependency cycles now",
       "## Current .peekumi.json",
+      "## Rules that earlier audits proposed",
     ])
       if (!task.includes(part)) throw Error("The audit prompt has no " + part);
     // A later audit writes the first rule another way: another ID and other kinds, over
@@ -111,12 +114,29 @@ if (values.includes("--tools")) {
       ? Number(readFileSync("audit-runs", "utf8"))
       : 0;
     writeFileSync("audit-runs", String(count + 1));
-    const rule = (principle, title, groups, rule) => ({
+    // A later audit knows the rules that earlier audits proposed.
+    if (
+      count &&
+      !task
+        .slice(task.indexOf("## Rules that earlier audits proposed"))
+        .includes('"id":"ui-imports-no-db"')
+    )
+      throw Error("The audit did not get the rules proposed before");
+    // The third audit finds nothing missing: a good result.
+    if (count >= 2) {
+      console.log(JSON.stringify({ is_error: false, result: '{"rules": []}' }));
+      process.exit(0);
+    }
+    const rule = (principle, title, groups, rule, more = {}) => ({
       principle,
       title,
+      plain: title,
+      value: "medium",
       why: "The rule keeps the design. Without it, a small mistake spreads.",
+      now: "",
       groups,
       rule,
+      ...more,
     });
     console.log(
       JSON.stringify({
@@ -134,6 +154,13 @@ if (values.includes("--tools")) {
                 kinds: count ? ["imports"] : ["imports", "inherits"],
                 message: "The UI uses services, not the database.",
               },
+              {
+                plain: count
+                  ? "ui/ must not import db/"
+                  : "Files in ui/ must not import code from db/",
+                value: "high",
+                now: "Two UI files import the store. This looks like a mistake.",
+              },
             ),
             rule(
               "Layering",
@@ -145,6 +172,19 @@ if (values.includes("--tools")) {
                 kinds: ["imports", "calls"],
                 message: "A lower layer does not use a higher layer.",
               },
+            ),
+            // A part of the first rule: it joins that rule in the list.
+            rule(
+              "Separation of concerns",
+              "The view imports no database code",
+              { view: ["ui/view.py"], db: ["db/**"] },
+              {
+                id: "view-imports-no-db",
+                from: "view",
+                to: ["db"],
+                kinds: ["imports", "inherits"],
+              },
+              { value: "low" },
             ),
             // A group name that the configuration uses for other patterns.
             rule(
@@ -159,18 +199,6 @@ if (values.includes("--tools")) {
               "Same ID",
               { ui: ["ui/**"], db: ["db/**"] },
               { id: "ui-no-db", from: "ui", to: ["db"], kinds: ["calls"] },
-            ),
-            // The same check as a current rule, with another ID and group name.
-            rule(
-              "Separation of concerns",
-              "Same check",
-              { views: ["ui/**"], db: ["db/**"] },
-              {
-                id: "views-no-db",
-                from: "views",
-                to: ["db"],
-                kinds: ["calls"],
-              },
             ),
             // A narrower form of a current rule: that rule already covers it.
             rule(

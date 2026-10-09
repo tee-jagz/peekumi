@@ -222,20 +222,31 @@ try {
         .click();
       const audits = page.locator(".audit-row");
       await audits.first().waitFor();
+      // Each idea once: the rule that the first rule covers shows under it.
       assert.equal(await audits.count(), 2);
-      assert.deepEqual(
-        await page.locator("#tabBody h3.workflow-group").allInnerTexts(),
-        ["Dependency inversion", "Layering"],
-      );
-      assert.equal(
-        await page.locator("#viewHead .view-meta").innerText(),
-        "2 rules under 2 principles",
+      assert.ok(
+        (
+          await page.locator("#tabBody h3.workflow-group").allInnerTexts()
+        ).includes("Guards against future mistakes"),
       );
       assert.match(
-        await audits.first().locator("small").innerText(),
-        /^ui-imports-no-db · /,
+        await page.locator("#viewHead .view-meta").innerText(),
+        /^2 rules · \d find a problem now$/,
       );
-      const layers = page.locator(".audit-row", { hasText: "app-layers" });
+      const inversion = page.locator(".audit-row", {
+        hasText: "Files in ui/ must not import code from db/",
+      });
+      assert.match(
+        await inversion.locator("small").innerText(),
+        /^Dependency inversion · high value · /,
+      );
+      assert.match(
+        await inversion.locator(".audit-parts").innerText(),
+        /^Also covers: The view imports no database code$/,
+      );
+      const layers = page.locator(".audit-row", {
+        hasText: "UI over services over database",
+      });
       assert.match(
         await layers.innerText(),
         /Group "services" matches no file/,
@@ -243,7 +254,7 @@ try {
       await page.locator(".fix-context summary").click();
       assert.match(
         await page.locator(".fix-context").innerText(),
-        /^The last audit left out 4 proposals[^]*Narrower: The rule "ui-no-db" already covers it/,
+        /^The last audit left out 3 proposals[^]*Narrower: The rule "ui-no-db" already covers it/,
       );
       const add = page.locator(".fix-buttons .primary");
       assert.equal(
@@ -308,14 +319,16 @@ try {
       assert.equal(await page.locator(".audit-row").count(), 2);
       assert.equal(
         await page
-          .locator(".audit-row", { hasText: "ui-imports-no-db" })
+          .locator(".audit-row", {
+            hasText: "Files in ui/ must not import code from db/",
+          })
           .locator("input[type=checkbox]")
           .isChecked(),
         false,
       );
       assert.match(
         await page
-          .locator(".audit-row", { hasText: "app-layers" })
+          .locator(".audit-row", { hasText: "UI over services over database" })
           .locator("small")
           .innerText(),
         / · drafted$/,

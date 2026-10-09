@@ -155,7 +155,7 @@ The bell on the Tasks page turns notifications on or off for one device. When no
 - A task reaches its one-hour limit: **Task stopped**.
 - A session agent asks to run a command: **Session needs you**.
 - A session turn ends and the agent waits for your message: **Your turn**.
-- A rule audit ends: **Rules proposed**, or **Rule audit needs you** when it fails.
+- A rule audit ends: **Rules proposed**, **No missing rule**, or **Rule audit needs you** when it fails.
 
 Peekumi sends no notification for a task or a turn that you stop yourself. The service worker shows a notification only when no Peekumi window is on the screen. Tap the notification to open the task or the session. A newer notification about the same run replaces the older one.
 

@@ -2340,14 +2340,22 @@ test("an agent audits the architecture in the background; the saved list keeps e
   assert.equal(first.configured, true);
   assert.ok(first.principles.some((p) => p.name === "Open-closed"));
   assert.deepEqual(
-    first.rules.map((r) => [r.principle, r.rule.id, r.status, r.runs]),
+    first.rules.map((r) => [r.principle, r.rule.id, r.value, r.status, r.runs]),
     [
-      ["Dependency inversion", "ui-imports-no-db", "proposed", 1],
-      ["Layering", "app-layers", "proposed", 1],
+      ["Dependency inversion", "ui-imports-no-db", "high", "proposed", 1],
+      ["Layering", "app-layers", "medium", "proposed", 1],
+      ["Separation of concerns", "view-imports-no-db", "low", "proposed", 1],
     ],
   );
-  // A rule that the current code breaks stays: the breaks show what to fix.
-  const [inversion, layers] = first.rules;
+  // A rule that the current code breaks stays: the breaks show what to fix. The agent says in
+  // plain words what the rule asks, and what it thinks of the breaks now.
+  const [inversion, layers, part] = first.rules;
+  assert.equal(inversion.plain, "Files in ui/ must not import code from db/");
+  assert.match(inversion.now, /looks like a mistake/);
+  // A rule that another rule in the list covers joins it.
+  assert.equal(part.partOf, inversion.id);
+  assert.equal(inversion.partOf, undefined);
+  assert.equal(layers.partOf, undefined);
   assert.deepEqual(
     [
       inversion.trial.checked,
@@ -2374,7 +2382,6 @@ test("an agent audits the architecture in the background; the saved list keeps e
       // "ui" means the group in the rule file, so this rule is ui-no-db again.
       'It checks the same files as the rule "ui-no-db"',
       'A rule with the ID "ui-no-db" already exists',
-      'It checks the same files as the rule "ui-no-db"',
       'The rule "ui-no-db" already covers it: each break of it also breaks that rule',
     ],
   );
@@ -2400,8 +2407,18 @@ test("an agent audits the architecture in the background; the saved list keeps e
     [
       ["ui-imports-no-db", "proposed", 2],
       ["app-layers", "selected", 2],
+      ["view-imports-no-db", "proposed", 2],
     ],
   );
+  // The saved rule takes the newest words, and keeps the check and the choice.
+  assert.equal(second.rules[0].plain, "ui/ must not import db/");
+  assert.deepEqual(second.rules[0].rule.kinds, ["imports", "inherits"]);
+  assert.equal(second.lastAdded, 0, "The second audit added no new rule");
+  // An audit that finds nothing missing is a good result, not an error.
+  const third = await audit();
+  assert.equal(third.error, null);
+  assert.equal(third.lastAdded, 0);
+  assert.equal(third.rules.length, 3);
   // An edited rule is tried again before it goes to an agent.
   const edited = await f.req("/api/rules/check", {
     head: f.sha,

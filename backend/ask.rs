@@ -1241,9 +1241,11 @@ pub const PRINCIPLES: [(&str, &str); 8] = [
 /// Ask, and it changes nothing.
 const AUDIT: &str = "You audit the architecture of a Git repository and propose dependency rules for Peekumi's rule engine. You read the code only through the lookup tools, and you change nothing.
 
-Start from the architecture. The user message gives the map of folders and files, the folder descriptions, the dependency cycles that exist now and the current .peekumi.json. Read the READMEs, the module documentation and the entry points that tell what each part is for. Then propose rules that keep this design true while the repository grows. Good rules stop small dependency mistakes before they spread.
+Start from the architecture. The user message gives the map of folders and files, the folder descriptions, the dependency cycles that exist now, the current .peekumi.json and the rules that earlier audits proposed. Read the READMEs, the module documentation and the entry points that tell what each part is for. Then find the rules that are missing: the rules that keep this design true while the repository grows.
 
-Do not copy the current dependencies: the code can already contain mistakes. Get each rule from the job of each part and from a principle, not from the imports that exist now. A rule that the current code breaks can be a good rule: Peekumi shows the breaks, and the owner fixes them. Never shape a group or a rule to leave out a file only because that file breaks the rule. Do not propose a rule that a current rule already states.
+Do not be pedantic. Propose a rule only when it is needed: it must stop a mistake that is likely in this repository and that costs much when it occurs. Do not propose a rule for a boundary that no change is likely to cross, a rule that only repeats the folder layout, or one idea in several rules. A rule that a current rule or an earlier proposal states, fully or in part, is not missing: do not propose it. When the current rules are enough, reply with no rules. That is a good result.
+
+Do not copy the current dependencies: the code can already contain mistakes. Get each rule from the job of each part and from a principle, not from the imports that exist now. A rule that the current code breaks can be a good rule: Peekumi shows the breaks, and the owner fixes them. Never shape a group or a rule to leave out a file only because that file breaks the rule.
 
 The engine checks only static relationships between files: imports, calls, implements and inherits. It cannot check size, duplication, names or runtime behaviour. Propose only rules that it can check.
 
@@ -1257,10 +1259,16 @@ A group is a name and a list of path globs from the repository root: * stays in 
 Put each rule under exactly one of these principles:
 PRINCIPLES
 
-Write why and message in ASD-STE100 Simplified Technical English: short sentences, the active voice, approved words. In why, say what the rule protects and what goes wrong without it, in two or three sentences. Do not say in why which files break the rule now: Peekumi measures the breaks and shows them. Propose at most 12 rules, the most valuable first. Reply with JSON only, and no other text: {\"rules\": [{\"principle\": \"<principle>\", \"title\": \"<a short name>\", \"why\": \"<why>\", \"groups\": {\"<name>\": [\"<glob>\"]}, \"rule\": {<the rule>}}]}. In groups, give every group that the rule names.";
+Before you propose a rule, use the lookups to see whether the code breaks it now. When it does, say in now whether the break looks like a deliberate design (the code needs it on purpose) or a mistake, and what a fix costs, in one or two sentences. When nothing breaks it, leave now empty. Peekumi measures the breaks itself.
+
+Write plain as one sentence that a new developer understands, with the file or folder names, for example \"frontend/model.js must not use other frontend files\". Give each rule a value: high when the mistake it stops is expensive or hard to see (security, the release, a cycle in the core), medium when it keeps a boundary clear, low otherwise. Write why, now and message in ASD-STE100 Simplified Technical English: short sentences, the active voice, approved words. In why, say what the rule protects and what goes wrong without it, in two or three sentences.
+
+Propose at most 5 rules, the most valuable first. Do not propose a rule that is only a part of another rule that you propose. Reply with JSON only, and no other text: {\"rules\": [{\"principle\": \"<principle>\", \"title\": \"<a short name>\", \"plain\": \"<one plain sentence>\", \"value\": \"high, medium or low\", \"why\": \"<why>\", \"now\": \"<the breaks now, or empty>\", \"groups\": {\"<name>\": [\"<glob>\"]}, \"rule\": {<the rule>}}]}. In groups, give every group that the rule names.";
 
 /// Reads the rule audit agent's reply: a JSON object (text around it is ignored) with
-/// `rules`. Keeps each proposal with a known principle, a title, groups and a rule object.
+/// `rules`. Keeps the first six proposals with a known principle, a title, groups and a rule
+/// object, each with its plain sentence (the title when it has none), its value (`high`,
+/// `medium` or `low`) and its note on the breaks now.
 fn read_rule_proposals(raw: &str) -> Result<Vec<Value>> {
     let start = raw.find('{').context("The agent did not reply with JSON")?;
     let end = raw
@@ -1273,18 +1281,28 @@ fn read_rule_proposals(raw: &str) -> Result<Vec<Value>> {
         .as_array()
         .into_iter()
         .flatten()
-        .take(12)
         .filter(|p| {
             PRINCIPLES.iter().any(|(name, _)| p["principle"] == *name)
                 && !text_of(&p["title"]).trim().is_empty()
                 && p["groups"].is_object()
                 && p["rule"].is_object()
         })
+        .take(6)
         .map(|p| {
+            let short = |v: &Value, n: usize| text_of(v).trim().chars().take(n).collect::<String>();
+            let title = short(&p["title"], 200);
+            let plain = short(&p["plain"], 300);
+            let value = p["value"]
+                .as_str()
+                .filter(|v| ["high", "medium", "low"].contains(v))
+                .unwrap_or("medium");
             json!({
                 "principle": p["principle"],
-                "title": text_of(&p["title"]).trim().chars().take(200).collect::<String>(),
-                "why": text_of(&p["why"]).trim().chars().take(2000).collect::<String>(),
+                "title": title,
+                "plain": if plain.is_empty() { title.clone() } else { plain },
+                "value": value,
+                "why": short(&p["why"], 2000),
+                "now": short(&p["now"], 1000),
                 "groups": p["groups"],
                 "rule": p["rule"],
             })
@@ -1337,6 +1355,15 @@ pub async fn propose_rules(app: &App, body: Value) -> Result<Value> {
             .map(|text| (*name, text))
     });
     let config = found.as_ref().map(|(_, text)| text.clone());
+    // The rules that earlier audits proposed (see the audit module): the agent proposes only
+    // what is missing.
+    let known: String = body["known"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(60)
+        .map(|k| format!("- {} ({})\n", text_of(&k["plain"]), k["rule"]))
+        .collect();
     // Cycles are faults, not a design: the agent can propose rules against them without
     // copying the dependencies that exist now.
     let cycles = app
@@ -1366,7 +1393,7 @@ pub async fn propose_rules(app: &App, body: Value) -> Result<Value> {
         })
         .collect();
     let prompt = format!(
-        "Audit the repository at commit {sha_text} and propose dependency rules.\n\n## Map of folders and files\n{map}\n\n## Folder descriptions\n{}\n\n## Dependency cycles now\nThese files reach each other through static relationships now. Each cycle is a fault to consider, not a design to copy.\n{}\n\n## Current .peekumi.json\n{}\n",
+        "Audit the repository at commit {sha_text} and propose dependency rules.\n\n## Map of folders and files\n{map}\n\n## Folder descriptions\n{}\n\n## Dependency cycles now\nThese files reach each other through static relationships now. Each cycle is a fault to consider, not a design to copy.\n{}\n\n## Current .peekumi.json\n{}\n\n## Rules that earlier audits proposed\nThe owner has these rules already. Do not propose them again, or a part of them.\n{}\n",
         if described.is_empty() {
             "None."
         } else {
@@ -1380,6 +1407,7 @@ pub async fn propose_rules(app: &App, body: Value) -> Result<Value> {
         config
             .as_deref()
             .unwrap_or("None: this repository has no rules yet."),
+        if known.is_empty() { "None." } else { &known },
     );
     // The prompt with the list of principles, made once.
     static SYSTEM: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -1415,14 +1443,7 @@ pub async fn propose_rules(app: &App, body: Value) -> Result<Value> {
             Err(reason) => dropped.push(json!({"title": proposal["title"], "reason": reason})),
         }
     }
-    ensure!(
-        !rules.is_empty(),
-        "The agent proposed no valid rule{}",
-        dropped
-            .first()
-            .map(|d| format!(" ({})", d["reason"].as_str().unwrap_or("")))
-            .unwrap_or_default()
-    );
+    // No rule is a good result: the current rules are enough.
     Ok(json!({
         "rules": rules,
         "dropped": dropped,
