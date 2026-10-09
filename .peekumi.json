@@ -121,7 +121,8 @@
       "backend/rules.rs",
       "backend/index.rs"
     ],
-    "language-adapters": [
+    "language-adapters": ["backend/adapters/**"],
+    "adapter-languages": [
       "backend/adapters/python.rs",
       "backend/adapters/typescript.rs",
       "backend/adapters/rust.rs"
@@ -303,8 +304,8 @@
     },
     {
       "id": "language-adapters-apart",
-      "from": "language-adapters",
-      "to": ["language-adapters"],
+      "from": "adapter-languages",
+      "to": ["adapter-languages"],
       "kinds": ["imports", "calls", "implements", "inherits"],
       "message": "A language adapter must not use a different language adapter. Put shared code in the adapter contract."
     }

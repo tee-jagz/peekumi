@@ -40,6 +40,7 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ### Fixed
 
+- Peekumi's own `.peekumi.json`: the group `language-adapters` covers `backend/adapters/**` again, so `analysis-layers` checks the adapter contract and `rust_relationships.rs` too (184 relationships, before 157). The rule `language-adapters-apart` uses its own group, `adapter-languages`.
 - A proposed rule that names a group of `.peekumi.json` with other patterns now gets a new group name. Before, it took the file's patterns. The rule then checked other files than the agent meant, and an agent that added it could change a group that other rules use.
 - Proposed rules that are in the rule file, or that went to an agent, move to a closed Done list.
 - The live line (Peek and "Your turn") sits at the right of the title row, beside "Back to task", not beside the selection's name.
