@@ -285,6 +285,42 @@ impl Rules {
     pub fn count(&self) -> usize {
         self.rules.len()
     }
+    /// The ID of a rule in `current` that already covers the only rule of `self`: each pair of
+    /// `paths` and each kind that would break the new rule also breaks that rule, so the new
+    /// rule adds nothing. A rule that no pair breaks is not covered (nothing shows that it adds
+    /// nothing), and more than 200,000 pairs are not compared.
+    pub fn covered_by(&self, current: &Rules, paths: &[&str]) -> Option<String> {
+        let rule = self.rules.first()?;
+        let kinds = Self::names(rule, "kinds");
+        let first = json!(kinds.first()?);
+        let sources: Vec<&str> = paths
+            .iter()
+            .copied()
+            .filter(|s| self.in_scope(rule, &first, s))
+            .collect();
+        if sources.len().saturating_mul(paths.len()) > 200_000 {
+            return None;
+        }
+        let breaks: Vec<(&str, &str)> = sources
+            .iter()
+            .flat_map(|s| paths.iter().map(move |t| (*s, *t)))
+            .filter(|(s, t)| self.breaks(rule, s, t))
+            .collect();
+        if breaks.is_empty() {
+            return None;
+        }
+        current
+            .rules
+            .iter()
+            .find(|other| {
+                kinds.iter().all(|kind| {
+                    breaks.iter().all(|(s, t)| {
+                        current.in_scope(other, &json!(kind), s) && current.breaks(other, s, t)
+                    })
+                })
+            })
+            .map(|other| other["id"].as_str().unwrap_or("").to_string())
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -367,6 +403,36 @@ mod tests {
         assert!(
             broken(&rules, "newfolder/x.py", "routes/r.py").is_empty(),
             "Outside every layer"
+        );
+    }
+    #[test]
+    fn a_narrower_rule_is_covered_by_a_current_rule() {
+        let current = parse(
+            r#"{"version":1,"groups":{"ui":["ui/**"],"db":["db/**"]},
+            "rules":[{"id":"ui-no-db","from":"ui","to":["db"],"kinds":["imports","calls"]}]}"#,
+        )
+        .unwrap();
+        let paths = ["ui/a.py", "ui/b.py", "db/c.py", "lib/d.py"];
+        let proposal = |rule: &str| {
+            parse(&format!(
+                r#"{{"version":1,"groups":{{"ui":["ui/**"],"view":["ui/a.py"],"db":["db/**"],"lib":["lib/**"]}},"rules":[{rule}]}}"#
+            ))
+            .unwrap()
+        };
+        let narrower = proposal(r#"{"id":"n","from":"view","to":["db"],"kinds":["calls"]}"#);
+        assert_eq!(
+            narrower.covered_by(&current, &paths),
+            Some("ui-no-db".to_string())
+        );
+        let wider = proposal(r#"{"id":"w","from":"ui","to":["db","lib"],"kinds":["calls"]}"#);
+        assert_eq!(wider.covered_by(&current, &paths), None, "lib/ is new");
+        let other_kind = proposal(r#"{"id":"k","from":"ui","to":["db"],"kinds":["inherits"]}"#);
+        assert_eq!(other_kind.covered_by(&current, &paths), None);
+        let nothing = proposal(r#"{"id":"x","from":"lib","to":["view"],"kinds":["calls"]}"#);
+        assert_eq!(
+            nothing.covered_by(&current, &paths),
+            None,
+            "Not covered: ui-no-db does not check lib/"
         );
     }
     #[test]

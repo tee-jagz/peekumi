@@ -2294,3 +2294,163 @@ test("Peekumi proposes one fix for each rule and declaration that its breaks rea
   });
   assert.deepEqual([nothing.fixes, nothing.provider], [[], null]);
 });
+test("an agent audits the architecture in the background; the saved list keeps each check once, and the owner's choices", async (t) => {
+  const f = await fixture({
+    files: {
+      ".peekumi.json": JSON.stringify({
+        version: 1,
+        groups: { ui: ["ui/**"], db: ["db/**"] },
+        rules: [
+          {
+            id: "ui-no-db",
+            from: "ui",
+            to: ["db"],
+            kinds: ["calls"],
+            message: "The UI goes through services.",
+          },
+        ],
+      }),
+      "ui/__init__.py": "",
+      "ui/view.py":
+        "from db.store import save\n\ndef show():\n    return save()\n",
+      "ui/panel.py":
+        "from db.store import save\n\ndef draw():\n    return save()\n",
+      "db/__init__.py": "",
+      "db/store.py": "def save():\n    return 2\n",
+    },
+  });
+  t.after(() => f.close());
+  const list = () => f.req(`/api/rules/audit?head=${f.sha}`);
+  const audit = async () => {
+    const started = await f.req("/api/rules/propose", {
+      head: f.sha,
+      using: { agent: "claude" },
+    });
+    assert.deepEqual(started, { status: 200, running: true });
+    return waitFor(async () => {
+      const saved = await list();
+      return !saved.running && saved;
+    });
+  };
+  const empty = await list();
+  assert.deepEqual([empty.rules, empty.lastRun], [[], undefined]);
+  const first = await audit();
+  assert.equal(first.error, null);
+  assert.equal(first.provider, "Claude Code");
+  assert.equal(first.configured, true);
+  assert.ok(first.principles.some((p) => p.name === "Open-closed"));
+  assert.deepEqual(
+    first.rules.map((r) => [r.principle, r.rule.id, r.status, r.runs]),
+    [
+      ["Dependency inversion", "ui-imports-no-db", "proposed", 1],
+      ["Layering", "app-layers", "proposed", 1],
+    ],
+  );
+  // A rule that the current code breaks stays: the breaks show what to fix.
+  const [inversion, layers] = first.rules;
+  assert.deepEqual(
+    [
+      inversion.trial.checked,
+      inversion.trial.broke,
+      inversion.trial.unresolved,
+    ],
+    [2, 2, 0],
+  );
+  assert.deepEqual(
+    inversion.trial.examples.map((e) => [e.source, e.target, e.kind]).sort(),
+    [
+      ["ui/panel.py", "db/store.py", "imports"],
+      ["ui/view.py", "db/store.py", "imports"],
+    ],
+  );
+  assert.equal(inversion.id, inversion.trial.key);
+  assert.equal(layers.trial.broke, 0);
+  assert.deepEqual(layers.trial.warnings, [
+    'Group "services" matches no file. Check its patterns.',
+  ]);
+  assert.deepEqual(
+    first.dropped.map((d) => d.reason),
+    [
+      // "ui" means the group in the rule file, so this rule is ui-no-db again.
+      'It checks the same files as the rule "ui-no-db"',
+      'A rule with the ID "ui-no-db" already exists',
+      'It checks the same files as the rule "ui-no-db"',
+      'The rule "ui-no-db" already covers it: each break of it also breaks that rule',
+    ],
+  );
+  // The owner selects a rule; a second audit adds nothing twice and keeps that choice.
+  assert.equal(
+    (
+      await f.req(
+        `/api/rules/audit/${layers.id}`,
+        { status: "selected" },
+        "PATCH",
+      )
+    ).ok,
+    true,
+  );
+  assert.equal(
+    (await f.req(`/api/rules/audit/${layers.id}`, { status: "gone" }, "PATCH"))
+      .status,
+    400,
+  );
+  const second = await audit();
+  assert.deepEqual(
+    second.rules.map((r) => [r.rule.id, r.status, r.runs]),
+    [
+      ["ui-imports-no-db", "proposed", 2],
+      ["app-layers", "selected", 2],
+    ],
+  );
+  // An edited rule is tried again before it goes to an agent.
+  const edited = await f.req("/api/rules/check", {
+    head: f.sha,
+    groups: inversion.groups,
+    rule: { ...inversion.rule, kinds: ["imports", "calls"] },
+  });
+  assert.deepEqual([edited.checked, edited.broke], [4, 4]);
+  assert.equal(edited.config, undefined);
+  const wrong = await f.req("/api/rules/check", {
+    head: f.sha,
+    groups: inversion.groups,
+    rule: { ...inversion.rule, kinds: ["reads"] },
+  });
+  assert.equal(wrong.status, 400);
+  assert.match(wrong.error, /Unknown relationship kind reads/);
+  // When the configuration has a rule, the list says so. A group that the file changed keeps
+  // the file's patterns: the rule is not refused.
+  await writeFile(
+    path.join(f.dir, ".peekumi.json"),
+    JSON.stringify({
+      version: 1,
+      groups: { ui: ["ui/**", "web/**"], db: ["db/**"] },
+      rules: [inversion.rule],
+    }),
+  );
+  await f.git("commit", "-qam", "Add the rule");
+  const next = (await f.git("rev-parse", "HEAD")).toString().trim();
+  const later = await f.req(`/api/rules/audit?head=${next}`);
+  assert.equal(later.rules[0].added, true);
+  assert.match(later.rules[0].problem, /already exists/);
+  const changed = later.rules.find((r) => r.rule.id === "app-layers");
+  assert.equal(changed.problem, undefined);
+  assert.deepEqual(changed.trial.groups.ui, ["ui/**", "web/**"]);
+  assert.ok(
+    changed.trial.warnings.includes(
+      'Group "ui" has other patterns in the rule file now. The rule uses those.',
+    ),
+  );
+  // A repository with no rules gets proposals too.
+  const g = await fixture();
+  t.after(() => g.close());
+  await g.req("/api/rules/propose", {
+    head: g.sha,
+    using: { agent: "claude" },
+  });
+  const fresh = await waitFor(async () => {
+    const saved = await g.req(`/api/rules/audit?head=${g.sha}`);
+    return !saved.running && saved;
+  });
+  assert.equal(fresh.configured, false);
+  assert.ok(fresh.rules.length >= 1);
+});

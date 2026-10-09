@@ -1140,13 +1140,29 @@ pub async fn propose_fixes(app: &App, body: Value) -> Result<Value> {
         "These dependency-rule breaks are at commit {sha}, grouped by rule and by the declaration that they reach. Propose the fixes.\n\n{}",
         serde_json::to_string_pretty(&context)?
     );
-    let engine = ask_engine(app, &body)?;
-    let lookups = open_grant(app, &sha, &sha);
+    let (raw, provider) = proposal_pass(app, &body, PROPOSE, prompt, &sha, "24", 360).await?;
+    Ok(json!({"fixes": read_proposals(&raw, &groups)?, "groups": groups, "provider": provider}))
+}
+
+/// Runs the agent that the owner chose for Ask (`body.using`) once for a proposal: `system`
+/// and `prompt`, with read-only lookups at commit `sha`, at most `turns` model turns and
+/// `seconds` seconds. Returns the reply text and the provider's name.
+async fn proposal_pass(
+    app: &App,
+    body: &Value,
+    system: &'static str,
+    prompt: String,
+    sha: &Value,
+    turns: &'static str,
+    seconds: u64,
+) -> Result<(String, String)> {
+    let engine = ask_engine(app, body)?;
+    let lookups = open_grant(app, sha, sha);
     let _closes = Closes(app);
-    let (raw, provider) = match engine {
+    Ok(match engine {
         Engine::OpenRouter(model, effort) => {
-            lookup::open(app, &sha, &sha);
-            let raw = openrouter_pass(app, &model, effort, PROPOSE, &prompt, None).await?;
+            lookup::open(app, sha, sha);
+            let raw = openrouter_pass(app, &model, effort, system, &prompt, None).await?;
             (raw, format!("OpenRouter · {model}"))
         }
         Engine::Claude(executable, model, effort) => {
@@ -1160,21 +1176,21 @@ pub async fn propose_fixes(app: &App, body: Value) -> Result<Value> {
                     lookups.as_deref(),
                     &tools,
                     false,
-                    PROPOSE,
-                    "24",
+                    system,
+                    turns,
                 );
                 let output = crate::process::run_for(
                     &executable,
                     &args,
                     Some(&cwd),
                     prompt.into_bytes(),
-                    std::time::Duration::from_secs(360),
+                    std::time::Duration::from_secs(seconds),
                 )?;
                 let response: Value =
                     serde_json::from_slice(&output).context("The agent returned invalid JSON")?;
                 ensure!(
                     response["is_error"] != true,
-                    "The agent could not propose fixes"
+                    "The agent could not make a proposal"
                 );
                 Ok(response["result"]
                     .as_str()
@@ -1184,8 +1200,238 @@ pub async fn propose_fixes(app: &App, body: Value) -> Result<Value> {
             .await??;
             (raw, "Claude Code".to_string())
         }
-    };
-    Ok(json!({"fixes": read_proposals(&raw, &groups)?, "groups": groups, "provider": provider}))
+    })
+}
+
+/// The engineering principles that dependency rules can check, with what each one means. Each
+/// proposed rule names one of them.
+pub const PRINCIPLES: [(&str, &str); 8] = [
+    (
+        "Layering",
+        "a lower layer does not use a higher layer (the layers form)",
+    ),
+    (
+        "Acyclic dependencies",
+        "two parts never use each other, so no part depends on itself in a cycle",
+    ),
+    (
+        "Dependency inversion",
+        "high-level policy does not use concrete details; both use an abstraction",
+    ),
+    (
+        "Open-closed",
+        "an extension point (adapters, plugins, handlers) uses only its contract, so a new extension changes nothing else (the only form)",
+    ),
+    (
+        "Separation of concerns",
+        "parts with different jobs do not use each other's code",
+    ),
+    (
+        "Encapsulation",
+        "other parts use a module only through its public entry point, not through its internal files",
+    ),
+    (
+        "Stable dependencies",
+        "a stable core uses only other stable parts (the only form)",
+    ),
+    ("Test isolation", "product code does not use test code"),
+];
+
+/// What the rule audit agent is told. It reads the code through the same read-only lookups as
+/// Ask, and it changes nothing.
+const AUDIT: &str = "You audit the architecture of a Git repository and propose dependency rules for Peekumi's rule engine. You read the code only through the lookup tools, and you change nothing.
+
+Start from the architecture. The user message gives the map of folders and files, the folder descriptions, the dependency cycles that exist now and the current .peekumi.json. Read the READMEs, the module documentation and the entry points that tell what each part is for. Then propose rules that keep this design true while the repository grows. Good rules stop small dependency mistakes before they spread.
+
+Do not copy the current dependencies: the code can already contain mistakes. Get each rule from the job of each part and from a principle, not from the imports that exist now. A rule that the current code breaks can be a good rule: Peekumi shows the breaks, and the owner fixes them. Never shape a group or a rule to leave out a file only because that file breaks the rule. Do not propose a rule that a current rule already states.
+
+The engine checks only static relationships between files: imports, calls, implements and inherits. It cannot check size, duplication, names or runtime behaviour. Propose only rules that it can check.
+
+A rule has one of three forms, and each rule has an id (lowercase words with hyphens), kinds (from imports, calls, implements, inherits) and a message:
+- {\"id\", \"from\": \"<group>\", \"to\": [\"<group>\"], \"kinds\", \"message\"}: files in from must not use files in the to groups.
+- {\"id\", \"from\": \"<group>\", \"only\": [\"<group>\"], \"kinds\", \"message\"}: files in from may use only files in from or in the only groups.
+- {\"id\", \"layers\": [\"<top group>\", \"...\", \"<bottom group>\"], \"kinds\", \"message\"}: a file in a layer must not use a layer above it.
+The only form always lets a group use its own files. To keep the files of one group apart from each other (no feature uses a different feature), use the to form with that group in from and in to. A file that uses itself never breaks a rule.
+A group is a name and a list of path globs from the repository root: * stays in one folder, ** crosses folders, ? is one character. Do not use braces or brackets. Use a group of the current .peekumi.json with its name and patterns unchanged, or give a new group a new name.
+
+Put each rule under exactly one of these principles:
+PRINCIPLES
+
+Write why and message in ASD-STE100 Simplified Technical English: short sentences, the active voice, approved words. In why, say what the rule protects and what goes wrong without it, in two or three sentences. Do not say in why which files break the rule now: Peekumi measures the breaks and shows them. Propose at most 12 rules, the most valuable first. Reply with JSON only, and no other text: {\"rules\": [{\"principle\": \"<principle>\", \"title\": \"<a short name>\", \"why\": \"<why>\", \"groups\": {\"<name>\": [\"<glob>\"]}, \"rule\": {<the rule>}}]}. In groups, give every group that the rule names.";
+
+/// Reads the rule audit agent's reply: a JSON object (text around it is ignored) with
+/// `rules`. Keeps each proposal with a known principle, a title, groups and a rule object.
+fn read_rule_proposals(raw: &str) -> Result<Vec<Value>> {
+    let start = raw.find('{').context("The agent did not reply with JSON")?;
+    let end = raw
+        .rfind('}')
+        .context("The agent did not reply with JSON")?;
+    ensure!(end > start, "The agent did not reply with JSON");
+    let reply: Value =
+        serde_json::from_str(&raw[start..=end]).context("The agent replied with invalid JSON")?;
+    Ok(reply["rules"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(12)
+        .filter(|p| {
+            PRINCIPLES.iter().any(|(name, _)| p["principle"] == *name)
+                && !text_of(&p["title"]).trim().is_empty()
+                && p["groups"].is_object()
+                && p["rule"].is_object()
+        })
+        .map(|p| {
+            json!({
+                "principle": p["principle"],
+                "title": text_of(&p["title"]).trim().chars().take(200).collect::<String>(),
+                "why": text_of(&p["why"]).trim().chars().take(2000).collect::<String>(),
+                "groups": p["groups"],
+                "rule": p["rule"],
+            })
+        })
+        .collect())
+}
+
+/// Audits the repository at `body.head` and proposes dependency rules, with the agent that the
+/// owner chose for Ask (`body.using`). The agent gets a high-level view first (the names-only
+/// map, the folder descriptions and the current `.peekumi.json`), then reads the code through
+/// read-only lookups. Peekumi tries each proposal at that commit (see `Repository::rule_trial`):
+/// it keeps the valid ones with their numbers, and returns the others in `dropped` with the
+/// reason. Returns `{rules, dropped, principles, provider, head, configured, configFile}`.
+pub async fn propose_rules(app: &App, body: Value) -> Result<Value> {
+    let head = body["head"]
+        .as_str()
+        .filter(|h| !h.is_empty())
+        .context("Name the commit to audit")?;
+    let sha = app
+        .engine
+        .call("resolve", json!([head]))
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let sha_text = sha
+        .as_str()
+        .context("The commit did not resolve")?
+        .to_string();
+    let map = crate::graph_brief::map(app, &[], &sha_text).await;
+    let folders = app
+        .engine
+        .call("directories", json!([sha_text, sha_text]))
+        .await
+        .map(|d| d["after"].clone())
+        .unwrap_or(Value::Null);
+    let mut described = String::new();
+    for (path, about) in folders.as_object().into_iter().flatten() {
+        let summary = about["description"].as_str().unwrap_or("");
+        if !summary.is_empty() && described.len() < 6000 {
+            described.push_str(&format!(
+                "- {}: {}\n",
+                if path.is_empty() { "(root)" } else { path },
+                summary.chars().take(300).collect::<String>()
+            ));
+        }
+    }
+    let found = crate::rules::CONFIG_FILES.iter().find_map(|name| {
+        app.workflow
+            .git_read(&["show", &format!("{sha_text}:{name}")])
+            .ok()
+            .map(|text| (*name, text))
+    });
+    let config = found.as_ref().map(|(_, text)| text.clone());
+    // Cycles are faults, not a design: the agent can propose rules against them without
+    // copying the dependencies that exist now.
+    let cycles = app
+        .engine
+        .call("cycles", json!([sha_text]))
+        .await
+        .unwrap_or(Value::Null);
+    let cycles: String = cycles
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| {
+            let files: Vec<&str> = c["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let size = c["size"].as_u64().unwrap_or(0);
+            let more = size.saturating_sub(files.len() as u64);
+            let more = if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            };
+            format!("- {size} files: {}{more}\n", files.join(", "))
+        })
+        .collect();
+    let prompt = format!(
+        "Audit the repository at commit {sha_text} and propose dependency rules.\n\n## Map of folders and files\n{map}\n\n## Folder descriptions\n{}\n\n## Dependency cycles now\nThese files reach each other through static relationships now. Each cycle is a fault to consider, not a design to copy.\n{}\n\n## Current .peekumi.json\n{}\n",
+        if described.is_empty() {
+            "None."
+        } else {
+            &described
+        },
+        if cycles.is_empty() {
+            "None found."
+        } else {
+            &cycles
+        },
+        config
+            .as_deref()
+            .unwrap_or("None: this repository has no rules yet."),
+    );
+    // The prompt with the list of principles, made once.
+    static SYSTEM: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let system = SYSTEM.get_or_init(|| {
+        AUDIT.replace(
+            "PRINCIPLES",
+            &PRINCIPLES
+                .iter()
+                .map(|(name, meaning)| format!("- {name}: {meaning}."))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    });
+    let (raw, provider) = proposal_pass(app, &body, system, prompt, &sha, "40", 600).await?;
+    let (mut rules, mut dropped) = (vec![], vec![]);
+    for mut proposal in read_rule_proposals(&raw)? {
+        let trial = app
+            .engine
+            .call(
+                "rule_trial",
+                json!([sha_text, {"groups": proposal["groups"], "rule": proposal["rule"]}]),
+            )
+            .await;
+        match trial {
+            Ok(mut trial) => {
+                trial.as_object_mut().map(|t| t.remove("config"));
+                // The same check gets the same ID in each audit (see `rule_key`).
+                proposal["id"] = trial["key"].clone();
+                proposal["scope"] = trial["scope"].clone();
+                proposal["trial"] = trial;
+                rules.push(proposal);
+            }
+            Err(reason) => dropped.push(json!({"title": proposal["title"], "reason": reason})),
+        }
+    }
+    ensure!(
+        !rules.is_empty(),
+        "The agent proposed no valid rule{}",
+        dropped
+            .first()
+            .map(|d| format!(" ({})", d["reason"].as_str().unwrap_or("")))
+            .unwrap_or_default()
+    );
+    Ok(json!({
+        "rules": rules,
+        "dropped": dropped,
+        "principles": PRINCIPLES.iter().map(|(name, meaning)| json!({"name": name, "meaning": meaning})).collect::<Vec<_>>(),
+        "provider": provider,
+        "head": sha_text,
+        "configured": config.is_some(),
+        "configFile": found.map(|(name, _)| name),
+    }))
 }
 
 #[cfg(test)]

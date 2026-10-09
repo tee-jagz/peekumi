@@ -44,6 +44,7 @@
       "frontend/focus.js",
       "frontend/pwa.js",
       "frontend/fixes.js",
+      "frontend/audit.js",
       "frontend/notify.js"
     ],
     "product": ["backend/**", "frontend/**"],
@@ -51,6 +52,7 @@
     "backend-root": ["backend/main.rs"],
     "backend-services": [
       "backend/ask.rs",
+      "backend/audit.rs",
       "backend/pull_requests.rs",
       "backend/sessions.rs"
     ],

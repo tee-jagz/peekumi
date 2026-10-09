@@ -604,6 +604,131 @@ impl Repository {
         let b = self.snapshot(head)?;
         Ok(json!({"head": b.sha, "checks": b.checks, "fixes": propose_fixes(&b.relationships)}))
     }
+    /// Tries a proposed rule at `head` without a commit: `proposal` is `{groups, rule}`, added
+    /// to the committed `.peekumi.json` (or to an empty one). A group name that the file has
+    /// keeps the file's patterns (a warning says so when they differ). Returns what the rule
+    /// would check now (`checked`, `broke`, `unresolved`), up to five of its breaks
+    /// (`examples`), the warnings about its own groups and rule, the groups that it uses
+    /// (`groups`), and the whole configuration with it (`config`).
+    ///
+    /// # Errors
+    /// A rule ID that the configuration already has, a rule that checks the same files as a
+    /// current rule or that a current rule covers, and any configuration that the rule engine
+    /// refuses.
+    pub fn rule_trial(&mut self, head: &str, proposal: &Value) -> Result<Value> {
+        let b = self.snapshot(head)?;
+        let committed = crate::rules::CONFIG_FILES
+            .iter()
+            .find_map(|name| b.files.get(*name)?.source.as_deref())
+            .filter(|source| crate::rules::parse(source).is_ok())
+            .and_then(|source| serde_json::from_str::<Value>(source).ok());
+        let mut config =
+            committed.unwrap_or_else(|| json!({"version": 1, "groups": {}, "rules": []}));
+        let groups = proposal["groups"]
+            .as_object()
+            .context("The proposal needs groups")?;
+        // The rules as they are now, before the proposal joins them.
+        let current = crate::rules::parse(&config.to_string()).ok();
+        // A group name that the rule file has means that group as it is now: the file can
+        // change after the agent read it (an uncommitted edit, a later commit).
+        let mut used = serde_json::Map::new();
+        let mut adopted = vec![];
+        for (name, patterns) in groups {
+            match config["groups"].get(name) {
+                Some(existing) => {
+                    if existing != patterns {
+                        adopted.push(format!(
+                            "Group \"{name}\" has other patterns in the rule file now. The rule uses those."
+                        ));
+                    }
+                    used.insert(name.clone(), existing.clone());
+                }
+                None => {
+                    config["groups"][name] = patterns.clone();
+                    used.insert(name.clone(), patterns.clone());
+                }
+            }
+        }
+        let rule = &proposal["rule"];
+        let id = rule["id"].as_str().unwrap_or("");
+        if config["rules"]
+            .as_array()
+            .is_some_and(|rules| rules.iter().any(|r| r["id"] == id))
+        {
+            bail!("A rule with the ID \"{id}\" already exists");
+        }
+        let paths: Vec<&str> = b.files.keys().map(String::as_str).collect();
+        // Only files that a language adapter reads can be in a relationship.
+        let code: Vec<&str> = paths
+            .iter()
+            .copied()
+            .filter(|path| adapters::for_path(path).is_some())
+            .collect();
+        let key = rule_key(&config["groups"], rule, &paths);
+        if let Some(same) = config["rules"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| rule_key(&config["groups"], r, &paths) == key)
+        {
+            bail!(
+                "It checks the same files as the rule \"{}\"",
+                same["id"].as_str().unwrap_or("")
+            );
+        }
+        config["rules"]
+            .as_array_mut()
+            .context("The configuration has no rules list")?
+            .push(rule.clone());
+        crate::rules::parse(&config.to_string())?;
+        // The rule alone, with every group, so its numbers are its own.
+        let alone = crate::rules::parse(
+            &json!({"version": 1, "groups": config["groups"], "rules": [rule]}).to_string(),
+        )?;
+        if let Some(by) = current.and_then(|current| alone.covered_by(&current, &code)) {
+            bail!("The rule \"{by}\" already covers it: each break of it also breaks that rule");
+        }
+        let mut relations = b.relationships.clone();
+        for r in &mut relations {
+            r["violations"] = json!([]);
+        }
+        alone.apply(&mut relations);
+        let (coverage, warnings) = alone.coverage(&relations, &paths);
+        let own: Vec<&String> = groups.keys().collect();
+        let warnings: Vec<String> = adopted
+            .into_iter()
+            .chain(warnings.into_iter().filter(|w| {
+                own.iter().any(|g| w.contains(&format!("\"{g}\"")))
+                    || w.contains(&format!("\"{id}\""))
+            }))
+            .collect();
+        let examples: Vec<Value> = relations
+            .iter()
+            .filter(|r| !array(&r["violations"]).is_empty())
+            .take(5)
+            .map(|r| json!({"source": r["source"]["path"], "target": r["targets"][0]["path"], "kind": r["kind"]}))
+            .collect();
+        let numbers = &coverage[0];
+        Ok(json!({
+            "id": id,
+            "key": key,
+            "scope": rule_shape(&config["groups"], rule, &paths, false),
+            "checked": numbers["checked"],
+            "broke": numbers["broke"],
+            "unresolved": numbers["unresolved"],
+            "warnings": warnings,
+            "examples": examples,
+            "groups": used,
+            "config": config,
+        }))
+    }
+    /// The dependency cycles between files at `head`: each group of two or more files that
+    /// reach each other through resolved relationships, the largest first (at most 10, each
+    /// with at most 10 of its files and its `size`).
+    pub fn cycles(&mut self, head: &str) -> Result<Value> {
+        let b = self.snapshot(head)?;
+        Ok(json!(file_cycles(&b.relationships)))
+    }
     /// Compares two Git revisions and returns file statuses and dependency changes.
     /// `overview` replaces full symbol lists with counts and compact previews for the initial map.
     /// Caches up to six comparison results; invalid revisions or snapshot failures return an error.
@@ -939,6 +1064,170 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
     );
     (values, checks)
 }
+/// What a rule checks, as a short hash. Two rules with the same key check the same thing,
+/// whatever their IDs and group names: the same form and kinds, the same source files and the
+/// same target files. Only files that a language adapter reads count, because only they can
+/// be in a relationship. The target groups of a `to` or `only` rule count as one set. When the
+/// source is one file, that file leaves the target set: a file that uses itself never breaks a
+/// rule. A group that matches no file yet counts by its patterns. Without `kinds`, the key is
+/// the rule's scope: the same files, whatever kinds it checks.
+fn rule_key(groups: &Value, rule: &Value, paths: &[&str]) -> String {
+    rule_shape(groups, rule, paths, true)
+}
+/// See [`rule_key`].
+fn rule_shape(groups: &Value, rule: &Value, paths: &[&str], with_kinds: bool) -> String {
+    let patterns = |name: &Value| -> Vec<&str> {
+        groups[name.as_str().unwrap_or("")]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect()
+    };
+    let files = |name: &Value| -> BTreeSet<&str> {
+        let patterns = patterns(name);
+        paths
+            .iter()
+            .copied()
+            .filter(|path| adapters::for_path(path).is_some())
+            .filter(|path| patterns.iter().any(|p| crate::rules::matches(p, path)))
+            .collect()
+    };
+    // A group's files, or its patterns when it matches none.
+    let set = |name: &Value| -> Value {
+        let found = files(name);
+        if found.is_empty() {
+            let mut sorted = patterns(name);
+            sorted.sort_unstable();
+            json!({"patterns": sorted})
+        } else {
+            json!(found)
+        }
+    };
+    // The target groups as one set of files, and the patterns of those that match none.
+    let targets = |field: &str, source: &BTreeSet<&str>| -> Value {
+        let (mut all, mut future) = (BTreeSet::new(), BTreeSet::new());
+        for name in array(&rule[field]) {
+            let found = files(&name);
+            if found.is_empty() {
+                future.extend(patterns(&name));
+            }
+            all.extend(found);
+        }
+        if source.len() == 1 {
+            all.retain(|f| !source.contains(f));
+        }
+        json!({"files": all, "patterns": future})
+    };
+    let mut kinds: Vec<String> = array(&rule["kinds"])
+        .iter()
+        .map(|k| text(k).to_string())
+        .collect();
+    kinds.sort_unstable();
+    if !with_kinds {
+        kinds.clear();
+    }
+    let shape = if rule.get("layers").is_some() {
+        json!({"layers": array(&rule["layers"]).iter().map(set).collect::<Vec<_>>(), "kinds": kinds})
+    } else {
+        let source = files(&rule["from"]);
+        let field = if rule.get("only").is_some() {
+            "only"
+        } else {
+            "to"
+        };
+        json!({"from": set(&rule["from"]), field: targets(field, &source), "kinds": kinds})
+    };
+    hash(shape.to_string().as_bytes())[..16].to_string()
+}
+
+/// The groups of files that depend on each other in a cycle (strongly connected components of
+/// the resolved file graph, Kosaraju's method without recursion). A file that uses itself is
+/// not a cycle.
+fn file_cycles(relationships: &[Value]) -> Vec<Value> {
+    let mut index: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut edges: BTreeSet<(usize, usize)> = BTreeSet::new();
+    for r in relationships {
+        if r["resolution"] != "resolved" {
+            continue;
+        }
+        let (source, target) = (text(&r["source"]["path"]), text(&r["targets"][0]["path"]));
+        if source.is_empty() || target.is_empty() || source == target {
+            continue;
+        }
+        let next = index.len();
+        let a = *index.entry(source).or_insert(next);
+        let next = index.len();
+        let b = *index.entry(target).or_insert(next);
+        edges.insert((a, b));
+    }
+    let n = index.len();
+    let (mut out, mut back) = (vec![vec![]; n], vec![vec![]; n]);
+    for &(a, b) in &edges {
+        out[a].push(b);
+        back[b].push(a);
+    }
+    // First pass: the order in which each node's depth-first search finishes.
+    let (mut seen, mut order) = (vec![false; n], Vec::with_capacity(n));
+    for start in 0..n {
+        if seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        let mut stack = vec![(start, 0)];
+        while let Some((node, next)) = stack.pop() {
+            if let Some(&child) = out[node].get(next) {
+                stack.push((node, next + 1));
+                if !seen[child] {
+                    seen[child] = true;
+                    stack.push((child, 0));
+                }
+            } else {
+                order.push(node);
+            }
+        }
+    }
+    // Second pass, on the reversed graph in reverse finish order: each tree is one component.
+    let names: Vec<&str> = {
+        let mut names = vec![""; n];
+        for (name, &i) in &index {
+            names[i] = name;
+        }
+        names
+    };
+    let mut component = vec![usize::MAX; n];
+    let mut groups: Vec<Vec<&str>> = vec![];
+    for &start in order.iter().rev() {
+        if component[start] != usize::MAX {
+            continue;
+        }
+        let id = groups.len();
+        let mut members = vec![];
+        let mut stack = vec![start];
+        component[start] = id;
+        while let Some(node) = stack.pop() {
+            members.push(names[node]);
+            for &parent in &back[node] {
+                if component[parent] == usize::MAX {
+                    component[parent] = id;
+                    stack.push(parent);
+                }
+            }
+        }
+        groups.push(members);
+    }
+    let mut cycles: Vec<Vec<&str>> = groups.into_iter().filter(|g| g.len() > 1).collect();
+    for cycle in &mut cycles {
+        cycle.sort_unstable();
+    }
+    cycles.sort_by(|a, b| b.len().cmp(&a.len()).then(a.cmp(b)));
+    cycles
+        .into_iter()
+        .take(10)
+        .map(|files| json!({"size": files.len(), "files": files.iter().take(10).collect::<Vec<_>>()}))
+        .collect()
+}
+
 /// Proposed fixes for the rule breaks at revision `head`: the breaks grouped by the rule and the
 /// declaration they reach, because one change there (move it, or reach it through an allowed
 /// module) fixes them all. Each fix is `{id, rule, message, target, kinds, count, sources,
@@ -1078,6 +1367,66 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cycles_are_groups_of_files_that_reach_each_other() {
+        let r = |a: &str, b: &str| json!({"resolution":"resolved","source":{"path":a},"targets":[{"path":b}]});
+        let relationships = vec![
+            r("a", "b"),
+            r("b", "c"),
+            r("c", "a"),
+            r("c", "d"),
+            r("d", "d"),
+            r("e", "f"),
+            r("f", "e"),
+            json!({"resolution":"unresolved","source":{"path":"d"},"targets":[{"path":"a"}]}),
+        ];
+        assert_eq!(
+            file_cycles(&relationships),
+            vec![
+                json!({"size": 3, "files": ["a", "b", "c"]}),
+                json!({"size": 2, "files": ["e", "f"]}),
+            ]
+        );
+    }
+    #[test]
+    fn rules_that_check_the_same_files_have_the_same_key() {
+        let groups = json!({"ui":["ui/**"],"view":["ui/*.py"],"db":["db/**"],"later":["later/**"]});
+        let paths = ["ui/a.py", "db/b.py", "db/c.py", "db/notes.md"];
+        let key = |rule: Value| rule_key(&groups, &rule, &paths);
+        assert_eq!(
+            key(json!({"from":"ui","to":["db"],"kinds":["calls","imports"]})),
+            key(json!({"from":"view","to":["db"],"kinds":["imports","calls"]})),
+            "Other names, same files"
+        );
+        assert_ne!(
+            key(json!({"from":"ui","to":["db"],"kinds":["calls"]})),
+            key(json!({"from":"ui","only":["db"],"kinds":["calls"]}))
+        );
+        assert_ne!(
+            key(json!({"from":"later","to":["db"],"kinds":["calls"]})),
+            key(json!({"from":"ui","to":["db"],"kinds":["calls"]})),
+            "A group that matches no file yet keeps its patterns"
+        );
+        let split =
+            json!({"ui":["ui/**"],"b":["db/b.py"],"c":["db/c.py"],"all":["**"],"db":["db/**"]});
+        let key = |rule: Value| rule_key(&split, &rule, &paths);
+        assert_eq!(
+            key(json!({"from":"ui","to":["b","c"],"kinds":["calls"]})),
+            key(json!({"from":"ui","to":["db"],"kinds":["calls"]})),
+            "Target groups count as one set, and a file that no adapter reads does not count"
+        );
+        assert_eq!(
+            key(json!({"from":"ui","to":["all"],"kinds":["calls"]})),
+            key(json!({"from":"ui","to":["db"],"kinds":["calls"]})),
+            "A single source file leaves the target set"
+        );
+        let scope = |rule: Value| rule_shape(&split, &rule, &paths, false);
+        assert_eq!(
+            scope(json!({"from":"ui","to":["db"],"kinds":["calls"]})),
+            scope(json!({"from":"ui","to":["db"],"kinds":["imports","inherits"]})),
+            "The scope is the files, whatever the kinds"
+        );
+    }
     use super::*;
     #[test]
     fn readme_summaries_skip_decorative_markup() {

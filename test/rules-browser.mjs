@@ -207,6 +207,119 @@ try {
         1,
         "Only the sent fix is selected",
       );
+
+      // Proposed rules: the agent audits the architecture; the rules show under their
+      // principles with what they check now, and none is selected at first. Proposals that
+      // the current rule already covers are left out. An edit is tried again, an invalid rule
+      // cannot be selected, and each sent rule is one draft on .peekumi.json.
+      await page.reload();
+      await front.locator(".node").first().waitFor();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator('#helperTools [data-tab="dependencies"]').click();
+      await page
+        .getByRole("button", { name: "Propose rules", exact: true })
+        .click();
+      const audits = page.locator(".audit-row");
+      await audits.first().waitFor();
+      assert.equal(await audits.count(), 2);
+      assert.deepEqual(
+        await page.locator("#tabBody h3.workflow-group").allInnerTexts(),
+        ["Dependency inversion", "Layering"],
+      );
+      assert.equal(
+        await page.locator("#viewHead .view-meta").innerText(),
+        "2 rules under 2 principles",
+      );
+      assert.match(
+        await audits.first().locator("small").innerText(),
+        /^ui-imports-no-db · /,
+      );
+      const layers = page.locator(".audit-row", { hasText: "app-layers" });
+      assert.match(
+        await layers.innerText(),
+        /Group "services" matches no file/,
+      );
+      await page.locator(".fix-context summary").click();
+      assert.match(
+        await page.locator(".fix-context").innerText(),
+        /^The last audit left out 4 proposals[^]*Narrower: The rule "ui-no-db" already covers it/,
+      );
+      const add = page.locator(".fix-buttons .primary");
+      assert.equal(
+        await page.locator(".audit-row input[type=checkbox]:checked").count(),
+        0,
+        "No rule is selected at first",
+      );
+      assert.ok(await add.isDisabled());
+      await layers.locator("input[type=checkbox]").check();
+      assert.equal(await add.innerText(), "Add 1 rule with an agent");
+      await layers.locator("summary", { hasText: "Edit rule" }).click();
+      const ruleText = layers.locator("textarea");
+      const original = await ruleText.inputValue();
+      await ruleText.fill(original.replace('"calls"', '"reads"'));
+      await ruleText.blur();
+      await layers
+        .locator(".rule-error", { hasText: "Unknown relationship kind reads" })
+        .waitFor();
+      assert.ok(await layers.locator("input[type=checkbox]").isDisabled());
+      assert.ok(await add.isDisabled(), "A refused rule cannot be sent");
+      await page.screenshot({
+        path: `test-results/rules-audit-${viewport.width}.png`,
+      });
+      await layers.locator("textarea").fill(original);
+      await layers.locator("textarea").blur();
+      await page.waitForFunction(
+        () => !document.querySelector(".audit-row .rule-error"),
+      );
+      assert.ok(
+        await layers.locator("input[type=checkbox]").isChecked(),
+        "The selection stays",
+      );
+      assert.equal(
+        await page.locator(".fix-buttons .primary").innerText(),
+        "Add 1 rule with an agent",
+      );
+      await page.locator(".fix-buttons .primary").click();
+      await page.waitForFunction(
+        () => document.querySelector("#panel").dataset.view === "prepare",
+      );
+      const rulePick = page.locator(".workflow-pick", {
+        hasText: 'Add the dependency rule "app-layers" to .peekumi.json',
+      });
+      await rulePick.waitFor();
+      assert.ok(await rulePick.locator("input").isChecked());
+      assert.equal(
+        await page.locator(".workflow-pick input:checked").count(),
+        1,
+        "Only the sent rule is selected",
+      );
+      // The choices stay on the server: after a reload, the list is the same (no new audit),
+      // the other rule is still not selected and the sent rule is drafted.
+      await page.reload();
+      await front.locator(".node").first().waitFor();
+      if (!(await page.locator("#helperTools").isVisible()))
+        await page.locator("#sheetHandle").click();
+      await page.locator('#helperTools [data-tab="dependencies"]').click();
+      await page
+        .getByRole("button", { name: "Propose rules", exact: true })
+        .click();
+      await page.locator(".audit-row").first().waitFor();
+      assert.equal(await page.locator(".audit-row").count(), 2);
+      assert.equal(
+        await page
+          .locator(".audit-row", { hasText: "ui-imports-no-db" })
+          .locator("input[type=checkbox]")
+          .isChecked(),
+        false,
+      );
+      assert.match(
+        await page
+          .locator(".audit-row", { hasText: "app-layers" })
+          .locator("small")
+          .innerText(),
+        / · drafted$/,
+      );
       assert.deepEqual(errors, []);
       console.log(`PASS rules ${viewport.width}`);
     } finally {

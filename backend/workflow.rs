@@ -796,14 +796,20 @@ impl Workflow {
             .collect::<Vec<_>>()
             .join("\n");
         let id = run["id"].as_str().unwrap_or("");
+        self.notify_link(title, &body, &format!("task={id}"), &format!("run-{id}"));
+    }
+    /// Tells the owner's devices `title` and `body` (see the push module). The notification
+    /// opens this repository with `query` in the address (for example `task=<id>`); a newer
+    /// notification with the same `tag` replaces it.
+    pub fn notify_link(&self, title: &str, body: &str, query: &str, tag: &str) {
         let mut url = String::from("/?");
         if !self.repository_id.is_empty() {
             url += &format!("repo={}&", self.repository_id);
         }
-        url += &format!("task={id}");
+        url += query;
         crate::push::notify(
             &self.secrets,
-            json!({"title": title, "body": body, "url": url, "tag": format!("run-{id}")}),
+            json!({"title": title, "body": body, "url": url, "tag": tag}),
         );
     }
     /// Accepts only reports for this active run and commits actually reachable from its branch.

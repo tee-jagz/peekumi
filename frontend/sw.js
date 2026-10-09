@@ -17,6 +17,7 @@ const SHELL = [
   "/menu.js",
   "/nav.js",
   "/fixes.js",
+  "/audit.js",
   "/notify.js",
   "/style.css",
   "/pwa.js",

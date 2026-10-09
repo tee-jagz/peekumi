@@ -206,6 +206,8 @@ Only the open view button has a label. The other view buttons show only their ic
 
 A card that starts a dependency rule break shows a red broken-link icon and the number of breaks. When you select it, one red line under its kind says which rule it breaks, for example **Breaks backend-layers · 6 calls to main.rs**. Tap the line to see only the breaks in Relations. There, **Propose fixes** asks your Ask agent to read the code and propose fixes. Select, edit or clear the fixes, then send them together to an agent as one task.
 
+**Propose rules**, also in Relations, asks your Ask agent to audit the architecture and propose new dependency rules. The audit runs in the background: you can leave the page, and a notification tells you when it ends. The rules show under engineering principles, such as Layering or Open-closed. Each rule shows what it checks, what it cannot check and how many breaks it has now. No rule is selected at first. Each audit adds to the same list, and your selection stays. Select, edit or clear the rules. Then tap **Add N rules with an agent**: an agent adds them to `.peekumi.json` in a task, and you review the task as usual.
+
 When you select a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it. Edit the text, then save the draft. A task that adds rule breaks names them before **Approve**.
 
 ## Pages and the way back

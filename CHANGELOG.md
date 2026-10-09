@@ -4,6 +4,12 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+### Proposed rules
+
+- **Propose rules** in Relations: the Ask agent audits the architecture and proposes dependency rules. Each rule is under one engineering principle, for example Layering, Open-closed or Encapsulation. The agent starts from the map, the folder descriptions and the current `.peekumi.json`. It gets each rule from the job of each part, not from the imports that exist now.
+- Peekumi tries each rule at the commit and shows what it checks, what it cannot check (unresolved relationships), its breaks now and warnings. It leaves out the rules that the engine refuses or that check the same files as a current rule, and says why. Select, edit and clear rules, then an agent adds them to `.peekumi.json` in a task.
+- The audit runs in the background and sends a notification when it ends. Each audit adds to a saved list, a duplicate counts once, and your selection stays. A proposal that a current rule already covers is left out. The agent also gets the dependency cycles that exist now (`POST /api/rules/propose`, `GET /api/rules/audit`, `PATCH /api/rules/audit/<id>`, `POST /api/rules/check`).
+
 ### Uncommitted changes
 
 - The map of the newest commit on the checked-out branch includes the uncommitted changes. A file or folder with uncommitted changes has a dashed outline, and the newest commit card counts them (**+ 4 uncommitted**). The source, relations, rule breaks and Ask include them too.

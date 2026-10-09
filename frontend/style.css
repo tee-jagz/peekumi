@@ -7830,7 +7830,8 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 .fix-buttons {
   margin-top: 12px;
 }
-.panel .propose-fixes {
+.panel .propose-fixes,
+.panel .propose-rules {
   display: block;
   margin: 2px 0 10px;
   font-family: var(--font);
@@ -7856,7 +7857,8 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
   align-items: center;
   font-size: 13.5px;
 }
-.panel .propose-fixes {
+.panel .propose-fixes,
+.panel .propose-rules {
   display: block;
   margin: 4px 0 14px;
 }
@@ -7962,4 +7964,52 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 .node[data-uncommitted="true"] {
   border-style: dashed !important;
   border-width: 1.5px !important;
+}
+
+/* Proposed rules (audit.js): plain rows under each principle, as Proposed fixes. */
+.audit-principle {
+  margin: -4px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.audit-why {
+  margin: 4px 0;
+  font-size: 13px;
+}
+.audit-row .rule-warning,
+.audit-row .rule-error,
+.audit-row .rule-coverage {
+  margin: 2px 0;
+  font-size: 12.5px;
+}
+.audit-row .rule-warning {
+  color: var(--mod);
+}
+.audit-row .rule-added {
+  margin: 2px 0;
+  color: var(--del);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+.audit-row .rule-coverage {
+  color: var(--muted);
+}
+/* Edit rule: a plain disclosure line, not a card. */
+.panel details.audit-edit {
+  margin: 6px 0 0;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.audit-edit summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+}
+.audit-text {
+  font: 12px var(--mono);
 }

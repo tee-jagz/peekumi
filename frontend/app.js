@@ -3,6 +3,7 @@ import { createAsk } from "./ask.js";
 import { createAgents } from "./agents.js";
 import { createWorkflow, renderDiff } from "./workflow.js";
 import { createFixes } from "./fixes.js";
+import { createAudit } from "./audit.js";
 import { createNotifications } from "./notify.js";
 import { createFocus } from "./focus.js";
 import { installContextMenus, closeMenu, menuIsOpen } from "./menu.js";
@@ -403,6 +404,31 @@ const fixes = createFixes({
     setTimeout(() => showNotice(""), 2500);
   },
   redraw: () => renderPanel(),
+});
+// Proposed rules from an audit of the architecture (audit.js): a page that saves the rules
+// the owner selects as instructions on the rule file, and opens the task form with them.
+const audit = createAudit({
+  api,
+  write: (route, body) =>
+    api(route, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  head: (title, options) => viewHead(title, options),
+  revision: () => headRef,
+  using: () => agents.using("ask"),
+  agentName: () => agents.label(agents.current("ask")?.agent),
+  send: (ids) => workflow.prepareWith(ids),
+  saved: (n) => {
+    workflow.refresh(false);
+    showNotice(
+      `Saved ${n} draft instruction${n === 1 ? "" : "s"}. Tasks lists them.`,
+    );
+    setTimeout(() => showNotice(""), 2500);
+  },
+  redraw: () => renderPanel(),
+  showing: () => nav.view().name === "audit",
 });
 const ask = createAsk({
   revisionName: (sha) => revisionName(sha),
@@ -2627,15 +2653,20 @@ async function restorePlace() {
   await restoreMapPlace();
   openLinkedRun();
 }
-/** Opens the run that a notification links to (`?task=`). The address then drops it, so a
- * reload does not open the run again. */
+/** Opens what a notification links to: a run (`?task=`) or the Proposed rules page
+ * (`?audit=1`). The address then drops it, so a reload does not open it again. */
 function openLinkedRun() {
   const url = new URL(location.href),
-    id = url.searchParams.get("task");
-  if (!id) return;
+    id = url.searchParams.get("task"),
+    rules = url.searchParams.get("audit");
+  if (!id && !rules) return;
   url.searchParams.delete("task");
+  url.searchParams.delete("audit");
   replaceUrl(url);
-  if (isOwner()) workflow.openTask(id).catch(() => {});
+  if (!isOwner()) return;
+  if (id) workflow.openTask(id).catch(() => {});
+  // The rule audit ended: its notification opens the Proposed rules page.
+  else nav.go({ name: "audit" });
 }
 async function restoreMapPlace() {
   if (!comparison) return;
@@ -4003,6 +4034,7 @@ function drawTab() {
   }
   if (view.name === "conversations") return renderConversations(body);
   if (view.name === "fixes") return fixes.render(body);
+  if (view.name === "audit") return audit.render(body);
   if (page) return workflow.render(body, view);
   if (view.aspect === "details") return renderInstructionsHere(body);
   if (view.aspect === "source") {
@@ -4214,6 +4246,18 @@ function renderDependencies(body) {
         "btn primary propose-fixes",
         `Propose fixes for ${after.violations} rule break${after.violations === 1 ? "" : "s"}`,
         () => nav.go({ name: "fixes" }),
+      ),
+    );
+  // An agent audits the architecture and proposes rules: the primary action when there is
+  // no break to fix.
+  if (!before && isOwner())
+    body.append(
+      button(
+        after?.state === "evaluated" && after.violations
+          ? "btn propose-rules"
+          : "btn primary propose-rules",
+        "Propose rules",
+        () => nav.go({ name: "audit" }),
       ),
     );
   // The breaks that start inside the selection. The list below shows only the lines between

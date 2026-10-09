@@ -3,6 +3,7 @@ mod adapters;
 mod agent_session;
 mod agents;
 mod ask;
+mod audit;
 mod engine;
 mod graph_brief;
 mod hash;
@@ -112,6 +113,8 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
         ),
         "commits" => repo.earlier_commits(argument(args, 0)),
         "fixes" => repo.fixes(argument(args, 0)),
+        "rule_trial" => repo.rule_trial(argument(args, 0), &args[1]),
+        "cycles" => repo.cycles(argument(args, 0)),
         "compare" => repo.compare(
             argument(args, 0),
             argument(args, 1),
@@ -374,6 +377,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/menu.js" => Some(("text/javascript", include_bytes!("../frontend/menu.js"))),
         "/nav.js" => Some(("text/javascript", include_bytes!("../frontend/nav.js"))),
         "/fixes.js" => Some(("text/javascript", include_bytes!("../frontend/fixes.js"))),
+        "/audit.js" => Some(("text/javascript", include_bytes!("../frontend/audit.js"))),
         "/notify.js" => Some(("text/javascript", include_bytes!("../frontend/notify.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
         "/manifest.webmanifest" => Some((
@@ -681,6 +685,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             || path == "/api/ask/history"
             || path.starts_with("/api/runs")
             || path.starts_with("/api/push")
+            || path.starts_with("/api/rules/audit")
             || path.starts_with("/api/comments"))
     {
         return error(
@@ -864,6 +869,9 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     };
     if path == "/api/ask"
         || path == "/api/fixes/propose"
+        || path == "/api/rules/propose"
+        || path == "/api/rules/check"
+        || path.starts_with("/api/rules/audit")
         || path == "/api/references"
         || path == "/api/ask/history"
         || path == "/api/workflow"
@@ -876,9 +884,15 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     {
         let method = request.method().to_string();
         // Ask conversations are kept per branch; the query names the branch viewed.
-        let branch = url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
-            .find(|(key, _)| key == "branch")
-            .map(|(_, value)| value.into_owned());
+        let (branch, head) = {
+            let query = |name: &str| {
+                url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
+                    .find(|(key, _)| key == name)
+                    .map(|(_, value)| value.into_owned())
+            };
+            // The commit on the map, for the saved list of proposed rules.
+            (query("branch"), query("head").unwrap_or_default())
+        };
         if method != "GET" {
             let origin = header(request.headers(), "origin");
             let valid_origin = origin.is_empty()
@@ -1004,6 +1018,49 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 _ => return error(StatusCode::NOT_FOUND, "Not found", gzip).await,
             };
             return match done {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            };
+        }
+        // A proposed rule, tried at a commit without a commit to .peekumi.json.
+        if path == "/api/rules/check" {
+            if method != "POST" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
+            }
+            let head = body["head"].as_str().unwrap_or("").to_string();
+            let proposal = json!({"groups": body["groups"], "rule": body["rule"]});
+            return match app.engine.call("rule_trial", json!([head, proposal])).await {
+                Ok(mut value) => {
+                    value.as_object_mut().map(|v| v.remove("config"));
+                    json_response(StatusCode::OK, value, gzip, None).await
+                }
+                Err(e) => error(StatusCode::BAD_REQUEST, &e, gzip).await,
+            };
+        }
+        // The rule audit runs in the background; the saved list has its rules.
+        if path == "/api/rules/propose" {
+            if method != "POST" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use POST", gzip).await;
+            }
+            return match audit::start(app.clone(), body) {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::CONFLICT, &e.to_string(), gzip).await,
+            };
+        }
+        if path == "/api/rules/audit" {
+            if method != "GET" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use GET", gzip).await;
+            }
+            return match audit::read(&app, &head).await {
+                Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
+                Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+            };
+        }
+        if let Some(id) = path.strip_prefix("/api/rules/audit/") {
+            if method != "PATCH" {
+                return error(StatusCode::METHOD_NOT_ALLOWED, "Use PATCH", gzip).await;
+            }
+            return match audit::mark(&app, id, body["status"].as_str().unwrap_or("")) {
                 Ok(value) => json_response(StatusCode::OK, value, gzip, None).await,
                 Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
             };

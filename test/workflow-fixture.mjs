@@ -86,11 +86,108 @@ if (values.includes("--tools")) {
   }
   // Proposed fixes: the agent reads the grouped breaks and replies with JSON fixes. It runs
   // like Ask: no built-in tools, only the read-only lookups.
-  if (
-    values[values.indexOf("--system-prompt") + 1]?.startsWith(
-      "You propose fixes for dependency-rule breaks",
+  // The rule audit agent: the same limits as Ask, and a high-level view in its prompt.
+  const system = values[values.indexOf("--system-prompt") + 1] || "";
+  if (system.startsWith("You audit the architecture of a Git repository")) {
+    if (
+      values[values.indexOf("--tools") + 1] !== "" ||
+      !values.includes("--strict-mcp-config")
     )
-  ) {
+      throw Error("The audit agent must have no built-in tools");
+    if (!system.includes("Do not copy the current dependencies"))
+      throw Error("The audit agent must not copy the current dependencies");
+    if (!system.includes("- Open-closed:"))
+      throw Error("The audit agent got no principles");
+    for (const part of [
+      "## Map of folders and files",
+      "## Folder descriptions",
+      "## Dependency cycles now",
+      "## Current .peekumi.json",
+    ])
+      if (!task.includes(part)) throw Error("The audit prompt has no " + part);
+    // A later audit writes the first rule another way: another ID and other kinds, over
+    // the same files.
+    const count = existsSync("audit-runs")
+      ? Number(readFileSync("audit-runs", "utf8"))
+      : 0;
+    writeFileSync("audit-runs", String(count + 1));
+    const rule = (principle, title, groups, rule) => ({
+      principle,
+      title,
+      why: "The rule keeps the design. Without it, a small mistake spreads.",
+      groups,
+      rule,
+    });
+    console.log(
+      JSON.stringify({
+        is_error: false,
+        result: JSON.stringify({
+          rules: [
+            rule(
+              "Dependency inversion",
+              "The UI imports no database code",
+              { ui: ["ui/**"], db: ["db/**"] },
+              {
+                id: count ? "ui-never-imports-db" : "ui-imports-no-db",
+                from: "ui",
+                to: ["db"],
+                kinds: count ? ["imports"] : ["imports", "inherits"],
+                message: "The UI uses services, not the database.",
+              },
+            ),
+            rule(
+              "Layering",
+              "UI over services over database",
+              { ui: ["ui/**"], services: ["services/**"], db: ["db/**"] },
+              {
+                id: "app-layers",
+                layers: ["ui", "services", "db"],
+                kinds: ["imports", "calls"],
+                message: "A lower layer does not use a higher layer.",
+              },
+            ),
+            // A group name that the configuration uses for other patterns.
+            rule(
+              "Separation of concerns",
+              "Changed group",
+              { ui: ["ui/*.py"], db: ["db/**"] },
+              { id: "other", from: "ui", to: ["db"], kinds: ["calls"] },
+            ),
+            // A rule ID that the configuration already has.
+            rule(
+              "Separation of concerns",
+              "Same ID",
+              { ui: ["ui/**"], db: ["db/**"] },
+              { id: "ui-no-db", from: "ui", to: ["db"], kinds: ["calls"] },
+            ),
+            // The same check as a current rule, with another ID and group name.
+            rule(
+              "Separation of concerns",
+              "Same check",
+              { views: ["ui/**"], db: ["db/**"] },
+              {
+                id: "views-no-db",
+                from: "views",
+                to: ["db"],
+                kinds: ["calls"],
+              },
+            ),
+            // A narrower form of a current rule: that rule already covers it.
+            rule(
+              "Separation of concerns",
+              "Narrower",
+              { view: ["ui/view.py"], db: ["db/**"] },
+              { id: "view-no-db", from: "view", to: ["db"], kinds: ["calls"] },
+            ),
+            // A principle that the engine cannot check.
+            rule("KISS", "Keep it simple", {}, { id: "simple" }),
+          ],
+        }),
+      }),
+    );
+    process.exit(0);
+  }
+  if (system.startsWith("You propose fixes for dependency-rule breaks")) {
     if (
       values[values.indexOf("--tools") + 1] !== "" ||
       !values.includes("--strict-mcp-config")
