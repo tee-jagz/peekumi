@@ -237,7 +237,12 @@ pub async fn read(app: &App, head: &str) -> Result<Value> {
             } else {
                 &r["groups"]
             };
-            json!({"groups": groups, "rule": r["rule"]})
+            let rule = if r["trial"]["rule"].is_object() {
+                &r["trial"]["rule"]
+            } else {
+                &r["rule"]
+            };
+            json!({"groups": groups, "rule": rule})
         })
         .collect();
     if let Ok(found) = app

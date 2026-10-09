@@ -605,11 +605,12 @@ impl Repository {
         Ok(json!({"head": b.sha, "checks": b.checks, "fixes": propose_fixes(&b.relationships)}))
     }
     /// Tries a proposed rule at `head` without a commit: `proposal` is `{groups, rule}`, added
-    /// to the committed `.peekumi.json` (or to an empty one). A group name that the file has
-    /// keeps the file's patterns (a warning says so when they differ). Returns what the rule
-    /// would check now (`checked`, `broke`, `unresolved`), up to five of its breaks
-    /// (`examples`), the warnings about its own groups and rule, the groups that it uses
-    /// (`groups`), and the whole configuration with it (`config`).
+    /// to the committed `.peekumi.json` (or to an empty one). A group name that the file uses
+    /// for other patterns gets a new name (`ui-2`), so the rule keeps its own files and the
+    /// file's group stays as it is; a warning says so. Returns what the rule would check now
+    /// (`checked`, `broke`, `unresolved`), up to five of its breaks (`examples`), the warnings
+    /// about its own groups and rule, the groups and the rule as it uses them (`groups`,
+    /// `rule`), and the whole configuration with it (`config`).
     ///
     /// # Errors
     /// A rule ID that the configuration already has, a rule that checks the same files as a
@@ -629,27 +630,33 @@ impl Repository {
             .context("The proposal needs groups")?;
         // The rules as they are now, before the proposal joins them.
         let current = crate::rules::parse(&config.to_string()).ok();
-        // A group name that the rule file has means that group as it is now: the file can
-        // change after the agent read it (an uncommitted edit, a later commit).
+        // A group that the rule file has with the same patterns is that group. A group name
+        // that the file uses for other patterns gets a new name: the rule keeps its own files,
+        // and the file's group stays as it is (another rule can depend on it).
         let mut used = serde_json::Map::new();
         let mut adopted = vec![];
+        let mut rule = proposal["rule"].clone();
         for (name, patterns) in groups {
-            match config["groups"].get(name) {
-                Some(existing) => {
-                    if existing != patterns {
-                        adopted.push(format!(
-                            "Group \"{name}\" has other patterns in the rule file now. The rule uses those."
-                        ));
-                    }
-                    used.insert(name.clone(), existing.clone());
-                }
-                None => {
-                    config["groups"][name] = patterns.clone();
-                    used.insert(name.clone(), patterns.clone());
-                }
+            let mut chosen = name.clone();
+            if config["groups"]
+                .get(name)
+                .is_some_and(|existing| existing != patterns)
+            {
+                chosen = (2..)
+                    .map(|n| format!("{name}-{n}"))
+                    .find(|n| config["groups"].get(n).is_none_or(|g| g == patterns))
+                    .unwrap_or_default();
+                adopted.push(format!(
+                    "Group \"{name}\" has other patterns in the rule file, so this rule uses a new group \"{chosen}\" with its own patterns."
+                ));
+                rename_group(&mut rule, name, &chosen);
             }
+            if config["groups"].get(&chosen).is_none() {
+                config["groups"][&chosen] = patterns.clone();
+            }
+            used.insert(chosen, patterns.clone());
         }
-        let rule = &proposal["rule"];
+        let rule = &rule;
         let id = rule["id"].as_str().unwrap_or("");
         if config["rules"]
             .as_array()
@@ -694,7 +701,7 @@ impl Repository {
         }
         alone.apply(&mut relations);
         let (coverage, warnings) = alone.coverage(&relations, &paths);
-        let own: Vec<&String> = groups.keys().collect();
+        let own: Vec<&String> = used.keys().collect();
         let warnings: Vec<String> = adopted
             .into_iter()
             .chain(warnings.into_iter().filter(|w| {
@@ -719,6 +726,7 @@ impl Repository {
             "warnings": warnings,
             "examples": examples,
             "groups": used,
+            "rule": rule,
             "config": config,
         }))
     }
@@ -1085,6 +1093,21 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
     );
     (values, checks)
 }
+/// Renames group `from` to `to` where `rule` names it: in `from`, `to`, `only` and `layers`.
+fn rename_group(rule: &mut Value, from: &str, to: &str) {
+    if rule["from"] == from {
+        rule["from"] = json!(to);
+    }
+    // `get_mut`, not indexing: an index adds a missing field as null.
+    for field in ["to", "only", "layers"] {
+        if let Some(list) = rule.get_mut(field).and_then(Value::as_array_mut) {
+            for name in list.iter_mut().filter(|n| *n == from) {
+                *name = json!(to);
+            }
+        }
+    }
+}
+
 /// What a rule checks, as a short hash. Two rules with the same key check the same thing,
 /// whatever their IDs and group names: the same form and kinds, the same source files and the
 /// same target files. Only files that a language adapter reads count, because only they can
@@ -1421,6 +1444,20 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_renamed_group_changes_only_its_own_names() {
+        let mut deny = json!({"id":"r","from":"ui","to":["ui","db"],"kinds":["calls"]});
+        rename_group(&mut deny, "ui", "ui-2");
+        assert_eq!(
+            deny,
+            json!({"id":"r","from":"ui-2","to":["ui-2","db"],"kinds":["calls"]}),
+            "No field is added, and other groups stay"
+        );
+        let mut layers = json!({"id":"l","layers":["ui","db"],"kinds":["calls"]});
+        rename_group(&mut layers, "db", "db-2");
+        assert_eq!(layers["layers"], json!(["ui", "db-2"]));
+        assert!(layers.get("to").is_none() && layers.get("from").is_none());
+    }
     #[test]
     fn a_proposal_that_another_covers_joins_it() {
         let groups = json!({"ui":["ui/**"],"db":["db/**"]});

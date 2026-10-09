@@ -7513,7 +7513,12 @@ body.menu-open .sheet[data-front="true"] .node:not(.menu-target) {
 .panel #taskReturn[hidden] {
   display: none;
 }
+/* With the way back to a task, the live line goes to the right too, beside it: Peek and its
+   word belong to the agent, not to the selection's name. */
 #reviewScope:has(#taskReturn:not([hidden])) #liveLine {
+  margin-left: auto;
+}
+#reviewScope:has(#liveLine:not([hidden])) #taskReturn {
   margin-left: 12px;
 }
 #reviewScope:has(#taskReturn:not([hidden])) .x {

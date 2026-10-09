@@ -121,7 +121,10 @@ export function createAudit({
     if (!edits.has(r.id))
       edits.set(r.id, {
         text: JSON.stringify(
-          { groups: r.trial?.groups || r.groups, rule: r.rule },
+          {
+            groups: r.trial?.groups || r.groups,
+            rule: r.trial?.rule || r.rule,
+          },
           null,
           2,
         ),
@@ -346,11 +349,16 @@ export function createAudit({
     const rules = data?.rules || [];
     // Each idea once: a rule that another rule covers shows under that rule.
     const ids = new Set(rules.map((r) => r.id));
-    const roots = rules.filter((r) => !r.partOf || !ids.has(r.partOf));
+    const tops = rules.filter((r) => !r.partOf || !ids.has(r.partOf));
+    // A rule that is in the rule file now, or that went to an agent, is done: it leaves the
+    // two sections for a closed list at the end.
+    const done = (r) => r.added || r.status === "drafted";
+    const roots = tops.filter((r) => !done(r));
+    const finished = tops.filter(done);
     const breaking = (r) => !r.problem && (r.trial?.broke || 0) > 0;
     head("Proposed rules", {
-      meta: roots.length
-        ? `${plural(roots.length, "rule")} · ${roots.filter(breaking).length} find a problem now`
+      meta: tops.length
+        ? `${plural(roots.length, "open rule")} · ${roots.filter(breaking).length} find a problem now`
         : "",
     });
     if (shown.error) body.append(el("p", "rule-error", shown.error));
@@ -446,7 +454,7 @@ export function createAudit({
           ),
         );
     }
-    if (rules.length) {
+    if (roots.length) {
       sendButton.type = saveButton.type = "button";
       sendButton.onclick = async () => {
         sendButton.disabled = true;
@@ -462,6 +470,27 @@ export function createAudit({
       buttons.append(sendButton, saveButton);
       update();
       body.append(buttons);
+    }
+    if (!roots.length && finished.length && !data.running)
+      body.append(
+        el(
+          "p",
+          "read-note",
+          "No open rule: each rule is added or sent to an agent.",
+        ),
+      );
+    if (finished.length) {
+      const closed = el("details", "fix-context audit-done");
+      closed.append(el("summary", "", `Done (${finished.length})`));
+      for (const r of finished)
+        closed.append(
+          el(
+            "p",
+            "fix-context-row",
+            `${plainOf(r)} · ${r.added ? "in the rule file" : "sent to an agent"}`,
+          ),
+        );
+      body.append(closed);
     }
     if (data.dropped?.length) {
       const left = el("details", "fix-context");

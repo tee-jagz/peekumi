@@ -2468,12 +2468,15 @@ test("an agent audits the architecture in the background; the saved list keeps e
   const later = await f.req(`/api/rules/audit?head=${next}`);
   assert.equal(later.rules[0].added, true);
   assert.match(later.rules[0].problem, /already exists/);
+  // A group name that the file now uses for other patterns gets a new name: the rule keeps
+  // its own files, and the file's group stays as it is.
   const changed = later.rules.find((r) => r.rule.id === "app-layers");
   assert.equal(changed.problem, undefined);
-  assert.deepEqual(changed.trial.groups.ui, ["ui/**", "web/**"]);
+  assert.deepEqual(changed.trial.groups["ui-2"], ["ui/**"]);
+  assert.deepEqual(changed.trial.rule.layers, ["ui-2", "services", "db"]);
   assert.ok(
     changed.trial.warnings.includes(
-      'Group "ui" has other patterns in the rule file now. The rule uses those.',
+      'Group "ui" has other patterns in the rule file, so this rule uses a new group "ui-2" with its own patterns.',
     ),
   );
   // A repository with no rules gets proposals too.

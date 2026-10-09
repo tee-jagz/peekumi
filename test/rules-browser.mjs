@@ -231,7 +231,7 @@ try {
       );
       assert.match(
         await page.locator("#viewHead .view-meta").innerText(),
-        /^2 rules · \d find a problem now$/,
+        /^2 open rules · \d find a problem now$/,
       );
       const inversion = page.locator(".audit-row", {
         hasText: "Files in ui/ must not import code from db/",
@@ -316,7 +316,8 @@ try {
         .getByRole("button", { name: "Propose rules", exact: true })
         .click();
       await page.locator(".audit-row").first().waitFor();
-      assert.equal(await page.locator(".audit-row").count(), 2);
+      // The sent rule is done: it leaves the sections for the closed Done list.
+      assert.equal(await page.locator(".audit-row").count(), 1);
       assert.equal(
         await page
           .locator(".audit-row", {
@@ -326,12 +327,14 @@ try {
           .isChecked(),
         false,
       );
+      await page.locator(".audit-done summary").click();
       assert.match(
-        await page
-          .locator(".audit-row", { hasText: "UI over services over database" })
-          .locator("small")
-          .innerText(),
-        / · drafted$/,
+        await page.locator(".audit-done").innerText(),
+        /^Done \(1\)[^]*UI over services over database · sent to an agent/,
+      );
+      assert.match(
+        await page.locator("#viewHead .view-meta").innerText(),
+        /^1 open rule · /,
       );
       assert.deepEqual(errors, []);
       console.log(`PASS rules ${viewport.width}`);
