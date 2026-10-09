@@ -34,11 +34,15 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ### Changed
 
+- A session agent now checks its commits against the dependency rules before it ends a turn, as a task agent does. It fixes each break that its work adds, or tells the owner why.
 - The code that runs the read-only agent moved from `ask.rs` to `agent_call.rs`. The rule audit and Proposed fixes keep their own instructions. No backend service uses another service now, so the rule `backend-services-independent` has no break.
 - `app.js` gives the session functions to the Tasks code. No frontend feature module imports another one now, so the rule `frontend-features-independent` has no break.
 
 ### Fixed
 
+- A proposed rule that names a group of `.peekumi.json` with other patterns now gets a new group name. Before, it took the file's patterns. The rule then checked other files than the agent meant, and an agent that added it could change a group that other rules use.
+- Proposed rules that are in the rule file, or that went to an agent, move to a closed Done list.
+- The live line (Peek and "Your turn") sits at the right of the title row, beside "Back to task", not beside the selection's name.
 - A second start of a fix proposal or a rule audit is not an error. When another agent run holds the agent, the page waits and tries again, in place of a red error.
 - Proposed fixes run on the server in the background. Before, the page waited on one long request. When the phone left the app or lost its connection, the page said "Cannot reach Peekumi", and the proposal was lost. Now the page keeps the last proposal, and a notification says when it is ready.
 - A call inside one file no longer breaks a rule whose `to` groups contain that file. Before, a rule such as "a feature module must not use another feature module" counted each call inside a module as a break.
