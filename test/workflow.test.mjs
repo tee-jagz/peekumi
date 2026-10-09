@@ -1288,6 +1288,11 @@ test("a session continues one conversation over turns, asks before commands, and
   assert.match(first.task, /# Session with the owner/);
   assert.match(first.task, /## The owner's first message\nMake the change\./);
   assert.match(first.task, /## Repository map/);
+  // A session checks its own commits against the rules, as a task does.
+  assert.match(
+    first.task,
+    /## Rule check\nBefore you end a turn in which you committed changes, call check_rules/,
+  );
   // The next turn resumes the conversation; the session rule answers without asking.
   const sent = await f.req(`/api/runs/${session.id}/message`, {
     text: "Again.\nRUN: npm install other",

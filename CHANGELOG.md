@@ -34,6 +34,7 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ### Changed
 
+- A session agent now checks its commits against the dependency rules before it ends a turn, as a task agent does. It fixes each break that its work adds, or tells the owner why.
 - The code that runs the read-only agent moved from `ask.rs` to `agent_call.rs`. The rule audit and Proposed fixes keep their own instructions. No backend service uses another service now, so the rule `backend-services-independent` has no break.
 - `app.js` gives the session functions to the Tasks code. No frontend feature module imports another one now, so the rule `frontend-features-independent` has no break.
 

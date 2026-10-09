@@ -108,7 +108,8 @@ impl Workflow {
     }
 
     /// The context of a session's first turn: where it works, how to work with the owner, the
-    /// repository map and the code graph tools, and the dependency rules.
+    /// repository map and the code graph tools, the dependency rules, and the rule check before
+    /// a turn with commits ends.
     #[allow(clippy::too_many_arguments)]
     fn session_text(
         &self,
@@ -132,6 +133,10 @@ impl Workflow {
             text.push_str("\n## Code graph tools\nPeekumi's read-only code graph of this repository at the start commit: highlight opens a folder, file or declaration with the details you ask for; route follows calls into a declaration or between two declarations; find_declarations finds a declaration by name; read_declaration, relationships, search_code and read_file read the same commit. The graph shows the start commit, not your own changes. Static calls only: some calls stay unresolved.\n");
         }
         text.push_str(&format!("\n## Dependency rules at start\n{rules}\n"));
+        // The same check as a task's: the breaks that the session's own commits add.
+        if graph {
+            text.push_str("\n## Rule check\nBefore you end a turn in which you committed changes, call check_rules (peekumi_graph). It returns the dependency-rule breaks that your commits add to the start commit. Fix each one, or tell the owner in your reply why the break is needed.\n");
+        }
         text
     }
 
