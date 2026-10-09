@@ -34,17 +34,31 @@ fn save(app: &App, state: &Value) -> Result<()> {
     Ok(())
 }
 
+/// What the page shows while another agent run holds Ask's lock.
+pub const BUSY: &str = "Another agent run is in progress: an Ask answer, a rule audit or a fix proposal. Peekumi starts this one when it ends.";
+
 /// Starts a proposal for the breaks at `body.head` with the Ask agent `body.using`, in the
-/// background. It holds Ask's lock until it ends, so it waits for no Ask answer and Ask waits
-/// for it.
+/// background, and returns `{running: true}`. It holds Ask's lock until it ends, so it waits
+/// for no Ask answer and Ask waits for it. A proposal for the same commit that runs already
+/// counts as started (a second tap, a second device). When another agent run holds the lock,
+/// it returns `{busy}` and starts nothing: the page tries again.
 ///
 /// # Errors
-/// An Ask answer, a rule audit or another proposal in progress.
+/// The saved proposal cannot be written.
 pub fn start(app: Arc<App>, body: Value) -> Result<Value> {
-    let guard = app.ask_lock.clone().try_lock_owned().ok().context(
-        "An Ask answer, a rule audit or a fix proposal is in progress. Try again when it ends",
-    )?;
     let head = body["head"].as_str().unwrap_or("").to_string();
+    {
+        let _one = SAVE.lock().unwrap_or_else(|e| e.into_inner());
+        let state = load(&app);
+        if state["head"] == head.as_str()
+            && state["running"]["process"].as_u64() == Some(u64::from(std::process::id()))
+        {
+            return Ok(json!({"running": true}));
+        }
+    }
+    let Ok(guard) = app.ask_lock.clone().try_lock_owned() else {
+        return Ok(json!({"busy": BUSY}));
+    };
     {
         let _one = SAVE.lock().unwrap_or_else(|e| e.into_inner());
         save(

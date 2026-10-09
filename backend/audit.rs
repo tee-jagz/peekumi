@@ -48,18 +48,20 @@ fn change<T>(app: &App, change: impl FnOnce(&mut Value) -> Result<T>) -> Result<
     Ok(out)
 }
 
-/// Starts an audit at `body.head` with the Ask agent `body.using`, in the background. It holds
-/// Ask's lock until it ends, so it waits for no Ask answer and Ask waits for it.
+/// Starts an audit at `body.head` with the Ask agent `body.using`, in the background, and
+/// returns `{running: true}`. It holds Ask's lock until it ends, so it waits for no Ask answer
+/// and Ask waits for it. An audit that runs already counts as started. When another agent run
+/// holds the lock, it returns `{busy}` and starts nothing: the page tries again.
 ///
 /// # Errors
-/// An Ask answer or another audit in progress.
+/// The saved list cannot be written.
 pub fn start(app: Arc<App>, mut body: Value) -> Result<Value> {
-    let guard = app
-        .ask_lock
-        .clone()
-        .try_lock_owned()
-        .ok()
-        .context("An Ask answer or a rule audit is in progress. Try again when it ends")?;
+    if load(&app)["running"]["process"].as_u64() == Some(u64::from(std::process::id())) {
+        return Ok(json!({"running": true}));
+    }
+    let Ok(guard) = app.ask_lock.clone().try_lock_owned() else {
+        return Ok(json!({"busy": crate::fix_proposals::BUSY}));
+    };
     // The agent gets the rules that earlier audits proposed, so it proposes only what is
     // missing.
     body["known"] = json!(

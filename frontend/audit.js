@@ -85,10 +85,24 @@ export function createAudit({
     }, 3000);
   }
 
-  /** Starts an audit at `commit`; its rules join the list when it ends. */
+  /** Starts an audit at `commit`; its rules join the list when it ends. When another agent
+   * run holds the agent, the page waits and tries again while it is open. */
   async function start(commit) {
     try {
-      await sendJson("/api/rules/propose", { head: commit, using: using() });
+      const started = await sendJson("/api/rules/propose", {
+        head: commit,
+        using: using(),
+      });
+      if (started.busy) {
+        shown.waiting = started.busy;
+        redraw();
+        setTimeout(() => {
+          if (shown?.commit === commit && shown.waiting && showing())
+            start(commit);
+        }, 5000);
+        return;
+      }
+      shown.waiting = "";
       shown.data = {
         ...(shown.data || { rules: [], dropped: [] }),
         running: {},
@@ -340,6 +354,14 @@ export function createAudit({
         : "",
     });
     if (shown.error) body.append(el("p", "rule-error", shown.error));
+    if (shown.waiting) {
+      const waiting = el("div", "fix-working");
+      waiting.append(
+        peek("idle", { className: "fix-peek" }),
+        el("p", "", shown.waiting),
+      );
+      body.append(waiting);
+    }
     if (!data) return body.append(el("p", "read-note", "Reading the list…"));
     if (data.running) {
       const working = el("div", "fix-working");

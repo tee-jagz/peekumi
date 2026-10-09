@@ -94,6 +94,11 @@ if (values.includes("--tools")) {
       !values.includes("--strict-mcp-config")
     )
       throw Error("The audit agent must have no built-in tools");
+    // FAKE_AUDIT_DELAY_MS: a slow audit, so a test can start other work while it runs.
+    if (process.env.FAKE_AUDIT_DELAY_MS)
+      await new Promise((r) =>
+        setTimeout(r, Number(process.env.FAKE_AUDIT_DELAY_MS)),
+      );
     if (!system.includes("Do not be pedantic"))
       throw Error("The audit agent must propose only missing rules");
     if (!system.includes("Do not copy the current dependencies"))

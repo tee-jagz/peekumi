@@ -138,8 +138,25 @@ export function createFixes({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ head: commit, using: using() }),
     })
-      .then(() => {
-        if (shown.commit === commit) follow(commit);
+      .then((started) => {
+        if (shown.commit !== commit) return;
+        if (!started.busy) return follow(commit);
+        // Another agent run holds the agent: wait, and try again while the page is open.
+        shown.agent = {
+          status: "waiting",
+          fixes: [],
+          provider: "",
+          error: started.busy,
+        };
+        redraw();
+        setTimeout(() => {
+          if (
+            shown?.commit === commit &&
+            shown.agent.status === "waiting" &&
+            showing()
+          )
+            propose();
+        }, 5000);
       })
       .catch((error) => {
         if (shown.commit !== commit) return;
@@ -267,14 +284,21 @@ export function createFixes({
       );
 
     const agent = shown.agent;
-    if (shown.mode === "agent" && agent.status === "running") {
+    if (
+      shown.mode === "agent" &&
+      (agent.status === "running" || agent.status === "waiting")
+    ) {
       const working = el("div", "fix-working");
       working.append(
-        peek("thinking", { className: "fix-peek" }),
+        peek(agent.status === "waiting" ? "idle" : "thinking", {
+          className: "fix-peek",
+        }),
         el(
           "p",
           "",
-          `${agentName() || "The agent"} reads the code and proposes fixes. This can take a few minutes. You can leave this page: Peekumi tells you when the fixes are ready, if notifications are on.`,
+          agent.status === "waiting"
+            ? agent.error
+            : `${agentName() || "The agent"} reads the code and proposes fixes. This can take a few minutes. You can leave this page: Peekumi tells you when the fixes are ready, if notifications are on.`,
         ),
       );
       return body.append(working, context(true));

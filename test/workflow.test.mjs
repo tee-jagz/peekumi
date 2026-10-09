@@ -2485,3 +2485,34 @@ test("an agent audits the architecture in the background; the saved list keeps e
   assert.equal(fresh.configured, false);
   assert.ok(fresh.rules.length >= 1);
 });
+
+test("a second start is not an error, and a busy agent makes a proposal wait", async (t) => {
+  const f = await fixture({ env: { FAKE_AUDIT_DELAY_MS: "3000" } });
+  t.after(() => f.close());
+  const start = (route) =>
+    f.req(route, { head: f.sha, using: { agent: "claude" } });
+  assert.deepEqual(await start("/api/rules/propose"), {
+    status: 200,
+    running: true,
+  });
+  // The same audit again: it runs already, so this is not an error.
+  assert.deepEqual(await start("/api/rules/propose"), {
+    status: 200,
+    running: true,
+  });
+  // The audit holds the agent: a fix proposal waits, and starts nothing.
+  const busy = await start("/api/fixes/propose");
+  assert.equal(busy.status, 200);
+  assert.match(busy.busy, /^Another agent run is in progress/);
+  assert.deepEqual(await f.req(`/api/fixes/proposal?head=${f.sha}`), {
+    status: 200,
+  });
+  await waitFor(
+    async () => !(await f.req(`/api/rules/audit?head=${f.sha}`)).running,
+  );
+  // When the agent is free, the proposal starts.
+  assert.deepEqual(await start("/api/fixes/propose"), {
+    status: 200,
+    running: true,
+  });
+});

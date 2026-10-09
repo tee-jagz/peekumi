@@ -39,6 +39,7 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ### Fixed
 
+- A second start of a fix proposal or a rule audit is not an error. When another agent run holds the agent, the page waits and tries again, in place of a red error.
 - Proposed fixes run on the server in the background. Before, the page waited on one long request. When the phone left the app or lost its connection, the page said "Cannot reach Peekumi", and the proposal was lost. Now the page keeps the last proposal, and a notification says when it is ready.
 - A call inside one file no longer breaks a rule whose `to` groups contain that file. Before, a rule such as "a feature module must not use another feature module" counted each call inside a module as a break.
 - The one-line installer downloads a public release without a token. Before, it got the file's description in place of the file, and the checksum check failed.
