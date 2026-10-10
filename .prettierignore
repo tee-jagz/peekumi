@@ -9,5 +9,7 @@ node_modules/
 test-results/
 docs/context/
 docs/mockups/
+docs/design/mockups/
+frontend/tokens.css
 test/reference/
 package-lock.json

@@ -45,19 +45,21 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(server.url + "/#token=" + server.token);
     const front = page.locator('.sheet[data-front="true"]'),
-      folder = front.locator('.node[data-path="lib"]');
+      folder = front.locator('.pk-card[data-path="lib"]');
     await folder.waitFor();
     await folder.click();
     await folder.click();
-    await front.locator('.node[data-path="lib/f.mjs"]').waitFor();
+    await front.locator('.pk-card[data-path="lib/f.mjs"]').waitFor();
     await page.waitForTimeout(400);
     const report = await page.evaluate(() => {
       const sheet = document.querySelector('.sheet[data-front="true"]');
       const box = (el) => el.getBoundingClientRect();
-      const cards = [...sheet.querySelectorAll(".node[data-key]")].map((n) => ({
-        key: n.dataset.key,
-        r: box(n),
-      }));
+      const cards = [...sheet.querySelectorAll(".pk-card[data-key]")].map(
+        (n) => ({
+          key: n.dataset.key,
+          r: box(n),
+        }),
+      );
       const lines = [...sheet.querySelectorAll(".edges path.e")];
       const crossings = [],
         bent = [],
@@ -145,10 +147,10 @@ try {
     );
     await page.screenshot({ path: `test-results/edges-${viewport.width}.png` });
     if (viewport.width < 900) {
-      const file = front.locator('.node[data-path="lib/wide.mjs"]');
+      const file = front.locator('.pk-card[data-path="lib/wide.mjs"]');
       await file.click();
       await file.click();
-      await front.locator('.node[data-key="symbol:wide"]').click();
+      await front.locator('.pk-card[data-key="symbol:wide"]').click();
       assert.equal(
         await page.locator("#panel").getAttribute("data-height"),
         "peek",

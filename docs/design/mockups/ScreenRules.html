@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposed rules · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div class="pk pk-shell" style="width: 390px; height: 844px"><div class="pk-shell-body" style="--pk-sheet-h: 740px"><header class="pk-header"><div class="pk-header-name"><strong>peekumi</strong><button type="button" class="pk-compare"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M4 15a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M6 7v6M14 8c0 3-8 2-8 5"></path></svg>main · ea2ae7f → c63a1eb</button></div><div class="pk-header-actions"><div class="pk-seg" role="group" aria-label="Mode"><button type="button" aria-pressed="false" aria-label="Time" title="Time"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0M10 6v4l3 2"></path></svg></button><button type="button" aria-pressed="true" aria-label="Diff" title="Diff"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 3h9v9H3ZM8 8h9v9H8Z"></path></svg></button></div><button type="button" class="pk-icon-button" aria-label="Conversations" title="Conversations"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 4h10v7H8l-3 3v-3H3ZM15.5 8H17v7h-1.5v2.5L12 15H9"></path></svg></button><button type="button" class="pk-icon-button" aria-label="Tasks" title="Tasks"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 5l2 2 3-3M10 6h7M3 13l2 2 3-3M10 14h7"></path></svg></button></div></header><section class="pk-sheet"><button type="button" class="pk-grabber" aria-label="Sheet height. Tap to change"></button><div class="pk-sheet-body"><div class="pk-page-header"><button type="button" class="pk-icon-button is-quiet" aria-label="Back" title="Back"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M12 4l-6 6 6 6"></path></svg></button><div class="titles"><h2>Proposed rules</h2><span class="pk-meta">From Claude Code · 3 open</span></div><div class="actions"><button type="button" class="pk-icon-button is-quiet" aria-label="Audit again" title="Audit again"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M16 10a6 6 0 1 1-2-4.5M16 3v4h-4"></path></svg></button></div></div><div><h3 class="pk-group-title">Finds a problem now</h3><div class="pk-proposal"><input type="checkbox" checked aria-label="Select this rule"><span class="title">backend/graph_brief.rs must not use backend/lookup.rs</span><span class="pk-figure is-danger">1<small>break</small></span><p class="why">Acyclic dependencies · High</p></div></div><div><h3 class="pk-group-title">Guards against future mistakes</h3><div class="pk-proposal"><input type="checkbox" checked aria-label="Select this rule"><span class="title">backend/adapters/mod.rs may use only the adapters and the platform</span><span class="pk-figure is-muted">0<small>breaks</small></span><p class="why">Stable dependencies · High</p></div><div class="pk-proposal"><input type="checkbox" aria-label="Select this rule"><span class="title">backend/ and frontend/ must not use scripts/</span><span class="pk-figure is-muted">0<small>breaks</small></span><p class="why">Separation of concerns · Medium</p></div></div><details class="pk-disclosure"><summary>Done (15)<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M5 8l5 5 5-5"></path></svg></summary></details><button type="button" class="pk-button is-primary is-block">Add 2 rules with an agent</button></div></section></div></div>
+</body>
+</html>

@@ -1,7 +1,8 @@
-/** Sessions in the browser: start one from the dock, answer a command request, follow the
- * agent's steps, reply, and send the work to the normal review. Phone and desktop. */
+/** Sessions in the browser: start one from the send sheet (With me), answer a command
+ * request, follow the agent's steps, reply, and send the work to the normal review. Phone and
+ * desktop. */
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { fixture } from "./workflow-support.mjs";
 let browser;
@@ -25,30 +26,59 @@ try {
     );
     try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
-      await page.locator('[data-compose="session"]').click();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
+      // A session is how a change runs: the change goes to the tray, and With me in the send
+      // sheet starts a session with it.
+      await page
+        .getByLabel("Ask, or describe a change")
+        .fill("Make the change.");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true })
+        .click();
+      await page.locator("#reviewActions .pk-tray").click();
+      await page.locator('#panel[data-view="prepare"]').waitFor();
+      const how = page.getByRole("group", { name: "How it runs" });
+      await how.getByRole("button", { name: "With me", exact: true }).click();
       assert.equal(
-        await page
-          .locator('[data-compose="session"]')
-          .getAttribute("aria-selected"),
+        await how
+          .getByRole("button", { name: "With me", exact: true })
+          .getAttribute("aria-pressed"),
         "true",
       );
-      const start = page.getByLabel("What do you want to work on?");
-      // Claude Code asks before commands: its switch is one quiet shield, off by default.
-      const shield = page.locator("#composerHost .session-mode");
-      await shield.waitFor();
+      // The send sheet names the agent that the session uses (once the list loads).
+      await page
+        .locator(".pk-facts > div", { hasText: /^Agent\s*Claude/ })
+        .waitFor({ timeout: 60000 });
+      // Claude Code asks before commands: Allow all commands is off by default.
+      const allowAll = page.getByLabel("Allow all commands");
+      await allowAll.waitFor();
+      assert.equal(await allowAll.isChecked(), false);
+      // With me needs no frozen preview: the session's first message is the change.
       assert.equal(
-        await shield.getAttribute("aria-label"),
-        "Allow all commands",
+        await page.getByText("The exact task", { exact: true }).count(),
+        0,
       );
-      assert.equal(await shield.getAttribute("aria-pressed"), "false");
-      await start.fill("Make the change.\nRUN: npm install left-pad");
-      await page.getByRole("button", { name: "Start session" }).click();
+      await page
+        .getByLabel("Extra instructions (optional)")
+        .fill("RUN: npm install left-pad");
+      await page.screenshot({
+        path: `test-results/session-send-${viewport.width}.png`,
+      });
+      // One tap starts the session, straight after the owner types in the field.
+      const startSession = page.locator("#dispatchRun");
+      assert.equal(await startSession.innerText(), "Start session");
+      await startSession.click();
       // The command waits for the owner, in the conversation.
-      const approval = page.locator(".session-approval");
+      const approval = page.getByRole("region", {
+        name: "The agent asks to run a command",
+      });
       await approval.waitFor();
       assert.match(
-        await approval.locator(".session-command").textContent(),
+        await approval.locator(".pk-command").textContent(),
         /npm install left-pad/,
       );
       // The note goes with Deny, so it comes before the buttons.
@@ -57,9 +87,8 @@ try {
           Boolean(
             card
               .querySelector("label")
-              .compareDocumentPosition(
-                card.querySelector(".session-approval-actions"),
-              ) & Node.DOCUMENT_POSITION_FOLLOWING,
+              .compareDocumentPosition(card.querySelector(".pk-actions")) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
           ),
         ),
         "The note comes first",
@@ -67,22 +96,31 @@ try {
       await page.screenshot({
         path: `test-results/session-approval-${viewport.width}.png`,
       });
-      // The chip beside the dock names the agent that sessions use (once the list loads).
-      await page.waitForFunction(
-        () =>
-          /Sessions use Claude/.test(
-            document.querySelector("#dockAgent")?.title || "",
-          ),
-        null,
-        { timeout: 60000 },
+      // The first message is the picked change, then the extra instructions.
+      const first = JSON.parse(
+        await readFile(f.state + "/session-turn-1.json", "utf8"),
+      );
+      assert.match(
+        first.task,
+        /\nMake the change\.\nRUN: npm install left-pad/,
+      );
+      // The session carries the change now, so it leaves the tray.
+      assert.equal(
+        (await f.req("/api/workflow")).comments.filter(
+          (c) => c.status === "draft",
+        ).length,
+        0,
+        "The sent change is no longer a draft",
       );
       await page
         .getByRole("button", { name: "Allow npm install in this session" })
         .click();
-      const log = page.locator(".session-log");
+      const log = page.getByRole("log", { name: "Session conversation" });
       await log.getByText("Turn 1 is done.").waitFor();
-      await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
-      const steps = log.locator(".session-step");
+      await page
+        .locator("#viewHead .pk-status", { hasText: "Your turn" })
+        .waitFor();
+      const steps = log.locator(".pk-step");
       assert.ok((await steps.count()) >= 2, "The agent's steps show");
       assert.match(
         await steps.first().locator("summary").textContent(),
@@ -90,7 +128,7 @@ try {
       );
       await steps.first().locator("summary").click();
       assert.match(
-        await steps.first().locator(".session-output").textContent(),
+        await steps.first().locator(".pk-command").textContent(),
         /78 passed/,
       );
       const edit = steps
@@ -134,6 +172,7 @@ try {
       assert.equal(await live.innerText(), "Your turn");
       assert.match(
         await live.getAttribute("aria-label"),
+        // The session is named by its first message: the change with its place.
         /^Session Make the change\. · Your turn: Turn 1 is done\./,
       );
       // On the title's line, at its right: no row of its own.
@@ -163,7 +202,7 @@ try {
       // Opening a card redraws the sheet; the button keeps the session's state.
       const homeCrumb = page.locator(".crumbs .crumb-home");
       if (await homeCrumb.isEnabled()) await homeCrumb.click();
-      const card = page.locator('.sheet[data-front="true"] .node').first();
+      const card = page.locator('.sheet[data-front="true"] .pk-card').first();
       await card.click();
       await card.click();
       await page.waitForFunction(
@@ -182,11 +221,11 @@ try {
           () => document.querySelector("#panel").dataset.height === "peek",
         );
         assert.ok(
-          await page.locator(".session-head").isVisible(),
+          await page.locator("#viewHead .pk-page-header").isVisible(),
           "The closed session shows its header",
         );
         assert.match(
-          await page.locator(".session-status").textContent(),
+          await page.locator("#viewHead .pk-status").textContent(),
           /Your turn/,
         );
         await page.screenshot({ path: "test-results/session-closed-390.png" });
@@ -200,18 +239,27 @@ try {
       await page.getByLabel("Reply to the agent").fill("Again, please.");
       await page.getByRole("button", { name: "Send to the agent" }).click();
       await log.getByText("Turn 2 is done.").waitFor();
-      await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
+      await page
+        .locator("#viewHead .pk-status", { hasText: "Your turn" })
+        .waitFor();
       assert.match(
-        await log.locator(".session-owner").last().textContent(),
+        await log.locator(".pk-message.is-user").last().textContent(),
         /Again, please\./,
       );
       // A link in the conversation moves the map; the conversation keeps its place.
+      // The test reads from the middle: the sheet scrolls to half way, and the test taps the
+      // link nearest the middle of the view (the rule keeps a reader at the end at the end).
+      await page
+        .locator("#reviewScroll")
+        .evaluate((n) => (n.scrollTop = (n.scrollHeight - n.clientHeight) / 2));
       const later = log.getByRole("button", { name: "module.py" }).last();
       // A redraw can replace the link while the test scrolls to it (its names become links
       // once their places are found); try again on the new one.
       for (let i = 0; ; i++)
         try {
-          await later.scrollIntoViewIfNeeded();
+          await later.evaluate((link) =>
+            link.scrollIntoView({ block: "nearest" }),
+          );
           break;
         } catch (e) {
           if (i === 4) throw e;
@@ -220,7 +268,8 @@ try {
       const kept = await page
         .locator("#reviewScroll")
         .evaluate((n) => n.scrollTop);
-      await later.click();
+      // A click in the page: Playwright's own click can scroll a few pixels to reach the link.
+      await later.evaluate((link) => link.click());
       await page.waitForFunction(() =>
         /module\.py/.test(document.querySelector(".crumbs")?.textContent || ""),
       );
@@ -244,7 +293,7 @@ try {
         .fill("One more. WAIT_FOR_STOP");
       await page.getByRole("button", { name: "Send to the agent" }).click();
       await log
-        .locator(".session-step")
+        .locator(".pk-step")
         .filter({ hasText: "Edited session-notes.txt" })
         .nth(2)
         .waitFor();
@@ -253,16 +302,17 @@ try {
         .getByRole("button", { name: "Back", exact: true })
         .click();
       const working = page.locator('#liveLine[data-state="running"]');
-      await working.locator('.peek-mark[data-state="working"]').waitFor();
+      // Peek shows the activity: the last step edited a file.
+      await working.locator('.peek-mark[data-state="editing"]').waitFor();
       await page.waitForFunction(() =>
-        /Working: Edited session-notes\.txt/.test(
+        /Editing: Edited session-notes\.txt/.test(
           document.querySelector("#liveLine").getAttribute("aria-label"),
         ),
       );
       // The map was moved into module.py by the link; at the top level the agent's file shows.
       const home = page.locator(".crumbs .crumb-home");
       if (await home.isEnabled()) await home.click();
-      await page.locator(".node.agent-here .agent-badge").waitFor();
+      await page.locator(".pk-card.is-agent .pk-card-peek").waitFor();
       await page.screenshot({
         path: `test-results/session-working-${viewport.width}.png`,
       });
@@ -276,9 +326,11 @@ try {
       });
       await page.emulateMedia({ colorScheme: "light" });
       await page.getByRole("button", { name: "Stop" }).click();
-      await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
+      await page
+        .locator("#viewHead .pk-status", { hasText: "Your turn" })
+        .waitFor();
       assert.equal(
-        await page.locator(".node.agent-here").count(),
+        await page.locator(".pk-card.is-agent").count(),
         0,
         "The mark leaves the map once the agent stops",
       );
@@ -307,15 +359,15 @@ try {
       });
       // The header sits above the scrolling conversation, so scrolling never moves it.
       // Measured in one step in the page: a redraw replaces the header element between calls.
-      await page.locator(".session-head").waitFor();
+      await page.locator("#viewHead .pk-page-header").waitFor();
       const [before, after, scroller] = await page.evaluate(() => {
         const box = (selector) => {
           const r = document.querySelector(selector)?.getBoundingClientRect();
           return r && r.height ? { y: r.y, height: r.height } : null;
         };
-        const first = box(".session-head");
+        const first = box("#viewHead .pk-page-header");
         document.querySelector("#reviewScroll").scrollTop = 0;
-        return [first, box(".session-head"), box("#reviewScroll")];
+        return [first, box("#viewHead .pk-page-header"), box("#reviewScroll")];
       });
       assert.ok(
         before &&
@@ -325,12 +377,12 @@ try {
         "The header stays above the conversation",
       );
       assert.equal(
-        await page.locator("#reviewScroll .session-head").count(),
+        await page.locator("#reviewScroll .pk-page-header").count(),
         0,
       );
       // Ending sends the branch to the normal review.
       await page.getByRole("button", { name: "End session" }).click();
-      await page.locator(".session-end").waitFor();
+      await page.getByRole("region", { name: "End the session" }).waitFor();
       await page.screenshot({
         path: `test-results/session-end-${viewport.width}.png`,
       });
@@ -341,7 +393,7 @@ try {
       // The conversation stays with the work.
       await page.getByText("Session conversation").click();
       await page
-        .locator(".session-record .session-log")
+        .locator(".session-record [role=log]")
         .getByText("Turn 2 is done.")
         .waitFor();
       await page.screenshot({

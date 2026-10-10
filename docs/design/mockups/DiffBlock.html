@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiffBlock · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><div class="pk gallery-box"><div class="pk-diff"><div class="pk-diff-file"><span>backend/graph_brief.rs</span><span class="pk-marks"><span class="pk-mark is-added">+2</span><span class="pk-mark is-removed">−1</span></span></div><div class="pk-line is-hunk"><span class="n"></span><span class="n"></span><span class="s"></span><span class="t">@@ -186,7 +186,9 @@ pub async fn map(app: &amp;App)</span></div><div class="pk-line"><span class="n">186</span><span class="n">186</span><span class="s"> </span><span class="t">    <span class="syn-c">// The names of the map, folded to the budget.</span></span></div><div class="pk-line is-del"><span class="n">187</span><span class="n"></span><span class="s">−</span><span class="t">    let tree = <span class="w-del">lookup::names_tree</span>(app, base).await;</span></div><div class="pk-line is-add"><span class="n"></span><span class="n">187</span><span class="s">+</span><span class="t">    let tree = <span class="w-add">names_tree</span>(app, base).await;</span></div><div class="pk-line is-add"><span class="n"></span><span class="n">188</span><span class="s">+</span><span class="t">    <span class="syn-c">// Moved here: lookup.rs uses the map brief.</span></span></div><div class="pk-line"><span class="n">188</span><span class="n">189</span><span class="s"> </span><span class="t">    fold(tree, <span class="syn-s">12_000</span>)</span></div><div class="pk-line"><span class="n">189</span><span class="n">190</span><span class="s"> </span><span class="t">}</span></div><button type="button" class="pk-collapsed"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M5 8l5 5 5-5"></path></svg>Show 24 lines</button></div></div></div>
+</body>
+</html>

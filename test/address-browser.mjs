@@ -44,10 +44,10 @@ try {
       await page.goto(
         f.server.url + "/?branch=refs/heads/feature#token=" + f.server.token,
       );
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
 
       // Back keeps the branch in the address, so a reload shows the same branch.
-      await front.locator('.node[data-path="backend"]').click();
+      await front.locator('.pk-card[data-path="backend"]').click();
       if (!(await page.locator("#helperTools").isVisible()))
         await page.locator("#sheetHandle").click();
       await page.locator('#helperTools [data-tab="changes"]').click();
@@ -61,7 +61,9 @@ try {
 
       // A selection at the top level comes back after a reload.
       await page.reload();
-      await front.locator('.node.sel[data-path="backend"]').waitFor();
+      await front
+        .locator('.pk-card.is-selected[data-path="backend"]')
+        .waitFor();
       assert.equal(
         await page.locator("#branchPicker").inputValue(),
         "refs/heads/feature",
@@ -77,7 +79,7 @@ try {
       );
       const head = await param("head");
       await page.reload();
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
       assert.equal(await param("mode"), "time");
       assert.equal(
         await param("head"),
@@ -119,10 +121,10 @@ try {
       );
       const home = page.locator(".crumbs .crumb-home");
       if (await home.isEnabled()) await home.click();
-      const backend = front.locator('.node[data-path="backend"]');
+      const backend = front.locator('.pk-card[data-path="backend"]');
       await backend.click();
       await backend.click();
-      await front.locator('.node[data-path="backend/lookup.py"]').click();
+      await front.locator('.pk-card[data-path="backend/lookup.py"]').click();
       await page.locator("#openTasks").click();
       await page.locator(".task-link").first().click();
       await page
@@ -141,7 +143,9 @@ try {
       await page.waitForFunction(() =>
         /backend/.test(document.querySelector(".crumbs")?.textContent || ""),
       );
-      await front.locator('.node.sel[data-path="backend/lookup.py"]').waitFor();
+      await front
+        .locator('.pk-card.is-selected[data-path="backend/lookup.py"]')
+        .waitFor();
       // A reload while exploring keeps the way back to the branch.
       await page.locator("#openTasks").click();
       await page.locator(".task-link").first().click();
@@ -157,24 +161,34 @@ try {
           document.querySelector("#branchPicker")?.value ===
           "refs/heads/feature",
       );
-      await front.locator('.node[data-path="backend"]').waitFor();
+      await front.locator('.pk-card[data-path="backend"]').waitFor();
 
-      // In Ask, the menu's "Start a session here" goes to the map's dock, in Session mode.
-      await page.locator('[data-compose="ask"]').click();
-      await page.getByLabel("Your question").fill("Name references.");
+      // In Ask, the menu's "Start a session here" goes to the map's composer, with the card
+      // selected; the session starts from the send sheet.
       await page
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByLabel("Ask, or describe a change")
+        .fill("Name references.");
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
       assert.equal(await view(), "ask");
       await front
-        .locator('.node[data-path="backend"]')
+        .locator('.pk-card[data-path="backend"]')
         .click({ button: "right" });
       await page
-        .locator(".context-menu")
+        .locator(".pk-menu.is-floating")
         .getByRole("menuitem", { name: /Start a session here/ })
         .click();
       assert.notEqual(await view(), "ask");
-      await page.getByLabel("What do you want to work on?").waitFor();
+      await page.waitForFunction(
+        () =>
+          document.activeElement?.getAttribute("aria-label") ===
+          "Ask, or describe a change",
+      );
+      await front
+        .locator('.pk-card.is-selected[data-path="backend"]')
+        .waitFor();
 
       assert.deepEqual(errors, []);
       console.log(`PASS address and way back ${viewport.width}`);

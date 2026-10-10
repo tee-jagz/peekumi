@@ -245,6 +245,7 @@ impl Repository {
         .into())
     }
     /// Returns checkout identity, available local/remote-tracking branches (most recent commit first) and first-parent history for the selected head.
+    /// `main` names the main branch and its merge base with the head, or is null.
     /// Reads refs and objects only; never checks out a branch or fetches remote refs.
     /// An invalid base falls back to the oldest listed commit; an invalid head or unreadable history is an error.
     pub fn metadata(&self, base: &str, head: &str) -> Result<Value> {
@@ -308,8 +309,25 @@ impl Repository {
                 .context("Repository has no commits")
         })?;
         let root = string(self.git(&["rev-parse", "--show-toplevel"])?);
+        // "This branch against main": where the head left the main branch (the pull request
+        // view). The local main comes first, then the remote one; null when neither exists or
+        // the histories share no commit.
+        let main = [
+            "refs/heads/main",
+            "refs/heads/master",
+            "refs/remotes/origin/main",
+            "refs/remotes/origin/master",
+        ]
+        .iter()
+        .find_map(|r| branches.iter().find(|b| text(&b["ref"]) == *r))
+        .and_then(|b| {
+            let fork = self
+                .git(&["merge-base", text(&b["sha"]), &initial_head])
+                .ok()?;
+            Some(json!({"name": b["name"], "base": string(fork).trim()}))
+        });
         Ok(
-            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"moreCommits":more,"initialBase":base,"initialHead":initial_head,"branches":branches,"selectedBranch":selected_branch}),
+            json!({"name":Path::new(root.trim()).file_name().unwrap_or_default().to_string_lossy(),"branch":if branch.trim().is_empty(){"detached HEAD"}else{branch.trim()},"commits":commits,"moreCommits":more,"initialBase":base,"initialHead":initial_head,"branches":branches,"selectedBranch":selected_branch,"main":main}),
         )
     }
     /// Returns one page of the first-parent history from `start`, newest first, and whether

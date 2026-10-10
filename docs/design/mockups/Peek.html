@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peek · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><div class="pk gallery-box"><h3 class="gallery-title">What the agent does</h3><div class="gallery-peeks"><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="reading" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-reading" focusable="false">
+<defs>
+<radialGradient id="peek14-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek14-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek14-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek14-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek14-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek14-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek14-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek14-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek14-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek14-tile)"/>
+<g clip-path="url(#peek14-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek14-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek14-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek14-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek14-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek14-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek14-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek14-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>reading</code><span>Read, a map lookup</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="searching" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-searching" focusable="false">
+<defs>
+<radialGradient id="peek15-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek15-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek15-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek15-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek15-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek15-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek15-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek15-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek15-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek15-tile)"/>
+<g clip-path="url(#peek15-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek15-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek15-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek15-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek15-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek15-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek15-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek15-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>searching</code><span>Grep, Glob</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="editing" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-editing" focusable="false">
+<defs>
+<radialGradient id="peek16-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek16-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek16-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek16-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek16-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek16-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek16-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek16-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek16-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek16-tile)"/>
+<g clip-path="url(#peek16-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek16-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek16-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek16-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek16-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek16-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek16-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek16-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>editing</code><span>Edit, Write to a file</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="creating" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-creating" focusable="false">
+<defs>
+<radialGradient id="peek17-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek17-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek17-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek17-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek17-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek17-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek17-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek17-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek17-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek17-tile)"/>
+<g clip-path="url(#peek17-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek17-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek17-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek17-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek17-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek17-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek17-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek17-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>creating</code><span>Write a new file</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="running" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-running" focusable="false">
+<defs>
+<radialGradient id="peek18-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek18-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek18-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek18-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek18-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek18-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek18-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek18-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek18-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek18-tile)"/>
+<g clip-path="url(#peek18-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek18-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek18-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek18-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek18-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek18-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek18-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek18-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>running</code><span>A command, the tests</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="working" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-working" focusable="false">
+<defs>
+<radialGradient id="peek19-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek19-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek19-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek19-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek19-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek19-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek19-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek19-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek19-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek19-tile)"/>
+<g clip-path="url(#peek19-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek19-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek19-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek19-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek19-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek19-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek19-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek19-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>working</code><span>Any other step</span></figcaption></figure></div><h3 class="gallery-title">States</h3><div class="gallery-peeks"><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="idle" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-idle" focusable="false">
+<defs>
+<radialGradient id="peek20-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek20-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek20-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek20-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek20-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek20-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek20-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek20-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek20-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek20-tile)"/>
+<g clip-path="url(#peek20-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek20-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek20-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek20-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek20-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek20-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek20-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek20-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>idle</code><span>Pairing, the home of the app</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="loading" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-loading" focusable="false">
+<defs>
+<radialGradient id="peek21-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek21-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek21-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek21-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek21-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek21-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek21-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek21-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek21-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek21-tile)"/>
+<g clip-path="url(#peek21-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek21-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek21-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek21-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek21-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek21-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek21-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek21-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>loading</code><span>The app or the map loads</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="thinking" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-thinking" focusable="false">
+<defs>
+<radialGradient id="peek22-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek22-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek22-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek22-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek22-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek22-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek22-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek22-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek22-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek22-tile)"/>
+<g clip-path="url(#peek22-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek22-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek22-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek22-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek22-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek22-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek22-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek22-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>thinking</code><span>An agent needs you</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="ready" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-ready" focusable="false">
+<defs>
+<radialGradient id="peek23-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek23-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek23-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek23-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek23-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek23-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek23-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek23-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek23-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek23-tile)"/>
+<g clip-path="url(#peek23-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek23-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek23-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek23-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek23-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek23-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek23-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek23-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>ready</code><span>A task is ready for review</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="success" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-success" focusable="false">
+<defs>
+<radialGradient id="peek24-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek24-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek24-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek24-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek24-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek24-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek24-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek24-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek24-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek24-tile)"/>
+<g clip-path="url(#peek24-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek24-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek24-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek24-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek24-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek24-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek24-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek24-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>success</code><span>A step is done</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="merged" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-merged" focusable="false">
+<defs>
+<radialGradient id="peek25-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek25-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek25-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek25-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek25-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek25-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek25-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek25-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek25-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek25-tile)"/>
+<g clip-path="url(#peek25-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek25-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek25-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek25-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek25-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek25-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek25-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek25-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>merged</code><span>Merged into main</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="empty" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-empty" focusable="false">
+<defs>
+<radialGradient id="peek26-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek26-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek26-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek26-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek26-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek26-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek26-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek26-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek26-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek26-tile)"/>
+<g clip-path="url(#peek26-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek26-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek26-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek26-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek26-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek26-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek26-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek26-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>empty</code><span>Nothing here yet</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="asleep" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-asleep" focusable="false">
+<defs>
+<radialGradient id="peek27-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek27-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek27-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek27-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek27-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek27-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek27-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek27-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek27-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek27-tile)"/>
+<g clip-path="url(#peek27-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek27-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek27-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek27-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek27-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek27-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek27-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek27-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>asleep</code><span>Offline</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="stopped" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-stopped" focusable="false">
+<defs>
+<radialGradient id="peek28-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek28-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek28-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek28-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek28-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek28-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek28-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek28-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek28-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek28-tile)"/>
+<g clip-path="url(#peek28-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek28-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek28-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek28-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek28-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek28-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek28-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek28-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>stopped</code><span>A task stopped</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="error" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-error" focusable="false">
+<defs>
+<radialGradient id="peek29-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek29-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek29-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek29-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek29-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek29-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek29-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek29-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek29-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek29-tile)"/>
+<g clip-path="url(#peek29-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek29-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek29-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek29-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek29-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek29-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek29-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek29-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>error</code><span>A run failed</span></figcaption></figure><figure class="gallery-peek"><span class="pk-peek peek-mark" data-state="idle" aria-hidden="true"><svg viewBox="0 0 200 200" class="peek is-idle tiled" focusable="false">
+<defs>
+<radialGradient id="peek30-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek30-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek30-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek30-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek30-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek30-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek30-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek30-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek30-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek30-tile)"/>
+<g clip-path="url(#peek30-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek30-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek30-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek30-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek30-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek30-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek30-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek30-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><figcaption><code>tile</code><span>The app icon</span></figcaption></figure></div></div></div>
+</body>
+</html>

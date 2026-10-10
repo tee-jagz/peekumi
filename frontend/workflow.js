@@ -2,6 +2,22 @@
 import { iconButton } from "./icons.js";
 import { richText } from "./text.js";
 import { peek } from "./peek.js";
+import {
+  Button,
+  Checkbox,
+  Command,
+  Composer,
+  Disclosure,
+  FactGrid,
+  IconButton,
+  InlineError,
+  List,
+  Note,
+  PickRow,
+  SegmentedControl,
+  Spinner,
+  TextArea,
+} from "./ui.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   n.className = cls || "";
@@ -186,8 +202,18 @@ export function createWorkflow({
   // The session feature (session.js), which app.js gives here: one feature module never
   // imports another, so each one can change alone.
   sessions,
+  // Notifications on this device (notify.js), for "Tell me when it is done".
+  notifications = { isOn: () => false, canTurnOn: () => false, ensureOn() {} },
 }) {
-  const { createSession, live, activity, timeline, focusOf } = sessions;
+  const {
+    createSession,
+    live,
+    activity,
+    timeline,
+    focusOf,
+    savedPermissions,
+    savePermissions,
+  } = sessions;
   let data = { comments: [], runs: [] },
     loaded = false,
     lastSignature = "",
@@ -200,6 +226,11 @@ export function createWorkflow({
   let sessionTail = null;
   let brief = "",
     picks = new Set(),
+    // The send sheet: "background" starts a task, "live" a session (With me). A preview is
+    // being made while `previewing` is true; `notifyMe` is the owner's choice for this send.
+    sendMode = "background",
+    previewing = false,
+    notifyMe = true,
     runDetail = null,
     // The open task's merge state from the server (see backend/merge.rs), or null.
     mergeInfo = null,
@@ -246,9 +277,6 @@ export function createWorkflow({
     notice,
     context,
     using: (job) => agents.using(job),
-    // The agent that sessions use (the choice for tasks), once the agent list has loaded.
-    sessionAgent: () =>
-      agents.load().then(() => agents.current("task")?.agent || null),
     agentName: (id) => agents.short(id),
     asksBeforeCommands: (id) => agents.asksBeforeCommands(id),
     openTask: (id) => openTask(id),
@@ -311,13 +339,18 @@ export function createWorkflow({
           open && open.id !== shown
             ? await api(`/api/runs/${open.id}/tail`).catch(() => null)
             : null;
-        // An approved or merged task shows what a merge would do now.
+        // A task to approve, approved or merged shows what a merge would do now: before the
+        // approval, the server's `next` decides between Approve and Approve and merge.
         const r = shown && runDetail?.id === shown && runDetail;
         mergeInfo =
           r &&
           r.status === "completed" &&
           !r.revisedBy &&
-          (reviewed(r) || r.merge)
+          (reviewed(r) ||
+            r.merge ||
+            data.comments.some(
+              (c) => c.runId === r.id && c.status === "addressed",
+            ))
             ? await api(`/api/runs/${r.id}/merge`).catch(() => null)
             : null;
         bar();
@@ -448,7 +481,7 @@ export function createWorkflow({
       nav.view().name === "inspect"
         ? document.querySelector("#reviewScope")
         : document.querySelector(
-            "#viewHead .view-head, #viewHead .session-head",
+            "#viewHead .view-head, #viewHead .pk-page-header",
           );
     if (row && line.parentElement !== row) row.append(line);
     const view = nav.view(),
@@ -493,14 +526,14 @@ export function createWorkflow({
     line.setAttribute("aria-label", label);
     line.title = label;
     line.onclick = () => openTask(r.id);
-    const key = [r.id, now.state].join("|");
+    const key = [r.id, now.state, now.title].join("|");
     if (line.dataset.key === key) return;
     line.dataset.key = key;
     line.dataset.state = now.state;
     line.replaceChildren(
       peek(
         now.state === "running"
-          ? "working"
+          ? now.pose || "working"
           : now.state === "needs"
             ? "thinking"
             : "ready",
@@ -546,6 +579,7 @@ export function createWorkflow({
     focus.set("run", {
       running: r.status === "running",
       live: live(r),
+      activity: where.activity,
       current: where.current,
       trail: where.trail,
       changed: full.changed || [],
@@ -564,24 +598,8 @@ export function createWorkflow({
     const tasksButton = document.querySelector("#openTasks");
     // The cue is Peek or the icon colour plus the accessible name, never a count badge.
     if (tasksButton) cueTasks(tasksButton, ready);
-    // Only the map's Details carry this line; work in progress shows in the live line.
-    if (nav.view().name !== "inspect") return;
-    const drafts = data.comments.filter(sendable);
-    const waiting = data.comments.filter((c) => c.status === "addressed");
-    if (!drafts.length && !waiting.length) return;
-    const b = action(
-      drafts.length
-        ? `${drafts.length} draft${drafts.length === 1 ? "" : "s"} waiting · Review task ›`
-        : `${waiting.length} ready for review ›`,
-      () => {
-        if (!drafts.length) return nav.go({ name: "tasks" });
-        picks = new Set(drafts.map((c) => c.id));
-        preview = null;
-        nav.go({ name: "prepare" });
-      },
-    );
-    b.className = "runbar";
-    host.append(b);
+    // Changes that wait to be sent show in the tray (the sheet's title row, app.js); work in
+    // progress shows in the live line.
   }
   /** True when instruction `c` is on the map's selection (or inside it). */
   function visible(c) {
@@ -601,6 +619,64 @@ export function createWorkflow({
       "PATCH",
     );
     await refresh();
+  }
+  /** The map's composer (ui.js Composer, intent): one field, then Add as a change (a draft
+   * at the current place, for the tray) or Ask (`onAsk` gets the text). While a task's
+   * changes are explored, a change joins that task's requested changes. Returns the place
+   * line for the dock. */
+  function renderIntent(composerHost, { onAsk, asking = false }) {
+    if (!composer || (!draft && !editing && !composer.pinned))
+      composer = context();
+    if (!composer) return "";
+    const target = editing ? null : exploring() || viewedTask();
+    const place =
+      dockLabel(composer.anchor) +
+      " · " +
+      (composer.sha.startsWith("refs/heads/")
+        ? composer.sha.slice(11)
+        : revisionName(composer.sha));
+    composerHost.append(
+      Composer({
+        intent: true,
+        docked: true,
+        place: null,
+        value: draft,
+        asking,
+        onInput: (text) => {
+          draft = text;
+          if (text) composer.pinned = true;
+        },
+        onAdd: async (text) => {
+          draft = text;
+          if (!draft.trim()) return;
+          try {
+            if (target) {
+              await write("/api/comments", {
+                ...composer,
+                text: draft,
+                forRun: target,
+              });
+              notice("Added to this task's requested changes");
+            } else {
+              await write("/api/comments", { ...composer, text: draft });
+              notice("Change added. Send it from the tray.");
+            }
+            setTimeout(() => notice(""), 2500);
+            composer = null;
+            draft = "";
+            await refresh();
+          } catch (e) {
+            notice(e.message, true);
+          }
+        },
+        onSend: (text) => {
+          draft = "";
+          composer = null;
+          onAsk(text);
+        },
+      }),
+    );
+    return place;
   }
   /** Renders the persistent draft input independently of the current inspection view. */
   function renderComposer(composerHost) {
@@ -714,14 +790,13 @@ export function createWorkflow({
     if (overview) {
       // The Agents sheet opens from here; the line says what a new task uses.
       // Agents is a quiet icon in the header row, as the back arrow is.
-      const choose = iconButton(
-        el("button", "view-action"),
-        "agents",
-        "Agents",
-      );
-      choose.type = "button";
+      const choose = IconButton({
+        icon: "agents",
+        label: "Agents",
+        quiet: true,
+        onClick: () => agents.open(null, () => redraw()),
+      });
       choose.id = "openAgents";
-      choose.onclick = () => agents.open(null, () => redraw());
       head("Tasks", { actions: [...taskActions().filter(Boolean), choose] });
       const uses = agents.describe("task");
       if (uses)
@@ -743,12 +818,8 @@ export function createWorkflow({
       if (drafts.length)
         body.append(
           action(
-            `Review task · ${drafts.length} draft${drafts.length === 1 ? "" : "s"}`,
-            () => {
-              preview = null;
-              picks = new Set(drafts.map((c) => c.id));
-              nav.go({ name: "prepare" });
-            },
+            `Send ${plural(drafts.length, "change")}`,
+            () => openSend(),
             true,
           ),
         );
@@ -921,129 +992,197 @@ export function createWorkflow({
       }
     }
   }
+  /** Opens the send sheet with every change that waits, or with `ids` only. */
+  function openSend({ ids, live: wantLive = sendMode === "live" } = {}) {
+    picks = new Set(ids || data.comments.filter(sendable).map((c) => c.id));
+    preview = null;
+    sendMode = wantLive ? "live" : "background";
+    nav.go({ name: "prepare" });
+  }
+  /** Makes the frozen preview of the task for the picked changes, once for each choice, so the
+   * owner always sees the exact task before Start task. */
+  async function ensurePreview() {
+    if (preview || previewing || !picks.size || sendMode !== "background")
+      return;
+    previewing = true;
+    try {
+      preview = await write("/api/runs/preview", {
+        using: agents.using("task"),
+        commentIds: [...picks],
+        brief,
+      });
+    } catch (e) {
+      notice(e.message, true);
+    } finally {
+      previewing = false;
+      redraw();
+    }
+  }
+  /** The send sheet: the changes to send, how the work runs (a task in the background, or a
+   * session with the owner), the exact task, and Start (docs/design/19-flows.md, flow 1). */
   function prepare(body) {
-    body.append(
-      el(
-        "p",
-        "read-note",
-        `The task starts from ${(data.watched || "main").replace("refs/heads/", "")}. Choose the instructions to send; results return here for review.`,
-      ),
-    );
-    // The task uses this device's choice for tasks; Change opens that list.
-    const uses = el("div", "task-uses");
-    uses.append(
-      el("span", "", `Uses ${agents.describe("task") || "the default agent"}`),
-      Object.assign(
-        action("Change", () =>
-          agents.open("task", () => {
-            preview = null;
-            redraw();
-          }),
-        ),
-        { className: "btn link-button" },
-      ),
-    );
-    body.append(uses);
+    const drafts = data.comments.filter(sendable);
+    for (const id of [...picks])
+      if (!drafts.some((c) => c.id === id)) picks.delete(id);
+    const chosen = drafts.filter((c) => picks.has(c.id));
+    const watched = (data.watched || "main").replace("refs/heads/", "");
     if (!agents.describe("task"))
       agents
         .load()
         .then((c) => c && redraw())
         .catch(() => {});
-    for (const c of data.comments.filter(sendable)) {
-      const l = el("label", "workflow-pick"),
-        check = el("input");
-      check.type = "checkbox";
-      check.checked = picks.has(c.id);
-      check.onchange = () => {
-        if (check.checked) picks.add(c.id);
-        else picks.delete(c.id);
-        preview = null;
-        redraw();
-      };
-      const txt = el("span");
-      txt.append(
-        el("strong", "", label(c.anchor)),
-        el("span", "workflow-text", c.text),
-      );
-      l.append(check, txt);
-      body.append(l);
-    }
+    const changed = () => {
+      preview = null;
+      redraw();
+    };
     body.append(
-      field("Extra instructions (optional)", brief, (v) => {
-        brief = v;
-        preview = null;
-        const dispatch = document.querySelector("#dispatchRun");
-        if (dispatch) dispatch.remove();
+      drafts.length
+        ? List(
+            ...drafts.map((c) =>
+              PickRow({
+                title: c.text,
+                meta: label(c.anchor),
+                checked: picks.has(c.id),
+                onChange: (on) => {
+                  if (on) picks.add(c.id);
+                  else picks.delete(c.id);
+                  changed();
+                },
+              }),
+            ),
+          )
+        : Note("No changes wait to be sent. Add one from the map."),
+      FactGrid([
+        [
+          "Starts from",
+          preview ? `${watched} · ${preview.base.slice(0, 7)}` : watched,
+        ],
+        ["Agent", agents.describe("task") || "The default agent"],
+      ]),
+      Button({
+        label: "Change agent",
+        variant: "plain",
+        onClick: () => agents.open("task", changed),
+      }),
+      SegmentedControl({
+        label: "How it runs",
+        value: sendMode,
+        options: [
+          { value: "background", label: "In the background" },
+          { value: "live", label: "With me" },
+        ],
+        onChange: (mode) => {
+          sendMode = mode;
+          changed();
+        },
       }),
     );
-    body.append(
-      action(
-        "Preview task",
-        async () => {
-          preview = await write("/api/runs/preview", {
-            using: agents.using("task"),
-            commentIds: [...picks],
-            brief,
-          });
-          redraw();
-          // The preview renders below the form; on a phone that is off screen, so show it.
-          requestAnimationFrame(() =>
-            document
-              .querySelector(".task-preview")
-              ?.scrollIntoView({ block: "start", behavior: "smooth" }),
-          );
-        },
-        // Once a preview is there, Start task is the next step.
-        !preview,
-      ),
-    );
-    if (preview) {
-      const summary = el("section", "task-preview");
-      // A provider that cannot run now says so before the start, not after it fails.
+    const live = sendMode === "live";
+    if (live && agents.asksBeforeCommands(agents.current("task")?.agent))
+      body.append(
+        Checkbox({
+          label: "Allow all commands",
+          checked: savedPermissions() === "allow",
+          onChange: (e) => savePermissions(e.target.checked ? "allow" : "ask"),
+        }),
+      );
+    if (notifications.canTurnOn())
+      body.append(
+        Checkbox({
+          label: "Tell me when it is done",
+          checked: notifyMe,
+          onChange: (e) => (notifyMe = e.target.checked),
+        }),
+      );
+    const note = TextArea({
+      label: "Extra instructions (optional)",
+      value: brief,
+      onInput: (e) => {
+        brief = e.target.value;
+        preview = null;
+      },
+    });
+    // The exact task changes with the note: make it again when the field is left. A session
+    // needs no preview, so nothing is redrawn there (a redraw would swallow the next tap).
+    note
+      .querySelector("textarea")
+      .addEventListener("change", () => sendMode === "background" && changed());
+    body.append(note);
+    if (!live && chosen.length) {
       const blocked = agents.problem("task");
-      summary.append(
-        el("h3", "", blocked ? "Not ready" : "Ready to start"),
-        ...(blocked
-          ? [
-              el(
-                "p",
-                "read-note warn-note",
-                `${blocked}. Change it in Agents, or fix it on your computer.`,
-              ),
+      if (blocked)
+        body.append(
+          InlineError({
+            title: "Not ready",
+            text: `${blocked}. Change it in Agents, or fix it on your computer.`,
+          }),
+        );
+      if (preview)
+        body.append(
+          Disclosure(
+            { summary: "The exact task" },
+            Note(
+              `${agents.label(preview.agent)} works on ${plural(preview.comments.length, "change")} on the new branch ${preview.branch}. ${watched} stays unchanged.`,
+            ),
+            Command(preview.task),
+          ),
+        );
+      else {
+        body.append(Spinner("Preparing the exact task"));
+        ensurePreview();
+      }
+    }
+    const start = Button({
+      label: live ? "Start session" : "Start task",
+      variant: "primary",
+      block: true,
+      disabled: !chosen.length || (!live && !preview),
+      onClick: async () => {
+        start.disabled = true;
+        try {
+          // The browser asks for the permission on this tap, before anything waits.
+          if (notifyMe && notifications.canTurnOn())
+            await notifications.ensureOn();
+          if (live) {
+            const first = chosen[0];
+            // The first change is the first line, so it names the session; the others follow.
+            const text = [
+              first.text,
+              ...chosen
+                .slice(1)
+                .map((c) => `- ${c.text} (at ${label(c.anchor)})`),
+              brief,
             ]
-          : []),
-        el(
-          "p",
-          "workflow-text",
-          `${agents.label(preview.agent)} will work on ${preview.comments.length} instruction${preview.comments.length === 1 ? "" : "s"}. You will review the results here. Your main branch stays unchanged.`,
-        ),
-      );
-      for (const c of preview.comments)
-        summary.append(richText(c.text, "workflow-text"));
-      if (preview.brief)
-        summary.append(richText(preview.brief, "workflow-text"));
-      const exact = el("details", "workflow-evidence");
-      exact.dataset.key = "preview-diagnostics";
-      exact.append(
-        el("summary", "", "Technical task details"),
-        el("pre", "taskpre", preview.task),
-      );
-      summary.append(exact);
-      body.append(summary);
-      const b = action(
-        "Start task",
-        async () => {
+              .filter(Boolean)
+              .join("\n");
+            const started = await write("/api/runs/session", {
+              anchor: first.anchor,
+              sha: first.sha,
+              text,
+              using: agents.using("task"),
+              permissions: savedPermissions(),
+            });
+            // The session carries these changes now; they leave the tray.
+            for (const c of chosen) await transition(c, "delete");
+            brief = "";
+            nav.back();
+            await openTask(started.id);
+            return;
+          }
           const result = await write("/api/runs", { previewId: preview.id });
           preview = null;
-          // The form is done: the new task takes its place, over the list.
+          brief = "";
+          // The sheet is done: the new task takes its place, over the list.
           nav.back();
           await openTask(result.id);
-        },
-        true,
-      );
-      b.id = "dispatchRun";
-      body.append(b);
-    }
+        } catch (e) {
+          notice(e.message, true);
+          start.disabled = false;
+        }
+      },
+    });
+    start.id = "dispatchRun";
+    body.append(start);
   }
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   /** One line per changed file: its path and line counts. */
@@ -1136,10 +1275,27 @@ export function createWorkflow({
       `This task adds ${plural(found.length, "dependency rule break")}: ${names}${more}. ${ending}`,
     );
   }
+  /** Records the owner's approval of the finished instructions `ready`, against their
+   * commit, with the note when one is written. */
+  async function approve(ready) {
+    for (const c of ready)
+      await write(
+        "/api/comments/" + c.id,
+        { action: "verify", version: c.version, note: verificationNote },
+        "PATCH",
+      );
+    verificationNote = "";
+    reply = null;
+  }
   /** Asks the owner to confirm the merge, with the files it changes and what happens to
-   * their checkout. Sends the exact state shown, so a change in between stops the merge. */
-  function confirmMerge(r, m) {
-    sheet("Merge into " + m.target, (box, close) => {
+   * their checkout. Sends the exact state shown, so a change in between stops the merge.
+   * With `approveFirst` (the instructions to approve), the same confirmation records the
+   * approval, then merges; Approve only records the approval and stops. */
+  function confirmMerge(r, m, approveFirst = null) {
+    const title = approveFirst
+      ? `Approve and merge into ${m.target}?`
+      : "Merge into " + m.target;
+    sheet(title, (box, close) => {
       const note = !m.checkedOut
         ? `${m.target} is not checked out, so only the branch moves. No files in your folder change.`
         : m.uncommitted
@@ -1148,11 +1304,24 @@ export function createWorkflow({
       const buttons = el("div", "merge-buttons");
       buttons.append(
         action("Cancel", close),
+        ...(approveFirst
+          ? [
+              action("Approve only", async () => {
+                try {
+                  await approve(approveFirst);
+                } finally {
+                  close();
+                  await refresh();
+                }
+              }),
+            ]
+          : []),
         Object.assign(
           action(
-            "Merge",
+            approveFirst ? "Approve and merge" : "Merge",
             async () => {
               try {
+                if (approveFirst) await approve(approveFirst);
                 await write(`/api/runs/${r.id}/merge`, {
                   target: m.targetSha,
                   head: m.head,
@@ -1178,7 +1347,9 @@ export function createWorkflow({
         el(
           "h2",
           "merge-title",
-          `Merge ${plural(m.commits, "commit")} into ${m.target}?`,
+          approveFirst
+            ? `Approve and merge ${plural(m.commits, "commit")} into ${m.target}?`
+            : `Merge ${plural(m.commits, "commit")} into ${m.target}?`,
         ),
         el(
           "p",
@@ -1736,24 +1907,26 @@ export function createWorkflow({
           `${left} instruction${left === 1 ? " needs" : "s need"} your decision (flagged, or not done). Approve covers only the finished ones. After a merge, ${left === 1 ? "it becomes a draft" : "they become drafts"} again.`,
         ),
       );
-    if (decide && ready.length)
+    // When the merge would go through, one step approves and merges, after one confirmation
+    // (docs/design/19-flows.md, flow 1). Approve only stays in that dialog.
+    if (decide && ready.length && mergeInfo?.next === "ready")
+      actions.append(
+        Object.assign(
+          action(
+            "Approve and merge",
+            () => confirmMerge(r, mergeInfo, ready),
+            true,
+          ),
+          { id: "approveMerge" },
+        ),
+      );
+    else if (decide && ready.length)
       actions.append(
         action(
           "Approve",
           async () => {
             try {
-              for (const c of ready)
-                await write(
-                  "/api/comments/" + c.id,
-                  {
-                    action: "verify",
-                    version: c.version,
-                    note: verificationNote,
-                  },
-                  "PATCH",
-                );
-              verificationNote = "";
-              reply = null;
+              await approve(ready);
             } finally {
               await refresh();
             }
@@ -1914,10 +2087,17 @@ export function createWorkflow({
      * of proposed fixes in one task. */
     async prepareWith(ids) {
       await refresh();
-      picks = new Set(ids);
-      preview = null;
-      nav.go({ name: "prepare" });
+      openSend({ ids, live: false });
     },
+    /** Opens the send sheet with every change that waits; `live` starts it on With me. */
+    openSend,
+    /** How many changes wait to be sent (the tray in the sheet's title row). */
+    draftCount: () => data.comments.filter(sendable).length,
+    /** The next send starts a session (the menu's "Start a session here"). */
+    preferLive() {
+      sendMode = "live";
+    },
+    renderIntent,
     /** Starts a new instruction at the current selection with `text`, for the owner to edit. */
     prefill(text) {
       editing = null;
@@ -1983,7 +2163,10 @@ export function createWorkflow({
     render(body, view) {
       bar();
       if (view.name === "prepare") {
-        header(body, "Review task");
+        const n = data.comments.filter(
+          (c) => sendable(c) && picks.has(c.id),
+        ).length;
+        header(body, n ? `Send ${plural(n, "change")}` : "Send changes");
         prepare(body);
       } else if (view.name === "run") runs(body);
       else comments(body);

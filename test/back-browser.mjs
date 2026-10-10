@@ -20,7 +20,7 @@ try {
       await page.goto("about:blank");
       await page.goto(f.server.url + "/#token=" + f.server.token);
       const backend = page.locator(
-        '.sheet[data-front="true"] .node[data-path="backend"]',
+        '.sheet[data-front="true"] .pk-card[data-path="backend"]',
       );
       await backend.waitFor();
       const crumbs = () => page.locator(".crumbs").textContent();
@@ -40,13 +40,13 @@ try {
       );
       await page
         .locator(
-          '.sheet[data-front="true"] .node[data-path="backend/lookup.py"]',
+          '.sheet[data-front="true"] .pk-card[data-path="backend/lookup.py"]',
         )
         .click({ button: "right" });
-      await page.locator(".context-menu").waitFor();
+      await page.locator(".pk-menu.is-floating").waitFor();
       // Back: the menu closes; nothing else changes.
       await back();
-      assert.equal(await page.locator(".context-menu").count(), 0);
+      assert.equal(await page.locator(".pk-menu.is-floating").count(), 0);
       assert.equal(
         await page.evaluate(
           () => document.querySelector("#panel").dataset.view,

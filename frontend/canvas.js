@@ -1,5 +1,5 @@
 /** @module Pan, pinch and zoom viewport for repository cards, moved as one GPU-composited layer. */
-import { iconButton } from "./icons.js";
+import { IconButton, MapViewport, setStates } from "./ui.js";
 const views = new Map();
 // Momentum: velocity decays by this factor per 16 ms frame; flings below the floor stop.
 const FRICTION = 0.94,
@@ -31,20 +31,16 @@ export function mountCanvas(
   options = {},
 ) {
   const contentHeight = Math.min(height, options.contentHeight || height);
-  const viewport = document.createElement("div");
-  viewport.className = "map-canvas";
-  viewport.setAttribute(
-    "aria-label",
-    "Repository map. Drag to pan, scroll to move, pinch or Control-scroll to zoom.",
+  const viewport = MapViewport(
+    {
+      width,
+      height,
+      label:
+        "Repository map. Drag to pan, scroll to move, pinch or Control-scroll to zoom.",
+    },
+    content,
   );
-  viewport.setAttribute("role", "group");
-  viewport.tabIndex = 0;
-  const layer = document.createElement("div");
-  layer.className = "map-layer";
-  layer.style.width = width + "px";
-  layer.style.height = height + "px";
-  layer.append(content);
-  viewport.append(layer);
+  const layer = viewport.firstChild;
   body.replaceChildren(viewport, controls);
   const view = { ...(views.get(key) || { x: 0, y: 0, scale: 1, auto: true }) };
   /** The visible part of the viewport, in its own coordinates: above the floating controls
@@ -107,9 +103,9 @@ export function mountCanvas(
     frame = null;
   // Promote the layer only while it moves; afterwards it re-rasterizes crisply at its scale.
   const moving = () => {
-    layer.classList.add("is-moving");
+    setStates(layer, { moving: true });
     clearTimeout(settle);
-    settle = setTimeout(() => layer.classList.remove("is-moving"), 160);
+    settle = setTimeout(() => setStates(layer, { moving: false }), 160);
   };
   const remember = () => {
     if (!view.auto) limit(frame || region());
@@ -136,15 +132,17 @@ export function mountCanvas(
     moving();
     remember();
   };
-  const add = (name, icon, action) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.onclick = () => {
-      stopGlide();
-      action();
-    };
-    toolbar.append(iconButton(b, icon, name));
-  };
+  const add = (label, icon, action) =>
+    toolbar.append(
+      IconButton({
+        icon,
+        label,
+        onClick: () => {
+          stopGlide();
+          action();
+        },
+      }),
+    );
   add("Zoom out", "zoomOut", () => zoom(1 / 1.25));
   add("Zoom in", "zoomIn", () => zoom(1.25));
   add("Fit map", "fit", () => {
@@ -390,7 +388,7 @@ export function mountCanvas(
     size = next;
     if (view.auto) place();
     else {
-      const selected = layer.querySelector(".node.sel");
+      const selected = layer.querySelector(".pk-card.is-selected");
       if (!first && selected)
         viewport.centerCard(selected, { animate: false, ifHidden: true });
     }

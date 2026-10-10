@@ -22,7 +22,7 @@
     "package": "node scripts/package.mjs",
     "format": "prettier --write . && node scripts/cargo.mjs fmt",
     "format:check": "prettier --check . && node scripts/cargo.mjs fmt --check",
-    "lint": "node scripts/cargo.mjs clippy --locked --all-targets -- -D warnings && node scripts/lint-docs.mjs",
+    "lint": "node scripts/cargo.mjs clippy --locked --all-targets -- -D warnings && node scripts/lint-docs.mjs && node scripts/lint-ui.mjs",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {

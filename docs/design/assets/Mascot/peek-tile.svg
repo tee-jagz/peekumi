@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" class="peek is-idle tiled" focusable="false"><style>.lid,.squint,.dots,.sparkle,.zz{display:none}</style>
+<defs>
+<radialGradient id="peek2-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek2-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek2-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek2-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek2-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek2-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek2-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek2-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek2-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek2-tile)"/>
+<g clip-path="url(#peek2-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek2-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek2-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek2-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek2-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek2-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek2-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek2-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg>

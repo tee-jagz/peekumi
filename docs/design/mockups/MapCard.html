@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapCard · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><div class="pk-map" style="height: 440px"><div class="pk-map-plane" style="width: 390px; height: 460px"><svg class="pk-edges" viewBox="0 0 390 460" aria-hidden="true"><defs><pattern id="grid-dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle class="pk-grid-dot" cx="8" cy="8" r="1"></circle></pattern></defs><rect x="-400" y="-400" width="4000" height="4000" fill="url(#grid-dots)"></rect></svg><button type="button" class="pk-card" data-kind="folder" style="left: 16px; top: 16px; width: 170px; height: 124px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M2 5h6l2 2h8v10H2Z"></path></svg><span class="pk-card-name">backend</span><span class="pk-mark is-break" aria-label="2 rule breaks"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M8.5 11.5 6.8 13.2a2.6 2.6 0 0 1-3.7-3.7l1.7-1.7M11.5 8.5l1.7-1.7a2.6 2.6 0 0 1 3.7 3.7l-1.7 1.7M7 3.5l.6 2.1M3.5 7l2.1.6M13 16.5l-.6-2.1M16.5 13l-2.1-.6"></path></svg>2</span></span><span class="pk-card-desc">The Rust backend serves the API.</span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-added">+2</span><span class="pk-mark is-modified">~4</span><span class="pk-mark is-files"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg>34</span></span><span class="pk-strata" aria-hidden="true"><span class="is-added" style="flex: 2"></span><span class="is-modified" style="flex: 4"></span><span class="is-same" style="flex: 28"></span></span></span></button><button type="button" class="pk-card is-selected" data-kind="file" style="left: 202px; top: 16px; width: 170px; height: 124px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg><span class="pk-card-name"><code>engine.<wbr>rs</code></span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-modified">~3</span></span></span></button><button type="button" class="pk-card is-agent" data-kind="file" style="left: 16px; top: 184px; width: 170px; height: 76px"><span class="pk-peek peek-mark pk-card-peek" data-state="editing" aria-hidden="true"><svg viewBox="36 58 128 69" class="peek is-editing" focusable="false">
+<defs>
+<radialGradient id="peek11-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
+<radialGradient id="peek11-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
+<linearGradient id="peek11-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff7e6"/><stop offset="1" stop-color="#68cfb0"/></linearGradient>
+<linearGradient id="peek11-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5e2bf"/><stop offset="1" stop-color="#cda874"/></linearGradient>
+<linearGradient id="peek11-clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfa673"/><stop offset="1" stop-color="#916a40"/></linearGradient>
+<radialGradient id="peek11-sclera" cx="42%" cy="32%" r="72%"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#f1f7f5"/><stop offset="1" stop-color="#c9ddd8"/></radialGradient>
+<radialGradient id="peek11-iris" cx="50%" cy="50%" r="50%"><stop offset=".5" stop-color="#0d2120"/><stop offset=".85" stop-color="#1f564d"/><stop offset="1" stop-color="#2c7466"/></radialGradient>
+<clipPath id="peek11-horizon"><rect width="200" height="127"/></clipPath>
+<clipPath id="peek11-eye"><circle cx="100" cy="94" r="22"/></clipPath>
+</defs>
+<rect class="tile" width="200" height="200" rx="44" fill="url(#peek11-tile)"/>
+<g clip-path="url(#peek11-horizon)"><g class="head">
+<circle cx="100" cy="122" r="60" fill="url(#peek11-dome)"/>
+<ellipse cx="74" cy="84" rx="15" ry="7" fill="#fff" opacity=".2" transform="rotate(-34 74 84)"/>
+<g class="open">
+<circle cx="100" cy="94" r="22" fill="url(#peek11-sclera)"/>
+<circle cx="100" cy="94" r="22" fill="none" stroke="#0c2724" stroke-opacity=".28" stroke-width="2"/>
+<g class="pupil"><circle cx="105" cy="91" r="11.5" fill="url(#peek11-iris)"/><circle cx="109" cy="86.5" r="3.6" fill="#fff"/><circle cx="101.5" cy="95.5" r="1.5" fill="#fff" opacity=".75"/></g>
+<g clip-path="url(#peek11-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
+</g>
+<g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
+</g></g>
+<ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
+<g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#peek11-mint)"/>
+<rect x="30" y="126.5" width="140" height="3.5" rx="1.75" fill="#fff" opacity=".45"/></g>
+<g class="l2"><rect x="40" y="148" width="120" height="13" rx="6.5" fill="url(#peek11-sand)"/>
+<rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
+<g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#peek11-clay)"/>
+<rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
+<g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
+<g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
+<g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg></span><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg><span class="pk-card-name"><code>lookup.<wbr>rs</code></span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-modified">~1</span></span></span></button><button type="button" class="pk-card is-removed" data-kind="file" style="left: 202px; top: 184px; width: 170px; height: 76px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg><span class="pk-card-name"><code>legacy.<wbr>rs</code></span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-removed">−1</span></span></span></button><button type="button" class="pk-card" data-kind="rootfiles" data-uncommitted="true" style="left: 16px; top: 276px; width: 170px; height: 76px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M6 5h10v13H6ZM3 14V2h10"></path></svg><span class="pk-card-name">Repository files</span><span class="pk-card-dot" aria-label="uncommitted changes"></span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-modified">~1</span><span class="pk-mark is-files"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg>21</span></span><span class="pk-strata" aria-hidden="true"><span class="is-modified" style="flex: 1"></span><span class="is-same" style="flex: 20"></span></span></span></button><button type="button" class="pk-card is-unchanged" data-kind="folder" style="left: 202px; top: 276px; width: 170px; height: 76px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M2 5h6l2 2h8v10H2Z"></path></svg><span class="pk-card-name">scripts</span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-files"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg>15</span></span></span></button><button type="button" class="pk-card" data-kind="function" style="left: 16px; top: 368px; width: 170px; height: 76px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M15 3c-4-2-5 1-6 5l-2 7c-1 3-3 3-5 2M5 8h9"></path></svg><span class="pk-card-name"><code>names_<wbr>tree()</code></span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-modified">~1</span></span></span></button><button type="button" class="pk-card is-unchanged is-dim" data-kind="folder" style="left: 202px; top: 368px; width: 170px; height: 76px"><span class="pk-card-top"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M2 5h6l2 2h8v10H2Z"></path></svg><span class="pk-card-name">docs</span></span><span class="pk-card-foot"><span class="pk-marks"><span class="pk-mark is-files"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 2h8l4 4v12H4ZM12 2v5h4"></path></svg>91</span></span></span></button></div></div></div>
+</body>
+</html>

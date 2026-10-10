@@ -10,7 +10,7 @@
  * Peekumi window is on the screen. On an iPhone or iPad, push works only in the app that
  * "Add to Home Screen" makes; in Safari the bell says so.
  */
-import { iconButton } from "./icons.js";
+import { IconButton } from "./ui.js";
 
 /** Makes the controller. `api(route, options)` sends a request and reads JSON; `notice(text,
  * error)` tells the owner what happened. */
@@ -55,9 +55,17 @@ export function createNotifications({ api, notice }) {
       home: "Notifications need the Home Screen app",
     }[state];
     if (!bell) return;
-    iconButton(bell, state === "on" ? "bell" : "bellOff", words);
-    bell.setAttribute("aria-pressed", String(state === "on"));
-    bell.disabled = busy;
+    const fresh = IconButton({
+      icon: state === "on" ? "bell" : "bellOff",
+      label: words,
+      quiet: true,
+      pressed: state === "on",
+      disabled: busy,
+      onClick: press,
+    });
+    fresh.id = "notifications";
+    bell.replaceWith(fresh);
+    bell = fresh;
   }
 
   /** Reads this device's state. A device with a subscription sends it again, so the server
@@ -136,15 +144,21 @@ export function createNotifications({ api, notice }) {
   /** A bell button for a page header, or nothing on a browser that has no use for it. */
   function button() {
     if (!supported && !apple) return null;
-    bell = document.createElement("button");
-    bell.type = "button";
-    bell.className = "view-action";
-    bell.id = "notifications";
-    bell.onclick = press;
+    bell = IconButton({ icon: "bell", label: "Notifications", quiet: true });
     draw();
     return bell;
   }
 
   read().catch(() => {});
-  return { button };
+  return {
+    button,
+    /** True when this device gets notifications. */
+    isOn: () => state === "on",
+    /** True when this browser can turn notifications on (not blocked, not a Safari tab). */
+    canTurnOn: () => state === "off",
+    /** Turns notifications on, from a tap (the send sheet's "Tell me when it is done"). */
+    async ensureOn() {
+      if (state === "off") await press();
+    },
+  };
 }

@@ -1,5 +1,11 @@
 /** @module Frosted menus that replace native select popups while keeping each select as the value and change-event source. */
-import { glyph } from "./icons.js";
+import {
+  Listbox,
+  ListboxCount,
+  ListboxHeading,
+  ListboxOption,
+  SelectTrigger,
+} from "./ui.js";
 
 const valueProperty = Object.getOwnPropertyDescriptor(
   HTMLSelectElement.prototype,
@@ -36,41 +42,25 @@ function choose(select, option) {
 /** Opens a listbox beside the trigger, above it when there is more room there. */
 function show(select, trigger) {
   close();
-  const id = "frost-menu-" + ++menuId,
-    menu = document.createElement("div"),
+  const id = "select-list-" + ++menuId,
     items = [];
-  menu.id = id;
-  menu.className = "frost-menu";
-  menu.setAttribute("role", "listbox");
-  menu.setAttribute(
-    "aria-label",
-    select.getAttribute("aria-label") || "Options",
-  );
-  menu.tabIndex = -1;
   // A long list (such as the branches of a large repository) gets a filter box on top
   // and a count at the bottom. The select's data-noun names its entries.
   const noun = select.dataset.noun || "options",
     long = select.options.length > LONG,
-    filter = long ? document.createElement("input") : null,
-    count = long ? document.createElement("div") : null,
+    menu = Listbox({
+      id,
+      label: select.getAttribute("aria-label") || "Options",
+      noun: long ? noun : null,
+    }),
+    filter = menu.querySelector(".pk-listbox-filter"),
+    count = long ? ListboxCount() : null,
     headings = [];
-  if (filter) {
-    filter.type = "search";
-    filter.className = "frost-filter";
-    filter.placeholder = "Filter " + noun;
-    filter.setAttribute("aria-label", "Filter " + noun);
-    filter.setAttribute("aria-controls", id);
-    filter.autocomplete = "off";
-    menu.append(filter);
-  }
   for (const option of select.options) {
     // A group gets a quiet heading before its first option.
     const group = option.parentElement;
     if (group.tagName === "OPTGROUP" && group.firstElementChild === option) {
-      const heading = document.createElement("div");
-      heading.className = "frost-group";
-      heading.setAttribute("role", "presentation");
-      heading.textContent = group.label;
+      const heading = ListboxHeading(group.label);
       headings.push({
         heading,
         from: items.length,
@@ -78,32 +68,19 @@ function show(select, trigger) {
       });
       menu.append(heading);
     }
-    const item = document.createElement("div");
-    item.id = `${id}-${items.length}`;
-    item.className = "frost-option";
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(option.selected));
-    if (option.disabled) item.setAttribute("aria-disabled", "true");
-    const label = document.createElement("span");
-    label.className = "frost-label";
-    label.textContent = option.textContent.trim();
     // An option can carry a second, quieter line, such as a pull request's state.
-    if (option.dataset.detail) {
-      const detail = document.createElement("small");
-      detail.textContent = option.dataset.detail;
-      label.append(detail);
-    }
-    item.append(label);
-    if (option.selected) item.append(glyph("check"));
-    item.onclick = () => choose(select, option);
+    const item = ListboxOption({
+      id: `${id}-${items.length}`,
+      text: option.textContent.trim(),
+      detail: option.dataset.detail,
+      selected: option.selected,
+      disabled: option.disabled,
+      onClick: () => choose(select, option),
+    });
     items.push(item);
     menu.append(item);
   }
-  if (count) {
-    count.className = "frost-count";
-    count.setAttribute("aria-live", "polite");
-    menu.append(count);
-  }
+  if (count) menu.append(count);
   let active = Math.max(0, select.selectedIndex);
   const activate = (index) => {
     items[active]?.removeAttribute("data-active");
@@ -175,7 +152,7 @@ function show(select, trigger) {
   menu.style.left = Math.max(margin, left) + "px";
   menu.style.top =
     (downward ? rect.bottom + 6 : rect.top - 6 - menu.offsetHeight) + "px";
-  current = { menu, trigger, select };
+  current = { menu, trigger, select, top: rect.top, left: rect.left };
   trigger.setAttribute("aria-expanded", "true");
   trigger.setAttribute("aria-controls", id);
   activate(active);
@@ -195,14 +172,8 @@ function show(select, trigger) {
 function frost(select) {
   if (select.dataset.frost) return;
   select.dataset.frost = "true";
-  const trigger = document.createElement("button"),
-    text = document.createElement("span");
-  trigger.type = "button";
-  trigger.className = "frost-select";
-  trigger.setAttribute("aria-haspopup", "listbox");
-  trigger.setAttribute("aria-expanded", "false");
-  text.className = "frost-select-value";
-  trigger.append(text, glyph("chevron"));
+  const trigger = SelectTrigger(),
+    text = trigger.querySelector(".pk-select-value");
   select.classList.add("visually-hidden");
   select.tabIndex = -1;
   select.setAttribute("aria-hidden", "true");
@@ -250,7 +221,7 @@ function frost(select) {
   sync();
 }
 
-/** Frosts every select under `root` now and as the interface renders new ones. Menus close on an outside press, resize or outside scroll. */
+/** Frosts every select under `root` now and as the interface renders new ones. Menus close on an outside press, resize or an outside scroll that moves the trigger. */
 export function frostSelects(root = document.body) {
   root.querySelectorAll("select").forEach(frost);
   new MutationObserver((records) => {
@@ -277,7 +248,15 @@ export function frostSelects(root = document.body) {
   document.addEventListener(
     "scroll",
     (event) => {
-      if (current && !current.menu.contains(event.target)) close();
+      if (!current || current.menu.contains(event.target)) return;
+      // Only a scroll that moved the trigger closes the menu. The scroll that brought the
+      // trigger into view, before the tap, reports after the menu opened, and changes nothing.
+      const at = current.trigger.getBoundingClientRect();
+      if (
+        Math.abs(at.top - current.top) > 1 ||
+        Math.abs(at.left - current.left) > 1
+      )
+        close();
     },
     true,
   );

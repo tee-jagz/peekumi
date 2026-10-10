@@ -6,12 +6,25 @@
  * message request as `using: {agent, model, effort}`; the server checks it there. Without a
  * saved choice, requests send none and the server uses its defaults. */
 
-const el = (tag, cls, text) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text !== undefined) n.textContent = text;
-  return n;
-};
+import {
+  Actions,
+  Button,
+  Choices,
+  Group,
+  IconButton,
+  InlineError,
+  List,
+  Modal,
+  Note,
+  PageHeader,
+  Row,
+  SegmentedControl,
+  Stack,
+  TextField,
+  TitleEnd,
+  openModal,
+} from "./ui.js";
+
 const JOBS = {
   ask: { title: "Ask", note: "Answers questions", heading: "Ask uses" },
   task: { title: "Tasks", note: "Changes code", heading: "Tasks use" },
@@ -50,7 +63,16 @@ const LONG = 12;
 
 export function createAgents({ api, repo }) {
   let catalog = null,
-    loading = null;
+    loading = null,
+    // Counts the lists that a save returned (a new API key). A read that started before a save
+    // never replaces the list that the save returned.
+    saves = 0;
+  /** Keeps the list that a save returned. */
+  const saveResult = (data) => {
+    saves++;
+    catalog = data;
+    return data;
+  };
   const key = () => "peekumi.agents." + (repo() || "default");
   function saved() {
     try {
@@ -71,12 +93,18 @@ export function createAgents({ api, repo }) {
   }
   // A copy in memory, for browsers that cannot store it.
   const memory = {};
-  /** Loads the agent list from the server once; `force` reads it again (for a new status). */
+  /** Loads the agent list from the server once; `force` reads it again (for a new status). A
+   * read that a save overtook keeps the newer list. */
   function load(force = false) {
-    if (force || (!catalog && !loading))
+    if (force || (!catalog && !loading)) {
+      const at = saves;
       loading = api("/api/agents")
-        .then((data) => (catalog = data))
+        .then((data) => {
+          if (at === saves) catalog = data;
+          return catalog;
+        })
         .finally(() => (loading = null));
+    }
     return loading || Promise.resolve(catalog);
   }
   /** The choice to send for `job`: saved on this device, else null (the server's default). */
@@ -122,25 +150,17 @@ export function createAgents({ api, repo }) {
   /** Opens the Agents sheet: one row for each job, each opening its list. `job` opens that
    * list directly. `closed` runs when the sheet closes, so the caller can show the new choice. */
   async function open(job = null, closed = () => {}) {
-    const dialog = el("dialog", "merge-dialog agents-dialog");
-    dialog.setAttribute("aria-label", "Agents");
-    const box = el("div", "merge-sheet");
-    dialog.append(box);
+    let hide = null;
     const close = () => {
-      dialog.close();
-      dialog.remove();
+      hide?.();
       closed();
     };
-    dialog.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      close();
-    });
-    dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) close();
-    });
-    document.body.append(dialog);
-    dialog.showModal();
-    box.append(el("p", "read-note", "Checking your agents…"));
+    const dialog = Modal(
+      { label: "Agents", onClose: close },
+      Note("Checking your agents…"),
+    );
+    const box = dialog.querySelector(".pk-modal-body");
+    hide = openModal(dialog);
     // True while the owner types a model name, also when a listed model is the choice.
     let typing = false,
       // The model search text, and true while the owner enters a new API key.
@@ -148,75 +168,82 @@ export function createAgents({ api, repo }) {
       keying = false,
       // A provider that the owner looks at but cannot choose yet (it needs a key first): the
       // working choice stays until the key is saved.
-      trying = null;
+      trying = null,
+      // The problem with a typed model name, shown under its field.
+      modelError = null;
     try {
       await load(true);
     } catch (e) {
-      box.replaceChildren(el("p", "merge-note", e.message));
+      box.replaceChildren(
+        InlineError({ title: "No agent list", text: e.message }),
+      );
       return;
     }
-    const head = (title, back) => {
-      const row = el("div", "agents-head");
-      if (back) {
-        const b = el("button", "agents-back", "‹");
-        b.type = "button";
-        b.setAttribute("aria-label", "Back to Agents");
-        b.onclick = back;
-        row.append(b);
-      }
-      row.append(el("h2", "merge-title", title));
-      if (!back) {
-        const x = el("button", "agents-back", "×");
-        x.type = "button";
-        x.setAttribute("aria-label", "Close");
-        x.onclick = close;
-        row.append(x);
-      }
-      return row;
-    };
-    const main = () => {
-      const rows = el("div", "agents-rows");
-      for (const [id, job] of Object.entries(JOBS)) {
-        const row = el("button", "agents-row");
-        row.type = "button";
-        const text = el("span", "agents-text");
-        text.append(el("strong", "", job.title), el("small", "", job.note));
-        row.append(
-          text,
-          el("span", "agents-value", describe(id) || ""),
-          el("span", "agents-chevron", "›"),
-        );
-        row.onclick = () => list(id);
-        rows.append(row);
-      }
+    const head = (title, back) =>
+      PageHeader({
+        title,
+        back: Boolean(back),
+        backLabel: "Back to Agents",
+        onBack: back,
+        actions: back
+          ? []
+          : [
+              IconButton({
+                icon: "close",
+                label: "Close",
+                quiet: true,
+                onClick: close,
+              }),
+            ],
+      });
+    const main = () =>
       box.replaceChildren(
         head("Agents"),
-        rows,
-        el("p", "read-note", "Saved on this device, for this repository."),
+        List(
+          ...Object.entries(JOBS).map(([id, job]) =>
+            Row({
+              title: job.title,
+              meta: job.note,
+              end: TitleEnd(describe(id) || ""),
+              onClick: () => list(id),
+            }),
+          ),
+        ),
+        Note("Saved on this device, for this repository."),
       );
-    };
+    /** One choice from a list: a segmented control for two to four, else rows. */
+    const pick = (label, options, value, onChange) =>
+      options.length >= 2 && options.length <= 4
+        ? SegmentedControl({ label, options, value, onChange })
+        : Choices({
+            label,
+            options: options.map((o) => ({ ...o, title: o.label })),
+            value,
+            onChange,
+          });
     // One job's choice: the provider, then one of its models, then that model's effort.
     const list = (job) => {
       const choice = current(job),
         agents = catalog.agents.filter((a) => a.jobs.includes(job)),
         agent =
           agents.find((a) => a.id === (trying || choice?.agent)) || agents[0];
-      const section = (text) => el("p", "agents-label", text);
-      // Provider: one button each, with its problem when it is not ready.
-      const providers = el("div", "seg agents-providers");
-      providers.setAttribute("role", "group");
-      providers.setAttribute("aria-label", "Provider");
-      for (const a of agents) {
-        const b = el("button", "", a.label);
-        b.type = "button";
-        b.setAttribute("aria-pressed", String(a.id === agent.id));
-        // A provider that only needs a key stays selectable: its list asks for the key.
-        b.disabled = !a.status.ready && !a.key;
-        if (!a.status.ready) b.title = a.status.reason;
-        b.onclick = () => {
+      // Provider: one each, with its problem when it is not ready. A provider that only needs
+      // a key stays selectable: its list asks for the key.
+      const providers = pick(
+        "Provider",
+        agents.map((a) => ({
+          value: a.id,
+          label: a.label,
+          disabled: !a.status.ready && !a.key,
+          title: a.status.ready ? null : a.status.reason,
+        })),
+        agent.id,
+        (id) => {
+          const a = agents.find((x) => x.id === id);
           typing = false;
           query = "";
           keying = false;
+          modelError = null;
           // A provider without its key is shown with the key form, but not chosen.
           if (a.key && !a.key.set) {
             trying = a.id;
@@ -228,102 +255,84 @@ export function createAgents({ api, repo }) {
             a.defaultModel === false ? (modelsOf(a, job)[0]?.id ?? null) : null;
           set(job, { agent: a.id, model: first, effort: "auto" });
           list(job);
-        };
-        providers.append(b);
-      }
+        },
+      );
       const problems = agents
         .filter((a) => !a.status.ready && !a.key)
-        .map((a) =>
-          el("small", "agents-problem", `${a.label}: ${a.status.reason}`),
-        );
+        .map((a) => Note(`${a.label}: ${a.status.reason}`));
       // A provider with an API key: the key form until a key is saved, then its key row.
       if (agent.key && (!agent.key.set || keying)) {
         box.replaceChildren(
           head(JOBS[job].heading, main),
-          section("Provider"),
-          providers,
+          Group({ title: "Provider" }, providers),
           ...keyForm(agent, job),
         );
-        box.querySelector(".agents-key input")?.focus();
+        box.querySelector('input[type="password"]')?.focus();
         return;
       }
       // Models of the provider, as it reports them; Other model takes any name.
-      const models = modelsOf(agent, job),
-        group = el("div", "agents-rows");
-      group.setAttribute("role", "radiogroup");
-      group.setAttribute("aria-label", "Model");
+      const models = modelsOf(agent, job);
       const chosen = models.find(
         (m) =>
           m.id === (choice?.agent === agent.id ? (choice.model ?? null) : null),
       );
-      const option = (title, note, checked, pick) => {
-        const row = el("label", "agents-option");
-        const radio = el("input");
-        radio.type = "radio";
-        radio.name = "agents-" + job;
-        radio.checked = checked;
-        radio.onchange = pick;
-        const text = el("span", "agents-text");
-        text.append(el("span", "", title), el("small", "", note));
-        row.append(radio, text);
-        return row;
-      };
-      // A long list (OpenRouter has hundreds of models) gets a search box.
-      const search = el("input", "agents-search");
-      search.type = "search";
-      search.placeholder = `Search ${models.length} models`;
-      search.setAttribute("aria-label", "Search models");
-      search.value = query;
       const shown = (m) =>
         !query ||
         `${m.label} ${m.id} ${m.note}`
           .toLowerCase()
           .includes(query.toLowerCase());
-      search.oninput = () => {
-        query = search.value;
-        for (const row of group.querySelectorAll(".agents-option[data-model]"))
-          row.hidden = !shown(models[Number(row.dataset.model)]);
-      };
-      for (const model of models)
-        group.append(
-          Object.assign(
-            option(model.label, model.note, !typing && model === chosen, () => {
-              typing = false;
-              set(job, { agent: agent.id, model: model.id, effort: "auto" });
-              list(job);
-            }),
-            { hidden: !shown(model) },
-          ),
-        );
-      group
-        .querySelectorAll(".agents-option")
-        .forEach((row, i) => (row.dataset.model = i));
-      group.append(
-        option("Other model", "Type its name", typing || !chosen, () => {
-          typing = true;
+      const group = Choices({
+        label: "Model",
+        value: typing || !chosen ? "other" : String(models.indexOf(chosen)),
+        options: [
+          ...models.map((m, i) => ({
+            value: String(i),
+            title: m.label,
+            meta: m.note,
+            hidden: !shown(m),
+          })),
+          { value: "other", title: "Other model", meta: "Type its name" },
+        ],
+        onChange: (value) => {
+          modelError = null;
+          if (value === "other") {
+            typing = true;
+            list(job);
+            box.querySelector('input[name="model"]')?.focus();
+            return;
+          }
+          typing = false;
+          set(job, {
+            agent: agent.id,
+            model: models[Number(value)].id,
+            effort: "auto",
+          });
           list(job);
-          box.querySelector(".agents-custom input")?.focus();
-        }),
-      );
-      const custom = el("div", "agents-custom");
-      custom.hidden = Boolean(chosen) && !typing;
-      const name = el("input");
-      name.type = "text";
-      name.placeholder = "Model name";
-      name.setAttribute("aria-label", "Model name");
-      name.autocomplete = "off";
-      name.value = chosen ? "" : choice?.model || "";
-      const use = el("button", "btn", "Use");
-      use.type = "button";
-      const problem = el("small", "agents-problem");
-      use.onclick = () => {
-        const typed = name.value.trim();
+        },
+      });
+      // A long list (OpenRouter has hundreds of models) gets a search box.
+      const search = TextField({
+        label: "Search models",
+        type: "search",
+        value: query,
+        placeholder: `Search ${models.length} models`,
+        autocomplete: "off",
+        onInput: (event) => {
+          query = event.target.value;
+          for (const row of group.querySelectorAll("[data-value]"))
+            if (row.dataset.value !== "other")
+              row.hidden = !shown(models[Number(row.dataset.value)]);
+        },
+      });
+      // A typed model name, for Other model.
+      const useTyped = () => {
+        const typed = box.querySelector('input[name="model"]').value.trim();
         if (!validModel(typed)) {
-          problem.textContent =
-            "Use only letters, digits and ._:/@-[] in a model name.";
-          return;
+          modelError = "Use only letters, digits and ._:/@-[] in a model name.";
+          return list(job);
         }
         typing = false;
+        modelError = null;
         set(job, {
           agent: agent.id,
           model: typed,
@@ -331,121 +340,123 @@ export function createAgents({ api, repo }) {
         });
         list(job);
       };
-      const line = el("div", "agents-custom-line");
-      line.append(name, use);
-      custom.append(line, problem);
+      const custom =
+        (typing || !chosen) &&
+        Stack(
+          TextField({
+            label: "Model name",
+            name: "model",
+            value: chosen ? "" : choice?.model || "",
+            placeholder: "Model name",
+            autocomplete: "off",
+            error: modelError,
+            onEnter: useTyped,
+          }),
+          Actions({}, Button({ label: "Use", onClick: useTyped })),
+        );
       // Effort: the levels of the chosen model (all of the provider's for a typed name).
       const levels = chosen?.efforts?.length
         ? chosen.efforts
         : inOrder(models.flatMap((m) => m.efforts || []));
-      const efforts = el("div", "agents-efforts");
-      efforts.setAttribute("role", "group");
-      efforts.setAttribute("aria-label", "Effort");
-      for (const effort of ["auto", ...levels]) {
-        const b = el("button", "agents-effort", title(effort));
-        b.type = "button";
-        b.setAttribute(
-          "aria-pressed",
-          String((choice?.effort || "auto") === effort),
-        );
-        b.onclick = () => {
+      const efforts = pick(
+        "Effort",
+        ["auto", ...levels].map((effort) => ({
+          value: effort,
+          label: title(effort),
+        })),
+        choice?.effort || "auto",
+        (effort) => {
           set(job, {
             agent: agent.id,
             model: choice?.agent === agent.id ? (choice.model ?? null) : null,
             effort,
           });
           list(job);
-        };
-        efforts.append(b);
-      }
+        },
+      );
       const auto = chosen?.defaultEffort
         ? `Auto uses ${chosen.defaultEffort}.`
         : "Auto lets the provider decide.";
       const keyRow = [];
-      if (agent.key?.set) {
-        const row = el("div", "agents-keyrow");
-        row.append(el("span", "", `API key •••• ${agent.key.end}`));
-        if (agent.key.fromEnvironment)
-          row.append(el("small", "", "From PEEKUMI_OPENROUTER_KEY"));
-        else {
-          const replace = el("button", "btn link-button", "Replace");
-          replace.type = "button";
-          replace.onclick = () => {
-            keying = true;
-            list(job);
-          };
-          const remove = el(
-            "button",
-            "btn link-button agents-remove",
-            "Remove",
-          );
-          remove.type = "button";
-          remove.onclick = async () => {
-            catalog = await api("/api/agents/openrouter-key", {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: "{}",
-            });
-            list(job);
-          };
-          row.append(replace, remove);
-        }
+      if (agent.key?.set)
         keyRow.push(
-          row,
-          el(
-            "p",
-            "agents-privacy",
+          Row({
+            title: `API key •••• ${agent.key.end}`,
+            meta: agent.key.fromEnvironment
+              ? "From PEEKUMI_OPENROUTER_KEY"
+              : null,
+            chevron: false,
+          }),
+          !agent.key.fromEnvironment &&
+            Actions(
+              {},
+              Button({
+                label: "Replace",
+                variant: "plain",
+                onClick: () => {
+                  keying = true;
+                  list(job);
+                },
+              }),
+              Button({
+                label: "Remove",
+                variant: "danger",
+                onClick: async () => {
+                  saveResult(
+                    await api("/api/agents/openrouter-key", {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: "{}",
+                    }),
+                  );
+                  list(job);
+                },
+              }),
+            ),
+          Note(
             job === "ask"
               ? `Ask sends your question and the code it reads to ${agent.label}, which sends them to the provider of the model. Ask still only reads.`
               : `The task sends your instructions and the code it reads to ${agent.label}, which sends them to the provider of the model.`,
           ),
         );
-      }
-      if (agent.notes?.[job])
-        keyRow.unshift(el("p", "read-note", agent.notes[job]));
+      if (agent.notes?.[job]) keyRow.unshift(Note(agent.notes[job]));
       box.replaceChildren(
         head(JOBS[job].heading, main),
-        section("Provider"),
-        providers,
-        ...problems,
-        ...keyRow,
-        section("Model"),
-        ...(models.length > LONG ? [search] : []),
-        group,
-        custom,
-        section("Effort"),
-        efforts,
-        el(
-          "p",
-          "read-note",
-          `${auto} Higher effort works more carefully, but slower.` +
-            (job === "task"
-              ? " A new task uses this; each task keeps the choice it started with."
-              : ""),
+        Group({ title: "Provider" }, providers, ...problems, ...keyRow),
+        Group(
+          { title: "Model" },
+          models.length > LONG && search,
+          group,
+          custom,
+        ),
+        Group(
+          { title: "Effort" },
+          efforts,
+          Note(
+            `${auto} Higher effort works more carefully, but slower.` +
+              (job === "task"
+                ? " A new task uses this; each task keeps the choice it started with."
+                : ""),
+          ),
         ),
       );
     };
     /** The form that adds a provider's API key; the server tests the key before it saves it. */
     function keyForm(agent, job) {
-      const form = el("form", "agents-key"),
-        input = el("input"),
-        save = el("button", "btn primary", "Test and save"),
-        problem = el("small", "agents-problem");
-      input.type = "password";
-      input.autocomplete = "off";
-      input.placeholder = `${agent.label} API key`;
-      input.setAttribute("aria-label", `${agent.label} API key`);
-      save.type = "submit";
-      form.onsubmit = async (event) => {
-        event.preventDefault();
-        save.disabled = true;
-        problem.textContent = "Testing the key…";
+      let saving = false;
+      const save = async () => {
+        if (saving) return;
+        saving = true;
+        const input = box.querySelector('input[type="password"]');
+        status.textContent = "Testing the key…";
         try {
-          catalog = await api("/api/agents/openrouter-key", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ key: input.value }),
-          });
+          saveResult(
+            await api("/api/agents/openrouter-key", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key: input.value }),
+            }),
+          );
           keying = false;
           const fresh = catalog.agents.find((a) => a.id === agent.id);
           const first = modelsOf(fresh, job)[0]?.id ?? null;
@@ -458,26 +469,42 @@ export function createAgents({ api, repo }) {
           trying = null;
           list(job);
         } catch (e) {
-          problem.textContent = e.message;
-          save.disabled = false;
+          status.textContent = e.message;
+          saving = false;
         }
       };
-      const cancel = el("button", "btn", "Cancel");
-      cancel.type = "button";
-      cancel.onclick = () => {
-        keying = false;
-        list(job);
-      };
-      const buttons = el("div", "merge-buttons");
-      buttons.append(...(agent.key.set ? [cancel] : []), save);
-      form.append(input, problem, buttons);
+      const status = Note();
+      status.setAttribute("role", "status");
       return [
-        el("p", "agents-label", `${agent.label} API key`),
-        form,
-        el(
-          "p",
-          "read-note",
-          `You make a key in your ${agent.label} account. The server keeps it in Peekumi's private state folder, and only your user account can read it. The app never shows the key again, only its last 4 characters.`,
+        Group(
+          { title: `${agent.label} API key` },
+          TextField({
+            label: `${agent.label} API key`,
+            type: "password",
+            autocomplete: "off",
+            placeholder: `${agent.label} API key`,
+            onEnter: save,
+          }),
+          status,
+          Actions(
+            {},
+            agent.key.set &&
+              Button({
+                label: "Cancel",
+                onClick: () => {
+                  keying = false;
+                  list(job);
+                },
+              }),
+            Button({
+              label: "Test and save",
+              variant: "primary",
+              onClick: save,
+            }),
+          ),
+          Note(
+            `You make a key in your ${agent.label} account. The server keeps it in Peekumi's private state folder, and only your user account can read it. The app never shows the key again, only its last 4 characters.`,
+          ),
         ),
       ];
     }

@@ -8,6 +8,8 @@ Run these commands from the repository root:
 2. Run `npm run test:rust`.
 3. Run `npm run test:browser`.
 
+`ui.test.mjs` checks the rule that keeps the interface on the components. It adds new UI to a copy of `frontend/` and expects `scripts/lint-ui.mjs` to fail. It also renders every component and screen, and checks their accessible names and classes.
+
 The `reference/` directory keeps the previous Node implementation for equivalence checks. It is not the production backend.
 
 Workflow integration tests use temporary Git repositories and a deterministic local agent. This agent uses the production stdio MCP protocol. `workflow-browser.mjs` completes draft → preview → dispatch → report → inspect → verify on phone and desktop. These tests do not run a real paid agent session.

@@ -35,7 +35,7 @@ try {
     isMobile: true,
   });
   await side.goto(link);
-  await front(side).locator(".node").first().waitFor();
+  await front(side).locator(".pk-card").first().waitFor();
   assert.ok(
     await side.locator("header.top").isVisible(),
     "The header shows in landscape",
@@ -64,7 +64,7 @@ try {
   ]) {
     const phone = await open({ viewport });
     await phone.goto(link);
-    await front(phone).locator(".node").first().waitFor();
+    await front(phone).locator(".pk-card").first().waitFor();
     for (const height of ["peek", "half"]) {
       if (height === "half") {
         await phone.locator("#sheetHandle").click();
@@ -76,13 +76,13 @@ try {
       const shape = await phone.evaluate(() => {
         const sheet = document.querySelector('.sheet[data-front="true"]');
         const canvas = sheet
-          .querySelector(".map-canvas")
+          .querySelector(".pk-map-viewport")
           .getBoundingClientRect();
         const groups = [...sheet.querySelectorAll(".canvas-controls > *")].map(
           (g) => Math.round(g.getBoundingClientRect().top),
         );
         const top = Math.min(
-          ...[...sheet.querySelectorAll(".node")].map(
+          ...[...sheet.querySelectorAll(".pk-card")].map(
             (n) => n.getBoundingClientRect().top,
           ),
         );
@@ -110,7 +110,7 @@ try {
   // waiting text has its own row.
   const away = await open({ viewport: { width: 390, height: 844 } });
   await away.goto(link);
-  await front(away).locator(".node").first().waitFor();
+  await front(away).locator(".pk-card").first().waitFor();
   await away.route("**/api/**", (r) => r.abort());
   await away.reload();
   await away.waitForTimeout(1500);
@@ -121,10 +121,10 @@ try {
 
   const page = await open({ viewport: { width: 1366, height: 768 } });
   await page.goto(link);
-  await front(page).locator(".node").first().waitFor();
+  await front(page).locator(".pk-card").first().waitFor();
 
   // The keyboard: Enter selects a card, Enter again opens it, and the focus stays on the map.
-  const backend = front(page).locator('.node[data-path="backend"]');
+  const backend = front(page).locator('.pk-card[data-path="backend"]');
   await backend.focus();
   await page.keyboard.press("Enter");
   assert.equal(
@@ -138,7 +138,7 @@ try {
   );
   assert.ok(
     await page.evaluate(() =>
-      Boolean(document.activeElement?.closest("#deck .node")),
+      Boolean(document.activeElement?.closest("#deck .pk-card")),
     ),
     "The new level's first card has the focus",
   );
@@ -168,7 +168,7 @@ try {
   );
 
   // A reload opens the same place, with the same selection.
-  await front(page).locator('.node[data-path="backend/lookup.py"]').click();
+  await front(page).locator('.pk-card[data-path="backend/lookup.py"]').click();
   await page.waitForFunction(
     () =>
       new URL(location.href).searchParams.get("item") === "backend/lookup.py",
@@ -178,7 +178,7 @@ try {
     /backend/.test(document.querySelector(".crumbs")?.textContent || ""),
   );
   await front(page)
-    .locator('.node.sel[data-path="backend/lookup.py"]')
+    .locator('.pk-card.is-selected[data-path="backend/lookup.py"]')
     .waitFor();
 
   // A file whose name often holds secrets: Source says why it shows nothing, in each view.
@@ -204,13 +204,23 @@ try {
     ),
   );
   await page.reload();
-  await front(page).locator(".node").first().waitFor();
-  await page.locator('[data-compose="session"]').click();
-  await page.getByLabel("What do you want to work on?").waitFor();
+  await front(page).locator(".pk-card").first().waitFor();
+  // The send sheet on With me shows Allow all commands only for an agent that asks first.
+  await page.getByLabel("Ask, or describe a change").fill("Look around.");
+  await page
+    .locator("#composerHost")
+    .getByRole("button", { name: "Add as a change", exact: true })
+    .click();
+  await page.locator("#reviewActions .pk-tray").click();
+  await page.getByRole("button", { name: "With me", exact: true }).click();
+  await page
+    .locator(".pk-facts > div", { hasText: /^Agent\s*Codex/ })
+    .waitFor();
+  await page.locator("#dispatchRun", { hasText: "Start session" }).waitFor();
   await page.waitForTimeout(500);
   assert.equal(
-    await page.locator("#composerHost .session-mode").isVisible(),
-    false,
+    await page.getByLabel("Allow all commands").count(),
+    0,
     "No switch for Codex",
   );
   await page.close();
@@ -226,16 +236,16 @@ try {
     (r) => r.url().includes("/api/agents") && agentsCalls.push(r.url()),
   );
   await readOnly.goto(f.server.url + "/#token=" + reader);
-  await front(readOnly).locator(".node").first().waitFor();
+  await front(readOnly).locator(".pk-card").first().waitFor();
   assert.equal(
-    await readOnly.locator(".access-note").innerText(),
+    await readOnly.locator(".pk-header-note.is-access").innerText(),
     "Read-only device",
   );
   await front(readOnly)
-    .locator('.node[data-path="backend"]')
+    .locator('.pk-card[data-path="backend"]')
     .click({ button: "right" });
   const items = await readOnly
-    .locator('.context-menu [role="menuitem"] span')
+    .locator('.pk-menu.is-floating [role="menuitem"] span')
     .allTextContents();
   assert.ok(items.includes("Open") && items.includes("Copy path"));
   for (const owner of [
@@ -259,7 +269,7 @@ try {
     (token) => (location.hash = "token=" + token),
     f.server.token,
   );
-  await front(second).locator(".node").first().waitFor();
+  await front(second).locator(".pk-card").first().waitFor();
   await second.close();
 
   assert.deepEqual(errors, []);

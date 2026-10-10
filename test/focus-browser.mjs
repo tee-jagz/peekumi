@@ -35,21 +35,30 @@ try {
     );
     try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
-      await page.locator('[data-compose="session"]').click();
       await page
-        .getByLabel("What do you want to work on?")
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
+      // A session starts from the send sheet: add the change, then With me.
+      await page
+        .getByLabel("Ask, or describe a change")
         .fill("Look around. FOCUS WAIT_FOR_STOP");
-      await page.getByRole("button", { name: "Start session" }).click();
+      await page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true })
+        .click();
+      await page.locator("#reviewActions .pk-tray").click();
+      await page.getByRole("button", { name: "With me", exact: true }).click();
+      await page.locator("#dispatchRun", { hasText: "Start session" }).click();
       // Follow moves the map into backend/lookup.py, where the agent reads route.
-      const pill = page.locator("#agentFocus .follow-pill");
+      const pill = page.locator("#deck #agentFocus");
       await pill.waitFor();
       assert.equal(await pill.getAttribute("data-on"), "true");
       await page
-        .locator('.node.agent-here[data-key="symbol:route"] .agent-badge')
+        .locator('.pk-card.is-agent[data-key="symbol:route"] .pk-card-peek')
         .waitFor({ timeout: 15000 });
       assert.match(
-        await page.locator(".session-step.is-current").textContent(),
+        await page.locator(".pk-step.is-current").textContent(),
         /read_declaration\s*route/,
       );
       // The agent's place sits in the middle of the visible map: above the sheet and above
@@ -57,10 +66,10 @@ try {
       await page.waitForTimeout(400);
       const centred = await page.evaluate(() => {
         const card = document
-          .querySelector('.node.agent-here[data-key="symbol:route"]')
+          .querySelector('.pk-card.is-agent[data-key="symbol:route"]')
           .getBoundingClientRect();
         const map = document
-          .querySelector('.sheet[data-front="true"] .map-canvas')
+          .querySelector('.sheet[data-front="true"] .pk-map-viewport')
           .getBoundingClientRect();
         const sheet = document.querySelector("#panel").getBoundingClientRect();
         const tools = document
@@ -116,18 +125,18 @@ try {
       );
       // The owner moves the map: Follow pauses, and the folder that holds the agent glows.
       await page.locator(".crumbs .crumb-home").click();
-      await page.locator('.node.agent-here[data-path="backend"]').waitFor();
+      await page.locator('.pk-card.is-agent[data-path="backend"]').waitFor();
       assert.equal(await pill.getAttribute("data-on"), "false");
       assert.equal(await pill.getAttribute("data-label"), "paused");
       assert.match(await pill.getAttribute("aria-label"), /Follow paused/);
       await page.waitForTimeout(3500);
       assert.equal(
-        await page.locator('.node[data-path="backend"]').count(),
+        await page.locator('.pk-card[data-path="backend"]').count(),
         1,
         "Paused: the map stays where the owner put it",
       );
       assert.equal(
-        await page.locator('.node.agent-changed[data-path="backend"]').count(),
+        await page.locator('.pk-card.is-touched[data-path="backend"]').count(),
         1,
         "backend holds a changed file",
       );
@@ -137,15 +146,17 @@ try {
       // A tap follows again.
       await pill.click();
       await page
-        .locator('.node.agent-here[data-key="symbol:route"]')
+        .locator('.pk-card.is-agent[data-key="symbol:route"]')
         .waitFor({ timeout: 15000 });
       // Stopped: no "now" mark, the trail and the changed files stay, with a key.
       await page.getByRole("button", { name: "Stop" }).click();
-      await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
-      assert.equal(await page.locator(".node.agent-here").count(), 0);
+      await page
+        .locator("#viewHead .pk-status", { hasText: "Your turn" })
+        .waitFor();
+      assert.equal(await page.locator(".pk-card.is-agent").count(), 0);
       assert.equal(
         await page
-          .locator('.node.agent-trail[data-key="symbol:route"]')
+          .locator('.pk-card.is-trail[data-key="symbol:route"]')
           .count(),
         1,
         "route stays on the trail",
@@ -164,7 +175,7 @@ try {
         .getByRole("button", { name: "Close legend", exact: true })
         .click();
       await page.locator(".crumbs .crumb-home").click();
-      await page.locator('.node.agent-trail[data-path="backend"]').waitFor();
+      await page.locator('.pk-card.is-trail[data-path="backend"]').waitFor();
       await page.screenshot({
         path: `test-results/focus-waiting-${viewport.width}.png`,
       });
@@ -176,17 +187,16 @@ try {
         .getByRole("button", { name: "Back", exact: true })
         .click();
       await page
-        .locator('.sheet[data-front="true"] .node[data-path="backend"]')
+        .locator('.sheet[data-front="true"] .pk-card[data-path="backend"]')
         .click();
-      await page.locator("#agentFocus .follow-pill").click();
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.getByLabel("Your question").fill("Look at route.");
+      await page.locator("#agentFocus").click();
+      await page.getByLabel("Ask, or describe a change").fill("Look at route.");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
       await page
-        .locator('.node.agent-here[data-key="symbol:route"] .agent-badge')
+        .locator('.pk-card.is-agent[data-key="symbol:route"] .pk-card-peek')
         .waitFor({ timeout: 15000 });
       assert.match(
         await page.locator("#dockContext").innerText(),
@@ -197,13 +207,13 @@ try {
         path: `test-results/focus-ask-${viewport.width}.png`,
       });
       await page
-        .locator(".ask-message.from-assistant", { hasText: "returns 1" })
+        .locator(".pk-message.is-assistant", { hasText: "returns 1" })
         .waitFor();
       await page
-        .locator('.node.agent-trail[data-key="symbol:route"]')
+        .locator('.pk-card.is-trail[data-key="symbol:route"]')
         .waitFor();
       assert.equal(
-        await page.locator(".node.agent-here").count(),
+        await page.locator(".pk-card.is-agent").count(),
         0,
         "Done: what Ask read stays as a trail",
       );
@@ -221,7 +231,9 @@ try {
       await f.req("/api/runs", { previewId: p.id });
       // The page sees a task started elsewhere at its next idle poll (up to 12 s).
       await page
-        .locator('.node.agent-here[data-path="backend/graph.py"] .agent-badge')
+        .locator(
+          '.pk-card.is-agent[data-path="backend/graph.py"] .pk-card-peek',
+        )
         .waitFor({ timeout: 30000 });
       await page.screenshot({
         path: `test-results/focus-task-${viewport.width}.png`,

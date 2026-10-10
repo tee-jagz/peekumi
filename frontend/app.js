@@ -12,6 +12,16 @@ import { createNav } from "./nav.js";
 import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
 import { peek } from "./peek.js";
+import {
+  Button,
+  AgentMark,
+  ChangeTray,
+  Choices,
+  HeaderNote,
+  IconButton,
+  MapCard,
+  setStates,
+} from "./ui.js";
 import { richText } from "./text.js";
 import {
   statusIcon,
@@ -72,9 +82,10 @@ const tones = {
   removed: "var(--del)",
   unchanged: "var(--faint)",
 };
-/** The dock's mode on the map: "ask", "comments" (an instruction) or "session". A
- * preference only; what the sheet shows is the view (see nav.js). */
-let dockMode = "ask";
+/** The dock's mode on the map: "intent" (the composer: Ask or Add as a change) or "session"
+ * (the reply box of the open session). A preference only; what the sheet shows is the view
+ * (see nav.js). */
+let dockMode = "intent";
 let changesOnly = false;
 let relationshipKind = "all",
   violationsOnly = false;
@@ -319,6 +330,7 @@ const notifications = createNotifications({
   notice: (text, error = false) => showNotice(text, error),
 });
 const workflow = createWorkflow({
+  notifications,
   api,
   // The Tasks page shows sessions too; app.js connects the two features.
   sessions,
@@ -328,9 +340,9 @@ const workflow = createWorkflow({
   head: viewHead,
   taskActions: () => (isOwner() ? [notifications.button()] : []),
   revisionName: (sha) => revisionName(sha),
-  /** A new instruction: the map, with the dock in Instruction mode (Back returns). */
+  /** A new change: the map, with the composer ready (Back returns). */
   writeInstruction() {
-    dockMode = "comments";
+    dockMode = "intent";
     nav.toMap();
     focusComposer();
   },
@@ -450,7 +462,13 @@ const ask = createAsk({
     focus.set(
       "ask",
       running || recent.length
-        ? { running, current: recent[0] || null, trail: recent.slice(1, 5) }
+        ? {
+            running,
+            // Ask only reads: Peek wears its reading lens on the card it reads.
+            activity: running ? "reading" : null,
+            current: recent[0] || null,
+            trail: recent.slice(1, 5),
+          }
         : null,
     );
   },
@@ -926,11 +944,11 @@ async function setupRepositories() {
   // A read-only device has no Tasks, Conversations or dock, and says so once, quietly. Both
   // ways: an owner link opened in a read-only tab brings them back.
   const reader = data.role === "reader";
-  if (reader && !$(".access-note"))
+  if (reader && !$(".pk-header-note.is-access"))
     $(".title-block")?.append(
-      element("span", "access-note", "Read-only device"),
+      HeaderNote({ kind: "access", text: "Read-only device" }),
     );
-  if (!reader) $(".access-note")?.remove();
+  if (!reader) $(".pk-header-note.is-access")?.remove();
   $("#openTasks").hidden = reader;
   $("#openConversations").hidden = reader;
   $("#conversationDock").hidden = reader;
@@ -1116,7 +1134,7 @@ function renderDeck() {
       deck.querySelector(".sheet:not(.peek) .sheet-body")?.scrollTop || 0;
   // A card with the keyboard focus keeps it across the redraw (a new element, same key).
   const focusedKey =
-    document.activeElement?.closest?.("#deck .node")?.dataset.key;
+    document.activeElement?.closest?.("#deck .pk-card")?.dataset.key;
   const mapLegend = $("#mapLegend"),
     sides = $("#baSeg"),
     crumbHost = $("#crumbHost");
@@ -1137,7 +1155,7 @@ function renderDeck() {
   // Before/After belongs to the comparison, not navigation: it sits in the top-left corner.
   body.append(sides);
   body.scrollTop = oldScroll;
-  const cards = [...body.querySelectorAll(".node")];
+  const cards = [...body.querySelectorAll(".pk-card")];
   const again = focusFirstCard
     ? cards[0]
     : focusedKey && cards.find((n) => n.dataset.key === focusedKey);
@@ -1148,7 +1166,7 @@ function renderDeck() {
 function tone(node) {
   return lens === "changes"
     ? tones[node.status] || "var(--faint)"
-    : "var(--accent)";
+    : "var(--old-accent)";
 }
 /** Determines whether a node belongs on the selected revision side and colour lens. */
 function visibleInSide(node) {
@@ -1223,6 +1241,23 @@ function kindCount(n, kind) {
     inherits: ["inheritance", "inheritances"],
   }[kind] || ["relationship", "relationships"];
   return `${n} ${nouns[n === 1 ? 0 : 1]}`;
+}
+/** The change that removes `breaks`, in words, for Fix: what to stop, which rule says so, and
+ * what must stay the same. */
+function fixText(breaks) {
+  const groups = new Map();
+  for (const b of breaks) {
+    const key = `${b.source} → ${b.target}`;
+    const g = groups.get(key) || { ...b, count: 0, messages: new Set() };
+    g.count += b.count;
+    g.messages.add(b.message);
+    groups.set(key, g);
+  }
+  const lines = [...groups.values()].map(
+    (g) =>
+      `Remove the ${kindCount(g.count, g.kind)} from ${g.source} to ${g.target}: ${g.count === 1 ? "it breaks" : "they break"} ${g.rule} (${[...g.messages].map((m) => m.replace(/\.$/, "")).join("; ")}).`,
+  );
+  return `${lines.join("\n")}\nKeep the behaviour the same, and keep the tests green.`;
 }
 /** One line for the sheet about `breaks` (see nodeBreaks): the rule, or how many rules, and
  * what breaks it, for example "Breaks ui-no-db · 3 calls to store.py". */
@@ -1513,158 +1548,99 @@ function renderGraph(body) {
     { contentHeight: y, center: root },
   );
 }
-/** Fills `host` with `name` and lets it wrap after a dot, a slash, a hyphen or an underscore,
- * and before a capital letter inside a word, so a long name takes a second line at its
- * parts and not at a random letter. Returns `host`. */
-function breakable(host, name) {
-  const parts = name.split(/(?<=[._/-])|(?<=[a-z0-9])(?=[A-Z])/);
-  parts.forEach((part, i) => {
-    if (i) host.append(document.createElement("wbr"));
-    host.append(part);
-  });
-  return host;
-}
-/** Creates an accessible map card with status, preview metadata and select-then-open behavior. */
+/** Creates an accessible map card (ui.js MapCard) with status, preview metadata and
+ * select-then-open behavior. */
 function graphNode({ node, x, y, w, h }, owners = new Set()) {
-  const cls = [
-    "node",
-    node.kind === "stub"
-      ? "stub"
-      : node.kind === "boundary"
-        ? "boundary"
-        : node.kind === "symbol"
-          ? "fn"
-          : "",
-    lens === "changes" ? "c-" + node.status : "",
-    selected?.key === node.key ? "sel" : "",
-    linkedKeys && node.kind !== "boundary" && selected?.key !== node.key
-      ? linkedKeys.has(node.key)
-        ? "linked"
-        : "faded"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const card = button(cls, "", () => {
-    if (busy) return;
-    if (selected?.key === node.key) openNode(node);
-    else selectNode(node);
-  });
-  card.dataset.key = node.key;
-  card.dataset.kind = node.kind;
-  card.dataset.path = node.path || "";
-  card.dataset.status = node.status || "unchanged";
-  // Uncommitted changes in it: a dashed outline (see uncommittedMark).
-  if (uncommittedMark(node)) card.dataset.uncommitted = "true";
-  card.dataset.relationshipChanged = String(
-    nodeRelations(node).some((r) => r.status !== "unchanged"),
-  );
+  const changes = lens === "changes";
+  const states = [
+    node.kind === "stub" && "stub",
+    node.kind === "boundary" && "boundary",
+    node.kind === "symbol" && "symbol",
+    changes && node.status === "unchanged" && "unchanged",
+    changes && node.status === "removed" && "removed",
+    selected?.key === node.key && "selected",
+    linkedKeys &&
+      node.kind !== "boundary" &&
+      selected?.key !== node.key &&
+      (linkedKeys.has(node.key) ? "linked" : "dim"),
+  ].filter(Boolean);
+  const uncommitted = Boolean(uncommittedMark(node));
   const changedFiles =
     node.files?.filter((f) => f.status !== "unchanged").length || 0;
-  card.setAttribute(
-    "aria-label",
-    `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${card.dataset.uncommitted ? ", uncommitted changes" : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
-  );
-  card.title = node.name;
-  Object.assign(card.style, {
-    left: x + "px",
-    top: y + "px",
-    width: w + "px",
-    height: h + "px",
-  });
-  card.style.setProperty("--tone", tone(node));
-  const top = element("div", "n-top");
-  top.append(objectTypeIcon(node));
   const owner =
     node.kind === "symbol"
       ? node.name.slice(0, node.name.lastIndexOf("."))
       : "";
   const shown =
-    owner && owners.has(owner) ? node.name.slice(owner.length + 1) : node.name;
-  top.append(
-    breakable(
-      element("span", "n-name"),
-      shown +
-        (node.kind === "symbol" &&
-        ["function", "method"].includes(node.symbolKind)
-          ? "()"
-          : ""),
-    ),
-  );
-  if (node.kind === "file")
-    top.append(
-      element("span", "n-meta", node.symbolCount ?? node.symbols?.length ?? 0),
-    );
-  // Which parts of a modified declaration changed: signature, documentation, implementation.
-  if (lens === "changes" && node.changes?.length) {
-    const parts = element("span", "n-parts");
-    parts.append(...node.changes.map(partIcon));
-    top.append(parts);
-  }
-  // Rule breaks: a red broken-link icon and how many, in the card's own row (no badge).
+    (owner && owners.has(owner)
+      ? node.name.slice(owner.length + 1)
+      : node.name) +
+    (node.kind === "symbol" && ["function", "method"].includes(node.symbolKind)
+      ? "()"
+      : "");
+  // Rule breaks: the broken-link mark and how many, in the card's own row.
   const found = nodeBreaks(node);
-  const total = found.reduce((sum, b) => sum + b.count, 0);
-  if (total) {
-    const breaks = element("span", "n-breaks");
-    breaks.append(glyph("broken"), document.createTextNode(total));
-    breaks.title = [...new Set(found.map((b) => b.message))].join("; ");
-    breaks.setAttribute(
-      "aria-label",
-      `${total} dependency rule break${total === 1 ? "" : "s"}`,
-    );
-    top.append(breaks);
-  }
-  card.append(top);
-  if (node.files) {
-    const info = directoryInfo(node.path, node.status === "removed");
-    if (info) {
-      const description = element("p", "n-description", info.description);
-      description.title = info.description;
-      card.append(description);
-    }
-    // Counts replace child-name chips, which could not fit without truncation.
-    const counts = element("div", "n-counts");
-    if (lens === "changes")
-      for (const status of ["added", "changed", "removed"]) {
-        const count = node.files.filter((f) => f.status === status).length;
-        if (!count) continue;
-        const item = element("span", "n-count");
-        item.dataset.status = status;
-        item.append(statusIcon(status), document.createTextNode(count));
-        counts.append(item);
-      }
-    const total = element("span", "n-count");
-    total.append(
-      glyph("file"),
-      document.createTextNode(node.files.length),
-      element("span", "visually-hidden", " files"),
-    );
-    counts.append(total);
-    card.append(counts);
-  } else if (
-    node.kind === "file" &&
-    (node.symbolCount ?? node.symbols?.length ?? 0)
-  ) {
-    const kids = element("div", "n-kids");
-    for (const symbol of (node.symbols || node.symbolPreview || []).slice(
-      0,
-      22,
-    )) {
-      const bar = element("span", "bar");
-      bar.style.setProperty(
-        "--c",
-        lens === "changes" ? tones[symbol.status] : "var(--accent)",
-      );
-      bar.title = symbol.name;
-      kids.append(bar);
-    }
-    card.append(kids);
-  }
-  if (node.kind === "boundary") {
-    card.tabIndex = -1;
-    card.removeAttribute("aria-label");
-  }
-  return card;
+  const breaks = found.reduce((sum, b) => sum + b.count, 0);
+  const count = (status) =>
+    changes ? node.files.filter((f) => f.status === status).length : 0;
+  const info =
+    node.files && directoryInfo(node.path, node.status === "removed");
+  return MapCard({
+    name: shown,
+    x,
+    y,
+    width: w,
+    height: h,
+    kind: node.kind,
+    icon: objectTypeIcon(node),
+    code: node.kind === "file" || node.kind === "symbol",
+    description: info?.description,
+    ...(node.files
+      ? {
+          files: node.files.length,
+          added: count("added"),
+          modified: count("changed"),
+          removed: count("removed"),
+        }
+      : {}),
+    meta:
+      node.kind === "file"
+        ? (node.symbolCount ?? node.symbols?.length ?? 0)
+        : null,
+    // Which parts of a modified declaration changed: signature, documentation, implementation.
+    parts: changes && node.changes?.length ? node.changes.map(partIcon) : [],
+    breaks,
+    breaksTitle: [...new Set(found.map((b) => b.message))].join("; "),
+    bars:
+      node.kind === "file"
+        ? (node.symbols || node.symbolPreview || [])
+            .slice(0, 22)
+            .map((symbol) => ({
+              title: symbol.name,
+              color: changes ? tones[symbol.status] : "var(--line-strong)",
+            }))
+        : null,
+    uncommitted,
+    states,
+    data: {
+      key: node.key,
+      path: node.path || "",
+      status: node.status || "unchanged",
+      "relationship-changed": String(
+        nodeRelations(node).some((r) => r.status !== "unchanged"),
+      ),
+    },
+    label:
+      node.kind === "boundary"
+        ? null
+        : `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${uncommitted ? ", uncommitted changes" : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
+    title: node.name,
+    onClick: () => {
+      if (busy) return;
+      if (selected?.key === node.key) openNode(node);
+      else selectNode(node);
+    },
+  });
 }
 /** The connections the map draws among the cards `placed` reports as shown: filtered by
  * Changes only, the Before/After side and the colour lens, narrowed to the selection when
@@ -2030,9 +2006,9 @@ function drawEdges(canvas, positions, width, height, arcs) {
   const defs = document.createElementNS(NS, "defs");
   for (const [status, color] of Object.entries({
     ...tones,
-    structure: "var(--edge)",
+    structure: "var(--old-edge)",
     violation: "var(--del)",
-    out: "var(--accent)",
+    out: "var(--old-accent)",
     in: "var(--link-in)",
   })) {
     const marker = document.createElementNS(NS, "marker");
@@ -2190,12 +2166,14 @@ function markSelection(node) {
   const sheet = document.querySelector('.sheet[data-front="true"]');
   const lines = sheet?.querySelectorAll("path[data-from]").length || 0;
   if (!sheet || lines || visibleEdges(() => true).length) return false;
-  const card = [...sheet.querySelectorAll(".node[data-key]")].find(
+  const card = [...sheet.querySelectorAll(".pk-card[data-key]")].find(
     (n) => n.dataset.key === node.key,
   );
   if (!card) return false;
-  sheet.querySelectorAll(".node.sel").forEach((n) => n.classList.remove("sel"));
-  card.classList.add("sel");
+  sheet
+    .querySelectorAll(".pk-card.is-selected")
+    .forEach((n) => setStates(n, { selected: false }));
+  setStates(card, { selected: true });
   linkedKeys = null;
   return true;
 }
@@ -2235,8 +2213,10 @@ async function openPlace(target, { keepTab = false } = {}) {
   render();
   // The place opens in the middle of the map, never at its edge.
   requestAnimationFrame(() => {
-    const card = document.querySelector('.sheet[data-front="true"] .node.sel');
-    card?.closest(".map-canvas")?.centerCard?.(card);
+    const card = document.querySelector(
+      '.sheet[data-front="true"] .pk-card.is-selected',
+    );
+    card?.closest(".pk-map-viewport")?.centerCard?.(card);
   });
 }
 /* The context menu (menu.js): what a long press or a right-click offers for a map card or a
@@ -2271,13 +2251,15 @@ function forbid(edge) {
         : end.path;
   const kind = edge.relationshipKind;
   workflow.prefill(
-    `Add a rule to .peekumi.json that forbids ${kind} from ${group(edge.from)} to ${group(edge.to)}, with a message that says why. Then fix the code that breaks the new rule, or list it in your report.`,
+    `Add a rule to .peekumi.json that forbids ${kind} from ${group(edge.from)} to ${group(edge.to)}, with a message that says why. Do not change other code: the breaks of the new rule show on the map, and Fix there sends them to an agent.`,
   );
   composeAbout(edge, "comments");
 }
 function composeAbout(node, mode) {
   selectNode(node);
-  dockMode = mode;
+  // A session starts from the send sheet (With me); the composer collects the change first.
+  if (mode === "session" && !workflow.hasLiveSession()) workflow.preferLive();
+  dockMode = mode === "session" ? "session" : "intent";
   // The conversation for this mode, when it is on screen, stays: the card becomes the subject
   // of its next message (Ask's question, or the session's reply). Anything else writes from
   // the map's dock.
@@ -2431,7 +2413,7 @@ function nameMenu(place, link) {
       key: "A",
       run: async () => {
         await openPlace(place, { keepTab: true });
-        dockMode = "ask";
+        dockMode = "intent";
         nav.toMap();
         focusComposer();
       },
@@ -2481,7 +2463,7 @@ function nameMenu(place, link) {
 }
 /** What a long press or a right-click on `element` opens: a map card or a name. */
 function menuFor(element) {
-  const link = element?.closest?.(".code-link[data-target]");
+  const link = element?.closest?.(".pk-code-link[data-target]");
   if (link) {
     try {
       return {
@@ -2492,17 +2474,25 @@ function menuFor(element) {
       return null;
     }
   }
-  const card = element?.closest?.('.sheet[data-front="true"] .node[data-key]');
+  const card = element?.closest?.(
+    '.sheet[data-front="true"] .pk-card[data-key]',
+  );
   const node = card && nodes.find((n) => n.key === card.dataset.key);
   if (!node || !["folder", "file", "rootfiles", "symbol"].includes(node.kind))
     return null;
   return { target: card, spec: cardMenu(node) };
 }
 installContextMenus(menuFor);
-/** Drills into a selected directory or file, or opens source for a selected symbol. */
+/** Drills into a selected directory or file, or opens source for a selected symbol: its diff
+ * when it changed, as the first tap shows (flow 4). */
 function openNode(node) {
   if (node.kind === "symbol") {
-    sourceView = node.status === "removed" ? "before" : "after";
+    sourceView =
+      node.status === "removed"
+        ? "before"
+        : node.status === "unchanged"
+          ? "after"
+          : "diff";
     nav.toMap("source");
     expandSheet();
     if (!sourceData) loadSource();
@@ -2528,7 +2518,7 @@ async function navigate(
     held ??= { context: currentContext(), base: baseRef, head: headRef };
   else held = null;
   // Opened with the keyboard from a card: the focus goes to the new level's first card.
-  if (!follow && document.activeElement?.closest?.("#deck .node"))
+  if (!follow && document.activeElement?.closest?.("#deck .pk-card"))
     focusFirstCard = true;
   // The owner moved the map: Follow pauses (its own moves are ignored there).
   workflow.ownerMoved();
@@ -2537,7 +2527,7 @@ async function navigate(
     next.path.split("/").length > scope.path.split("/").length ||
     scope.kind === "repo";
   if (graph && !reducedMotion) {
-    const origin = [...graph.querySelectorAll(".node")].find(
+    const origin = [...graph.querySelectorAll(".pk-card")].find(
       (n) => n.dataset.key === originKey,
     );
     if (origin)
@@ -2757,6 +2747,22 @@ function renderPanel() {
     );
     line.title = [...new Set(breaks.map((b) => b.message))].join("; ");
     scopeBar.append(line);
+    // Fix writes the change from the rule and the breaks into the composer, for the owner to
+    // edit and add (docs/design/19-flows.md, flow 3). The task agent finds the fix.
+    if (isOwner())
+      scopeBar.append(
+        Button({
+          label: "Fix",
+          variant: "plain",
+          onClick: () => {
+            workflow.prefill(fixText(breaks));
+            dockMode = "intent";
+            nav.toMap();
+            renderPanel();
+            focusComposer();
+          },
+        }),
+      );
   }
   if (selected?.changes?.length) {
     // Say what changed inside a modified declaration, so the reader knows what to inspect.
@@ -2799,7 +2805,11 @@ function renderPanel() {
 function dockKind() {
   const view = nav.view();
   if (!isOwner()) return null;
-  if (view.name === "inspect") return dockMode;
+  // On the map: the composer (Ask or Add as a change), or the reply box of the open session.
+  if (view.name === "inspect")
+    return dockMode === "session" && workflow.hasLiveSession()
+      ? "session"
+      : "intent";
   if (view.name === "ask") return "ask";
   if (view.name === "instructions") return "comments";
   if (view.name === "run")
@@ -2840,6 +2850,145 @@ function loadEarlier() {
     })
     .finally(() => (loadingEarlier = null));
   return loadingEarlier;
+}
+/** "Since my last look" (docs/design/19-flows.md, flow 4): each device keeps the newest commit
+ * that it showed, for each repository and branch. The look from before this visit stays for
+ * the whole visit; the page saves the newest commit when it is hidden. */
+const looks = new Map();
+const lookKey = () =>
+  `peekumi-look:${$("#repositoryPicker").value || metadata.name}:${viewingBranch || "HEAD"}`;
+function lastLook() {
+  const key = lookKey();
+  if (!looks.has(key)) {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(key));
+    } catch {
+      /* No storage: the choice says that it has no look. */
+    }
+    looks.set(key, saved?.sha ? saved : null);
+  }
+  return looks.get(key);
+}
+function saveLook() {
+  const newest = metadata?.commits[0];
+  if (!newest || viewingPr) return;
+  lastLook();
+  try {
+    localStorage.setItem(
+      lookKey(),
+      JSON.stringify({ sha: newest.sha, time: Date.now() }),
+    );
+  } catch {
+    /* The next visit has no look. */
+  }
+}
+addEventListener("pagehide", saveLook);
+document.addEventListener(
+  "visibilitychange",
+  () => document.visibilityState === "hidden" && saveLook(),
+);
+/** The commit of the last look on the branch: the saved commit, or (after a rewrite) the
+ * newest commit from before the look. Null when the device has no look. */
+function lookBase() {
+  const look = lastLook();
+  if (!look) return null;
+  if (metadata.commits.some((c) => c.sha === look.sha)) return look.sha;
+  return (
+    metadata.commits.find((c) => c.time && new Date(c.time) <= look.time)
+      ?.sha || null
+  );
+}
+/** True while the owner chooses the head and the base: the selects show. */
+let choosing = false;
+/** The comparison on view, named by its question: the last commit, since the last look,
+ * this branch against main, or commits that the owner chose. */
+function compareChoice() {
+  const tip = shownRevision(metadata.initialHead);
+  if (choosing || headRef !== tip) return "choose";
+  if (!diffBase) return "last";
+  if (diffBase === lookBase()) return "look";
+  if (diffBase === metadata.main?.base) return "main";
+  return "choose";
+}
+/** Shows the comparison for one choice. The head is the newest commit, with the uncommitted
+ * changes; "Choose commits…" only shows the selects. */
+function compareBy(choice) {
+  if (busy) return;
+  choosing = choice === "choose";
+  // The head and base selects are in Diff mode.
+  if (choosing && mode === "diff") return renderCommits();
+  if (choosing) {
+    mode = "diff";
+    return loadComparison();
+  }
+  if (choice !== "last") mode = "diff";
+  before = false;
+  headRef = shownRevision(metadata.initialHead);
+  diffBase = { look: lookBase(), main: metadata.main?.base }[choice] || null;
+  baseRef = diffBase || parentRevision(headRef);
+  $("#revisionDetails").open = false;
+  loadComparison();
+}
+const shortDate = (time) =>
+  new Date(time).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+/** The four comparison choices, with a line under each that says what it compares. */
+function renderChoices() {
+  const newest = metadata.commits[0],
+    changes = newest?.uncommitted?.paths.length,
+    look = lastLook(),
+    from = lookBase(),
+    fresh = from ? metadata.commits.findIndex((c) => c.sha === from) : -1,
+    main = metadata.main,
+    onMain = !main || main.base === metadata.initialHead,
+    plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const choices = Choices({
+    label: "Compare",
+    value: compareChoice(),
+    onChange: compareBy,
+    options: [
+      {
+        value: "last",
+        title: "The last commit",
+        meta: newest
+          ? `${newest.short} ${newest.subject}${changes ? `, with ${plural(changes, "uncommitted change")}` : ""}`
+          : "",
+      },
+      {
+        value: "look",
+        title: "Since my last look",
+        disabled: fresh < 1,
+        meta: !look
+          ? "This device keeps it from your next visit"
+          : fresh < 1
+            ? `No new commits since ${shortDate(look.time)}`
+            : `${plural(fresh, "new commit")} since ${shortDate(look.time)}`,
+      },
+      {
+        value: "main",
+        title: `This branch against ${main?.name || "main"}`,
+        disabled: onMain,
+        meta: !main
+          ? "This repository has no main branch"
+          : onMain
+            ? `You are on ${main.name}`
+            : `From ${main.base.slice(0, 7)}, where it left ${main.name}`,
+      },
+      {
+        value: "choose",
+        title: "Choose commits…",
+        meta: "Pick the head and the base",
+      },
+    ],
+  });
+  choices.id = "compareChoices";
+  choices.hidden = !!viewingPr;
+  const old = $("#compareChoices");
+  if (old) old.replaceWith(choices);
+  else $("#commitHead").before(choices);
 }
 /** Builds commit history controls and the base-revision picker from the loaded repository history. */
 function renderCommits() {
@@ -2959,6 +3108,9 @@ function renderCommits() {
     row.append(picker);
     bar.append(row);
   }
+  renderChoices();
+  // The selects are for "Choose commits…" only; the other choices need none.
+  bar.hidden = compareChoice() !== "choose" && !viewingPr;
   if (diffBase) {
     bar.append(
       button("btn", "Use previous commit", () => {
@@ -2974,7 +3126,7 @@ function renderCommits() {
   const meta = element(
     "p",
     "c-meta",
-    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"}${c.worktree ? ` + ${c.uncommitted.paths.length} uncommitted` : ""} · compared with ${commit(baseRef).short} · ${diffBase ? "manual base" : "previous commit (automatic)"}`,
+    `${c.short} · ${c.time ? new Date(c.time).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "commit"}${c.worktree ? ` + ${c.uncommitted.paths.length} uncommitted` : ""} · compared with ${commit(baseRef).short} · ${{ last: "previous commit (automatic)", look: "since your last look", main: `against ${metadata.main?.name}`, choose: diffBase ? "manual base" : "previous commit (automatic)" }[compareChoice()]}`,
   );
   head.append(meta);
   // A long branch name (such as an agent's run branch) shortens with an ellipsis; the
@@ -3651,7 +3803,7 @@ function renderMapLegend() {
   // The agent's marks, while any agent's focus shows: a session, a task at work, or Ask.
   if (
     document.querySelector(
-      ".node.agent-here, .node.agent-trail, .node.agent-changed",
+      ".pk-card.is-agent, .pk-card.is-trail, .pk-card.is-touched",
     ) ||
     workflow.hasLiveSession()
   ) {
@@ -3799,23 +3951,22 @@ function showDockAgent() {
       .catch(() => {});
     return;
   }
-  // The agent's name stays; its model and effort shorten first.
-  const [agent, ...detail] = uses.split(" · ");
-  chip.replaceChildren(
-    element("span", "chip-agent", agent),
-    ...(detail.length
-      ? [element("span", "chip-detail", "\u00a0· " + detail.join(" · "))]
-      : []),
-  );
+  // Peek stands for the agent; its name and choice are the button's name and tooltip.
+  chip.replaceChildren(AgentMark(uses));
+  // The map's composer can do both: say what Ask uses and what new work uses, and open both.
   const what =
     job === "ask"
       ? "Ask uses"
       : kind === "session"
         ? "Sessions use"
         : "New tasks use";
-  chip.title = `${what} ${uses}. Change`;
+  const ask = kind === "intent" && agents.describe("ask");
+  chip.title = ask
+    ? `Ask uses ${ask}. New tasks use ${uses}. Change`
+    : `${what} ${uses}. Change`;
   chip.setAttribute("aria-label", chip.title);
-  chip.onclick = () => agents.open(job, () => renderTab());
+  chip.onclick = () =>
+    agents.open(kind === "intent" ? null : job, () => renderTab());
 }
 /* The review sheet's scroll position follows one rule, for every view:
  * - the same view drawn again (a poll, a new message, the map moving under it) keeps the
@@ -3866,8 +4017,24 @@ function placeReader() {
 $("#reviewScroll").addEventListener("scroll", rememberReading, {
   passive: true,
 });
+/** The tray beside the composer: the changes that wait to go to an agent, and the way to
+ * send them (docs/design/19-flows.md, flow 1). */
+function drawTray() {
+  $("#reviewActions .pk-tray")?.remove();
+  const count = isOwner() ? workflow.draftCount() : 0;
+  // Beside the composer, where a change is added: the title row has no room on a phone.
+  if (count)
+    $("#reviewActions").insertBefore(
+      ChangeTray({ count, onClick: () => workflow.openSend() }),
+      $("#dockAgent"),
+    );
+}
 function renderTab() {
+  // The place is read now, before the redraw: a scroll event comes a moment later, so a tap
+  // right after a scroll would otherwise find the old place.
+  rememberReading();
   drawTab();
+  drawTray();
   // After the title rows are drawn: the live line, and the way back to an explored task, go
   // into the one on screen.
   workflow.cueLive();
@@ -3968,7 +4135,8 @@ function drawTab() {
   // The dock follows the view: its modes on the map, a conversation's own box elsewhere.
   const kind = dockKind();
   $("#conversationDock").hidden = !kind;
-  $("#tabs").hidden = page;
+  // The composer has no modes: Ask and Add as a change are its two buttons.
+  $("#tabs").hidden = true;
   document
     .querySelectorAll("[data-compose]")
     .forEach((b) =>
@@ -3983,9 +4151,15 @@ function drawTab() {
   const caret = typing && [typing.selectionStart, typing.selectionEnd];
   composerHost.replaceChildren();
   const conversation = element("div", "conversation");
-  if (kind === "ask") ask.render(conversation, composerHost);
+  let intentPlace = "";
+  if (kind === "intent")
+    intentPlace = workflow.renderIntent(composerHost, {
+      onAsk: (text) => ask.ask(text),
+      asking: ask.asking(),
+    });
+  else if (kind === "ask") intentPlace = ask.render(conversation, composerHost);
   else if (kind === "session")
-    workflow.renderSessionComposer(
+    intentPlace = workflow.renderSessionComposer(
       composerHost,
       view.name === "run" ? view.id : null,
     );
@@ -4004,7 +4178,8 @@ function drawTab() {
     box?.focus({ preventScroll: true });
     box?.setSelectionRange(...caret);
   }
-  const anchor = composerHost.querySelector(".composer-anchor")?.textContent;
+  const anchor =
+    intentPlace || composerHost.querySelector(".composer-anchor")?.textContent;
   // The place's name stays readable on a phone: the commit after it shortens first.
   const [, place = anchor, commit] =
     anchor?.match(/^(.*?)( · [0-9a-f]{7,}| · uncommitted| · [^·]+\/[^·]+)?$/) ||
@@ -4024,14 +4199,13 @@ function drawTab() {
   showDockAgent();
   $("#selectionDetails").hidden = page || view.aspect !== "details";
   if (view.name === "ask") {
-    const fresh = iconButton(
-      element("button", "view-action"),
-      "add",
-      "New conversation",
-    );
-    fresh.type = "button";
-    fresh.disabled = !ask.hasMessages();
-    fresh.onclick = () => ask.clear();
+    const fresh = IconButton({
+      icon: "add",
+      label: "New conversation",
+      quiet: true,
+      disabled: !ask.hasMessages(),
+      onClick: () => ask.clear(),
+    });
     viewHead(`Ask · ${branchName()}`, { actions: [fresh] });
     body.append(conversation);
     return;
@@ -4961,7 +5135,7 @@ document.addEventListener("visibilitychange", async () => {
 // Header and map popovers close when the owner interacts elsewhere.
 document.addEventListener("pointerdown", (event) => {
   // A select menu belongs to the popover that opened it, though it renders in <body>.
-  if (event.target.closest?.(".frost-menu")) return;
+  if (event.target.closest?.(".pk-listbox")) return;
   for (const id of ["#revisionDetails", "#mapLegend"])
     if ($(id).open && !$(id).contains(event.target)) $(id).open = false;
 });
@@ -4983,9 +5157,10 @@ document.addEventListener("keydown", (event) => {
       return;
     const map = document.querySelector('.sheet[data-front="true"]');
     const target = inMap
-      ? map?.querySelector(".node.sel") || map?.querySelector(".map-canvas")
+      ? map?.querySelector(".pk-card.is-selected") ||
+        map?.querySelector(".pk-map-viewport")
       : document.querySelector("#viewHead:not([hidden]) button") ||
-        map?.querySelector(".map-canvas");
+        map?.querySelector(".pk-map-viewport");
     target?.focus({ preventScroll: true });
   });
 });
@@ -5094,7 +5269,7 @@ $("#stage").addEventListener("click", (event) => {
   // The path from when the tap began: a control that redrew itself during its own click
   // (the Follow eye) is no longer the target's ancestor, but it is still in the path.
   const control =
-    '.node, [role="button"], button, a, summary, details, input, select';
+    '.pk-card, [role="button"], button, a, summary, details, input, select';
   if (dragged || event.composedPath().some((n) => n.matches?.(control))) return;
   // A list or a task gives way to the map; on the map, the selection clears.
   if (nav.view().name !== "inspect" && !onThread()) nav.back();

@@ -410,8 +410,136 @@ async function shareCloudflare(c) {
       process.off(signal, cancel);
   }
 }
+
+/** Opens private Tailscale HTTPS access, saves the phone URL and restarts the service. Fails
+ * with the setup steps when Tailscale is not ready, and changes nothing then. */
+async function shareTailscale(c) {
+  let tunnelStatus;
+  try {
+    tunnelStatus = tunnel.status();
+    tunnel.expose(c.port, tunnelStatus);
+  } catch (cause) {
+    throw new Error(
+      `Tailscale sharing is not ready: ${cause.message}\n\n` +
+        "To use private Tailscale sharing:\n" +
+        "1. Install Tailscale on this host and your phone, and make sure the tailscale CLI is on PATH.\n" +
+        "2. Start Tailscale and sign into the same tailnet on both devices. Run tailscale status on the host to check the connection.\n" +
+        "3. Enable tailnet HTTPS if prompted. Review tailscale serve status and preserve any existing Serve configuration.\n" +
+        "4. Retry peekumi share, then run peekumi pair for your private pairing link.\n\n" +
+        "For an explicitly opted-in PUBLIC temporary URL instead, run:\n" +
+        "  peekumi share --tunnel cloudflare\n" +
+        "The Cloudflare URL is reachable from the internet; keep pairing links private.",
+      { cause },
+    );
+  }
+  c.publicUrl = tunnel.url(tunnelStatus);
+  c.secureCookie = true;
+  await save(c);
+  await stop();
+  await start();
+  console.log(
+    `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run peekumi pair`,
+  );
+}
+
+/** Adds the Git repository that holds `path` to the registry, and to the running service. */
+async function addRepository(path) {
+  const c = await config();
+  const live = await running();
+  const directory = await realpath(path);
+  const actual = await realpath(
+    run("git", ["-C", directory, "rev-parse", "--show-toplevel"]),
+  );
+  run("git", ["-C", actual, "rev-parse", "--verify", "HEAD"]);
+  if (!c.repositories.includes(actual)) c.repositories.push(actual);
+  await save(c);
+  if (!live)
+    return console.log(`Added ${actual}. It is served from the next start.`);
+  try {
+    await api("/api/repositories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: actual }),
+      timeout: 60000,
+    });
+    console.log(`Added ${actual}. It is being served now.`);
+  } catch (error) {
+    console.log(
+      `Added ${actual} to the registry, but the running service could not open it: ${error.message}\nRun peekumi restart to try again.`,
+    );
+  }
+}
+
+/** The private pairing link: the phone URL (or the local one) with the access token. */
+async function pairLink(readOnly = false) {
+  const c = await config();
+  const path = readOnly
+    ? join(state, "read-only/access-token")
+    : join(state, "access-token");
+  const token = (await readFile(path, "utf8")).trim();
+  return `${c.publicUrl || `http://127.0.0.1:${c.port}`}/#token=${token}`;
+}
+
+/** Asks a yes or no question in the terminal. An empty answer takes the default. */
+async function ask(question, yes = true) {
+  const { createInterface } = await import("node:readline/promises");
+  const line = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    const answer = (
+      await line.question(`${question} ${yes ? "[Y/n]" : "[y/N]"} `)
+    )
+      .trim()
+      .toLowerCase();
+    return answer ? answer.startsWith("y") : yes;
+  } finally {
+    line.close();
+  }
+}
+
+/** The guided start (`peekumi` with no arguments, in a terminal): adds the repository of the
+ * current folder, starts the service, offers private Tailscale access once, and prints the
+ * pairing link. Each question has a default. A public tunnel is never opened here: it needs
+ * `peekumi share --tunnel cloudflare`. */
+async function guidedStart() {
+  const c = await config();
+  let here = null;
+  try {
+    here = await realpath(
+      run("git", ["-C", process.cwd(), "rev-parse", "--show-toplevel"]),
+    );
+  } catch {}
+  if (here && !c.repositories.includes(here)) {
+    if (await ask(`Add this repository (${basename(here)})?`))
+      await addRepository(here);
+  } else if (!here && !c.repositories.length)
+    throw new Error(
+      "Run peekumi in a Git repository, or add one with peekumi repo add /path/to/repo",
+    );
+  await start();
+  const fresh = await config();
+  if (!fresh.publicUrl) {
+    let ready = false;
+    try {
+      tunnel.status();
+      ready = true;
+    } catch {}
+    if (ready && (await ask("Open Peekumi on your phone with Tailscale?")))
+      await shareTailscale(fresh);
+    else if (!ready)
+      console.log(
+        "Tailscale is not ready, so the link below works on this computer only. Run peekumi share when Tailscale is set up.",
+      );
+  }
+  console.log(`\nOpen this link on your phone:\n${await pairLink()}`);
+}
+
 async function main() {
   const [command = "help", sub, ...args] = process.argv.slice(2);
+  if (process.argv.length === 2 && process.stdin.isTTY && process.stdout.isTTY)
+    return guidedStart();
   if (
     command !== "share" &&
     process.argv
@@ -431,33 +559,7 @@ async function main() {
     // A running service picks the change up straight away; the registry is what it starts
     // from next time.
     const live = await running();
-    if (sub === "add") {
-      const directory = await realpath(args[0]);
-      const actual = await realpath(
-        run("git", ["-C", directory, "rev-parse", "--show-toplevel"]),
-      );
-      run("git", ["-C", actual, "rev-parse", "--verify", "HEAD"]);
-      if (!c.repositories.includes(actual)) c.repositories.push(actual);
-      await save(c);
-      if (!live)
-        return console.log(
-          `Added ${actual}. It is served from the next start.`,
-        );
-      try {
-        await api("/api/repositories", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: actual }),
-          timeout: 60000,
-        });
-        console.log(`Added ${actual}. It is being served now.`);
-      } catch (error) {
-        console.log(
-          `Added ${actual} to the registry, but the running service could not open it: ${error.message}\nRun peekumi restart to try again.`,
-        );
-      }
-      return;
-    }
+    if (sub === "add") return addRepository(args[0]);
     // The folder may already be gone; remove it by the path it was registered under.
     const directory = await realpath(args[0]).catch(() => resolve(args[0]));
     if (!c.repositories.includes(directory))
@@ -555,15 +657,7 @@ async function main() {
     return;
   }
   if (command === "pair") {
-    const c = await config();
-    const path =
-      sub === "--read-only"
-        ? join(state, "read-only/access-token")
-        : join(state, "access-token");
-    const token = (await readFile(path, "utf8")).trim();
-    console.log(
-      `${c.publicUrl || `http://127.0.0.1:${c.port}`}/#token=${token}`,
-    );
+    console.log(await pairLink(sub === "--read-only"));
     return;
   }
   if (command === "devices") {
@@ -582,33 +676,7 @@ async function main() {
     if (!(await running())) throw new Error("Start Peekumi first");
     await ensureIdle();
     if (name === "cloudflare") return shareCloudflare(c);
-    let tunnelStatus;
-    try {
-      tunnelStatus = tunnel.status();
-      tunnel.expose(c.port, tunnelStatus);
-    } catch (cause) {
-      throw new Error(
-        `Tailscale sharing is not ready: ${cause.message}\n\n` +
-          "To use private Tailscale sharing:\n" +
-          "1. Install Tailscale on this host and your phone, and make sure the tailscale CLI is on PATH.\n" +
-          "2. Start Tailscale and sign into the same tailnet on both devices. Run tailscale status on the host to check the connection.\n" +
-          "3. Enable tailnet HTTPS if prompted. Review tailscale serve status and preserve any existing Serve configuration.\n" +
-          "4. Retry peekumi share, then run peekumi pair for your private pairing link.\n\n" +
-          "For an explicitly opted-in PUBLIC temporary URL instead, run:\n" +
-          "  peekumi share --tunnel cloudflare\n" +
-          "The Cloudflare URL is reachable from the internet; keep pairing links private.",
-        { cause },
-      );
-    }
-    c.publicUrl = tunnel.url(tunnelStatus);
-    c.secureCookie = true;
-    await save(c);
-    await stop();
-    await start();
-    console.log(
-      `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run peekumi pair`,
-    );
-    return;
+    return shareTailscale(c);
   }
   if (command === "port") {
     if (await running())

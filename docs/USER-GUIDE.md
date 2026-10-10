@@ -98,11 +98,12 @@ Tap the comparison line in the header to open this popover.
 |---|---|---|
 | 1 | Branch or Pull request | Select which list to use. **Pull request** shows the pull requests of the repository instead of the branch controls. |
 | 2 | Branch | Select the branch to inspect. The most recent branches are first. The list does not show a remote branch that has a local copy, or the branches of agent tasks (the Tasks view shows them). Type in the filter box at the top of a long list to find a branch. This changes only what you see. Peekumi never switches your checkout. |
-| 3 | Commit summary | The message and date of the head commit, and the commit that Peekumi compares it with. |
-| 4 | Head revision | The newer commit in the comparison. |
-| 5 | Compare with | The older commit. **Previous commit (automatic)** follows the first parent of the head. If you select a specific commit, Peekumi pins it until you select the automatic option again or tap **Use previous commit**. |
-| 6 | Refresh | Looks for new commits. Peekumi never shows uncommitted work. |
-| 7 | Close | Closes the popover. You can also tap anywhere outside the popover to close it. |
+| 3 | Compare | Four choices. **The last commit** (the default) shows the newest commit and your uncommitted changes. **Since my last look** shows the commits since your last visit on this device. **This branch against main** shows the changes since the branch left main, as a pull request does. **Choose commits…** shows the two commit lists (5 and 6). A line under each choice tells what it compares, or why you cannot use it now. |
+| 4 | Commit summary | The message and date of the head commit, and the commit that Peekumi compares it with. |
+| 5 | Head revision | The newer commit in the comparison. You see it after you tap **Choose commits…**. |
+| 6 | Compare with | The older commit. **Previous commit (automatic)** follows the first parent of the head. If you select a specific commit, Peekumi pins it until you select the automatic option again or tap **Use previous commit**. |
+| 7 | Refresh | Looks for new commits, and reads your uncommitted changes again. |
+| 8 | Close | Closes the popover. You can also tap anywhere outside the popover to close it. |
 
 A list with more than 12 entries opens at the current entry. It has a filter box at the top and shows the number of entries at the bottom.
 
@@ -129,7 +130,7 @@ Each picker opens a menu like this one. A check mark (1) shows the current choic
 
 <img src="guide/05-time.jpg" width="340" alt="Time mode with commit cards above the map">
 
-In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows, compared with its parent. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits. Peekumi loads 80 commits at a time. When older commits exist, the first card is **Earlier**: tap it to load the next 80. In **Diff**, the last item of each commit list is **Earlier commits…**.
+In **Time**, a strip of commit cards shows above the map. The highlighted card (1) is the commit that Peekumi shows. Peekumi compares it with its parent, or with the base that you chose in **Compare with**. A chosen base stays until you select **Previous commit (automatic)**. Tap a different card (2) to go to that commit. Swipe the strip to the side to see older commits. Peekumi loads 80 commits at a time. When older commits exist, the first card is **Earlier**: tap it to load the next 80. In **Diff**, the last item of each commit list is **Earlier commits…**.
 
 ### Uncommitted changes
 
@@ -228,11 +229,11 @@ When that is not sufficient, Ask can look up more of the repository at the same 
 
 Some names of files and declarations in an answer point to exactly one location. These names have a dotted underline. Tap one, and the map moves to that location and selects it. Your question shows immediately when you send it. You can type the next question while the answer loads. Answers are in ASD-STE100 Simplified Technical English: short sentences, one meaning for each word, and steps as numbered instructions.
 
-If the answer ends with a suggested instruction, **Save as draft instruction** keeps it as a draft for the same selection. When you explore the changes of a task, this button shows **Add to requested changes**. The save button of the Instruction box also shows this label. Each of these buttons adds the change, at the location that it is about, to the next round of that task. Then you can continue to explore. Peekumi does this because a new draft starts from main and does not contain the work of the agent.
+If the answer ends with a suggested change, **Add as a change** keeps it as a draft for the same selection. The tray then counts it. When you explore the changes of a task, this button shows **Add to requested changes**. **Add as a change** in the composer then does the same. Each of these buttons adds the change, at the location that it is about, to the next round of that task. Then you can continue to explore. Peekumi does this because a new draft starts from main and does not contain the work of the agent.
 
 ### Agents
 
-Tap the agent name next to the composer, for example **Claude · Sonnet · low**. It shows what the current mode uses, and it opens that list. On a phone it shows only the agent, for example **Claude**. The **Agents** icon (two sliders) in the header of the Tasks page opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
+Tap the agent name next to the composer, for example **Claude · Sonnet · low**. It shows what the composer uses, and it opens that list. On a phone it shows only the agent, for example **Claude**. The **Agents** icon (two sliders) in the header of the Tasks page opens both: **Ask** sets what answers your questions, and **Tasks** sets what changes your code. For each one:
 
 1. Select the provider. For Ask: Claude Code, or OpenRouter (any model, with your API key). For tasks: Claude Code, Codex or OpenRouter. With OpenRouter, Peekumi runs the model itself: it reads, searches, edits and commits files in the worktree of the task, but it cannot run commands or tests. The first time that you select OpenRouter, paste your API key and tap **Test and save**.
 2. Select a model. **Default** is the model that the provider uses on its own. The other models come from the provider. **Other model** lets you type the name of a model.
@@ -244,33 +245,37 @@ The **Back to task** chip shows the number of changes that wait ("2 to send"). T
 
 When you send a question, the Ask page opens, and its dock is the question box. To open it again later, use [Conversations](#conversations). One conversation continues for the branch. It stays on the screen while you move on the map. Each question is about the item that is selected when you send it. "About …" shows where the subject changes. Each branch has its own conversation. When you explore the branch of an agent, Ask shows the conversation for that branch. When you go back, Ask shows the conversation for your branch again. Peekumi keeps each conversation, so a reload or an app update does not remove it. The **+** in the header of the Ask page starts a new conversation for the branch that you see.
 
-<img src="guide/11-comment.jpg" width="340" alt="The Instruction box while you write a draft instruction">
+<img src="guide/11-comment.jpg" width="340" alt="The composer while you write a change">
+
+The composer at the bottom of the map has one field. Write a question or a change, then choose:
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Instruction | Changes the box from a question to an instruction for an agent. |
-| 2 | Anchor | The selection and commit that the instruction is attached to. It stays attached if you go to a different location before you save. |
-| 3 | Instruction text | Describe the change that you want and the reason for it. |
-| 4 | Cancel | Discards the unsent instruction. |
-| 5 | Save draft | Saves the instruction as a draft. The map stays. Details then shows "1 instruction here", which opens the instructions on that selection, and Tasks lists the draft. Drafts are private until you send them to an agent. |
+| 1 | Place | The selection and commit that the question or the change is about. A change stays attached to it if you go to a different location before you add it. |
+| 2 | Field | Write a question, or describe the change that you want and the reason for it. |
+| 3 | Add as a change | Saves the text as a draft instruction at the place. The map stays. Details then shows "1 instruction here", and the tray counts it. Drafts are private until you send them to an agent. |
+| 4 | Ask | Asks the question. The Ask page opens with the answer. |
 
-<img src="guide/12-tasks.jpg" width="340" alt="The Tasks view with one draft instruction">
+<img src="guide/12-tasks.jpg" width="340" alt="The send sheet with one change">
+
+The tray in the sheet's title row ("1 change · Send") opens the send sheet. **Send N changes** on the Tasks page does the same.
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Review task | Makes a task from your drafts. Select the drafts and optional extra instructions. The task uses your choice for tasks in **Agents**; **Change** opens it. Then look at a preview of the exact task before you start it. |
-| 2 | Draft | A saved instruction with its anchor and commit. You can edit or delete it while it is a draft. |
-| 3 | Back | Goes back to the view before. The phone's back button does the same. |
+| 1 | Changes | The changes that wait, each with a checkbox. Clear a box to keep that change for later. |
+| 2 | How it runs | **In the background** starts a task. **With me** starts a session, with the changes as its first message. |
+| 3 | The exact task | The task as the agent gets it. Peekumi makes it when the sheet opens, and again after a change of choice. |
+| 4 | Start task | Starts the task. The task uses your choice for tasks in **Agents**; **Change agent** opens it. |
 
 After a task starts, the same view shows the progress of the agent, the checks that the agent reports and the commits that it made. The task first shows its state, then each instruction and the result from the agent. **Explore changes** shows all the work of the agent on the map, compared with the commit that the task started from. **Back to task** takes you back to the task and your previous view. **Agent log** contains the messages of the agent, the raw events and the generated task.
 
-**Approve** records your review. To add a note, tap **Add note** first. To ask for changes, write each change in the box at the bottom of the task and tap ✓. Peekumi adds the change to the list of the task. **Request changes** puts the cursor in that box. Then tap the button below the list, for example **Send 1 change to Codex**. The same agent starts the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. To open an earlier round, use **Open round N** in the latest round.
+When the merge would go through, the task offers **Approve and merge**: one confirmation records your review and merges. **Approve only** in the same confirmation records the review and stops. When something is in the way, the task offers **Approve**. To add a note, tap **Add note** first. To ask for changes, write each change in the box at the bottom of the task and tap ✓. Peekumi adds the change to the list of the task. **Request changes** puts the cursor in that box. Then tap the button below the list, for example **Send 1 change to Codex**. The same agent starts the next round. That round starts from the last commit of the agent, so Peekumi keeps the earlier work. To open an earlier round, use **Open round N** in the latest round.
 
 Tasks hold only work. An open session is a conversation, so it is in Conversations; after **Send to review** it becomes a task. The Tasks list puts tasks in groups by what they need from you. **Needs you** has drafts and tasks to review. **Working** has the tasks that an agent works on now. **Done · waiting to merge** has approved tasks that you did not merge yet, and these are muted. When a task is applied to main, it goes to **History**. A link at the bottom of the list opens History. On a selection, approved instructions and instructions of applied tasks go into one line, "N earlier instructions", which opens when you tap it.
 
 The Tasks button opens the Tasks list over the current view. Tap it again, or tap an empty area of the map, to go back. While an agent works, Peek works inside the Tasks button, and a small Peek with **Working** shows at the right of the sheet's title row. Tap it to open the task. When the agent completes its work, Peek jumps one time and the icon becomes blue for review. If Peek droops on an orange tint, a task stopped before it was complete and needs your action.
 
-Approval of a task does not change your code. After you approve, the task shows **Ready to merge into main**, with the number of commits and changed files. Tap **Merge into main**, then **Merge** to confirm. Peekumi does a fast-forward of main to the last commit of the task. It never pushes. After the merge, the task shows **Merged into main** and an **Undo merge** button. Undo works until main changes.
+Approval alone does not change your code. After **Approve** (or **Approve only**), the task shows **Ready to merge into main**, with the number of commits and changed files. Tap **Merge into main**, then **Merge** to confirm. Peekumi does a fast-forward of main to the last commit of the task. It never pushes. After the merge, the task shows **Merged into main** and an **Undo merge** button. Undo works until main changes.
 
 If you have uncommitted changes in a file that the merge changes, the task shows the files that are in the way. Tap **Commit my changes, then merge**. An agent writes a commit message for only those files. Examine the files and the message, then tap **Commit**. If main has new commits, tap **Update with main**. If main and the task conflict, the agent resolves the conflict in a new round, and you review the task again. Refer to [WORKFLOW.md](WORKFLOW.md) for the full loop.
 
@@ -280,7 +285,7 @@ If you have uncommitted changes in a file that the merge changes, the task shows
 
 A session is a live conversation with an agent. Use it when you want to work together with the agent, step by step. The agent reads and changes code, runs checks and commits, in its own worktree and on its own branch. You read each step and reply between its turns.
 
-To start a session, select a part of the map and tap **Session** in the dock. Write what you want to work on, and tap **Start session**. The session uses your choice for tasks in **Agents**.
+To start a session, write what you want in the composer and tap **Add as a change**. Then tap the tray, select **With me** and tap **Start session**. **Start a session here** in the context menu selects the card and selects **With me** for you. The session uses your choice for tasks in **Agents**.
 
 | # | Element | How to use it |
 |---|---|---|
@@ -291,9 +296,9 @@ To start a session, select a part of the map and tap **Session** in the dock. Wr
 
 Each step of the agent shows in the conversation. Tap a step to see its output. A file or declaration name in the conversation is a link: tap it, and the map moves there while the session stays on the screen. Under the conversation, one line gives the agent, the turns, the commits and the cost. Links there show the changes on the map, change how the session treats commands, and end the session.
 
-**Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. With Claude Code, the shield next to **Start session** sets it before you start: amber means that all commands are allowed. Codex and OpenRouter have no shield, because they never ask before commands. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
+**Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. With Claude Code, **Allow all commands** in the send sheet sets it before you start. Codex and OpenRouter have no shield, because they never ask before commands. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
 
-To finish, tap **End session**, then **Send to review**. The work then goes through the normal review: **Approve**, then **Merge**. Refer to [WORKFLOW.md](WORKFLOW.md#sessions) for all the details.
+To finish, tap **End session**, then **Send to review**. The work then goes through the normal review: **Approve and merge**, or **Approve**, then **Merge**. Refer to [WORKFLOW.md](WORKFLOW.md#sessions) for all the details.
 
 ### Agent focus
 
@@ -303,11 +308,11 @@ The map shows where the agent looks. This works for a session, for a task while 
 
 | # | Element | How to use it |
 |---|---|---|
-| 1 | Now | The card of the agent's current place glows, and a small Peek works on it. When the place is inside a folder, the folder card glows. |
+| 1 | Now | The card of the agent's current place glows, and a small Peek shows what the agent does there. With its lens, Peek reads or searches. With its pen, Peek edits or creates a file. When the agent runs a command, Peek's layers pulse. When the place is inside a folder, the folder card glows. |
 | 2 | Trail | The places before the current one keep an outline that fades with age. |
 | 3 | Changed | An amber dot marks a file that the session changed, or a folder that holds one. |
 | 4 | Follow | Tap the eye to move the map with the agent. The map puts the agent's place in the middle. When you move the map yourself, Follow pauses. Tap the eye again to continue. |
-| 5 | Live line | When the session, or a task at work, is not on the screen, a small Peek and one word show at the right of the sheet's title row: **Working**, **Needs you** or **Your turn**. Tap them to open the session or the task. |
+| 5 | Live line | When the session, or a task at work, is not on the screen, a small Peek and one word show at the right of the sheet's title row. The word is what the agent does now (**Reading**, **Searching**, **Editing**, **Creating**, **Running** or **Working**), or **Needs you** or **Your turn**. Tap them to open the session or the task. |
 
 The map key explains the three marks while a session is open.
 

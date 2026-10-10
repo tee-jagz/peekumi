@@ -1,7 +1,7 @@
 /** Navigation in the browser, as the view stack (frontend/nav.js) defines it:
  * - each open action shows a view with one header row, and Back (or Escape, or the row's
  *   arrow) always returns to the view before it;
- * - the dock follows the view: mode tabs on the map, the thread's reply box in a thread;
+ * - the dock follows the view: the composer on the map, the thread's reply box in a thread;
  * - Conversations hold Ask and sessions; Tasks hold only work;
  * - a small Peek and one word in the sheet's handle row lead to an open session;
  * - exploring a task's branch returns to the task and its comparison. Phone and desktop. */
@@ -48,7 +48,7 @@ try {
 
       await page.goto(f.server.url + "/#token=" + f.server.token);
       const front = page.locator('.sheet[data-front="true"]');
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
       const view = () =>
         page.evaluate(() => document.querySelector("#panel").dataset.view);
       const title = () => page.locator("#viewHead .view-title").innerText();
@@ -63,7 +63,8 @@ try {
           .click();
       const crumbs = () => page.locator(".crumbs").innerText();
       const tabs = page.locator("#tabs");
-      const backend = front.locator('.node[data-path="backend"]');
+      const composer = page.getByLabel("Ask, or describe a change");
+      const backend = front.locator('.pk-card[data-path="backend"]');
 
       // The aspect buttons show once the sheet is open (a phone starts with it closed).
       const aspect = async (name) => {
@@ -82,14 +83,26 @@ try {
         "Back from an aspect returns to Details",
       );
       assert.equal(
-        await front.locator('.node.sel[data-path="backend"]').count(),
+        await front
+          .locator('.pk-card.is-selected[data-path="backend"]')
+          .count(),
         1,
         "The selection stays",
       );
+      // The map's dock is the composer: one field, Add as a change and Ask, and no modes.
       assert.ok(
-        await tabs.isVisible(),
-        "The map's dock offers Ask, Instruction and Session",
+        await composer.isVisible(),
+        "The map's dock offers the composer",
       );
+      for (const name of ["Add as a change", "Ask"])
+        assert.ok(
+          await page
+            .locator("#composerHost")
+            .getByRole("button", { name, exact: true })
+            .isVisible(),
+          `The composer offers ${name}`,
+        );
+      assert.ok(await tabs.isHidden(), "The composer has no mode tabs");
 
       // Tasks hold work only; a task opens over the list and Back returns to it.
       await page.locator("#openTasks").click();
@@ -100,7 +113,10 @@ try {
         0,
         "No sessions in Tasks",
       );
-      assert.ok(await tabs.isHidden(), "No dock modes on a list");
+      assert.ok(
+        await page.locator("#conversationDock").isHidden(),
+        "No dock on a list",
+      );
       await page.locator(".task-link").first().click();
       assert.equal(await view(), "run");
       await arrow();
@@ -147,36 +163,46 @@ try {
       // Ask: a question opens its thread; the dock is the thread's box; Back returns.
       await page.locator(".crumbs .crumb-home").click();
       await backend.click();
-      await page.locator('[data-compose="ask"]').click();
-      await page.getByLabel("Your question").fill("Name references.");
+      await composer.fill("Name references.");
       await page
-        .getByRole("button", { name: "Send question", exact: true })
+        .locator("#composerHost")
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
       assert.equal(await view(), "ask");
       assert.match(await title(), /^Ask/);
-      assert.ok(await tabs.isHidden(), "In a thread the dock has no modes");
-      await page.locator(".ask-message.from-assistant").first().waitFor();
+      assert.ok(
+        await page.getByLabel("Your question").isVisible(),
+        "In a thread the dock is the thread's question box",
+      );
+      await page.locator(".pk-message.is-assistant").first().waitFor();
       await back();
       assert.equal(await view(), "details");
       assert.equal(
-        await front.locator('.node.sel[data-path="backend"]').count(),
+        await front
+          .locator('.pk-card.is-selected[data-path="backend"]')
+          .count(),
         1,
       );
 
-      // A session: it starts from the dock and opens; Back returns to the map, where the
-      // live line in the handle row leads back to it; Conversations list it and Ask.
-      await page.locator('[data-compose="session"]').click();
+      // A session: it starts from the send sheet (With me) and opens; Back returns to the
+      // map, where the live line in the handle row leads back to it; Conversations list it
+      // and Ask.
+      await composer.fill("Look around.");
       await page
-        .getByLabel("What do you want to work on?")
-        .fill("Look around.");
-      await page
-        .getByRole("button", { name: "Start session", exact: true })
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true })
         .click();
-      await page.locator(".session-log").waitFor();
+      await page.locator("#reviewActions .pk-tray").click();
+      assert.equal(await view(), "prepare");
+      await page.getByRole("button", { name: "With me", exact: true }).click();
+      await page.locator("#dispatchRun", { hasText: "Start session" }).click();
+      await page.getByRole("log", { name: "Session conversation" }).waitFor();
       assert.equal(await view(), "run");
       assert.ok(await tabs.isHidden());
       await page.getByLabel("Reply to the agent").waitFor();
-      await page.locator(".session-status", { hasText: "Your turn" }).waitFor();
+      await page
+        .locator("#viewHead .pk-status", { hasText: "Your turn" })
+        .waitFor();
       await back();
       assert.equal(await view(), "details");
       const live = page.locator("#liveLine");
@@ -209,15 +235,13 @@ try {
       await back();
       assert.equal(await view(), "details");
 
-      // An instruction is saved on the map; Details leads to the instructions there.
-      await page.locator('[data-compose="comments"]').click();
+      // A change is added on the map; Details leads to the instructions there.
+      await composer.fill("Rename route.");
       await page
-        .getByLabel("What should change, and why")
-        .fill("Rename route.");
-      await page
-        .getByRole("button", { name: "Save draft", exact: true })
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true })
         .click();
-      assert.equal(await view(), "details", "Saving keeps the map");
+      assert.equal(await view(), "details", "Adding keeps the map");
       await page
         .locator(".instructions-here", { hasText: "2 instructions here" })
         .click();
@@ -231,7 +255,7 @@ try {
 
       // Down to nothing: the selection clears, then the map goes up, then the app is left.
       await back();
-      assert.equal(await front.locator(".node.sel").count(), 0);
+      assert.equal(await front.locator(".pk-card.is-selected").count(), 0);
       assert.ok(page.url().startsWith(f.server.url));
       assert.deepEqual(errors, []);
       console.log(`PASS navigation ${viewport.width}`);

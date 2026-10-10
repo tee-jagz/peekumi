@@ -111,7 +111,8 @@ impl Workflow {
     /// `elsewhere` (the target is checked out in another folder: `folder`), `merged` (this
     /// task's merge is on the target; `undoable` says if Undo still works), `applied` (its
     /// commits reached the target another way), or `waiting` (not approved, or not the
-    /// latest finished round). `files` lists the task's own changes with line counts.
+    /// latest finished round). `files` lists the task's own changes with line counts. Before
+    /// the approval of a finished round, `next` holds the state that the merge would meet.
     pub fn merge_status(&self, id: &str) -> Result<Value> {
         let target = self.target_ref()?;
         let v = self.read()?;
@@ -154,14 +155,13 @@ impl Workflow {
             status["state"] = json!("applied");
             return Ok(status);
         }
-        if active(&run)
-            || run["status"] != "completed"
-            || !run["revisedBy"].is_null()
-            || !Self::approved(&v, &run)
-        {
+        if active(&run) || run["status"] != "completed" || !run["revisedBy"].is_null() {
             status["state"] = json!("waiting");
             return Ok(status);
         }
+        // Before the approval the state is `waiting`, and `next` says what the merge would
+        // meet, so the owner can see the commits and files and approve and merge in one step.
+        let approved = Self::approved(&v, &run);
         let base = self.git(&["merge-base", &target_sha, &head])?;
         let mut files = vec![];
         for line in self
@@ -185,34 +185,38 @@ impl Workflow {
         if behind > 0 {
             status["state"] = json!("behind");
             status["behind"] = json!(behind);
-            return Ok(status);
+        } else {
+            match self.checked_out(&target)? {
+                Some(Some(folder)) => {
+                    status["state"] = json!("elsewhere");
+                    status["folder"] = json!(folder);
+                }
+                Some(None) => {
+                    let dirty = self.uncommitted()?;
+                    let touched = self.files_between(&target_sha, &head)?;
+                    let blocking: Vec<&String> = dirty
+                        .iter()
+                        .map(|(p, _)| p)
+                        .filter(|p| touched.contains(*p))
+                        .collect();
+                    status["checkedOut"] = json!(true);
+                    status["uncommitted"] = json!(dirty.len());
+                    status["blocking"] = json!(blocking);
+                    status["state"] = json!(if blocking.is_empty() {
+                        "ready"
+                    } else {
+                        "blocked"
+                    });
+                }
+                None => {
+                    status["checkedOut"] = json!(false);
+                    status["state"] = json!("ready");
+                }
+            }
         }
-        match self.checked_out(&target)? {
-            Some(Some(folder)) => {
-                status["state"] = json!("elsewhere");
-                status["folder"] = json!(folder);
-            }
-            Some(None) => {
-                let dirty = self.uncommitted()?;
-                let touched = self.files_between(&target_sha, &head)?;
-                let blocking: Vec<&String> = dirty
-                    .iter()
-                    .map(|(p, _)| p)
-                    .filter(|p| touched.contains(*p))
-                    .collect();
-                status["checkedOut"] = json!(true);
-                status["uncommitted"] = json!(dirty.len());
-                status["blocking"] = json!(blocking);
-                status["state"] = json!(if blocking.is_empty() {
-                    "ready"
-                } else {
-                    "blocked"
-                });
-            }
-            None => {
-                status["checkedOut"] = json!(false);
-                status["state"] = json!("ready");
-            }
+        if !approved {
+            status["next"] = status["state"].clone();
+            status["state"] = json!("waiting");
         }
         Ok(status)
     }

@@ -20,6 +20,8 @@ const glyphs = {
   ask: "M10 17a7 7 0 1 0-6.2-3.8L3 17l3.6-.9A7 7 0 0 0 10 17ZM8 8a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9v.4M10 13.3v.1",
   comment: "M4 4h12v9h-5l-4 3v-3H4ZM7 7.5h6M7 10h4",
   send: "M10 16V4M5 9l5-5 5 5",
+  // Two layers: the changes that wait in the tray.
+  tray: "M3 8l7-4 7 4-7 4ZM3 12l7 4 7-4",
   pending: ring(5, 10, 0.8) + ring(10, 10, 0.8) + ring(15, 10, 0.8),
   details: ring(10, 10, 7.5) + "M10 9v5M10 6.2v.1",
   source: "M7 6l-4 4 4 4M13 6l4 4-4 4",
@@ -133,6 +135,26 @@ export function glyph(name) {
   svg.setAttribute("class", "glyph");
   const path = document.createElementNS(svg.namespaceURI, "path");
   path.setAttribute("d", glyphs[name]);
+  svg.append(path);
+  return svg;
+}
+
+/** Returns a decorative SVG icon for a ui.js component: a control glyph by name, or an object
+ * shape as `obj-<shape>` (`obj-folder`, `obj-file`, `obj-rootfiles`, `obj-function`, …).
+ * `small` gives the 16px size. Unknown names throw a RangeError. */
+export function uiIcon(name, small = false) {
+  const shape = name.startsWith("obj-") ? name.slice(4) : null;
+  const d = shape
+    ? paths[shape === "rootfiles" ? "files" : shape]
+    : Object.hasOwn(glyphs, name) && glyphs[name];
+  if (!d) throw new RangeError(`Unknown icon: ${name}`);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 20 20");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("class", small ? "pk-i is-sm" : "pk-i");
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", d);
   svg.append(path);
   return svg;
 }

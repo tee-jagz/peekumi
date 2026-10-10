@@ -19,7 +19,10 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
       assert.ok(await page.locator("#timeRail").isHidden());
       assert.equal(await page.locator(".sheet.peek").count(), 0);
       if (viewport.width < 900) {
@@ -34,7 +37,7 @@ try {
         );
         await page.screenshot({ path: "test-results/sheet-peek.png" });
         await page
-          .getByLabel("Your question")
+          .getByLabel("Ask, or describe a change")
           .fill("Keep my question while resizing");
         const anchor = await page.locator("#dockContext").textContent();
         const handle = page.locator("#sheetHandle");
@@ -45,10 +48,10 @@ try {
         );
         const startHeight = (await page.locator("#panel").boundingBox()).height;
         await page
-          .locator(".map-canvas")
+          .locator(".pk-map-viewport")
           .evaluate((el) => (el.dataset.dragIdentity = "preserved"));
         const originalTransform = await page
-          .locator(".map-canvas > .map-layer")
+          .locator(".pk-map-viewport > .pk-map-layer")
           .evaluate((el) => el.style.transform);
         await page.mouse.down();
         await page.mouse.move(
@@ -67,12 +70,14 @@ try {
           "Sheet follows the pointer before release",
         );
         assert.equal(
-          await page.locator(".map-canvas").getAttribute("data-drag-identity"),
+          await page
+            .locator(".pk-map-viewport")
+            .getAttribute("data-drag-identity"),
           "preserved",
         );
         assert.equal(
           await page
-            .locator(".map-canvas > .map-layer")
+            .locator(".pk-map-viewport > .pk-map-layer")
             .evaluate((el) => el.style.transform),
           originalTransform,
         );
@@ -94,7 +99,7 @@ try {
         );
         await page.screenshot({ path: "test-results/sheet-full.png" });
         assert.equal(
-          await page.getByLabel("Your question").inputValue(),
+          await page.getByLabel("Ask, or describe a change").inputValue(),
           "Keep my question while resizing",
         );
         assert.equal(await page.locator("#dockContext").textContent(), anchor);
@@ -143,19 +148,27 @@ try {
           0,
           "Reduced motion skips settling animation",
         );
-        await page.getByLabel("Your question").fill("");
+        await page.getByLabel("Ask, or describe a change").fill("");
       }
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
-      const save = page.getByRole("button", {
-        name: "Save draft",
-        exact: true,
-      });
+      // The map's composer has no modes: one field, then Add as a change or Ask.
+      assert.ok(await page.locator("#tabs").isHidden(), "No mode tabs");
+      const save = page
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true });
       assert.equal(
         await save.isDisabled(),
         true,
-        "An empty instruction cannot be saved",
+        "An empty change cannot be added",
       );
-      const box = page.getByLabel("What should change, and why");
+      assert.equal(
+        await page
+          .locator("#composerHost")
+          .getByRole("button", { name: "Ask", exact: true })
+          .isDisabled(),
+        true,
+        "An empty question cannot be asked",
+      );
+      const box = page.getByLabel("Ask, or describe a change");
       const oneLine = await box.evaluate((t) => t.offsetHeight);
       await box.fill("One\nTwo\nThree\nFour\nFive\nSix");
       const grown = await box.evaluate((t) => t.offsetHeight);
@@ -163,14 +176,23 @@ try {
       assert.ok(grown < oneLine * 3.2, "and stops at about four lines");
       await box.fill("Make the implementation easier to review.");
       assert.equal(await save.isDisabled(), false);
-      await page
-        .getByRole("button", { name: "Save draft", exact: true })
-        .click();
-      // Saving keeps the map; Details counts the instruction, and leads to it.
+      await save.click();
+      // Adding keeps the map; Details counts the instruction, and leads to it.
       assert.equal(
         await page.locator("#panel").getAttribute("data-view"),
         "details",
-        "A saved instruction stays with its selection instead of jumping to Tasks",
+        "An added change stays with its selection instead of jumping to Tasks",
+      );
+      // The tray in the sheet's title row counts the change and opens the send sheet.
+      const tray = page.locator("#reviewActions .pk-tray");
+      await tray.waitFor();
+      // The tray is an icon with the count; its name says what it does.
+      assert.equal(await tray.getAttribute("aria-label"), "1 change · Send");
+      assert.equal((await tray.innerText()).trim(), "1");
+      assert.equal(
+        await page.locator("#runBar .runbar").count(),
+        0,
+        "The old drafts line under Details is gone",
       );
       if (
         viewport.width < 900 &&
@@ -190,26 +212,52 @@ try {
       });
       await page.locator("#openTasks").click();
       assert.equal(await page.locator("#helperTools").isVisible(), false);
+      // Tasks sends the same changes, through the same send sheet.
       await page
-        .getByRole("button", { name: "Review task · 1 draft", exact: true })
+        .getByRole("button", { name: "Send 1 change", exact: true })
         .click();
+      await page.locator('#panel[data-view="prepare"]').waitFor();
+      await page.locator("#viewHead", { hasText: "Send 1 change" }).waitFor();
+      assert.equal(await page.locator("label.pk-pick").count(), 1);
+      assert.equal(
+        await page.locator("label.pk-pick input").isChecked(),
+        true,
+        "Every waiting change is picked at first",
+      );
+      assert.match(
+        await page.locator("label.pk-pick").innerText(),
+        /Make the implementation easier to review/,
+      );
+      // The sheet makes the exact task by itself; Start task waits for it.
+      const startTask = page.locator("#dispatchRun");
+      assert.equal(await startTask.innerText(), "Start task");
+      await page
+        .locator(".pk-disclosure > summary", { hasText: "The exact task" })
+        .waitFor();
+      assert.equal(await startTask.isDisabled(), false);
+      assert.equal(
+        await page.getByRole("button", { name: "Preview task" }).count(),
+        0,
+        "There is no separate preview step",
+      );
+      // The extra instructions go into the exact task: leaving the field makes it again.
       await page
         .getByLabel("Extra instructions (optional)")
         .fill("Keep the current behavior. Explain your checks.");
-      await page
-        .getByRole("button", { name: "Preview task", exact: true })
-        .click();
-      await page
-        .getByRole("button", { name: "Start task", exact: true })
-        .waitFor();
+      await page.getByLabel("Extra instructions (optional)").blur();
+      await page.waitForFunction(() =>
+        document
+          .querySelector(".pk-disclosure .pk-command")
+          ?.textContent.includes("Keep the current behavior"),
+      );
       assert.match(
-        await page.locator(".task-preview").innerText(),
+        await page.locator(".pk-disclosure .pk-command").textContent(),
         /Make the implementation easier to review/,
       );
       assert.equal(
-        await page.locator(".taskpre").isVisible(),
+        await page.locator(".pk-disclosure .pk-command").isVisible(),
         false,
-        "Generated prompt is hidden by default",
+        "The exact task is closed by default",
       );
       await page.screenshot({
         path: `test-results/workflow-preview-${viewport.width}.png`,
@@ -272,10 +320,13 @@ try {
           .isVisible(),
       );
       // Keeping diagnostics open must not freeze the terminal state or review actions.
+      // Main has not moved, so the merge would go through: one button approves and merges.
       await page.locator(".diagnostics > summary").click();
-      await page
-        .getByRole("button", { name: "Approve", exact: true })
-        .waitFor({ timeout: 20000 });
+      await page.locator("#approveMerge").waitFor({ timeout: 20000 });
+      assert.equal(
+        await page.locator("#approveMerge").innerText(),
+        "Approve and merge",
+      );
       assert.equal(
         await page.locator(".diagnostics").evaluate((d) => d.open),
         true,
@@ -332,7 +383,7 @@ try {
       assert.ok(
         (await page
           .locator(
-            '.sheet[data-front="true"] .node:not([data-status="unchanged"])',
+            '.sheet[data-front="true"] .pk-card:not([data-status="unchanged"])',
           )
           .count()) > 0,
         "The agent's changes are coloured on the map",
@@ -342,13 +393,12 @@ try {
       });
       // While exploring, changes are collected for this task's next round, not new drafts
       // from main, and exploring carries on.
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
       await page
-        .getByLabel("Your question")
+        .getByLabel("Ask, or describe a change")
         .fill("What would improve this change?");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
       await page
         .getByRole("button", { name: "Add to requested changes", exact: true })
@@ -365,13 +415,13 @@ try {
         await page.locator("#taskReturn").innerText(),
         "‹ Back to task · 1 to send",
       );
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
+      // The map's composer adds to the explored task too: Add as a change joins its list.
       await page
-        .getByLabel("What should change, and why")
+        .getByLabel("Ask, or describe a change")
         .fill("Keep the result file short.");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Add to requested changes", exact: true })
+        .getByRole("button", { name: "Add as a change", exact: true })
         .click();
       await page.locator("#taskReturn", { hasText: "2 to send" }).waitFor();
       assert.equal(
@@ -388,9 +438,7 @@ try {
           .count()) >= 1,
         true,
       );
-      await page
-        .getByRole("button", { name: "Approve", exact: true })
-        .waitFor();
+      await page.locator("#approveMerge").waitFor();
       // The task shows at once; the map goes back to the branch it left as it loads.
       await page.waitForFunction(
         () =>
@@ -399,7 +447,10 @@ try {
       assert.equal(await page.locator("#taskReturn").isVisible(), false);
       await explore();
       await page.reload();
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
       assert.equal(
         await page.locator("#branchPicker").inputValue(),
         "refs/heads/" + completed.branch,
@@ -418,9 +469,7 @@ try {
           .getByLabel("Review note")
           .fill("Inspected the result commit and the agent's reported checks.");
       }
-      await page
-        .getByRole("button", { name: "Approve", exact: true })
-        .waitFor();
+      await page.locator("#approveMerge").waitFor();
       await page.screenshot({
         path: `test-results/workflow-task-${viewport.width}.png`,
       });
@@ -469,9 +518,7 @@ try {
         0,
         "The list went with round 2",
       );
-      await page
-        .getByRole("button", { name: "Approve", exact: true })
-        .waitFor({ timeout: 20000 });
+      await page.locator("#approveMerge").waitFor({ timeout: 20000 });
       await page.locator("#openTasks").click();
       assert.equal(
         await page.locator(".task-link").count(),
@@ -479,7 +526,37 @@ try {
         "Earlier rounds are part of the task, not separate tasks",
       );
       await page.locator(".task-link").first().click();
-      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      // Approve and merge asks once, with the commits and the files. Cancel changes nothing.
+      const mergeSheet = page.locator("dialog.merge-dialog");
+      await page.locator("#approveMerge").click();
+      await mergeSheet.waitFor();
+      assert.match(
+        await mergeSheet.innerText(),
+        /Approve and merge 2 commits into main\?[^]*agent-result\.txt[^]*Nothing is pushed/,
+      );
+      for (const name of ["Cancel", "Approve only", "Approve and merge"])
+        assert.equal(
+          await mergeSheet.getByRole("button", { name, exact: true }).count(),
+          1,
+          `The merge dialog offers ${name}`,
+        );
+      await page.screenshot({
+        path: `test-results/workflow-approve-merge-${viewport.width}.png`,
+      });
+      await mergeSheet
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      await mergeSheet.waitFor({ state: "hidden" });
+      assert.equal(
+        await page.getByText("Approved by you", { exact: false }).count(),
+        0,
+        "Cancel records no approval",
+      );
+      // Approve only records the approval and leaves the merge for later.
+      await page.locator("#approveMerge").click();
+      await mergeSheet
+        .getByRole("button", { name: "Approve only", exact: true })
+        .click();
       await page
         .getByText("Approved by you", { exact: false })
         .first()
@@ -487,11 +564,15 @@ try {
       await page
         .getByText("Approved · ready to merge", { exact: true })
         .waitFor();
+      assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), f.sha);
       // A mistaken approval can be undone while the work is not on main.
       await page
         .getByRole("button", { name: "Reopen review", exact: true })
         .click();
-      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      await page.locator("#approveMerge").click();
+      await mergeSheet
+        .getByRole("button", { name: "Approve only", exact: true })
+        .click();
       await page
         .getByText("Approved · ready to merge", { exact: true })
         .waitFor();
@@ -539,22 +620,22 @@ try {
         await page.keyboard.press("Home");
       }
       const front = page.locator('.sheet[data-front="true"]');
-      await front.locator(".node").first().focus();
-      await front.locator(".node").first().click();
-      await front.locator(".node").first().click();
-      await front.locator('.node[data-path="module.py"]').click();
-      await front.locator('.node[data-path="module.py"]').click();
-      await front.locator('.node[data-kind="symbol"]').first().click();
+      await front.locator(".pk-card").first().focus();
+      await front.locator(".pk-card").first().click();
+      await front.locator(".pk-card").first().click();
+      await front.locator('.pk-card[data-path="module.py"]').click();
+      await front.locator('.pk-card[data-path="module.py"]').click();
+      await front.locator('.pk-card[data-kind="symbol"]').first().click();
       if (!(await page.locator("#helperTools").isVisible()))
         await page.locator("#sheetHandle").click();
       await page.locator('[data-tab="source"]').click();
       await page.locator('[data-source-view="before"]').click();
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page
-        .getByLabel("What should change, and why")
+        .getByLabel("Ask, or describe a change")
         .fill("Check this earlier declaration");
       await page
-        .getByRole("button", { name: "Save draft", exact: true })
+        .locator("#composerHost")
+        .getByRole("button", { name: "Add as a change", exact: true })
         .click();
       const anchored = await waitFor(async () => {
         const state = await f.req("/api/workflow");
@@ -566,34 +647,37 @@ try {
       assert.equal(anchored.anchor.kind, "symbol");
       assert.equal(anchored.anchor.path, "module.py");
       assert.equal(anchored.anchor.symbol, "run");
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      // Ask on the map's composer asks about the selection, and the answer opens by itself.
       await page
-        .getByLabel("Your question")
+        .getByLabel("Ask, or describe a change")
         .fill("What would improve this function?");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
-      await page
-        .getByRole("button", { name: "Save as draft instruction", exact: true })
-        .last()
+      const suggestion = page.locator(".pk-suggestion").last();
+      await suggestion
+        .getByRole("button", { name: "Add as a change", exact: true })
         .waitFor();
+      assert.match(await suggestion.innerText(), /^Suggested change/i);
       const countBefore = (await f.req("/api/workflow")).comments.length;
       await page.screenshot({ path: `test-results/ask-${viewport.width}.png` });
-      await page
-        .getByRole("button", { name: "Save as draft instruction", exact: true })
-        .last()
+      await suggestion
+        .getByRole("button", { name: "Add as a change", exact: true })
         .click();
       await waitFor(
         async () =>
           (await f.req("/api/workflow")).comments.length === countBefore + 1,
       );
-      // The draft is saved where the question was asked; the conversation stays on screen.
+      await suggestion
+        .getByText("Added as a change", { exact: true })
+        .waitFor();
+      // The change is added where the question was asked; the conversation stays on screen.
       assert.equal(
         await page.locator("#panel").getAttribute("data-view"),
         "ask",
       );
-      // Back on the map, the dock's modes stay inside the visible panel.
+      // Back on the map, the composer and its two buttons stay inside the visible panel.
       await page
         .locator("#viewHead")
         .getByRole("button", { name: "Back", exact: true })
@@ -601,8 +685,13 @@ try {
       await page
         .locator("#reviewScroll")
         .evaluate((el) => (el.scrollTop = el.scrollHeight));
-      for (const selector of ["#newComment", '#tabs [data-compose="ask"]']) {
-        const bounds = await page.locator(selector).boundingBox();
+      const composer = page.locator("#composerHost");
+      for (const target of [
+        composer.getByLabel("Ask, or describe a change"),
+        composer.getByRole("button", { name: "Add as a change", exact: true }),
+        composer.getByRole("button", { name: "Ask", exact: true }),
+      ]) {
+        const bounds = await target.boundingBox();
         const panel = await page.locator("#panel").boundingBox();
         assert.ok(
           bounds.y >= panel.y &&
@@ -610,27 +699,27 @@ try {
           "Primary action stays inside visible panel",
         );
       }
-      assert.equal(
-        await page.locator('#tabs [role="tab"]').count(),
-        3,
-        "Ask, Instruction and Session",
+      assert.ok(
+        await page.locator("#tabs").isHidden(),
+        "The composer has no mode tabs",
       );
       // A name in an answer links to the map; following it keeps the conversation in view.
       const home = page.locator(".crumbs .crumb-home");
       if (await home.isEnabled()) await home.click();
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.getByLabel("Your question").fill("Name references.");
+      await page
+        .getByLabel("Ask, or describe a change")
+        .fill("Name references.");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
-      const runLink = page.locator(".ask-message .code-link", {
+      const runLink = page.locator(".pk-message .pk-code-link", {
         hasText: /^run$/,
       });
       await runLink.waitFor();
       assert.equal(
         await page
-          .locator(".ask-message .code-link", { hasText: "nowhere_at_all" })
+          .locator(".pk-message .pk-code-link", { hasText: "nowhere_at_all" })
           .count(),
         0,
         "Unknown names stay plain text",
@@ -646,14 +735,14 @@ try {
       );
       assert.equal(
         await page
-          .locator('.sheet[data-front="true"] .node.sel')
+          .locator('.sheet[data-front="true"] .pk-card.is-selected')
           .getAttribute("data-key"),
         "symbol:run",
         "The linked declaration is selected on the map",
       );
       assert.ok(
         await page
-          .locator(".ask-message.from-user", { hasText: "Name references." })
+          .locator(".pk-message.is-user", { hasText: "Name references." })
           .isVisible(),
         "The conversation stays in view after following a link",
       );
@@ -668,7 +757,7 @@ try {
       const reading = await review.evaluate((el) => el.scrollTop);
       if (await home.isEnabled()) await home.click();
       await page
-        .locator(".ask-message.from-user", { hasText: "Name references." })
+        .locator(".pk-message.is-user", { hasText: "Name references." })
         .waitFor();
       assert.equal(
         await page.locator("#panel").getAttribute("data-view"),
@@ -707,15 +796,18 @@ try {
       });
       // Reloading (as an app update does) brings the conversation back.
       await page.reload();
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
       await page.locator("#openConversations").click();
       await page.locator(".conversation-row", { hasText: "Ask" }).click();
       await page
-        .locator(".ask-message.from-user", { hasText: "Name references." })
+        .locator(".pk-message.is-user", { hasText: "Name references." })
         .waitFor();
       assert.ok(
         await page
-          .locator(".ask-message.from-user", {
+          .locator(".pk-message.is-user", {
             hasText: "What would improve this function?",
           })
           .isVisible(),
@@ -723,7 +815,7 @@ try {
       );
       assert.equal(
         await page
-          .locator(".ask-message", {
+          .locator(".pk-message", {
             hasText: "What would improve this change?",
           })
           .count(),
@@ -767,9 +859,8 @@ try {
         .locator("#viewHead")
         .getByRole("button", { name: "Back", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
       await page
-        .getByLabel("What should change, and why")
+        .getByLabel("Ask, or describe a change")
         .fill("Keep this unfinished comment anchored.");
       await assertDockVisible();
       await page.screenshot({
@@ -782,7 +873,7 @@ try {
       );
       await page.locator("#openTasks").click();
       assert.equal(
-        await page.getByLabel("What should change, and why").inputValue(),
+        await page.getByLabel("Ask, or describe a change").inputValue(),
         "Keep this unfinished comment anchored.",
       );
       if (viewport.width < 900) {
@@ -878,14 +969,31 @@ try {
         (await f.git("log", "-1", "--format=%s", "main")).toString().trim(),
         "Record the owner's own result notes",
       );
-      await page
-        .getByRole("button", { name: "Approve", exact: true })
-        .waitFor({ timeout: 30000 });
-      await page.getByRole("button", { name: "Approve", exact: true }).click();
-      await page.locator('.merge-step[data-state="ready"]').waitFor();
-      await page.locator("#mergeTask").click();
+      // Up to date with main again, the merge would go through: Approve and merge does both
+      // after one confirmation.
+      await page.locator("#approveMerge").waitFor({ timeout: 30000 });
+      await page.locator("#approveMerge").click();
+      await page.locator("dialog.merge-dialog").waitFor();
+      assert.match(
+        await page.locator("dialog.merge-dialog h2").innerText(),
+        /^Approve and merge \d+ commits? into main\?$/,
+      );
       await page.locator("#confirmMerge").click();
       await page.locator('.merge-step[data-state="merged"]').waitFor();
+      assert.equal(
+        (await f.git("rev-parse", "main")).toString().trim(),
+        (
+          await f.git(
+            "rev-parse",
+            (await f.req("/api/workflow")).runs.find(
+              (r) => r.status === "completed" && !r.revisedBy,
+            ).branch,
+          )
+        )
+          .toString()
+          .trim(),
+        "Approve and merge moved main to the task's work",
+      );
       await page.locator("#openTasks").click();
       if (
         (await page.locator("#openTasks").getAttribute("aria-pressed")) !==
@@ -918,7 +1026,10 @@ try {
       assert.match(await page.locator("#dockContext").innerText(), /main$/);
       // Agents: two jobs, each one short list from the server, kept on this device.
       await page.reload();
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
       await page.locator("#openTasks").click();
       await page
         .locator(".tasks-uses", { hasText: "New tasks use Codex · Default" })
@@ -935,29 +1046,30 @@ try {
         path: `test-results/tasks-bell-${viewport.width}.png`,
       });
       await page.locator("#openAgents").click();
-      const agentsSheet = page.locator("dialog.agents-dialog");
-      await agentsSheet.locator(".agents-row", { hasText: /^Ask/ }).waitFor();
+      const agentsSheet = page.locator('dialog[aria-label="Agents"]');
+      await agentsSheet.locator(".pk-row", { hasText: /^Ask/ }).waitFor();
       assert.match(
         await agentsSheet.innerText(),
         /Ask[^]*Claude · Sonnet · low[^]*Tasks[^]*Codex · Default/,
       );
-      await agentsSheet.locator(".agents-row", { hasText: /^Tasks/ }).click();
+      await agentsSheet.locator(".pk-row", { hasText: /^Tasks/ }).click();
       // Provider, then its models as the provider reports them, then that model's efforts.
       assert.match(
         await agentsSheet.innerText(),
-        /Provider[^]*Model[^]*Default[^]*Fixture Large[^]*Fixture Small[^]*Other model[^]*Effort/,
+        /Provider[^]*Model[^]*Default[^]*Fixture Large[^]*Fixture Small[^]*Other model[^]*Effort/i,
       );
       await agentsSheet
         .getByRole("button", { name: "Claude Code", exact: true })
         .click();
       await agentsSheet.getByText("Opus", { exact: true }).click();
       assert.deepEqual(
-        await agentsSheet.locator(".agents-effort").allInnerTexts(),
+        await agentsSheet
+          .getByRole("radiogroup", { name: "Effort" })
+          .locator(".pk-row-title")
+          .allInnerTexts(),
         ["Auto", "Low", "Medium", "High", "Max"],
       );
-      await agentsSheet
-        .getByRole("button", { name: "High", exact: true })
-        .click();
+      await agentsSheet.getByRole("radio", { name: /^High/ }).click();
       await agentsSheet.getByText("Other model", { exact: true }).click();
       await agentsSheet.getByLabel("Model name").fill("--bad");
       await agentsSheet
@@ -981,7 +1093,10 @@ try {
         })
         .waitFor();
       await page.reload();
-      await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+      await page
+        .locator('.sheet[data-front="true"] .pk-card')
+        .first()
+        .waitFor();
       assert.deepEqual(
         await page.evaluate(
           () => JSON.parse(localStorage.getItem("peekumi.agents.default")).task,
@@ -989,26 +1104,27 @@ try {
         { agent: "claude", model: "opus", effort: "high" },
         "The choice stays on this device",
       );
-      // The composer's chip names what the current mode uses and opens that list.
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
+      // The chip beside the dock names what its box uses and opens that list: on the map,
+      // the agent for new tasks; in an Ask conversation, the agent for Ask.
+      await page
+        .locator("#dockAgent", { hasText: "Claude · Opus · high" })
+        .waitFor();
+      await page.locator("#openConversations").click();
+      await page.locator(".conversation-row", { hasText: "Ask" }).click();
       await page
         .locator("#dockAgent", { hasText: "Claude · Sonnet · low" })
         .waitFor();
       await page.locator("#dockAgent").click();
       await page
-        .locator("dialog.agents-dialog h2", { hasText: "Ask uses" })
+        .locator('dialog[aria-label="Agents"] h2', { hasText: "Ask uses" })
         .waitFor();
       await page.screenshot({
         path: `test-results/agents-ask-${viewport.width}.png`,
       });
       await page.keyboard.press("Escape");
-      await page.getByRole("tab", { name: "Instruction", exact: true }).click();
-      await page
-        .locator("#dockAgent", { hasText: "Claude · Opus · high" })
-        .waitFor();
       assert.deepEqual(errors, []);
       console.log(
-        `Workflow browser ${viewport.width}: draft → preview → dispatch → MCP report → inspect → verify passed`,
+        `Workflow browser ${viewport.width}: change → send sheet → task → MCP report → inspect → approve and merge passed`,
       );
     } finally {
       await page.close();

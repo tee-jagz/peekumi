@@ -1,0 +1,2743 @@
+/* Peekumi components: the styles of the parts in frontend/ui.js. Every value comes from
+   docs/design/tokens.json (tokens.css): colours, spacing, radii, the shadow, sizes and the type
+   styles. Class names start with pk-. The rules in docs/design/15-rules.md apply, and
+   scripts/lint-ui.mjs checks them. */
+
+/* ---------- Fonts ----------
+   Host Grotesk for the interface and JetBrains Mono for code, served by Peekumi itself so the
+   app works offline
+   (SIL Open Font License, fonts/OFL-next.txt and fonts/OFL-mono.txt). */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("fonts/mono-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("fonts/mono-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Host Grotesk";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("fonts/next-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Host Grotesk";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("fonts/next-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------- Base ---------- */
+.pk,
+.pk * {
+  box-sizing: border-box;
+}
+.pk {
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+.pk button,
+.pk input,
+.pk textarea,
+.pk select {
+  font: inherit;
+  color: inherit;
+}
+.pk :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.pk-i {
+  width: var(--icon);
+  height: var(--icon);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pk-i.is-sm {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.pk-muted {
+  color: var(--ink-muted);
+}
+.pk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ---------- Button ---------- */
+.pk-text {
+  margin: 0;
+  font: 400 16px/24px var(--font-ui);
+}
+.pk-note {
+  margin: 0;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* ---------- AppShell ----------
+   The page frame: the header, the commit rail in Time mode, the map, the sheet over the map, and
+   an overlay for a dialog. --pk-sheet-h is the sheet's height; the map controls stay above it.
+   From 900px wide the sheet becomes a right panel. */
+.pk-shell {
+  container: pk-shell / inline-size;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.pk-shell-body {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+}
+.pk-shell-body > .pk-rail {
+  grid-row: 2;
+}
+.pk-shell-body > .pk-map {
+  grid-row: 3;
+}
+.pk-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: end;
+}
+.pk-overlay > .pk-scrim {
+  z-index: 0;
+}
+.pk-overlay > .pk-dialog {
+  position: relative;
+}
+@container pk-shell (min-width: 900px) {
+  .pk-shell-body {
+    grid-template-columns: minmax(0, 1fr) 440px;
+  }
+  .pk-shell-body > .pk-header {
+    grid-column: 1 / -1;
+  }
+  .pk-shell-body > .pk-map {
+    grid-column: 1;
+    grid-row: 2 / 4;
+    margin: 0 var(--space-4) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .pk-shell-body > .pk-rail {
+    grid-column: 1;
+  }
+  .pk-shell-body > .pk-sheet {
+    position: relative;
+    grid-column: 2;
+    grid-row: 2 / 4;
+    height: auto;
+    margin: 0 var(--space-4) var(--space-4) 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .pk-shell-body .pk-grabber {
+    display: none;
+  }
+  .pk-shell-body > .pk-sheet .pk-sheet-body {
+    padding-top: var(--space-4);
+  }
+  .pk-shell-body .pk-map-controls {
+    bottom: var(--space-4);
+  }
+}
+
+.pk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 14px/20px var(--font-ui);
+  cursor: pointer;
+}
+.pk-button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.pk-button.is-plain {
+  border-color: transparent;
+  background: none;
+  color: var(--accent);
+  padding: 0 var(--space-2);
+}
+.pk-button.is-danger {
+  border-color: transparent;
+  background: none;
+  color: var(--danger);
+  padding: 0 var(--space-2);
+}
+.pk-button.is-block {
+  width: 100%;
+}
+.pk-button[disabled] {
+  opacity: var(--disabled);
+  cursor: default;
+}
+
+/* ---------- IconButton ---------- */
+.pk-icon-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pk-icon-button.is-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-muted);
+}
+.pk-icon-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.pk-icon-button[data-dot]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--surface);
+  background: var(--accent);
+}
+.pk-icon-button[data-dot="warning"]::after {
+  background: var(--warning);
+}
+
+/* ---------- SegmentedControl ---------- */
+.pk-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.pk-seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: 600 14px/20px var(--font-ui);
+  cursor: pointer;
+}
+.pk-seg button + button {
+  border-left: 1px solid var(--line);
+}
+.pk-seg button[aria-pressed="true"] {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+/* ---------- Tabs ---------- */
+.pk-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--line);
+}
+.pk-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--ink-muted);
+  font: 600 14px/20px var(--font-ui);
+  cursor: pointer;
+}
+.pk-tabs button span {
+  display: none;
+}
+.pk-tabs button[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.pk-tabs button[aria-selected="true"] span {
+  display: inline;
+}
+
+/* ---------- Fields ---------- */
+.pk-field,
+.pk-textarea,
+.pk-select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: 400 16px/24px var(--font-ui);
+}
+.pk-textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+.pk-textarea.is-code {
+  font: 400 14px/20px var(--font-mono);
+}
+.pk-field:disabled,
+.pk-textarea:disabled {
+  color: var(--ink-subtle);
+}
+.pk-field::placeholder,
+.pk-textarea::placeholder {
+  color: var(--ink-subtle);
+}
+.pk-field.is-error,
+.pk-textarea.is-error {
+  border-color: var(--danger);
+}
+.pk-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+}
+.pk-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  font: 600 14px/20px var(--font-ui);
+}
+.pk-help {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-help.is-error {
+  color: var(--danger);
+}
+.pk-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap);
+  cursor: pointer;
+}
+.pk-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* ---------- Disclosure ---------- */
+.pk-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  color: var(--accent);
+  font: 600 14px/20px var(--font-ui);
+  list-style: none;
+  cursor: pointer;
+}
+.pk-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.pk-disclosure > summary .pk-i {
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+.pk-disclosure[open] > summary .pk-i {
+  transform: rotate(180deg);
+}
+
+/* ---------- Row, list, meta ---------- */
+.pk-list {
+  display: grid;
+}
+.pk-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  background: none;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.pk-row:last-child {
+  border-bottom: 0;
+}
+.pk-row-body {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.pk-row-title {
+  font: 600 16px/22px var(--font-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-row-title.is-sm {
+  font: 400 14px/20px var(--font-ui);
+}
+.pk-row .pk-chevron {
+  color: var(--ink-subtle);
+}
+.pk-meta {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-meta code,
+.pk-code-sm {
+  font: 400 12px/16px var(--font-mono);
+}
+.pk-group-title {
+  margin: var(--space-5) 0 var(--space-1);
+  font: 600 12px/16px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+}
+.pk-group-title:first-child {
+  margin-top: 0;
+}
+
+/* ---------- Figure, facts ---------- */
+.pk-figure {
+  display: grid;
+  justify-items: end;
+  font: 600 20px/24px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pk-figure small {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-figure.is-muted {
+  color: var(--ink-muted);
+}
+.pk-figure.is-danger {
+  color: var(--danger);
+}
+.pk-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+.pk-facts div {
+  display: grid;
+  gap: 2px;
+}
+.pk-facts dt {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-facts dd {
+  margin: 0;
+  font: 600 16px/22px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- StatusLabel ---------- */
+.pk-status {
+  --state: var(--ink-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--state);
+  font: 600 12px/16px var(--font-ui);
+  white-space: nowrap;
+}
+.pk-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+.pk-status[data-state="working"],
+.pk-status[data-state="ready"] {
+  --state: var(--accent);
+}
+.pk-status[data-state="needs"] {
+  --state: var(--warning);
+}
+.pk-status[data-state="approved"],
+.pk-status[data-state="merged"] {
+  --state: var(--success);
+}
+.pk-status[data-state="failed"] {
+  --state: var(--danger);
+}
+.pk-status[data-state="working"]::before {
+  animation: pk-pulse 1s ease-in-out infinite alternate;
+}
+
+/* ---------- StatusMark ---------- */
+.pk-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: 600 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.pk-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.pk-mark.is-added {
+  color: var(--added);
+}
+.pk-mark.is-modified {
+  color: var(--modified);
+}
+.pk-mark.is-removed {
+  color: var(--removed);
+}
+.pk-mark.is-break {
+  color: var(--danger);
+}
+.pk-mark.is-files {
+  color: var(--ink-muted);
+}
+
+/* ---------- Code bits ---------- */
+.pk-code {
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  font: 400 13px/1 var(--font-mono);
+}
+.pk-code-link {
+  color: var(--ink);
+  text-decoration: underline dotted var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.pk-command {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font: 400 13px/20px var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---------- Header and comparison line ---------- */
+.pk-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--canvas);
+}
+.pk-header-name {
+  display: contents;
+}
+.pk-header-name strong {
+  grid-area: 1 / 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 24px/30px var(--font-mono);
+  letter-spacing: -0.02em;
+}
+.pk-header-name .pk-compare {
+  grid-area: 2 / 1 / 3 / 3;
+  justify-self: start;
+  white-space: nowrap;
+}
+.pk-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: 400 12px/16px var(--font-mono);
+  cursor: pointer;
+}
+.pk-compare.is-offline {
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+.pk-compare.is-offline::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--warning);
+}
+.pk-header-actions {
+  grid-area: 1 / 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+/* ---------- Map ---------- */
+.pk-map {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.pk-map-plane {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.pk-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.pk-edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+.pk-edge.is-impl {
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+.pk-edge.is-out {
+  stroke-dasharray: 6 4;
+}
+.pk-edge.is-break {
+  stroke: var(--danger);
+  stroke-dasharray: 6 4;
+}
+.pk-edge.is-added {
+  stroke: var(--added);
+}
+.pk-edge-mark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--danger);
+  pointer-events: none;
+}
+.pk-edge.is-removed {
+  stroke: var(--removed);
+  stroke-dasharray: 4 4;
+}
+.pk-edge.is-selected {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.pk-edge.is-dim {
+  opacity: var(--dim);
+}
+.pk-edge-arrow {
+  fill: var(--edge);
+}
+.pk-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--card-line);
+  border-top-color: var(--card-rim);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+/* Change shows by contrast: a changed card lifts a little; an unchanged one fades into the
+   ground (below). */
+.pk-card:not(.is-unchanged) {
+  box-shadow: var(--shadow-strata);
+}
+.pk-card.is-static {
+  position: relative;
+}
+.pk-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.pk-card-top .pk-i {
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.pk-card-name {
+  flex: 1;
+  min-width: 0;
+  font: 600 14px/20px var(--font-ui);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pk-card-name code {
+  font: 600 13px/20px var(--font-mono);
+}
+/* With a description, the name keeps one line, so the description is never cut. */
+.pk-card:has(.pk-card-desc) .pk-card-name {
+  -webkit-line-clamp: 1;
+}
+.pk-card-desc {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pk-card-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--warning);
+  flex: none;
+}
+.pk-card.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.pk-card.is-dim {
+  opacity: var(--dim);
+}
+.pk-card.is-unchanged {
+  border-color: var(--line);
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.6;
+}
+.pk-card.is-unchanged .pk-card-name {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.pk-card.is-removed {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+.pk-card.is-removed .pk-card-name {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+}
+.pk-card.is-agent {
+  border: 1.5px solid var(--accent);
+  box-shadow: var(--shadow-agent);
+  opacity: 1;
+}
+.pk-card:active {
+  transform: scale(0.985);
+}
+.pk-card.is-linked {
+  opacity: 1;
+}
+/* Where an agent has been: an accent outline that fades with each older place (data-trail 1
+   to 4), and a warning dot on a card that the agent changed. */
+.pk-card.is-trail {
+  border-color: var(--accent);
+}
+.pk-card.is-trail[data-trail="2"] {
+  border-color: var(--line-strong);
+}
+.pk-card.is-trail[data-trail="3"],
+.pk-card.is-trail[data-trail="4"] {
+  border-color: var(--line);
+}
+.pk-card.is-touched::after {
+  content: "";
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--warning);
+  pointer-events: none;
+}
+.pk-card.is-symbol .pk-card-name {
+  font: 600 13px/20px var(--font-mono);
+}
+.pk-card.is-stub {
+  min-height: 36px;
+  border-style: dotted;
+  background: var(--canvas);
+}
+.pk-card.is-stub .pk-card-name {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-card.is-boundary {
+  z-index: 0;
+  border-color: var(--line);
+  background: transparent;
+  pointer-events: none;
+}
+.pk-card.is-boundary .pk-card-name {
+  font: 600 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-card-top > svg,
+.pk-card-top > span > svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink-muted);
+}
+.pk-card-meta {
+  font: 400 12px/20px var(--font-mono);
+  color: var(--ink-muted);
+}
+.pk-card-parts {
+  display: inline-flex;
+  gap: 2px;
+  color: var(--modified);
+}
+.pk-card-bars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: auto;
+}
+.pk-card-bars span {
+  width: var(--space-3);
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+}
+.pk-peek.pk-card-peek {
+  position: absolute;
+  top: -22px;
+  right: var(--space-3);
+  width: 40px;
+  height: 22px;
+}
+.pk-card-foot {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+.pk-strata {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--line);
+}
+.pk-strata span {
+  min-width: 6px;
+}
+.pk-strata .is-added {
+  background: var(--added);
+}
+.pk-strata .is-modified {
+  background: var(--modified);
+}
+.pk-strata .is-removed {
+  background: var(--removed);
+}
+.pk-grid-dot {
+  fill: var(--line-strong);
+  opacity: var(--dim);
+}
+.pk-card-peek .peek {
+  overflow: hidden;
+}
+.pk-map-controls {
+  position: absolute;
+  left: var(--space-4);
+  bottom: calc(var(--pk-sheet-h, 0px) + var(--space-3));
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.pk-map-controls .pk-icon-button {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-muted);
+}
+.pk-map-controls .divider {
+  width: 1px;
+  margin: var(--space-2) 0;
+  background: var(--line);
+}
+
+/* ---------- Key ---------- */
+.pk-key {
+  display: grid;
+  gap: var(--space-2);
+  width: 280px;
+  padding: var(--space-4);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.pk-key h3 {
+  margin: 0 0 var(--space-1);
+  font: 600 14px/20px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font: 400 14px/20px var(--font-ui);
+}
+.pk-key-glyph {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  width: 32px;
+  flex: none;
+}
+.pk-key-glyph svg {
+  width: 32px;
+  height: 12px;
+}
+
+/* ---------- Time rail ---------- */
+.pk-rail {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  overflow-x: auto;
+  background: var(--canvas);
+  scrollbar-width: none;
+}
+.pk-commit {
+  display: grid;
+  gap: 2px;
+  min-width: 128px;
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.pk-commit code {
+  font: 600 12px/16px var(--font-mono);
+}
+.pk-commit span {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 132px;
+}
+.pk-commit[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* ---------- Review sheet ---------- */
+.pk-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--pk-sheet-h);
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--sheet-edge);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+.pk-grabber {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  width: 100%;
+  border: 0;
+  background: none;
+  cursor: grab;
+}
+.pk-grabber::before {
+  content: "";
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+}
+.pk-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-4) var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-4);
+}
+.pk-sheet-title {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+}
+.pk-sheet-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pk-sheet-title-row strong {
+  font: 600 18px/24px var(--font-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-sheet-title-row .pk-live,
+.pk-sheet-title-row .pk-return,
+.pk-sheet-title-row .pk-end {
+  margin-left: auto;
+}
+.pk-keyline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--danger);
+}
+.pk-keyline > .pk-button {
+  margin-left: auto;
+}
+.pk-return {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap);
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 600 14px/20px var(--font-ui);
+  cursor: pointer;
+}
+
+/* ---------- LiveLine ---------- */
+.pk-live {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap);
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 600 12px/16px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pk-live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  animation: pk-pulse 1s ease-in-out infinite alternate;
+}
+.pk-live.is-needs {
+  color: var(--warning);
+}
+.pk-live.is-needs::before {
+  animation: none;
+}
+.pk-live.has-peek::before {
+  display: none;
+}
+.pk-live .pk-peek {
+  width: 28px;
+  height: 28px;
+}
+.pk-live-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- PageHeader ---------- */
+.pk-page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.pk-page-header .titles {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding-top: var(--space-2);
+}
+.pk-page-header h2 {
+  margin: 0;
+  font: 600 22px/28px var(--font-ui);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.pk-page-header .actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* ---------- Composer ---------- */
+.pk-composer {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.pk-composer-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.pk-place {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pk-place code {
+  font: 400 12px/16px var(--font-mono);
+}
+.pk-composer-input {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.pk-composer-input .pk-field {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  resize: none;
+  font: 400 16px/22px var(--font-ui);
+  /* Four lines, then the field scrolls. */
+  max-height: 106px;
+  overflow-y: auto;
+}
+.pk-composer.is-docked {
+  padding: 0;
+  border-top: 0;
+}
+.pk-pick {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.pk-pick input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.pk-send {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+.pk-send[disabled] {
+  opacity: var(--disabled);
+}
+.pk-send.is-secondary {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--accent);
+}
+
+/* ---------- ChangeTray ---------- */
+.pk-tray {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  cursor: pointer;
+}
+/* The touch area stays 44px around the 36px button. */
+.pk-tray::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.pk-tray-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 12px/18px var(--font-ui);
+  text-align: center;
+}
+/* The agent choice in a 36px button; its touch area stays 44px. */
+.pk-agent-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.pk-agent-mark::before {
+  content: "";
+  position: absolute;
+  inset: -15px -10px;
+}
+/* Text for assistive technology only. */
+.pk-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Choices ---------- */
+.pk-choices .pk-row[aria-checked="true"] .pk-row-title {
+  color: var(--accent);
+}
+.pk-choices .pk-row > .pk-i {
+  color: var(--accent);
+}
+.pk-choices .pk-row:disabled .pk-row-title {
+  color: var(--ink-subtle);
+}
+
+/* ---------- Diff and source ---------- */
+.pk-diff,
+.pk-source {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow-x: auto;
+  font: 400 13px/20px var(--font-mono);
+}
+.pk-diff-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font: 600 13px/20px var(--font-mono);
+}
+.pk-line {
+  display: grid;
+  grid-template-columns: 4ch 4ch 2ch max-content;
+  min-width: 100%;
+  white-space: pre;
+}
+.pk-source .pk-line {
+  grid-template-columns: 4ch max-content;
+}
+.pk-line .n {
+  padding-right: var(--space-2);
+  text-align: right;
+  color: var(--ink-subtle);
+  font-size: 12px;
+  user-select: none;
+}
+.pk-line .s {
+  text-align: center;
+  user-select: none;
+}
+.pk-line .t {
+  padding-right: var(--space-4);
+}
+.pk-line.is-add {
+  background: var(--added-tint);
+}
+.pk-line.is-add .s {
+  color: var(--added);
+}
+.pk-line.is-del {
+  background: var(--removed-tint);
+}
+.pk-line.is-del .s {
+  color: var(--removed);
+}
+.pk-line .w-add {
+  background: var(--added-word);
+  border-radius: var(--radius-xs);
+}
+.pk-line .w-del {
+  background: var(--removed-word);
+  border-radius: var(--radius-xs);
+}
+.pk-line.is-hunk {
+  background: var(--accent-subtle);
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.pk-line.is-selected {
+  position: relative;
+  background: var(--accent-subtle);
+}
+.pk-line.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent);
+}
+.pk-collapsed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  font: 600 12px/16px var(--font-ui);
+  cursor: pointer;
+}
+.syn-c {
+  color: var(--ink-muted);
+}
+.syn-s {
+  color: var(--syntax-string);
+}
+.syn-d {
+  color: var(--accent);
+}
+
+/* ---------- Review parts ---------- */
+.pk-steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pk-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 28px;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-steps li.is-done {
+  color: var(--ink);
+}
+.pk-steps li.is-done .pk-i {
+  color: var(--success);
+}
+.pk-steps li.is-now {
+  color: var(--ink);
+  font-weight: 600;
+}
+.pk-steps li.is-next::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+}
+.pk-elapsed {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-report {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.pk-report p {
+  margin: 0;
+}
+.pk-report.is-plain {
+  border-bottom: 0;
+}
+.pk-report-title {
+  font: 600 16px/22px var(--font-ui);
+}
+.pk-report blockquote {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-muted);
+  font: 400 14px/20px var(--font-ui);
+}
+.pk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pk-actions.is-stack {
+  display: grid;
+}
+.pk-approval {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line);
+}
+.pk-step-list {
+  display: grid;
+}
+.pk-step > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0;
+  list-style: none;
+  cursor: pointer;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-step > summary::-webkit-details-marker {
+  display: none;
+}
+.pk-step > summary code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 13px/20px var(--font-mono);
+  color: var(--ink);
+}
+.pk-step-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.pk-step-mark.is-done {
+  color: var(--success);
+}
+.pk-step-mark.is-failed,
+.pk-step.is-failed .pk-step-label {
+  color: var(--danger);
+}
+.pk-step-mark.is-now::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  animation: pk-pending 1.2s ease-in-out infinite;
+}
+.pk-step.is-current > summary {
+  color: var(--ink);
+}
+.pk-step-body {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-3) var(--space-5);
+}
+.pk-approval h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font: 600 16px/22px var(--font-ui);
+  color: var(--warning);
+}
+.pk-approval h3.is-plain {
+  color: var(--ink);
+}
+.pk-proposal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.pk-proposal input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.pk-proposal .title {
+  font: 600 16px/22px var(--font-ui);
+}
+.pk-proposal .why {
+  grid-column: 2 / 4;
+  margin: 0;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-proposal .pk-disclosure,
+.pk-proposal .more {
+  grid-column: 2 / 4;
+  /* A grid item may shrink below its content: a wide rule scrolls inside its field. */
+  min-width: 0;
+}
+.pk-proposal .more {
+  display: grid;
+  gap: var(--space-1);
+}
+.pk-proposal.is-done .title,
+.pk-proposal.is-done .why {
+  color: var(--ink-subtle);
+}
+
+/* ---------- Conversation ---------- */
+.pk-thread {
+  display: grid;
+  gap: var(--space-3);
+}
+.pk-message {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font: 400 16px/24px var(--font-ui);
+  color: var(--ink);
+}
+.pk-message.is-user {
+  justify-self: end;
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.pk-message.is-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+}
+.pk-message .pk-note {
+  margin: var(--space-2) 0 0;
+}
+/* Prose: Markdown from answers, instructions and agent reports. */
+.pk-prose {
+  overflow-wrap: anywhere;
+}
+.pk-prose > * {
+  margin: 0;
+}
+.pk-prose > * + * {
+  margin-top: var(--space-2);
+}
+.pk-prose p {
+  white-space: pre-wrap;
+}
+.pk-prose-heading {
+  font-weight: 600;
+}
+.pk-prose ul,
+.pk-prose ol {
+  padding-left: var(--space-5);
+}
+.pk-prose li + li {
+  margin-top: var(--space-1);
+}
+.pk-prose code {
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  font: 400 14px/20px var(--font-mono);
+}
+.pk-prose pre {
+  overflow-x: auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font: 400 13px/20px var(--font-mono);
+}
+.pk-prose pre code {
+  padding: 0;
+  background: none;
+}
+/* A place in the text: a long press opens Peekumi's menu, not the browser's callout. */
+.pk-prose .pk-code-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pk-subject {
+  justify-self: end;
+  margin: var(--space-1) 0 0;
+  font: 600 12px/16px var(--font-ui);
+  color: var(--ink-subtle);
+}
+.pk-suggestion {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.pk-suggestion-label {
+  font: 600 12px/16px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+}
+.pk-suggestion .pk-button {
+  justify-self: start;
+}
+.pk-pending::after {
+  content: "…";
+  animation: pk-pending 1.2s ease-in-out infinite;
+}
+@keyframes pk-pending {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-pending::after {
+    animation: none;
+  }
+}
+
+/* ---------- Feedback ---------- */
+.pk-error {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+  color: var(--danger);
+}
+.pk-error strong {
+  font: 600 14px/20px var(--font-ui);
+}
+.pk-error p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--ink);
+  font: 400 14px/20px var(--font-ui);
+}
+.pk-error .pk-button {
+  grid-column: 2;
+  justify-self: start;
+}
+.pk-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+.pk-empty .pk-peek {
+  width: 88px;
+  height: 88px;
+}
+.pk-empty strong {
+  font: 600 18px/24px var(--font-ui);
+}
+.pk-empty p {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-muted);
+}
+.pk-skeleton {
+  display: grid;
+  gap: var(--space-3);
+}
+.pk-skeleton i {
+  display: block;
+  height: 12px;
+  border-radius: var(--radius-xs);
+  background: var(--line);
+  animation: pk-pulse 1s ease-in-out infinite alternate;
+}
+.pk-spinner {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: pk-spin 0.8s linear infinite;
+}
+.pk-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  font: 600 14px/20px var(--font-ui);
+}
+.pk-toast .pk-i {
+  color: var(--success);
+}
+.pk-menu {
+  display: grid;
+  min-width: 220px;
+  padding: var(--space-1);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.pk-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font: 400 14px/20px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.pk-menu button:hover,
+.pk-menu button[aria-selected="true"] {
+  background: var(--accent-subtle);
+}
+.pk-menu button .pk-i {
+  color: var(--ink-muted);
+}
+.pk-menu hr {
+  width: 100%;
+  margin: var(--space-1) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.pk-menu .is-danger {
+  color: var(--danger);
+}
+.pk-menu .is-accent,
+.pk-menu .is-accent .pk-i {
+  color: var(--success);
+}
+.pk-menu button:focus-visible {
+  outline: none;
+  background: var(--accent-subtle);
+}
+.pk-menu button small,
+.pk-menu button kbd {
+  margin-left: auto;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-subtle);
+}
+.pk-menu button kbd {
+  font-family: var(--font-mono);
+}
+.pk-menu button small + kbd {
+  margin-left: var(--space-2);
+}
+.pk-menu-head {
+  margin: 0;
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-menu-head strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* The app's map viewport (canvas.js): the whole map moves as one layer, promoted to the GPU
+   only while it moves. */
+.pk-map-viewport {
+  position: relative;
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  contain: layout paint;
+}
+.pk-map-viewport:active {
+  cursor: grabbing;
+}
+.pk-map-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.pk-map-layer.is-moving {
+  will-change: transform;
+}
+/* The list of a select (select.js), fixed to the viewport next to its trigger. */
+.pk-select-trigger {
+  min-height: 40px;
+  font: 400 14px/20px var(--font-ui);
+}
+.pk-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pk-select-trigger .pk-i {
+  color: var(--ink-muted);
+}
+.pk-select-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+.pk-listbox {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-1);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  font: 400 14px/20px var(--font-ui);
+  color: var(--ink);
+  outline: none;
+}
+.pk-listbox-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.pk-listbox-option[data-active] {
+  background: var(--accent-subtle);
+}
+.pk-listbox-option[aria-selected="true"] {
+  font-weight: 600;
+}
+.pk-listbox-option[aria-disabled="true"] {
+  color: var(--ink-subtle);
+  cursor: default;
+}
+.pk-listbox-option .pk-i {
+  margin-left: auto;
+  color: var(--accent);
+}
+.pk-listbox-label {
+  display: grid;
+  gap: 2px;
+}
+.pk-listbox-label small {
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-listbox-filter {
+  position: sticky;
+  top: calc(-1 * var(--space-1));
+  z-index: 2;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  margin: 0 0 var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: 400 16px/24px var(--font-ui);
+}
+.pk-listbox > [hidden] {
+  display: none;
+}
+.pk-listbox-count {
+  position: sticky;
+  bottom: calc(-1 * var(--space-1));
+  z-index: 2;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-listbox-heading {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font: 600 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+}
+.pk-listbox-heading:not(:first-child) {
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+/* A quiet note in the header's comparison row, after the comparison: never a card. */
+.pk-header-note {
+  order: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 26px;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.pk-note-peek {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.pk-header-note-action {
+  min-height: 26px;
+  margin-left: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.pk-header-note-action.is-main {
+  color: var(--accent);
+  font-weight: 600;
+}
+/* The context menu floats next to the finger or the cursor (menu.js places it). */
+.pk-menu.is-floating {
+  position: fixed;
+  z-index: 2000;
+  max-width: min(300px, calc(100vw - 16px));
+}
+@media (pointer: coarse) {
+  .pk-menu button kbd {
+    display: none;
+  }
+}
+/* While a menu is open, the card that it is about lifts with an accent ring, and the rest of
+   the map dims. */
+.pk-card.is-menu-target {
+  z-index: 3;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.is-menu-open .pk-map-viewport .pk-card:not(.is-menu-target) {
+  opacity: 0.45;
+}
+.pk-code-link.is-menu-target code {
+  background: var(--accent-subtle);
+}
+.pk-popover {
+  display: grid;
+  gap: var(--space-3);
+  width: 320px;
+  padding: var(--space-4);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.pk-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+.pk-modal {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 16px));
+  max-height: calc(100dvh - 40px);
+  margin: auto auto var(--space-2);
+  padding: 0;
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  overflow: auto;
+}
+.pk-modal::backdrop {
+  background: var(--scrim);
+}
+.pk-modal-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+@media (min-width: 900px) {
+  .pk-modal {
+    margin: auto;
+  }
+}
+.pk-dialog {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  border: 1px solid var(--float-line);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.pk-dialog h2 {
+  margin: 0;
+  font: 600 22px/28px var(--font-ui);
+  letter-spacing: -0.02em;
+}
+.pk-dialog p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* ---------- Motion ---------- */
+@keyframes pk-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+@keyframes pk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk *,
+  .pk *::before,
+  .pk *::after {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+/* ---------- Peek ----------
+   The states and poses of frontend/peek.js. The host is span.pk-peek. Reduced motion holds every
+   state still. */
+.pk-peek {
+  display: inline-block;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  vertical-align: middle;
+}
+.peek {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.peek:not(.tiled) .tile {
+  display: none;
+}
+.peek .head,
+.peek .pupil,
+.peek .lid,
+.peek .dots circle,
+.peek .sparkle path,
+.peek .l1,
+.peek .l2,
+.peek .l3,
+.peek .zz circle {
+  transform-box: fill-box;
+}
+.peek .l1,
+.peek .l2,
+.peek .l3,
+.peek .zz circle {
+  transform-origin: 50% 50%;
+}
+.peek .lid {
+  transform-origin: 50% 0;
+  transform: scaleY(0);
+}
+.peek .head {
+  transform-origin: 50% 100%;
+}
+.peek .squint,
+.peek .dots,
+.peek .sparkle,
+.peek .zz,
+.peek .glasses,
+.peek .pen {
+  opacity: 0;
+}
+.peek.is-idle .lid {
+  animation: peek-blink 4.6s infinite;
+}
+.peek.is-idle .pupil {
+  animation: peek-glance 7s ease-in-out infinite;
+}
+.peek.is-loading .head {
+  animation: peek-bob 1.8s ease-in-out infinite;
+}
+.peek.is-loading .pupil {
+  animation: peek-scan 1.8s ease-in-out infinite;
+}
+.peek.is-thinking .pupil {
+  transform: translate(3px, -7px);
+}
+.peek.is-thinking .lid {
+  transform: scaleY(0.18);
+}
+.peek.is-thinking .dots {
+  opacity: 1;
+}
+.peek.is-thinking .dots circle {
+  transform-origin: 50% 50%;
+  animation: peek-dot 1.4s ease-in-out infinite;
+  opacity: 0.25;
+}
+.peek.is-thinking .dots circle:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.peek.is-thinking .dots circle:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.peek.is-success .open {
+  opacity: 0;
+}
+.peek.is-success .squint,
+.peek.is-success .sparkle {
+  opacity: 1;
+}
+.peek.is-success .head {
+  animation: peek-hop 2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+.peek.is-success .sparkle path {
+  transform-origin: 50% 50%;
+  animation: peek-twinkle 2s ease-in-out infinite;
+}
+.peek.is-success .sparkle path:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.peek.is-error .head {
+  transform: translateY(22px);
+}
+.peek.is-error .lid {
+  transform: scaleY(0.48);
+}
+.peek.is-error .pupil {
+  animation: peek-sway 4s ease-in-out infinite;
+}
+.peek.is-empty .head {
+  animation: peek-up 5s ease-in-out infinite;
+}
+.peek.is-empty .pupil {
+  animation: peek-look 5s ease-in-out infinite;
+}
+@keyframes peek-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(0);
+  }
+  94% {
+    transform: scaleY(1);
+  }
+}
+@keyframes peek-glance {
+  0%,
+  38%,
+  100% {
+    transform: translate(0, 0);
+  }
+  46%,
+  60% {
+    transform: translate(-10px, 2px);
+  }
+  70%,
+  86% {
+    transform: translate(2px, -2px);
+  }
+}
+@keyframes peek-bob {
+  0%,
+  100% {
+    transform: translateY(7px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes peek-scan {
+  0%,
+  100% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+@keyframes peek-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes peek-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-14px) scaleY(1.03);
+  }
+  38% {
+    transform: translateY(0) scaleY(0.96);
+  }
+}
+@keyframes peek-twinkle {
+  0%,
+  100% {
+    transform: scale(0.4);
+    opacity: 0.2;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.5);
+    opacity: 0.3;
+  }
+}
+@keyframes peek-sway {
+  0%,
+  100% {
+    transform: translate(-6px, 4px);
+  }
+  50% {
+    transform: translate(2px, 5px);
+  }
+}
+@keyframes peek-up {
+  0%,
+  8% {
+    transform: translateY(64px);
+  }
+  22%,
+  78% {
+    transform: translateY(0);
+  }
+  92%,
+  100% {
+    transform: translateY(64px);
+  }
+}
+@keyframes peek-look {
+  0%,
+  26% {
+    transform: translate(0, 0);
+  }
+  36%,
+  46% {
+    transform: translate(-10px, 1px);
+  }
+  56%,
+  66% {
+    transform: translate(4px, 0);
+  }
+  76%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+/* Working: reading, while its layers lift and settle in turn. */
+.peek.is-working .lid {
+  transform: scaleY(0.24);
+}
+.peek.is-working .pupil {
+  animation: peek-read 2.4s ease-in-out infinite;
+}
+.peek.is-working .l1 {
+  animation: peek-place 2.4s ease-in-out infinite;
+}
+.peek.is-working .l2 {
+  animation: peek-place 2.4s ease-in-out 0.35s infinite;
+}
+.peek.is-working .l3 {
+  animation: peek-place 2.4s ease-in-out 0.7s infinite;
+}
+/* Peeking: ducks behind its layers, then looks over them. */
+.peek.is-peeking .head,
+.peek.is-searching .head {
+  animation: peek-dive 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.peek.is-peeking .pupil,
+.peek.is-searching .pupil {
+  animation: peek-dart 2.8s ease-in-out infinite;
+}
+/* Ready: eye on you, one bounce, then a long wait. */
+.peek.is-ready .pupil {
+  transform: translate(-5px, 3px) scale(1.06);
+}
+.peek.is-ready .head {
+  animation: peek-perk 3.2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+/* Merged: the lower layers slide into the top one, then a sparkle. */
+.peek.is-merged .pupil {
+  transform: translate(-3px, -5px);
+}
+.peek.is-merged .l2 {
+  animation: peek-merge2 3.8s ease-in-out infinite;
+}
+.peek.is-merged .l3 {
+  animation: peek-merge3 3.8s ease-in-out infinite;
+}
+.peek.is-merged .sparkle {
+  animation: peek-shine 3.8s ease-in-out infinite;
+}
+/* Asleep: eye closed, breathing, dots drifting up. */
+.peek.is-asleep .lid {
+  transform: scaleY(1);
+}
+.peek.is-asleep .head {
+  animation: peek-breathe 4s ease-in-out infinite;
+}
+.peek.is-asleep .zz {
+  opacity: 1;
+}
+.peek.is-asleep .zz circle {
+  opacity: 0;
+  animation: peek-drift 4s ease-out infinite;
+}
+.peek.is-asleep .zz circle:nth-child(2) {
+  animation-delay: 1.3s;
+}
+/* Stopped: half-lidded, sunk, its layers out of line. */
+.peek.is-stopped .head {
+  transform: translateY(10px);
+}
+.peek.is-stopped .lid {
+  transform: scaleY(0.5);
+}
+.peek.is-stopped .pupil {
+  animation: peek-down 5s ease-in-out infinite;
+}
+.peek.is-stopped .l1 {
+  transform: rotate(-3deg);
+}
+.peek.is-stopped .l2 {
+  transform: translateX(8px) rotate(2deg);
+}
+.peek.is-stopped .l3 {
+  transform: translateX(-6px) rotate(-3deg);
+}
+/* What the agent does, from its last step. Each pose moves only Peek's own parts: the eye
+   reads, a layer shifts, layers stack up, or the layers pulse. With reduced motion, each holds
+   a still pose that differs from the others. Searching is the peeking motion. */
+/* Reading: the eye reads line by line behind its reading lens. */
+.peek.is-reading .glasses,
+.peek.is-searching .glasses {
+  opacity: 1;
+}
+.peek.is-reading .lid {
+  transform: scaleY(0.3);
+}
+.peek.is-reading .pupil {
+  transform: translate(-8px, 5px);
+  animation: peek-lines 3.6s ease-in-out infinite;
+}
+/* Editing: the eye follows its pencil, which writes along the top layer. */
+.peek.is-editing .lid {
+  transform: scaleY(0.36);
+}
+.peek.is-editing .pupil,
+.peek.is-creating .pupil {
+  transform: translate(8px, 9px);
+}
+.peek.is-editing .pen,
+.peek.is-creating .pen {
+  opacity: 1;
+  animation: peek-write 2.4s ease-in-out infinite;
+}
+/* Creating: the pencil writes while new layers rise into the stack under Peek. */
+.peek.is-creating .lid {
+  transform: scaleY(0.36);
+}
+.peek.is-creating .pen {
+  animation-duration: 3.2s;
+}
+.peek.is-creating .l2 {
+  animation: peek-lay 3.2s ease-out infinite;
+}
+.peek.is-creating .l3 {
+  opacity: 0.4;
+  animation: peek-lay 3.2s ease-out 0.4s infinite;
+}
+/* Running: the eye holds still while the layers pulse in turn, top to bottom. */
+.peek.is-running .lid {
+  transform: scaleY(0.3);
+}
+.peek.is-running .l1,
+.peek.is-running .l2,
+.peek.is-running .l3 {
+  animation: peek-pulse 1.2s ease-in-out infinite;
+}
+.peek.is-running .l2 {
+  opacity: 0.55;
+  animation-delay: 0.2s;
+}
+.peek.is-running .l3 {
+  animation-delay: 0.4s;
+}
+@keyframes peek-lines {
+  0%,
+  100% {
+    transform: translate(-8px, 3px);
+  }
+  22% {
+    transform: translate(6px, 3px);
+  }
+  27% {
+    transform: translate(-8px, 7px);
+  }
+  50% {
+    transform: translate(6px, 7px);
+  }
+  55% {
+    transform: translate(-8px, 11px);
+  }
+  78% {
+    transform: translate(6px, 11px);
+  }
+  84% {
+    transform: translate(-8px, 3px);
+  }
+}
+@keyframes peek-write {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-6px, -3px);
+  }
+  30% {
+    transform: translate(-12px, 0);
+  }
+  45% {
+    transform: translate(-18px, -3px);
+  }
+  60%,
+  70% {
+    transform: translate(-24px, 0);
+  }
+}
+@keyframes peek-lay {
+  0%,
+  10% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  30%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+@keyframes peek-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0.45;
+  }
+}
+@keyframes peek-read {
+  0%,
+  100% {
+    transform: translate(-9px, 9px);
+  }
+  50% {
+    transform: translate(6px, 9px);
+  }
+}
+@keyframes peek-place {
+  0%,
+  45%,
+  100% {
+    transform: translateY(0) scaleX(1);
+  }
+  15% {
+    transform: translateY(-6px) scaleX(0.94);
+  }
+  28% {
+    transform: translateY(1px) scaleX(1.02);
+  }
+}
+@keyframes peek-dive {
+  0%,
+  12% {
+    transform: translateY(0);
+  }
+  24%,
+  40% {
+    transform: translateY(50px);
+  }
+  54%,
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes peek-dart {
+  0%,
+  54% {
+    transform: translate(0, 0);
+  }
+  62%,
+  72% {
+    transform: translate(-10px, 1px);
+  }
+  80%,
+  92% {
+    transform: translate(5px, 0);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+@keyframes peek-perk {
+  0%,
+  30%,
+  100% {
+    transform: translateY(0);
+  }
+  10% {
+    transform: translateY(-12px) scaleY(1.03);
+  }
+  20% {
+    transform: translateY(0) scaleY(0.97);
+  }
+}
+@keyframes peek-merge2 {
+  0%,
+  15%,
+  92%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+  40%,
+  80% {
+    transform: translateY(-23px) scaleX(1.27);
+    opacity: 0;
+  }
+}
+@keyframes peek-merge3 {
+  0%,
+  22%,
+  92%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+  47%,
+  80% {
+    transform: translateY(-44px) scaleX(1.81);
+    opacity: 0;
+  }
+}
+@keyframes peek-shine {
+  0%,
+  45%,
+  86%,
+  100% {
+    opacity: 0;
+  }
+  56%,
+  76% {
+    opacity: 1;
+  }
+}
+@keyframes peek-breathe {
+  0%,
+  100% {
+    transform: translateY(12px) scaleY(1);
+  }
+  50% {
+    transform: translateY(12px) scaleY(1.035);
+  }
+}
+@keyframes peek-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(12px, -26px);
+  }
+}
+@keyframes peek-down {
+  0%,
+  100% {
+    transform: translate(-6px, 8px);
+  }
+  50% {
+    transform: translate(1px, 8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .peek * {
+    animation: none !important;
+  }
+}
+/* Peek in the interface: sizes for each place, and the still variant. */
+.pk-peek.is-still .peek * {
+  animation: none;
+}
+.pk-head-peek {
+  width: 44px;
+  height: 44px;
+}
+.pk-toast .pk-peek {
+  width: 24px;
+  height: 24px;
+}

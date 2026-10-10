@@ -20,8 +20,8 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(server.url + "/#token=" + server.token);
     const front = page.locator('.sheet[data-front="true"]'),
-      group = front.locator('.node[data-kind="rootfiles"]'),
-      file = front.locator('.node[data-path="lib.rs"]');
+      group = front.locator('.pk-card[data-kind="rootfiles"]'),
+      file = front.locator('.pk-card[data-path="lib.rs"]');
     // Root-level files sit inside the "Repository files" group.
     await group.waitFor();
     await group.click();
@@ -29,11 +29,11 @@ try {
     await file.waitFor();
     await file.click();
     await file.click();
-    const imp = front.locator('.node[data-key="symbol:imp"]');
+    const imp = front.locator('.pk-card[data-key="symbol:imp"]');
     await imp.waitFor();
     assert.deepEqual(
       await front
-        .locator('.node[data-key="symbol:sig"] .part-icon')
+        .locator('.pk-card[data-key="symbol:sig"] .part-icon')
         .evaluateAll((icons) => icons.map((i) => i.getAttribute("aria-label"))),
       ["Signature changed"],
     );

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AppHeader · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><header class="pk-header"><div class="pk-header-name"><strong>peekumi</strong><button type="button" class="pk-compare"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M4 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M4 15a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M6 7v6M14 8c0 3-8 2-8 5"></path></svg>main · ea2ae7f → c63a1eb</button></div><div class="pk-header-actions"><div class="pk-seg" role="group" aria-label="Mode"><button type="button" aria-pressed="false" aria-label="Time" title="Time"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0M10 6v4l3 2"></path></svg></button><button type="button" aria-pressed="true" aria-label="Diff" title="Diff"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 3h9v9H3ZM8 8h9v9H8Z"></path></svg></button></div><button type="button" class="pk-icon-button" aria-label="Conversations" title="Conversations"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 4h10v7H8l-3 3v-3H3ZM15.5 8H17v7h-1.5v2.5L12 15H9"></path></svg></button><button type="button" class="pk-icon-button" aria-label="Tasks" title="Tasks" data-dot="accent"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 5l2 2 3-3M10 6h7M3 13l2 2 3-3M10 14h7"></path></svg></button></div></header></div>
+</body>
+</html>

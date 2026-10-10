@@ -2,9 +2,19 @@
  * One conversation runs for the session and stays in view as the map moves; each question is
  * about whatever was selected when it was sent, and is marked when that changes. Answers
  * stream in as Claude writes them; lookups show while they happen. */
-import { iconButton } from "./icons.js";
-import { richText } from "./text.js";
-import { peek } from "./peek.js";
+import {
+  Prose,
+  Button,
+  Message,
+  Note,
+  Peek,
+  Pending,
+  ReplyComposer,
+  SubjectMark,
+  Suggestion,
+  Text,
+  Thread,
+} from "./ui.js";
 export function createAsk({
   api,
   stream,
@@ -60,61 +70,47 @@ export function createAsk({
     anchor.path?.split("/").at(-1) ||
     rootSubject?.() ||
     "the repository";
-  const el = (tag, text) => {
-    const n = document.createElement(tag);
-    if (text !== undefined) n.textContent = text;
-    return n;
-  };
+  /** A button that runs `fn` once at a time, and tells the owner when it fails. */
   const btn = (label, fn) => {
-    const b = el("button", label);
-    b.type = "button";
-    b.className = "btn";
-    b.onclick = async () => {
-      b.disabled = true;
-      try {
-        await fn();
-      } catch (e) {
-        notice(e.message, true);
-      } finally {
-        b.disabled = false;
-      }
-    };
+    const b = Button({
+      label,
+      onClick: async () => {
+        b.disabled = true;
+        try {
+          await fn();
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          b.disabled = false;
+        }
+      },
+    });
     return b;
   };
   /** The in-progress reply: text as it streams (without a half-written suggestion line), or
    * Peek thinking until the first words arrive, plus any lookups made so far. */
   function pendingBubble(chat) {
-    const waiting = el("article");
-    waiting.className = "ask-message from-assistant is-pending";
-    waiting.setAttribute("aria-live", "polite");
     const text = chat.partial.replace(
       /\n?Suggested (instruction|comment):[^]*$/,
       "",
     );
-    if (text.trim()) {
-      waiting.classList.add("is-streaming");
-      waiting.append(richText(text, "ask-text"));
-    } else {
-      const label = el("span", "Reading the code");
-      label.className = "pending-text";
-      // Peek looks over its layers while Ask is reading the code, and thinks otherwise. The
-      // reply is redrawn on every event, so the same Peek carries on rather than restarting.
-      const mood = chat.live.length ? "peeking" : "thinking",
-        current = document.querySelector(".ask-message.is-pending .peek-mark");
-      waiting.append(
-        current?.dataset.state === mood ? current : peek(mood),
-        label,
-      );
-    }
-    if (chat.live.length) {
-      const read = el(
-        "p",
-        "Looking up: " + [...new Set(chat.live)].join(" · "),
-      );
-      read.className = "read-note ask-lookups";
-      waiting.append(read);
-    }
-    return waiting;
+    // Peek looks over its layers while Ask is reading the code, and thinks otherwise. The
+    // reply is redrawn on every event, so the same Peek carries on rather than restarting.
+    const mood = chat.live.length ? "peeking" : "thinking",
+      current = document.querySelector(".pk-message.is-pending .peek-mark");
+    return Message(
+      { pending: true },
+      text.trim()
+        ? Prose(text)
+        : [
+            current?.dataset.state === mood
+              ? current
+              : Peek({ state: mood, size: "live" }),
+            Pending("Reading the code"),
+          ],
+      chat.live.length > 0 &&
+        Note("Looking up: " + [...new Set(chat.live)].join(" · ")),
+    );
   }
   let painting = 0;
   /** Repaints only the streaming bubble, once per frame, so typing elsewhere is undisturbed. */
@@ -123,9 +119,93 @@ export function createAsk({
     painting = requestAnimationFrame(() => {
       painting = 0;
       document
-        .querySelector(".ask-message.is-pending")
+        .querySelector(".pk-message.is-pending")
         ?.replaceWith(pendingBubble(chat));
     });
+  }
+  /** Sends `chat.question` about the current context: shows it at once, streams the answer
+   * into this branch's conversation, and puts the question back when the answer fails. */
+  async function send() {
+    if (chat.pending || !chat.question.trim()) return;
+    const question = chat.question,
+      asked = context();
+    // Earlier questions carry their subject, so follow-ups across selections make sense.
+    const history = chat.messages.slice(-12).map(({ role, text, subject }) => ({
+      role,
+      text: (role === "user" ? `[About ${subject}] ${text}` : text).slice(
+        0,
+        8000,
+      ),
+    }));
+    // Bound prior dialogue separately from server-built source context.
+    while (JSON.stringify(history).length > 11000) history.shift();
+    // Show the question at once; the answer can take several seconds. The answer joins
+    // this branch's conversation even if the view moves to another branch meanwhile.
+    const thread = chat.messages,
+      key = branch;
+    chat.pendingFor = key;
+    thread.push({
+      role: "user",
+      text: question,
+      subject: subjectOf(asked.anchor),
+    });
+    // Kept at once, so a reload during the answer does not lose the question.
+    save(key, thread);
+    chat.question = "";
+    chat.pending = true;
+    chat.partial = "";
+    chat.live = [];
+    chat.reveal = true;
+    opened();
+    redraw();
+    // Where the answer looks, for the map: the place of each lookup that names one.
+    const places = [];
+    lookedAt(places, true);
+    try {
+      let response = null;
+      // The answer streams in; each new model turn replaces earlier working text.
+      await stream(
+        "/api/ask",
+        { ...asked, question, history, stream: true, using: using() },
+        (event) => {
+          if (event.type === "text") chat.partial += event.text;
+          else if (event.type === "turn") chat.partial = "";
+          else if (event.type === "lookup") {
+            chat.live.push(event.text);
+            if (event.place?.path) {
+              places.push(event.place);
+              lookedAt(places, true);
+            }
+          } else if (event.type === "error") throw new Error(event.message);
+          else if (event.type === "done") response = event;
+          paint();
+        },
+      );
+      if (!response) throw new Error("The answer stopped before it finished.");
+      thread.push({
+        role: "assistant",
+        asked,
+        ...response.answer,
+        references: response.references || {},
+        omitted: response.context.omitted,
+        lookups: response.lookups || [],
+      });
+      save(key, thread);
+    } catch (e) {
+      // Put the question back so it can be retried or edited.
+      thread.pop();
+      save(key, thread);
+      if (!chat.question) chat.question = question;
+      notice(e.message, true);
+    } finally {
+      // The trail of what the answer read stays on the map until the next question.
+      lookedAt(places, false);
+      chat.pending = false;
+      chat.partial = "";
+      chat.live = [];
+      chat.reveal = true;
+      redraw();
+    }
   }
   return {
     /** Shows branch `key`'s conversation, loading its saved one the first time this page
@@ -147,6 +227,13 @@ export function createAsk({
       if (branch === key) chat.messages = thread;
       return true;
     },
+    /** Asks `text` about the current selection (the map's composer), and opens the answer. */
+    ask(text) {
+      chat.question = text;
+      return send();
+    },
+    /** True while an answer is on its way. */
+    asking: () => chat.pending,
     /** True when this branch's conversation has messages (New conversation can clear it). */
     hasMessages: () => Boolean(chat.messages.length && !chat.pending),
     /** The last question of this branch's conversation, for the Conversations list. */
@@ -161,96 +248,79 @@ export function createAsk({
       save();
       redraw();
     },
+    /** Draws the conversation in `body` and its composer in `composerHost`; returns the
+     * place that the next question is about, for the dock. */
     render(body, composerHost) {
       // New questions are about the current selection; earlier ones keep their own subject.
       const c = context(),
         subject = subjectOf(c.anchor);
-      if (!chat.messages.length && !chat.pending) {
-        const empty = el(
-          "p",
-          `Ask about ${subject}: what it does, what changed or what to check. Answers use the code, its callers and dependencies at this revision, and can look up more of the repository read-only.`,
+      if (!chat.messages.length && !chat.pending)
+        body.append(
+          Text(
+            `Ask about ${subject}: what it does, what changed or what to check. Answers use the code, its callers and dependencies at this revision, and can look up more of the repository read-only.`,
+          ),
         );
-        empty.className = "empty ask-empty";
-        body.append(empty);
-      }
-      const thread = el("div");
-      thread.className = "ask-thread";
+      const thread = Thread();
       let lastSubject = null;
       for (const message of chat.messages) {
         // Mark the subject when it changes, so a moving conversation stays readable.
         if (message.role === "user" && message.subject !== lastSubject) {
-          const about = el("p", "About " + message.subject);
-          about.className = "ask-about";
-          thread.append(about);
+          thread.append(SubjectMark("About " + message.subject));
           lastSubject = message.subject;
         }
-        const bubble = el("article");
-        bubble.className = "ask-message from-" + message.role;
         const links = {
           links: message.references || {},
           onLink: openReference,
         };
-        bubble.append(richText(message.text, "ask-text", links));
-        if (message.lookups?.length) {
-          // Show what the answer read beyond the selection, so it can be judged.
-          const read = el(
-            "p",
-            "Looked up: " + [...new Set(message.lookups)].join(" · "),
-          );
-          read.className = "read-note ask-lookups";
-          bubble.append(read);
-        }
-        if (message.omitted?.length) {
-          const limited = el("p", "Some context was trimmed");
-          limited.className = "read-note";
-          limited.title = message.omitted.join("; ");
-          bubble.append(limited);
-        }
-        if (message.suggestion) {
-          const proposal = el("div");
-          proposal.className = "ask-suggestion";
-          const words = richText(message.suggestion, "workflow-text", links);
-          proposal.append(
-            el("span", "Suggested instruction"),
-            words,
-            // While exploring a task's changes, a suggestion belongs with that task's next
-            // round, which builds on the agent's work; a draft would start again from main.
-            message.added
-              ? Object.assign(el("p", "Added to requested changes"), {
-                  className: "read-note",
-                })
-              : message.saved
-                ? Object.assign(el("p", "Saved as a draft instruction"), {
-                    className: "read-note",
-                  })
-                : changeTarget()
-                  ? btn("Add to requested changes", async () => {
-                      await addToChanges(message);
-                      message.added = true;
-                      redraw();
-                    })
-                  : btn("Save as draft instruction", async () => {
-                      // Once only: the button gives way to a note, so a second tap adds nothing.
-                      if (message.saved) return;
-                      message.saved = true;
-                      try {
-                        await makeDraft({
-                          anchor: message.asked.anchor,
-                          sha: message.asked.sha,
-                          text: message.suggestion,
-                        });
-                        save();
-                      } catch (e) {
-                        message.saved = false;
-                        throw e;
-                      } finally {
-                        redraw();
-                      }
-                    }),
-          );
-          bubble.append(proposal);
-        }
-        thread.append(bubble);
+        // What the answer read beyond the selection, so it can be judged.
+        const trimmed =
+          message.omitted?.length > 0 && Note("Some context was trimmed");
+        if (trimmed) trimmed.title = message.omitted.join("; ");
+        thread.append(
+          Message(
+            { from: message.role },
+            Prose(message.text, links),
+            message.lookups?.length > 0 &&
+              Note("Looked up: " + [...new Set(message.lookups)].join(" · ")),
+            trimmed,
+            message.suggestion &&
+              Suggestion({
+                text: Prose(message.suggestion, links),
+                // While exploring a task's changes, a suggestion belongs with that task's
+                // next round, which builds on the agent's work; a draft would start again
+                // from main.
+                action: message.added
+                  ? Note("Added to requested changes")
+                  : message.saved
+                    ? Note("Added as a change")
+                    : changeTarget()
+                      ? btn("Add to requested changes", async () => {
+                          await addToChanges(message);
+                          message.added = true;
+                          redraw();
+                        })
+                      : btn("Add as a change", async () => {
+                          // Once only: the button gives way to a note, so a second tap adds
+                          // nothing.
+                          if (message.saved) return;
+                          message.saved = true;
+                          try {
+                            await makeDraft({
+                              anchor: message.asked.anchor,
+                              sha: message.asked.sha,
+                              text: message.suggestion,
+                            });
+                            save();
+                          } catch (e) {
+                            message.saved = false;
+                            throw e;
+                          } finally {
+                            redraw();
+                          }
+                        }),
+              }),
+          ),
+        );
       }
       // An answer still running for another branch's conversation shows there, not here.
       if (chat.pending && chat.pendingFor === branch)
@@ -259,132 +329,27 @@ export function createAsk({
       if (chat.reveal) {
         chat.reveal = false;
         // Once attached, put the latest question at the top so its answer reads from the start.
-        const question = [...thread.querySelectorAll(".from-user")].at(-1);
+        const question = [...thread.querySelectorAll(".pk-message.is-user")].at(
+          -1,
+        );
         requestAnimationFrame(() =>
           question?.scrollIntoView({ block: "start", behavior: "smooth" }),
         );
       }
-      const form = el("form"),
-        label = el("label", "Your question"),
-        input = el("textarea");
-      label.className = "workflow-field";
-      form.className = "dock-form";
-      input.rows = 1;
-      input.placeholder = `Ask about ${subject}`;
-      input.setAttribute("aria-label", "Your question");
-      label.classList.add("dock-input");
-      label.firstChild.textContent = "";
-      input.maxLength = 8000;
-      input.value = chat.question;
-      input.required = true;
-      input.oninput = () => {
-        chat.question = input.value;
-        submit.disabled = chat.pending || !chat.question.trim();
-      };
-      label.append(input);
-      form.append(label);
-      const submit = iconButton(
-        el("button"),
-        chat.pending ? "pending" : "send",
-        chat.pending ? "Thinking…" : "Send question",
+      // The dock shows the place above the composer (app.js), so the composer has none.
+      composerHost.append(
+        ReplyComposer({
+          label: "Your question",
+          placeholder: `Ask about ${subject}`,
+          sendLabel: "Send question",
+          busy: chat.pending,
+          value: chat.question,
+          docked: true,
+          onInput: (text) => (chat.question = text),
+          onSend: () => send(),
+        }),
       );
-      submit.className = "btn primary icon-action";
-      submit.type = "submit";
-      submit.disabled = chat.pending || !chat.question.trim();
-      form.append(submit);
-      form.onsubmit = async (event) => {
-        event.preventDefault();
-        if (chat.pending || !chat.question.trim()) return;
-        const question = chat.question,
-          asked = context();
-        // Earlier questions carry their subject, so follow-ups across selections make sense.
-        const history = chat.messages
-          .slice(-12)
-          .map(({ role, text, subject }) => ({
-            role,
-            text: (role === "user" ? `[About ${subject}] ${text}` : text).slice(
-              0,
-              8000,
-            ),
-          }));
-        // Bound prior dialogue separately from server-built source context.
-        while (JSON.stringify(history).length > 11000) history.shift();
-        // Show the question at once; the answer can take several seconds. The answer joins
-        // this branch's conversation even if the view moves to another branch meanwhile.
-        const thread = chat.messages,
-          key = branch;
-        chat.pendingFor = key;
-        thread.push({
-          role: "user",
-          text: question,
-          subject: subjectOf(asked.anchor),
-        });
-        // Kept at once, so a reload during the answer does not lose the question.
-        save(key, thread);
-        chat.question = "";
-        chat.pending = true;
-        chat.partial = "";
-        chat.live = [];
-        chat.reveal = true;
-        opened();
-        redraw();
-        // Where the answer looks, for the map: the place of each lookup that names one.
-        const places = [];
-        lookedAt(places, true);
-        try {
-          let response = null;
-          // The answer streams in; each new model turn replaces earlier working text.
-          await stream(
-            "/api/ask",
-            { ...asked, question, history, stream: true, using: using() },
-            (event) => {
-              if (event.type === "text") chat.partial += event.text;
-              else if (event.type === "turn") chat.partial = "";
-              else if (event.type === "lookup") {
-                chat.live.push(event.text);
-                if (event.place?.path) {
-                  places.push(event.place);
-                  lookedAt(places, true);
-                }
-              } else if (event.type === "error") throw new Error(event.message);
-              else if (event.type === "done") response = event;
-              paint();
-            },
-          );
-          if (!response)
-            throw new Error("The answer stopped before it finished.");
-          thread.push({
-            role: "assistant",
-            asked,
-            ...response.answer,
-            references: response.references || {},
-            omitted: response.context.omitted,
-            lookups: response.lookups || [],
-          });
-          save(key, thread);
-        } catch (e) {
-          // Put the question back so it can be retried or edited.
-          thread.pop();
-          save(key, thread);
-          if (!chat.question) chat.question = question;
-          notice(e.message, true);
-        } finally {
-          // The trail of what the answer read stays on the map until the next question.
-          lookedAt(places, false);
-          chat.pending = false;
-          chat.partial = "";
-          chat.live = [];
-          chat.reveal = true;
-          redraw();
-        }
-      };
-      const anchor = el(
-        "p",
-        `${[c.anchor.path?.split("/").at(-1) || rootSubject?.() || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${revisionName(c.sha)}`,
-      );
-      anchor.className = "composer-anchor";
-      anchor.title = anchor.textContent;
-      composerHost.append(anchor, form);
+      return `${[c.anchor.path?.split("/").at(-1) || rootSubject?.() || "Repository", c.anchor.symbol].filter(Boolean).join(" · ")} · ${revisionName(c.sha)}`;
     },
   };
 }

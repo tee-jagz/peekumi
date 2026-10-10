@@ -7,8 +7,7 @@
  * A place is `{path, symbol?}`. Marks are CSS classes on the map cards (`agent-here`,
  * `agent-trail` with `data-trail`, `agent-changed`) and a working Peek on the current card;
  * they are applied as a difference, so Peek keeps animating while the map is drawn again. */
-import { glyph } from "./icons.js";
-import { peek } from "./peek.js";
+import { IconButton, Peek, setStates } from "./ui.js";
 
 const FOLLOW = "peekumi.session.follow";
 
@@ -39,7 +38,7 @@ export function createFocus({ followTo }) {
    * card, or the nearest folder card that holds it ("Repository files" for a file at the
    * root). `exact` is true when the card is the place itself. */
   function cardFor(place) {
-    const cards = [...document.querySelectorAll(".node[data-path]")];
+    const cards = [...document.querySelectorAll(".pk-card[data-path]")];
     if (place.symbol) {
       const name = place.symbol.replace("::", ".");
       const symbol = cards.find(
@@ -63,7 +62,7 @@ export function createFocus({ followTo }) {
         best = card;
     }
     if (!best && !place.path.includes("/"))
-      best = document.querySelector('.node[data-kind="rootfiles"]');
+      best = document.querySelector('.pk-card[data-kind="rootfiles"]');
     return best
       ? { card: best, exact: best.dataset.path === place.path && !place.symbol }
       : null;
@@ -99,23 +98,25 @@ export function createFocus({ followTo }) {
         want(found.card, "trail", running ? i + 1 : i);
     });
     for (const card of document.querySelectorAll(
-      ".node.agent-here, .node.agent-trail, .node.agent-changed",
+      ".pk-card.is-agent, .pk-card.is-trail, .pk-card.is-touched",
     ))
       if (!wanted.has(card)) wanted.set(card, {});
     for (const [card, marks] of wanted) {
-      card.classList.toggle("agent-changed", Boolean(marks.changed));
-      card.classList.toggle(
-        "agent-trail",
-        marks.trail !== undefined && !marks.here,
-      );
+      setStates(card, {
+        touched: marks.changed,
+        trail: marks.trail !== undefined && !marks.here,
+        agent: marks.here,
+      });
       if (marks.trail !== undefined)
         card.dataset.trail = String(Math.min(4, marks.trail + 1));
       else delete card.dataset.trail;
-      card.classList.toggle("agent-here", Boolean(marks.here));
-      const badge = card.querySelector(":scope > .agent-badge");
-      if (marks.here && !badge)
-        card.append(peek("working", { className: "agent-badge" }));
-      if (!marks.here && badge) badge.remove();
+      // Peek on the agent's card shows what it does there: reading, editing, and so on.
+      const badge = card.querySelector(":scope > .pk-card-peek"),
+        pose = (marks.here && source.activity) || "working";
+      if (badge && (!marks.here || badge.dataset.state !== pose))
+        badge.remove();
+      if (marks.here && badge?.dataset.state !== pose)
+        card.prepend(Peek({ state: pose, size: "card" }));
     }
     eye(source && (source.running || source.live));
     // Follow: show the agent's place in the middle of the map. When the place is not on this
@@ -136,56 +137,54 @@ export function createFocus({ followTo }) {
     const spot = here && `${key}|${here.card.dataset.key}`;
     if (spot && spot !== centered) {
       centered = spot;
-      here.card.closest(".map-canvas")?.centerCard?.(here.card);
+      here.card.closest(".pk-map-viewport")?.centerCard?.(here.card);
     }
   }
 
   /** The eye at the top right of the map while an agent works or a session is open: open
    * while the map follows the agent, crossed out while paused or off. */
   function eye(visible) {
-    const stage = document.querySelector("#stage");
+    // On the map itself, at its top-right corner (Before and After are at the top-left).
+    const stage = document.querySelector(
+      '#deck .sheet[data-front="true"] .sheet-body',
+    );
     if (!stage) return;
-    let host = stage.querySelector("#agentFocus");
+    const old = document.querySelector("#agentFocus");
     if (!visible) {
-      host?.remove();
+      old?.remove();
       return;
     }
-    if (!host) {
-      host = document.createElement("div");
-      host.id = "agentFocus";
-      const button = document.createElement("button");
-      button.className = "follow-pill";
-      button.type = "button";
-      host.append(button);
-      stage.append(host);
-    }
-    const button = host.querySelector(".follow-pill");
     const on = follow && !paused;
-    button.dataset.on = String(on);
-    button.setAttribute("aria-pressed", String(on));
     const label = on ? "on" : paused ? "paused" : "off";
-    if (button.dataset.label !== label) {
-      button.dataset.label = label;
-      button.replaceChildren(glyph(on ? "eye" : "eyeOff"));
-    }
-    button.title = on
+    // The same state keeps the same button, so a redraw does not take the focus from it.
+    if (old?.dataset.label === label) return;
+    const title = on
       ? "Following the agent: the map moves to where it works. Tap to turn off"
       : paused
         ? "Follow paused, because you moved the map. Tap to follow the agent again"
         : "Follow the agent: the map moves to where it works";
-    button.setAttribute("aria-label", button.title);
-    button.onclick = () => {
-      if (on) follow = false;
-      else {
-        follow = true;
-        paused = false;
-        followed = { key: "", at: 0 };
-      }
-      try {
-        localStorage.setItem(FOLLOW, follow ? "on" : "off");
-      } catch {}
-      apply();
-    };
+    const button = IconButton({
+      icon: on ? "eye" : "eyeOff",
+      label: title,
+      pressed: on,
+      onClick: () => {
+        if (on) follow = false;
+        else {
+          follow = true;
+          paused = false;
+          followed = { key: "", at: 0 };
+        }
+        try {
+          localStorage.setItem(FOLLOW, follow ? "on" : "off");
+        } catch {}
+        apply();
+      },
+    });
+    button.id = "agentFocus";
+    button.dataset.on = String(on);
+    button.dataset.label = label;
+    if (old) old.replaceWith(button);
+    else stage.append(button);
   }
 
   return {

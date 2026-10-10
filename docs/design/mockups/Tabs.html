@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabs · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><div class="pk gallery-box"><div class="pk-tabs" role="tablist"><button type="button" role="tab" aria-selected="false" aria-label="Details"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M2.5 10a7.5 7.5 0 1 0 15 0a7.5 7.5 0 1 0 -15 0M10 9v5M10 6.2v.1"></path></svg><span>Details</span></button><button type="button" role="tab" aria-selected="false" aria-label="Source"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M7 6l-4 4 4 4M13 6l4 4-4 4"></path></svg><span>Source</span></button><button type="button" role="tab" aria-selected="false" aria-label="Changes"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M6 3v6M3 6h6M11 14h6M15 4L5 16"></path></svg><span>Changes</span></button><button type="button" role="tab" aria-selected="true" aria-label="Relations"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 5.5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M13 5.5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M8 15a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M7 5.5h6M6 7.5l3 5.6M14 7.5l-3 5.6"></path></svg><span>Relations</span></button></div></div></div>
+</body>
+</html>

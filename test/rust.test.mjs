@@ -98,8 +98,13 @@ test("Rust full/overview/source/metadata match the Node reference, including rev
   const metadata = await get("/api/repo");
   assert.ok(metadata.branches.some((b) => b.ref === "refs/heads/main"));
   assert.equal(metadata.selectedBranch.ref, "refs/heads/main");
-  const { branches, selectedBranch, moreCommits, ...identity } = metadata;
+  const { branches, selectedBranch, moreCommits, main, ...identity } = metadata;
   assert.equal(moreCommits, false, "A short history has no older page");
+  // On main, the head is its own merge base with main ("This branch against main").
+  assert.deepEqual(main, {
+    name: "main",
+    base: await f.repo.resolve("HEAD"),
+  });
   assert.deepEqual(identity, {
     ...(await f.repo.metadata()),
     initialBase: f.base,

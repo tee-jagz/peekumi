@@ -68,6 +68,22 @@ node scripts/manage.mjs install
 
 ## First run
 
+The quickest start: open a terminal in your repository and run `peekumi` with no arguments.
+
+```sh
+cd /absolute/path/to/repo
+peekumi
+```
+
+Peekumi then asks two questions, and each question has a default (press Return):
+
+1. It asks if it can add the repository of the current folder.
+2. It starts the service, and it asks if it can open private phone access with Tailscale. It asks this only when Tailscale is ready.
+
+Then it prints the pairing link to open on your phone. Peekumi never opens a public tunnel here: that needs `peekumi share --tunnel cloudflare`. When the output does not go to a terminal (a script or a pipe), `peekumi` only prints the list of commands.
+
+To do the same steps one at a time:
+
 ```sh
 peekumi doctor
 peekumi repo add /absolute/path/to/repo

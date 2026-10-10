@@ -1,7 +1,8 @@
 /** Dependency rules in the browser: a task that adds a rule break says so before Approve; the
  * rule summary shows the breaks a comparison adds and each rule's coverage; a card counts its
- * breaks, and the sheet names them in one line; and "Forbid this dependency" on a
- * relationship starts an instruction that asks for a rule. Phone and desktop. */
+ * breaks, and the sheet names them in one line, with Fix that writes the change; and
+ * "Forbid this dependency" on a relationship starts a change that asks for a rule only.
+ * Phone and desktop. */
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
@@ -55,7 +56,7 @@ try {
       );
       await page.goto(f.server.url + "/#token=" + f.server.token);
       const front = page.locator('.sheet[data-front="true"]');
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
 
       // The task names the break before Approve.
       await page.locator("#openTasks").click();
@@ -96,10 +97,10 @@ try {
 
       // The card that breaks the rule counts its breaks in its own row (no badge), and the
       // sheet says what it breaks in one line, which opens only the breaks.
-      const ui = front.locator('.node[data-path="ui"]');
+      const ui = front.locator('.pk-card[data-path="ui"]');
       assert.equal(
-        await ui.locator(".n-breaks").getAttribute("aria-label"),
-        "1 dependency rule break",
+        await ui.locator(".pk-mark.is-break").getAttribute("aria-label"),
+        "1 rule break",
       );
       assert.equal(await page.locator(".rule-badge").count(), 0);
       await ui.click();
@@ -108,6 +109,26 @@ try {
         await line.innerText(),
         /^Breaks ui-no-db · 1 import of store\.py/,
       );
+      // Fix beside the line writes the change from the rule and the break into the map's
+      // composer, for the owner to edit and add.
+      const composer = page.getByLabel("Ask, or describe a change");
+      await page
+        .locator("#reviewScope")
+        .getByRole("button", { name: "Fix", exact: true })
+        .click();
+      await page.waitForFunction(
+        () =>
+          document.activeElement?.getAttribute("aria-label") ===
+          "Ask, or describe a change",
+      );
+      assert.match(
+        await composer.inputValue(),
+        /^Remove the 1 import from \S+ to \S+: it breaks ui-no-db \(The UI goes through services\)\.\nKeep the behaviour the same, and keep the tests green\.$/,
+      );
+      await page.screenshot({
+        path: `test-results/rules-fix-${viewport.width}.png`,
+      });
+      await composer.fill("");
       await line.click();
       assert.equal(
         await page.evaluate(
@@ -125,7 +146,7 @@ try {
         path: `test-results/rules-breaks-${viewport.width}.png`,
       });
 
-      // "Forbid this dependency" on the relationship starts an instruction draft.
+      // "Forbid this dependency" on the relationship writes a change that adds the rule only.
       await page.evaluate(() =>
         document
           .querySelector('.sheet[data-front="true"] path.hit')
@@ -137,30 +158,25 @@ try {
       await page
         .getByRole("button", { name: /Forbid this dependency/ })
         .click();
-      const box = page.getByLabel("What should change, and why");
-      await box.waitFor();
+      await composer.waitFor();
       assert.match(
-        await box.inputValue(),
-        /^Add a rule to \.peekumi\.json that forbids imports from ui\/\*\* to db\/\*\*/,
+        await composer.inputValue(),
+        /^Add a rule to \.peekumi\.json that forbids imports from ui\/\*\* to db\/\*\*, with a message that says why\. Do not change other code: /,
       );
       await page.screenshot({
         path: `test-results/rules-forbid-${viewport.width}.png`,
       });
 
       // Proposed fixes: from Relations, one fix for the break; it can be cleared, edited and
-      // sent; the task form opens with that draft selected.
-      await page
-        .locator("#composerHost")
-        .getByRole("button", { name: "Cancel" })
-        .click()
-        .catch(() => {});
+      // sent; the send sheet opens with that change picked.
+      await composer.fill("");
       if (!(await page.locator("#helperTools").isVisible()))
         await page.locator("#sheetHandle").click();
       await page.locator('#helperTools [data-tab="dependencies"]').click();
       await page
         .getByRole("button", { name: /^Propose fixes for 1 rule break/ })
         .click();
-      const rows = page.locator(".fix-row");
+      const rows = page.locator(".pk-proposal");
       await rows.first().waitFor();
       assert.equal(await rows.count(), 1);
       assert.equal(
@@ -169,19 +185,24 @@ try {
       );
       // The agent read the code and proposed the fix; Peekumi's group is its context.
       assert.match(
-        await page.locator("#tabBody .read-note").first().innerText(),
+        await page.locator("#tabBody .pk-note").first().innerText(),
         /^Claude Code read the code and proposed these fixes/,
       );
       assert.equal(
-        await rows.first().locator("strong").innerText(),
+        await rows.first().locator(".title").innerText(),
         "Reach the store through a service",
       );
       assert.match(
         await rows.first().locator("textarea").inputValue(),
         /^Create services\/store\.py/,
       );
-      assert.equal(await page.locator(".fix-context").count(), 1);
-      const send = page.locator(".fix-buttons .primary");
+      assert.equal(
+        await page
+          .locator(".pk-disclosure", { hasText: "What Peekumi found" })
+          .count(),
+        1,
+      );
+      const send = page.locator("#tabBody .pk-actions .is-primary");
       assert.equal(await send.innerText(), "Send 1 fix to an agent");
       await rows.first().locator("input[type=checkbox]").uncheck();
       assert.ok(await send.isDisabled(), "Nothing selected, nothing to send");
@@ -197,13 +218,13 @@ try {
       await page.waitForFunction(
         () => document.querySelector("#panel").dataset.view === "prepare",
       );
-      const picked = page.locator(".workflow-pick", {
+      const picked = page.locator("label.pk-pick", {
         hasText: "Move save behind a service",
       });
       await picked.waitFor();
       assert.ok(await picked.locator("input").isChecked());
       assert.equal(
-        await page.locator(".workflow-pick input:checked").count(),
+        await page.locator("label.pk-pick input:checked").count(),
         1,
         "Only the sent fix is selected",
       );
@@ -213,52 +234,58 @@ try {
       // the current rule already covers are left out. An edit is tried again, an invalid rule
       // cannot be selected, and each sent rule is one draft on .peekumi.json.
       await page.reload();
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
       if (!(await page.locator("#helperTools").isVisible()))
         await page.locator("#sheetHandle").click();
       await page.locator('#helperTools [data-tab="dependencies"]').click();
       await page
         .getByRole("button", { name: "Propose rules", exact: true })
         .click();
-      const audits = page.locator(".audit-row");
+      const audits = page.locator(".pk-proposal");
       await audits.first().waitFor();
       // Each idea once: the rule that the first rule covers shows under it.
       assert.equal(await audits.count(), 2);
       assert.ok(
         (
-          await page.locator("#tabBody h3.workflow-group").allInnerTexts()
+          await page.locator("#tabBody h3.pk-group-title").allTextContents()
         ).includes("Guards against future mistakes"),
       );
       assert.match(
         await page.locator("#viewHead .view-meta").innerText(),
         /^2 open rules · \d find a problem now$/,
       );
-      const inversion = page.locator(".audit-row", {
+      const inversion = page.locator(".pk-proposal", {
         hasText: "Files in ui/ must not import code from db/",
       });
       assert.match(
-        await inversion.locator("small").innerText(),
+        await inversion.locator(".why").innerText(),
         /^Dependency inversion · high value · /,
       );
       assert.match(
-        await inversion.locator(".audit-parts").innerText(),
+        await inversion
+          .locator(".pk-note", { hasText: "Also covers" })
+          .innerText(),
         /^Also covers: The view imports no database code$/,
       );
-      const layers = page.locator(".audit-row", {
+      const layers = page.locator(".pk-proposal", {
         hasText: "UI over services over database",
       });
       assert.match(
         await layers.innerText(),
         /Group "services" matches no file/,
       );
-      await page.locator(".fix-context summary").click();
+      await page
+        .locator(".pk-disclosure summary", { hasText: "left out" })
+        .click();
       assert.match(
-        await page.locator(".fix-context").innerText(),
+        await page
+          .locator(".pk-disclosure", { hasText: "left out" })
+          .innerText(),
         /^The last audit left out 3 proposals[^]*Narrower: The rule "ui-no-db" already covers it/,
       );
-      const add = page.locator(".fix-buttons .primary");
+      const add = page.locator("#tabBody .pk-actions .is-primary");
       assert.equal(
-        await page.locator(".audit-row input[type=checkbox]:checked").count(),
+        await page.locator(".pk-proposal input[type=checkbox]:checked").count(),
         0,
         "No rule is selected at first",
       );
@@ -271,7 +298,7 @@ try {
       await ruleText.fill(original.replace('"calls"', '"reads"'));
       await ruleText.blur();
       await layers
-        .locator(".rule-error", { hasText: "Unknown relationship kind reads" })
+        .locator(".pk-error", { hasText: "Unknown relationship kind reads" })
         .waitFor();
       assert.ok(await layers.locator("input[type=checkbox]").isDisabled());
       assert.ok(await add.isDisabled(), "A refused rule cannot be sent");
@@ -281,55 +308,56 @@ try {
       await layers.locator("textarea").fill(original);
       await layers.locator("textarea").blur();
       await page.waitForFunction(
-        () => !document.querySelector(".audit-row .rule-error"),
+        () => !document.querySelector(".pk-proposal .pk-error"),
       );
       assert.ok(
         await layers.locator("input[type=checkbox]").isChecked(),
         "The selection stays",
       );
       assert.equal(
-        await page.locator(".fix-buttons .primary").innerText(),
+        await page.locator("#tabBody .pk-actions .is-primary").innerText(),
         "Add 1 rule with an agent",
       );
-      await page.locator(".fix-buttons .primary").click();
+      await page.locator("#tabBody .pk-actions .is-primary").click();
       await page.waitForFunction(
         () => document.querySelector("#panel").dataset.view === "prepare",
       );
-      const rulePick = page.locator(".workflow-pick", {
+      const rulePick = page.locator("label.pk-pick", {
         hasText: 'Add the dependency rule "app-layers" to .peekumi.json',
       });
       await rulePick.waitFor();
       assert.ok(await rulePick.locator("input").isChecked());
       assert.equal(
-        await page.locator(".workflow-pick input:checked").count(),
+        await page.locator("label.pk-pick input:checked").count(),
         1,
         "Only the sent rule is selected",
       );
       // The choices stay on the server: after a reload, the list is the same (no new audit),
       // the other rule is still not selected and the sent rule is drafted.
       await page.reload();
-      await front.locator(".node").first().waitFor();
+      await front.locator(".pk-card").first().waitFor();
       if (!(await page.locator("#helperTools").isVisible()))
         await page.locator("#sheetHandle").click();
       await page.locator('#helperTools [data-tab="dependencies"]').click();
       await page
         .getByRole("button", { name: "Propose rules", exact: true })
         .click();
-      await page.locator(".audit-row").first().waitFor();
+      await page.locator(".pk-proposal").first().waitFor();
       // The sent rule is done: it leaves the sections for the closed Done list.
-      assert.equal(await page.locator(".audit-row").count(), 1);
+      assert.equal(await page.locator(".pk-proposal").count(), 1);
       assert.equal(
         await page
-          .locator(".audit-row", {
+          .locator(".pk-proposal", {
             hasText: "Files in ui/ must not import code from db/",
           })
           .locator("input[type=checkbox]")
           .isChecked(),
         false,
       );
-      await page.locator(".audit-done summary").click();
+      const doneList = page.locator(".pk-disclosure", { hasText: "Done (" });
+      await doneList.locator("summary").click();
       assert.match(
-        await page.locator(".audit-done").innerText(),
+        await doneList.innerText(),
         /^Done \(1\)[^]*UI over services over database · sent to an agent/,
       );
       assert.match(

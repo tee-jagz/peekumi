@@ -47,14 +47,32 @@ try {
       ]);
   });
   await page.goto(server.url + "/#token=" + server.token);
-  await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+  await page.locator('.sheet[data-front="true"] .pk-card').first().waitFor();
   await page.locator("#notice").waitFor({ state: "hidden" });
   assert.deepEqual(
     comparisons.at(-1),
     [parent, head],
     "Merge uses its first parent, not the configured launch base",
   );
+  // Four choices, named by the question. The head and base selects wait behind the last.
   await page.locator("#revisionDetails > summary").click();
+  const choices = page.getByRole("radiogroup", { name: "Compare" });
+  assert.deepEqual(await choices.locator(".pk-row-title").allInnerTexts(), [
+    "The last commit",
+    "Since my last look",
+    "This branch against main",
+    "Choose commits…",
+  ]);
+  const choice = (name) =>
+    choices.getByRole("radio", { name: new RegExp(`^${name}`) });
+  assert.equal(
+    await choice("The last commit").getAttribute("aria-checked"),
+    "true",
+  );
+  assert.ok(await choice("This branch against main").isDisabled(), "On main");
+  assert.match(await choice("Since my last look").innerText(), /next visit/);
+  assert.equal(await page.locator("#commitBar").isVisible(), false);
+  await choice("Choose commits…").click();
   assert.equal(await page.locator("#base").inputValue(), "__previous__");
   await page.locator("#headRevision").selectOption(parent);
   await page.locator("#notice").waitFor({ state: "hidden" });
@@ -101,6 +119,7 @@ try {
     await page.locator("#commitHead").innerText(),
     new RegExp(parent.slice(0, 7)),
   );
+  await choice("Choose commits…").click();
   await page.locator("#base").selectOption(root);
   await page.locator("#notice").waitFor({ state: "hidden" });
   await page.locator("#refresh").click();
@@ -115,6 +134,35 @@ try {
   assert.match(
     await page.locator("#commitHead").innerText(),
     /previous commit \(automatic\)/,
+  );
+  // Since my last look: the device keeps the newest commit that it showed. A look at the root
+  // compares the root with the newest commit. (The reload saves the newest commit as it leaves,
+  // so the older look is put back before the page starts.)
+  await page.evaluate(() => dispatchEvent(new Event("pagehide")));
+  const lookKey = await page.evaluate(() =>
+    Object.keys(localStorage).find((k) => k.startsWith("peekumi-look:")),
+  );
+  assert.ok(lookKey, "The page keeps the look");
+  await page.addInitScript(
+    ([key, sha]) =>
+      localStorage.setItem(key, JSON.stringify({ sha, time: Date.now() })),
+    [lookKey, root],
+  );
+  await page.reload();
+  await page.locator('.sheet[data-front="true"] .pk-card').first().waitFor();
+  await page.locator("#notice").waitFor({ state: "hidden" });
+  await page.locator("#revisionDetails > summary").click();
+  assert.match(
+    await choice("Since my last look").innerText(),
+    /2 new commits since/,
+  );
+  await choice("Since my last look").click();
+  await page.locator("#notice").waitFor({ state: "hidden" });
+  assert.deepEqual(comparisons.at(-1), [root, head], "Since the last look");
+  await page.locator("#revisionDetails > summary").click();
+  assert.match(
+    await page.locator("#commitHead").innerText(),
+    /since your last look/,
   );
   console.log(
     "PASS revision defaults: first parent, manual override, Time/Diff, refresh, reset and root commit",

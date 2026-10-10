@@ -7,7 +7,7 @@
  * is swallowed. While the menu is open, its item lifts and the rest of the map dims. Arrow
  * keys move between items, a letter runs the item with that key, Escape or a tap outside
  * closes it, and focus goes back to the item. */
-import { glyph } from "./icons.js";
+import { Menu, setStates } from "./ui.js";
 
 const HOLD = 450,
   SLOP = 8;
@@ -23,8 +23,8 @@ export function closeMenu({ restore = true } = {}) {
   const { popover, target, keydown, outside } = open;
   open = null;
   popover.remove();
-  target.classList.remove("menu-target");
-  document.body.classList.remove("menu-open");
+  setStates(target, { "menu-target": false });
+  setStates(document.body, { "menu-open": false });
   document.removeEventListener("keydown", keydown, true);
   document.removeEventListener("pointerdown", outside, true);
   if (restore && target.isConnected) target.focus({ preventScroll: true });
@@ -39,56 +39,33 @@ export function closeMenu({ restore = true } = {}) {
  */
 export function showMenu(target, x, y, spec) {
   closeMenu({ restore: false });
-  const popover = document.createElement("div");
-  popover.className = "context-menu";
-  popover.setAttribute("role", "menu");
-  popover.setAttribute("aria-label", spec.title);
-  const head = document.createElement("p");
-  head.className = "context-menu-head";
-  const name = document.createElement("strong");
-  name.textContent = spec.title;
-  head.append(name);
-  if (spec.subtitle)
-    head.append(document.createTextNode(" · " + spec.subtitle));
-  popover.append(head);
-  const buttons = [];
   const keys = new Map();
-  for (const item of spec.items) {
-    if (item === "rule") {
-      if (popover.lastChild?.className !== "context-menu-rule") {
-        const rule = document.createElement("div");
-        rule.className = "context-menu-rule";
-        popover.append(rule);
-      }
-      continue;
-    }
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "context-menu-item" + (item.accent ? " is-accent" : "");
-    button.setAttribute("role", "menuitem");
-    button.tabIndex = -1;
-    if (item.icon) button.append(glyph(item.icon));
-    const label = document.createElement("span");
-    label.textContent = item.label;
-    button.append(label);
-    if (item.hint) {
-      const hint = document.createElement("small");
-      hint.textContent = item.hint;
-      button.append(hint);
-    }
-    if (item.key) {
-      const key = document.createElement("kbd");
-      key.textContent = item.key === "Enter" ? "↵" : item.key;
-      button.append(key);
-      keys.set(item.key.toLowerCase(), button);
-    }
-    button.onclick = () => {
-      closeMenu({ restore: false });
-      item.run();
-    };
-    buttons.push(button);
-    popover.append(button);
-  }
+  const popover = Menu(
+    spec.items
+      .map((item, at) =>
+        item === "rule"
+          ? // One separator between groups, never two in a row or at the top.
+            at > 0 && spec.items[at - 1] !== "rule"
+            ? null
+            : undefined
+          : {
+              ...item,
+              onClick: () => {
+                closeMenu({ restore: false });
+                item.run();
+              },
+            },
+      )
+      .filter((item) => item !== undefined),
+    { title: spec.title, subtitle: spec.subtitle },
+  );
+  setStates(popover, { floating: true });
+  const buttons = [...popover.querySelectorAll('[role="menuitem"]')];
+  spec.items
+    .filter((item) => item !== "rule")
+    .forEach(
+      (item, at) => item.key && keys.set(item.key.toLowerCase(), buttons[at]),
+    );
   document.body.append(popover);
   // Next to the point, inside the viewport: below and to the right, else above or left.
   const box = popover.getBoundingClientRect(),
@@ -100,8 +77,8 @@ export function showMenu(target, x, y, spec) {
       : Math.max(margin, y - box.height);
   popover.style.left = left + "px";
   popover.style.top = top + "px";
-  target.classList.add("menu-target");
-  document.body.classList.add("menu-open");
+  setStates(target, { "menu-target": true });
+  setStates(document.body, { "menu-open": true });
   const move = (step) => {
     const at = buttons.indexOf(document.activeElement);
     buttons[(at + step + buttons.length) % buttons.length]?.focus();

@@ -36,9 +36,11 @@ try {
       );
       await page.goto(f.server.url + "/#token=" + f.server.token);
       const front = page.locator('.sheet[data-front="true"]');
-      await front.locator(".node").first().waitFor();
-      const lib = front.locator('.node[data-kind="folder"][data-path="lib"]');
-      const root = front.locator('.node[data-kind="rootfiles"]');
+      await front.locator(".pk-card").first().waitFor();
+      const lib = front.locator(
+        '.pk-card[data-kind="folder"][data-path="lib"]',
+      );
+      const root = front.locator('.pk-card[data-kind="rootfiles"]');
       assert.equal(await lib.getAttribute("data-uncommitted"), "true");
       assert.equal(await root.getAttribute("data-uncommitted"), null);
       assert.match(await lib.getAttribute("aria-label"), /uncommitted changes/);

@@ -5,21 +5,27 @@
  * settle in turn (an agent running), `peeking` ducks behind its layers and looks over them
  * (Ask lookups), `ready` bounces once and waits (a task to review), `merged` slides its
  * layers into one with a sparkle (applied to main), `asleep` breathes with its eye closed
- * (offline) and `stopped` droops with its layers out of line (a task that stopped). Reduced
- * motion holds each state still. The drawing is a fixed template with no inserted text, so
- * building it from markup is safe. */
+ * (offline) and `stopped` droops with its layers out of line (a task that stopped). What the
+ * agent does now: `reading` reads line by line with its reading lens, `searching` peeks like
+ * `peeking` with the lens, `editing` writes on its top layer with its pencil, `creating`
+ * writes while new layers stack up, and `running` pulses its layers in turn. Reduced motion holds each state still. The drawing is a fixed
+ * template with no inserted text, so building it from markup is safe. */
 
 let instances = 0;
 
-/** Returns a decorative Peek element (`span.peek-mark`) in the given state. `tiled` adds the
- * dark app-icon tile; `className` adds classes that size it for its context. */
-export function peek(state = "idle", { tiled = false, className = "" } = {}) {
+/** Returns a decorative Peek element (`span.pk-peek`) in the given state. `tiled` adds the
+ * dark app-icon tile; `head` crops the drawing to the head, for the mark over a map card;
+ * `className` adds classes that size it for its context. */
+export function peek(
+  state = "idle",
+  { tiled = false, className = "", head = false } = {},
+) {
   const s = "peek" + ++instances;
   const host = document.createElement("span");
-  host.className = `peek-mark ${className}`.trim();
+  host.className = `pk-peek peek-mark ${className}`.trim();
   host.dataset.state = state;
   host.setAttribute("aria-hidden", "true");
-  host.innerHTML = `<svg viewBox="0 0 200 200" class="peek is-${state}${tiled ? " tiled" : ""}" focusable="false">
+  host.innerHTML = `<svg viewBox="${head ? "36 58 128 69" : "0 0 200 200"}" class="peek is-${state}${tiled ? " tiled" : ""}" focusable="false">
 <defs>
 <radialGradient id="${s}-tile" cx="50%" cy="36%" r="78%"><stop offset="0" stop-color="#1b4a44"/><stop offset="1" stop-color="#0a1a19"/></radialGradient>
 <radialGradient id="${s}-dome" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#78e2c0"/><stop offset=".42" stop-color="#36a98a"/><stop offset="1" stop-color="#1a6553"/></radialGradient>
@@ -42,6 +48,7 @@ export function peek(state = "idle", { tiled = false, className = "" } = {}) {
 <g clip-path="url(#${s}-eye)"><rect class="lid" x="76" y="70" width="48" height="48" fill="#33a385"/></g>
 </g>
 <g class="squint"><path d="M84 90 Q100 106 116 90" fill="none" stroke="#0d2120" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="74" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/><ellipse cx="126" cy="106" rx="8" ry="4.5" fill="#ff9aa8" opacity=".55"/></g>
+<g class="glasses"><circle cx="100" cy="94" r="27" fill="#fff" fill-opacity=".14" stroke="#0f2a27" stroke-width="4.5"/><path d="M127 91 L149 85" fill="none" stroke="#0f2a27" stroke-width="4.5" stroke-linecap="round"/><path d="M83 82 A20 20 0 0 1 95 75" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/></g>
 </g></g>
 <ellipse cx="100" cy="128" rx="56" ry="4.5" fill="#050f0e" opacity=".3"/>
 <g class="l1"><rect x="24" y="125" width="152" height="15" rx="7.5" fill="url(#${s}-mint)"/>
@@ -50,6 +57,7 @@ export function peek(state = "idle", { tiled = false, className = "" } = {}) {
 <rect x="46" y="149.5" width="108" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>
 <g class="l3"><rect x="58" y="169" width="84" height="12" rx="6" fill="url(#${s}-clay)"/>
 <rect x="64" y="170.5" width="72" height="2.6" rx="1.3" fill="#fff" opacity=".25"/></g>
+<g class="pen"><g transform="translate(152 127) rotate(40)"><path d="M0 0 L-6.5 -13 L6.5 -13 Z" fill="#f5e2bf"/><path d="M0 0 L-2.6 -5.2 L2.6 -5.2 Z" fill="#0f2a27"/><rect x="-6.5" y="-50" width="13" height="37" fill="#68cfb0"/><rect x="-6.5" y="-50" width="4.5" height="37" fill="#fff" opacity=".35"/><rect x="-6.5" y="-56" width="13" height="6" fill="#e2c393"/><rect x="-6.5" y="-64" width="13" height="9" rx="3.5" fill="#a87c4c"/></g></g>
 <g class="dots"><circle cx="138" cy="44" r="5" fill="#68cfb0"/><circle cx="152" cy="32" r="6.5" fill="#68cfb0"/><circle cx="168" cy="20" r="8" fill="#68cfb0"/></g>
 <g class="zz" fill="#9fd9c7"><circle cx="140" cy="62" r="5"/><circle cx="156" cy="46" r="3.5"/></g>
 <g class="sparkle" fill="#f2c94c"><path d="M44 52l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M156 40l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>

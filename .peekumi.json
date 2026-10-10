@@ -36,7 +36,8 @@
       "frontend/peek.js",
       "frontend/canvas.js",
       "frontend/model.js",
-      "frontend/menu.js"
+      "frontend/menu.js",
+      "frontend/ui.js"
     ],
     "frontend-features": [
       "frontend/workflow.js",

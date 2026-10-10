@@ -28,10 +28,10 @@ try {
     try {
       await page.goto(f.server.url + "/#token=" + f.server.token);
       const card = page.locator(
-        '.sheet[data-front="true"] .node[data-path="backend"]',
+        '.sheet[data-front="true"] .pk-card[data-path="backend"]',
       );
       await card.waitFor();
-      const menu = page.locator('.context-menu[role="menu"]');
+      const menu = page.locator('.pk-menu.is-floating[role="menu"]');
       // Open the menu the way the device does: right-click, or a held finger.
       // Real touch input through the browser, so the press is a true one.
       const cdp = phone ? await page.context().newCDPSession(page) : null;
@@ -79,7 +79,7 @@ try {
       await openOn(card);
       await menu.waitFor();
       assert.match(
-        await menu.locator(".context-menu-head").textContent(),
+        await menu.locator(".pk-menu-head").textContent(),
         /^backend · folder/,
       );
       const labels = await menu
@@ -93,12 +93,12 @@ try {
       ]);
       assert.ok(labels.includes("Copy path"));
       assert.equal(
-        await page.locator(".node.sel").count(),
+        await page.locator(".pk-card.is-selected").count(),
         0,
         "A long press or right-click does not also select the card",
       );
       assert.equal(
-        await page.locator("body.menu-open").count(),
+        await page.locator("body.is-menu-open").count(),
         1,
         "The rest of the map dims",
       );
@@ -120,13 +120,63 @@ try {
         // The first tap on an item runs it: the long press does not swallow it.
         await tap(menu.getByRole("menuitem", { name: /Ask about this/ }));
       }
-      await page.waitForFunction(
-        () =>
-          document
-            .querySelector('[data-compose="ask"]')
-            .getAttribute("aria-selected") === "true",
-      );
+      // Ask about this focuses the map's composer, about the card.
+      const composerFocused = () =>
+        page.waitForFunction(
+          () =>
+            document.activeElement?.getAttribute("aria-label") ===
+            "Ask, or describe a change",
+        );
+      await composerFocused();
       assert.match(await page.locator("#dockContext").textContent(), /backend/);
+      if (!phone) {
+        // Add instruction writes in the same composer.
+        await page.locator("#composerHost textarea").blur();
+        await openOn(card);
+        await menu.waitFor();
+        await menu.getByRole("menuitem", { name: /Add instruction/ }).click();
+        await composerFocused();
+        assert.match(
+          await page.locator("#dockContext").textContent(),
+          /backend/,
+        );
+        // Start a session here selects the card, and the next send runs With me.
+        await openOn(card);
+        await menu.waitFor();
+        await menu
+          .getByRole("menuitem", { name: /Start a session here/ })
+          .click();
+        await composerFocused();
+        await page
+          .locator(
+            '.sheet[data-front="true"] .pk-card.is-selected[data-path="backend"]',
+          )
+          .waitFor();
+        await page
+          .getByLabel("Ask, or describe a change")
+          .fill("Work on backend with me.");
+        await page
+          .locator("#composerHost")
+          .getByRole("button", { name: "Add as a change", exact: true })
+          .click();
+        await page.locator("#reviewActions .pk-tray").click();
+        await page.locator('#panel[data-view="prepare"]').waitFor();
+        assert.equal(
+          await page
+            .getByRole("button", { name: "With me", exact: true })
+            .getAttribute("aria-pressed"),
+          "true",
+          "The send sheet opens on With me",
+        );
+        assert.equal(
+          await page.locator("#dispatchRun").innerText(),
+          "Start session",
+        );
+        await page
+          .locator("#viewHead")
+          .getByRole("button", { name: "Back", exact: true })
+          .click();
+      }
       // A moving finger pans the map and opens nothing.
       if (phone) {
         await touch(card, { move: 30 });
@@ -157,21 +207,20 @@ try {
         /backend/,
         "The reply carries the card",
       );
-      // A name in an answer: its menu moves the map there.
-      await page.getByRole("tab", { name: "Ask", exact: true }).click();
-      await page.waitForFunction(
-        () =>
-          document
-            .querySelector('[data-compose="ask"]')
-            .getAttribute("aria-selected") === "true",
-      );
-      await page.getByLabel("Your question").fill("Name references.");
+      // A name in an answer: its menu moves the map there. Ask about this brings the
+      // composer back in place of the reply box.
+      await openOn(card);
+      await menu.waitFor();
+      await menu.getByRole("menuitem", { name: /Ask about this/ }).click();
+      await page
+        .getByLabel("Ask, or describe a change")
+        .fill("Name references.");
       await page
         .locator("#composerHost")
-        .getByRole("button", { name: "Send question", exact: true })
+        .getByRole("button", { name: "Ask", exact: true })
         .click();
       const name = page
-        .locator(".ask-message .code-link[data-target]", {
+        .locator(".pk-message .pk-code-link[data-target]", {
           hasText: "module.py",
         })
         .first();

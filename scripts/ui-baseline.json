@@ -1,0 +1,31 @@
+{
+  "frontend/app.js": {
+    "U5": 1,
+    "U1": 343,
+    "U3": 8,
+    "U4": 18
+  },
+  "frontend/canvas.js": {
+    "U4": 3
+  },
+  "frontend/index.html": {
+    "U6": 78
+  },
+  "frontend/menu.js": {
+    "U4": 2
+  },
+  "frontend/select.js": {
+    "U3": 1,
+    "U4": 5
+  },
+  "frontend/style.css": {
+    "U7": 973
+  },
+  "frontend/text.js": {
+    "U3": 1
+  },
+  "frontend/workflow.js": {
+    "U1": 183,
+    "U3": 11
+  }
+}

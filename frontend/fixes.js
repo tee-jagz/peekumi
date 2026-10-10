@@ -14,9 +14,18 @@
  * The owner selects fixes (all at first), edits their text and clears the ones to leave out.
  * One button saves the selected fixes as draft instructions and opens the task form with them
  * selected (a batch of fixes in one task); another only saves them. A drafted fix is not
- * drafted again.
+ * drafted again, also after a reload: the server's instructions say which were sent.
  */
-import { peek } from "./peek.js";
+import {
+  Actions,
+  Button,
+  Disclosure,
+  EmptyState,
+  InlineError,
+  Note,
+  ProposalRow,
+  TextArea,
+} from "./ui.js";
 
 /** Makes the page. `api(route, options)` reads JSON; `write(route, body)` posts it;
  * `head(title, {meta})` draws the page's header row; `revision()` is the map's head commit;
@@ -42,12 +51,6 @@ export function createFixes({
   // The owner's choice and text for each proposal, and the fixes already drafted, by key.
   const choices = new Map(),
     drafted = new Set();
-  const el = (tag, className, text) => {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  };
   const plural = (n, word) =>
     `${n} ${n === 1 ? word : word.endsWith("x") ? word + "es" : word + "s"}`;
 
@@ -60,6 +63,19 @@ export function createFixes({
       agent: { status: "idle", fixes: [], provider: "", error: "" },
       mode: "agent",
     };
+    // What was already sent, from the server: a fix whose text is a live instruction is not
+    // sent again, also after a reload.
+    api("/api/workflow")
+      .then((w) => {
+        if (shown.commit !== commit) return;
+        shown.sent = new Set(
+          (w.comments || [])
+            .filter((c) => c.status !== "deleted")
+            .map((c) => c.text.trim()),
+        );
+        redraw();
+      })
+      .catch(() => {});
     api("/api/fixes?head=" + encodeURIComponent(commit))
       .then((data) => {
         if (shown.commit !== commit) return;
@@ -205,10 +221,14 @@ export function createFixes({
     }));
   }
 
+  /** True when proposal `item` is already an instruction (drafted here, or sent before). */
+  const isDrafted = (item) =>
+    drafted.has(item.key) ||
+    Boolean(shown.sent?.has(choices.get(item.key)?.text?.trim()));
   /** The selected proposals that are not drafted yet. */
   const picked = () =>
     items().filter(
-      (item) => choices.get(item.key)?.selected && !drafted.has(item.key),
+      (item) => choices.get(item.key)?.selected && !isDrafted(item),
     );
 
   /** Saves the selected proposals as draft instructions; returns their IDs. */
@@ -228,30 +248,18 @@ export function createFixes({
   }
 
   /** What Peekumi found, as plain lines: the agent's context, and the fallback. */
-  function context(open) {
-    const box = el("details", "fix-context");
-    box.open = open;
-    box.append(
-      el(
-        "summary",
-        "",
-        `What Peekumi found (${plural(shown.groups.length, "place")})`,
+  const context = (open) =>
+    Disclosure(
+      {
+        summary: `What Peekumi found (${plural(shown.groups.length, "place")})`,
+        open,
+      },
+      shown.groups.map((g) =>
+        Note(
+          `${g.target.symbol ? `${g.target.symbol} in ${g.target.path}` : g.target.path} · ${g.rule} · ${plural(g.count, "break")} from ${g.sources.join(", ")}`,
+        ),
       ),
     );
-    for (const g of shown.groups) {
-      const target = g.target.symbol
-        ? `${g.target.symbol} in ${g.target.path}`
-        : g.target.path;
-      box.append(
-        el(
-          "p",
-          "fix-context-row",
-          `${target} · ${g.rule} · ${plural(g.count, "break")} from ${g.sources.join(", ")}`,
-        ),
-      );
-    }
-    return box;
-  }
 
   /** Draws the page in `body`. */
   function render(body) {
@@ -265,133 +273,130 @@ export function createFixes({
         ? `${plural(breaks, "rule break")} in ${plural(shown.groups.length, "place")}`
         : "",
     });
-    if (shown.error) return body.append(el("p", "rule-error", shown.error));
-    if (!shown.groups)
-      return body.append(el("p", "read-note", "Reading the rule breaks…"));
+    if (shown.error)
+      return body.append(
+        InlineError({ title: "No rule breaks", text: shown.error }),
+      );
+    if (!shown.groups) return body.append(Note("Reading the rule breaks…"));
     if (shown.state !== "evaluated")
       return body.append(
-        el(
-          "p",
-          "read-note",
-          shown.state === "invalid"
-            ? "The rule configuration (.peekumi.json) is invalid. Fix it first."
-            : "This repository has no dependency rules (.peekumi.json).",
-        ),
+        EmptyState({
+          title:
+            shown.state === "invalid"
+              ? "The rule configuration (.peekumi.json) is invalid. Fix it first."
+              : "This repository has no dependency rules (.peekumi.json).",
+        }),
       );
     if (!shown.groups.length)
       return body.append(
-        el("p", "read-note", "No rule breaks at this commit. Nothing to fix."),
+        EmptyState({
+          state: "ready",
+          title: "No rule breaks at this commit. Nothing to fix.",
+        }),
       );
 
     const agent = shown.agent;
     if (
       shown.mode === "agent" &&
       (agent.status === "running" || agent.status === "waiting")
-    ) {
-      const working = el("div", "fix-working");
-      working.append(
-        peek(agent.status === "waiting" ? "idle" : "thinking", {
-          className: "fix-peek",
-        }),
-        el(
-          "p",
-          "",
-          agent.status === "waiting"
-            ? agent.error
-            : `${agentName() || "The agent"} reads the code and proposes fixes. This can take a few minutes. You can leave this page: Peekumi tells you when the fixes are ready, if notifications are on.`,
-        ),
-      );
-      return body.append(working, context(true));
-    }
-    if (shown.mode === "agent" && agent.status === "failed") {
-      const tryAgain = el("button", "btn primary", "Try again"),
-        fallback = el("button", "btn", "Use Peekumi's own proposals");
-      tryAgain.type = fallback.type = "button";
-      tryAgain.onclick = propose;
-      fallback.onclick = usePeekumi;
-      const buttons = el("div", "sel-acts fix-buttons");
-      buttons.append(tryAgain, fallback);
+    )
       return body.append(
-        el(
-          "p",
-          "rule-error",
-          `The agent could not propose fixes: ${agent.error}`,
-        ),
-        buttons,
+        EmptyState({
+          state: agent.status === "waiting" ? "idle" : "thinking",
+          title:
+            agent.status === "waiting"
+              ? "Waiting for the agent"
+              : "Proposing fixes",
+          text:
+            agent.status === "waiting"
+              ? agent.error
+              : `${agentName() || "The agent"} reads the code and proposes fixes. This can take a few minutes. You can leave this page: Peekumi tells you when the fixes are ready, if notifications are on.`,
+        }),
         context(true),
       );
-    }
+    if (shown.mode === "agent" && agent.status === "failed")
+      return body.append(
+        InlineError({
+          title: "The agent could not propose fixes",
+          text: agent.error,
+        }),
+        Actions(
+          {},
+          Button({ label: "Try again", variant: "primary", onClick: propose }),
+          Button({ label: "Use Peekumi's own proposals", onClick: usePeekumi }),
+        ),
+        context(true),
+      );
 
     body.append(
-      el(
-        "p",
-        "read-note",
+      Note(
         shown.mode === "agent"
           ? `${agent.provider} read the code and proposed these fixes. Select the fixes to make, edit their text, then send them together as one task.`
           : "Peekumi's own proposals, one for each place. Select the fixes to make, edit their text, then send them together as one task.",
       ),
     );
-    const list = el("div", "fix-list");
     // The buttons count the selection; a change to it updates them in place, so the text box
     // that the owner types in keeps its focus.
-    const sendButton = el("button", "btn primary"),
-      saveButton = el("button", "btn");
+    const sendButton = Button({
+        label: "",
+        variant: "primary",
+        onClick: async () => {
+          sendButton.disabled = true;
+          send(await draft());
+        },
+      }),
+      saveButton = Button({
+        label: "Save as drafts",
+        onClick: async () => {
+          saveButton.disabled = true;
+          const ids = await draft();
+          saved(ids.length);
+          redraw();
+        },
+      });
     const update = () => {
       const n = picked().length;
       sendButton.textContent = `Send ${plural(n, "fix")} to an agent`;
-      saveButton.textContent = "Save as drafts";
       sendButton.disabled = saveButton.disabled = !n;
     };
-    for (const item of items()) {
+    const rows = items().map((item) => {
       const choice = choices.get(item.key);
-      const done = drafted.has(item.key);
-      const row = el("div", "fix-row" + (done ? " is-drafted" : ""));
-      const label = el("label", "fix-head");
-      const check = el("input");
-      check.type = "checkbox";
-      check.checked = choice.selected && !done;
-      check.disabled = done;
-      check.onchange = () => {
-        choice.selected = check.checked;
-        update();
-      };
-      const title = el("span", "fix-title");
-      title.append(
-        el("strong", "", item.title),
-        el("small", "", item.line + (done ? " · drafted" : "")),
-      );
-      label.append(check, title);
-      const text = el("textarea", "fix-text");
-      text.value = choice.text;
-      text.rows = 5;
-      text.disabled = done;
-      text.setAttribute("aria-label", `Instruction for ${item.title}`);
-      text.oninput = () => (choice.text = text.value);
-      row.append(label, text);
-      list.append(row);
-    }
-    sendButton.type = saveButton.type = "button";
-    sendButton.onclick = async () => {
-      sendButton.disabled = true;
-      send(await draft());
-    };
-    saveButton.onclick = async () => {
-      saveButton.disabled = true;
-      const ids = await draft();
-      saved(ids.length);
-      redraw();
-    };
-    const buttons = el("div", "sel-acts fix-buttons");
-    buttons.append(sendButton, saveButton);
+      const done = isDrafted(item);
+      return ProposalRow({
+        sentence: item.title,
+        meta: item.line + (done ? " · drafted" : ""),
+        breaks: null,
+        name: `Select ${item.title}`,
+        checked: choice.selected && !done,
+        disabled: done,
+        done,
+        editLabel: "The instruction",
+        editOpen: true,
+        editor: TextArea({
+          label: `Instruction for ${item.title}`,
+          value: choice.text,
+          rows: 5,
+          disabled: done,
+          onInput: (event) => (choice.text = event.target.value),
+        }),
+        onToggle: (event) => {
+          choice.selected = event.target.checked;
+          update();
+        },
+      });
+    });
     update();
-    const other = el(
-      "button",
-      "link-button fix-other",
-      shown.mode === "agent" ? "Propose again ›" : "Ask the agent instead ›",
+    body.append(
+      ...rows,
+      Actions({}, sendButton, saveButton),
+      Button({
+        label:
+          shown.mode === "agent" ? "Propose again" : "Ask the agent instead",
+        variant: "plain",
+        onClick: propose,
+      }),
+      context(false),
     );
-    other.type = "button";
-    other.onclick = propose;
-    body.append(list, buttons, other, context(false));
   }
 
   return { render };

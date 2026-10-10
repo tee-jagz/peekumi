@@ -54,11 +54,11 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(server.url + "/#token=" + server.token);
     await page
-      .locator('.sheet[data-front="true"] .node[data-path="web"]')
+      .locator('.sheet[data-front="true"] .pk-card[data-path="web"]')
       .waitFor();
     const front = page.locator('.sheet[data-front="true"]'),
-      web = front.locator('.node[data-path="web"]');
-    assert.ok(await web.locator(".n-breaks").count());
+      web = front.locator('.pk-card[data-path="web"]');
+    assert.ok(await web.locator(".pk-mark.is-break").count());
     await page
       .getByRole("button", { name: "Changes only", exact: true })
       .click();
@@ -68,29 +68,31 @@ try {
     );
     await web.click();
     await web.click();
-    const consumer = front.locator('.node[data-path="web/consumer.ts"]');
+    const consumer = front.locator('.pk-card[data-path="web/consumer.ts"]');
     await consumer.waitFor();
-    assert.ok(await consumer.locator(".n-breaks").count());
+    assert.ok(await consumer.locator(".pk-mark.is-break").count());
     assert.ok(await front.locator("path.e.violation").count());
     await page.locator('[data-ba="before"]').click();
-    assert.equal(await front.locator(".n-breaks").count(), 0);
+    assert.equal(await front.locator(".pk-mark.is-break").count(), 0);
     await page.locator('[data-ba="after"]').click();
     await consumer.click();
     await consumer.click();
-    await front.locator('.node[data-key="symbol:run"]').waitFor();
-    await front.locator('.node[data-key="symbol:run"]').click();
+    await front.locator('.pk-card[data-key="symbol:run"]').waitFor();
+    await front.locator('.pk-card[data-key="symbol:run"]').click();
     // Selecting a declaration emphasises its own connections and quiets the rest.
     assert.ok(
       await front.locator("path.e.hl.out").count(),
       "The selection's outgoing relationships are emphasised",
     );
     assert.equal(
-      await front.locator('.node[data-key="symbol:run"].faded').count(),
+      await front.locator('.pk-card[data-key="symbol:run"].is-dim').count(),
       0,
     );
-    if (await front.locator('.node[data-key="symbol:Client"]').count())
+    if (await front.locator('.pk-card[data-key="symbol:Client"]').count())
       assert.ok(
-        await front.locator('.node.faded[data-key="symbol:Client"]').count(),
+        await front
+          .locator('.pk-card.is-dim[data-key="symbol:Client"]')
+          .count(),
         "An unrelated declaration recedes",
       );
     if (!(await page.locator("#helperTools").isVisible()))

@@ -48,7 +48,7 @@ try {
     release(); // Later comparisons pass straight through.
     await page.locator("#panel").waitFor({ state: "visible" });
     await page
-      .locator('.sheet[data-front="true"] .node')
+      .locator('.sheet[data-front="true"] .pk-card')
       .first()
       .waitFor({ timeout: 45000 })
       .catch(async (e) => {
@@ -118,8 +118,12 @@ try {
       sentKey = r.request().postDataJSON().key;
       return r.fulfill({ json: catalog(true) });
     });
-    await page.locator("#dockAgent:not([hidden])").click();
-    const sheet = page.locator("dialog.agents-dialog");
+    // The map's chip names the agent for new tasks, so Ask's agent is chosen in Agents, from
+    // Tasks.
+    await page.locator("#openTasks").click();
+    await page.locator("#openAgents").click();
+    const sheet = page.locator('dialog[aria-label="Agents"]');
+    await sheet.locator(".pk-row", { hasText: /^Ask/ }).click();
     await sheet
       .getByRole("button", { name: "OpenRouter", exact: true })
       .click();
@@ -130,21 +134,28 @@ try {
     await sheet.getByText("API key •••• 7890").waitFor();
     assert.equal(sentKey, "sk-or-test-1234567890"); // gitleaks:allow (a fake test key)
     assert.match(
-      await sheet.locator(".agents-privacy").innerText(),
+      await sheet
+        .locator(".pk-note", { hasText: "sends your question" })
+        .innerText(),
       /sends your question and the code it reads to OpenRouter/,
     );
     await sheet.getByLabel("Search models").fill("model-13");
     assert.equal(
-      await sheet.locator(".agents-option:visible").count(),
+      await sheet
+        .getByRole("radiogroup", { name: "Model" })
+        .locator(".pk-row:visible")
+        .count(),
       2,
       "The match and Other model",
     );
     await page.screenshot({ path: `test-results/openrouter-${width}.png` });
     await sheet.getByText("Model 13", { exact: true }).click();
-    await page.keyboard.press("Escape");
-    await page
-      .locator("#dockAgent", { hasText: "OpenRouter · Model 13" })
+    await sheet.getByRole("button", { name: "Back to Agents" }).click();
+    await sheet
+      .locator(".pk-row", { hasText: /^Ask[^]*OpenRouter · Model 13/ })
       .waitFor();
+    await page.keyboard.press("Escape");
+    await page.locator("#openTasks").click();
     await page.evaluate(() => localStorage.clear());
     await page.unroute("**/api/agents");
     await page.unroute("**/api/agents/openrouter-key");
@@ -198,27 +209,28 @@ try {
       .waitFor({ state: "visible" });
     await page.screenshot({ path: `test-results/usability-${width}.png` });
     // A long list opens at its current entry and has a filter with a count.
-    await page.locator("#headRevision + .frost-select").click();
-    const menu = page.locator(".frost-menu");
-    await menu.locator(".frost-filter").waitFor();
+    await page.getByRole("radio", { name: /^Choose commits…/ }).click();
+    await page.locator("#headRevision + .pk-select-trigger").click();
+    const menu = page.locator(".pk-listbox");
+    await menu.locator(".pk-listbox-filter").waitFor();
     const opened = await menu.evaluate((m) => {
       const item = m
-          .querySelector('.frost-option[aria-selected="true"]')
+          .querySelector('.pk-listbox-option[aria-selected="true"]')
           .getBoundingClientRect(),
         box = m.getBoundingClientRect();
       return item.top >= box.top && item.bottom <= box.bottom;
     });
     assert.ok(opened, "The current entry is in view when the list opens");
     assert.match(
-      await menu.locator(".frost-count").innerText(),
+      await menu.locator(".pk-listbox-count").innerText(),
       /^\d+ commits$/,
     );
-    await menu.locator(".frost-filter").fill("no commit has this text");
+    await menu.locator(".pk-listbox-filter").fill("no commit has this text");
     assert.match(
-      await menu.locator(".frost-count").innerText(),
+      await menu.locator(".pk-listbox-count").innerText(),
       /^0 of \d+ match$/,
     );
-    assert.equal(await menu.locator(".frost-option:visible").count(), 0);
+    assert.equal(await menu.locator(".pk-listbox-option:visible").count(), 0);
     await page.keyboard.press("Escape");
     await menu.waitFor({ state: "detached" });
     const id = await page
@@ -292,7 +304,7 @@ try {
     );
     await page.locator("#repositoryPicker").selectOption(id);
     await page.waitForURL("**/?repo=" + id);
-    await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+    await page.locator('.sheet[data-front="true"] .pk-card').first().waitFor();
     assert.match(await page.title(), /second/);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
@@ -312,7 +324,7 @@ try {
     await page.reload();
     await page.getByRole("status").filter({ hasText: "Offline" }).waitFor();
     assert.equal(
-      await page.locator(".node").count(),
+      await page.locator(".pk-card").count(),
       0,
       "Offline reload must not restore private repository data",
     );
@@ -326,7 +338,7 @@ try {
     await readFile(join(server.state, "read-only/access-token"), "utf8")
   ).trim();
   await page.goto(server.url + "/#token=" + reader);
-  await page.locator('.sheet[data-front="true"] .node').first().waitFor();
+  await page.locator('.sheet[data-front="true"] .pk-card').first().waitFor();
   assert.equal(await page.locator("#conversationDock").isVisible(), false);
   await page.close();
 } finally {

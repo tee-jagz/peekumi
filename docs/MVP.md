@@ -16,7 +16,7 @@ Use real packages and symbols. Do not invent layers or health measurements. Larg
 
 The review sheet on the phone has three heights: peek, half and full. To change the height, drag or click the handle of the sheet, or use the arrow/Home/End keys. Peek shows the selection, its documentation summary and, where available, compact inputs/outputs. Peek does not show inspection controls. The expanded views give direct access to Details, Source, Changes, Relations and Discussion.
 
-Ask/Comment is an independent composer. It stays available in every inspection view and at every sheet height. When you navigate, the unsent text keeps its original anchor and revision.
+The composer (Ask, Instruction and Session) is independent. It stays available in every inspection view and at every sheet height. When you navigate, the unsent text keeps its original anchor and revision.
 
 The review sheet and its controls are frosted glass. The text areas are more opaque and are readable. Controls are icons with accessible names and tooltips. The map key continues to use words.
 

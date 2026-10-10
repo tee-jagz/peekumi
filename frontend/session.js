@@ -2,16 +2,26 @@
  * (backend/agent_session.rs). The owner's messages start agent turns; this module shows the
  * conversation, each step the agent takes with its output, the agent's command requests, and
  * the way to end the session in the normal review. */
-import { iconButton } from "./icons.js";
-import { richText } from "./text.js";
-import { peek } from "./peek.js";
-
-const el = (tag, cls, text) => {
-  const n = document.createElement(tag);
-  n.className = cls || "";
-  if (text !== undefined) n.textContent = text;
-  return n;
-};
+import {
+  Prose,
+  Actions,
+  ApprovalPrompt,
+  Button,
+  Command,
+  IconButton,
+  InlineError,
+  Message,
+  Note,
+  PageHeader,
+  Peek,
+  Pending,
+  ReplyComposer,
+  StatusLabel,
+  StepList,
+  StepRow,
+  TextField,
+  Thread,
+} from "./ui.js";
 
 /** True for a session that is still open: an agent turn runs, or it waits for the owner. */
 export const live = (r) =>
@@ -22,14 +32,14 @@ export const live = (r) =>
 
 /** How a new session treats commands on this device: "ask" (the default) or "allow". */
 const PERMISSIONS = "peekumi.session.permissions";
-function savedPermissions() {
+export function savedPermissions() {
   try {
     return localStorage.getItem(PERMISSIONS) === "allow" ? "allow" : "ask";
   } catch {
     return "ask";
   }
 }
-function savePermissions(mode) {
+export function savePermissions(mode) {
   try {
     localStorage.setItem(PERMISSIONS, mode);
   } catch {}
@@ -38,6 +48,14 @@ function savePermissions(mode) {
 /** What a live session does now, for the sheet's header outside its view: a title, a short
  * label, the command or file to highlight, and the path the agent works on (for the map).
  * `tail` is the session with the end of its log. */
+/** The word for each of Peek's activity poses (frontend/peek.js). */
+const ACTIVITY_WORDS = {
+  reading: "Reading",
+  searching: "Searching",
+  editing: "Editing",
+  creating: "Creating",
+  running: "Running",
+};
 export function activity(tail) {
   if (tail.approval)
     return {
@@ -76,7 +94,8 @@ export function activity(tail) {
   const path = last.changed?.[0] || last.files?.[0] || "";
   return {
     state: "running",
-    title: "Working",
+    title: ACTIVITY_WORDS[last.activity] || "Working",
+    pose: last.activity,
     label: last.label,
     code: last.code || "",
     path,
@@ -123,7 +142,8 @@ export function pathsIn(text = "") {
 }
 
 /** Where a session's agent is and has been, from its steps: `current` (the newest place),
- * `trail` (up to four places before it, newest first). A place is `{path, symbol?}`. */
+ * `trail` (up to four places before it, newest first), and `activity`, the pose of a step
+ * that is not done yet. A place is `{path, symbol?}`. */
 export function focusOf(items) {
   const places = items.flatMap((i) =>
     i.kind === "step" ? i.targets || [] : [],
@@ -136,7 +156,12 @@ export function focusOf(items) {
     seen.add(key(places[i]));
     order.push(places[i]);
   }
-  return { current: order[0] || null, trail: order.slice(1) };
+  const newest = items.findLast((i) => i.kind === "step");
+  return {
+    current: order[0] || null,
+    trail: order.slice(1),
+    activity: newest?.done ? null : newest?.activity || null,
+  };
 }
 
 /** The text of a Claude Code tool result, which is a string or a list of text parts. */
@@ -164,6 +189,7 @@ function claudeStep(part) {
     case "Read":
       return {
         ...step,
+        activity: "reading",
         label: `Read ${fileName(file)}`,
         files: [file],
         targets: at([file]),
@@ -172,6 +198,7 @@ function claudeStep(part) {
     case "MultiEdit":
       return {
         ...step,
+        activity: "editing",
         label: `Edited ${fileName(file)}`,
         files: [file],
         changed: [file],
@@ -180,6 +207,7 @@ function claudeStep(part) {
     case "Write":
       return {
         ...step,
+        activity: "creating",
         label: `Wrote ${fileName(file)}`,
         files: [file],
         changed: [file],
@@ -188,6 +216,7 @@ function claudeStep(part) {
     case "Bash":
       return {
         ...step,
+        activity: "running",
         label: "Ran",
         code: input.command,
         note: input.description,
@@ -196,6 +225,7 @@ function claudeStep(part) {
     case "Glob":
       return {
         ...step,
+        activity: "searching",
         label: "Listed files",
         code: input.pattern,
         targets: at(pathsIn(input.path)),
@@ -203,6 +233,7 @@ function claudeStep(part) {
     case "Grep":
       return {
         ...step,
+        activity: "searching",
         label: "Searched",
         code: input.pattern,
         targets: at(pathsIn(input.path)),
@@ -231,6 +262,7 @@ function claudeStep(part) {
       .map((t) => ({ path: t.path, symbol: t.name || undefined }));
     return {
       ...step,
+      activity: "reading",
       label: `Map · ${tool}`,
       code: target,
       files: path ? [path] : [],
@@ -293,6 +325,9 @@ export function timeline(output = "") {
         if (!step) continue;
         step.output = resultText(part.content);
         step.failed = part.is_error === true;
+        // A Write over a file that exists edits it (Claude Code says "updated").
+        if (step.activity === "creating" && /\bupdated\b/i.test(step.output))
+          step.activity = "editing";
         step.done = true;
       }
     if (event.type === "result" && event.is_error)
@@ -314,6 +349,7 @@ export function timeline(output = "") {
         );
         items.push({
           kind: "step",
+          activity: "running",
           label: "Ran",
           code: command,
           output: item.aggregated_output,
@@ -330,6 +366,10 @@ export function timeline(output = "") {
         const failed = item.status === "failed";
         items.push({
           kind: "step",
+          // Only new files: creating. Any other change: editing.
+          activity: item.changes?.every((c) => c.kind === "add")
+            ? "creating"
+            : "editing",
           label: `${failed ? "Could not change" : "Changed"} ${paths.map(fileName).join(", ")}`,
           files: paths,
           changed: failed ? [] : paths,
@@ -343,6 +383,7 @@ export function timeline(output = "") {
       )
         items.push({
           kind: "step",
+          activity: "reading",
           label: `Map · ${item.tool}`,
           done: true,
           files: [],
@@ -386,7 +427,6 @@ export function createSession({
   notice,
   context,
   using,
-  sessionAgent = () => Promise.resolve(null),
   agentName: nameOf = (id) => id,
   asksBeforeCommands = () => false,
   openTask,
@@ -405,23 +445,22 @@ export function createSession({
     denyNote = "",
     // The request last brought into view, so a redraw does not move the reader again.
     shownRequest = null;
-  const action = (text, fn, primary = false, cls = "") => {
-    const b = el(
-      "button",
-      "btn" + (primary ? " primary" : "") + (cls ? " " + cls : ""),
-      text,
-    );
-    b.type = "button";
-    b.onclick = async () => {
-      b.disabled = true;
-      try {
-        await fn();
-      } catch (e) {
-        notice(e.message, true);
-      } finally {
-        b.disabled = false;
-      }
-    };
+  /** A button that runs `fn` once at a time, and tells the owner when it fails. */
+  const action = (label, fn, variant = "secondary") => {
+    const b = Button({
+      label,
+      variant,
+      onClick: async () => {
+        b.disabled = true;
+        try {
+          await fn();
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          b.disabled = false;
+        }
+      },
+    });
     return b;
   };
   // Names and abilities come from the server's agent list (agents.js), never from IDs here.
@@ -434,29 +473,6 @@ export function createSession({
   /** The agent's request to run a command, with the owner's three answers. */
   function approvalCard(r) {
     const a = r.approval;
-    const card = el("section", "session-approval");
-    card.setAttribute("aria-label", "The agent asks to run a command");
-    card.append(
-      el(
-        "strong",
-        "",
-        a.tool === "Bash"
-          ? "The agent asks to run a command"
-          : `The agent asks to use ${a.tool}`,
-      ),
-    );
-    card.append(el("pre", "session-command", a.input));
-    if (a.reason) card.append(el("p", "read-note", `Why: “${a.reason}”`));
-    const label = el(
-      "label",
-      "workflow-field",
-      "A note for the agent (optional)",
-    );
-    const note = el("input");
-    note.value = denyNote;
-    note.setAttribute("aria-label", "A note for the agent");
-    note.oninput = () => (denyNote = note.value);
-    label.append(note);
     const decide = (decision) => async () => {
       await write(`/api/runs/${r.id}/approval`, {
         approval: a.id,
@@ -466,20 +482,28 @@ export function createSession({
       denyNote = "";
       await refresh();
     };
-    const buttons = el("div", "session-approval-actions");
-    buttons.append(action("Allow once", decide("allow"), true));
-    // The server names the rule, or none when no rule is safe (a chained command, a shell,
-    // sudo, git push…): then allow it once, or allow everything.
-    if (a.rule)
-      buttons.append(
-        action(`Allow ${a.rule} in this session`, decide("session")),
-      );
-    buttons.append(
-      action("Allow all commands", decide("all")),
-      action("Deny", decide("deny"), false, "danger"),
-    );
-    // The note comes first: it goes with Deny, so it is written before the tap.
-    card.append(label, buttons);
+    const card = ApprovalPrompt({
+      title:
+        a.tool === "Bash"
+          ? "The agent asks to run a command"
+          : `The agent asks to use ${a.tool}`,
+      command: a.input,
+      reason: a.reason && `Why: “${a.reason}”`,
+      // The note comes first: it goes with Deny, so it is written before the tap.
+      note: TextField({
+        label: "A note for the agent (optional)",
+        value: denyNote,
+        onInput: (event) => (denyNote = event.target.value),
+      }),
+      actions: [
+        action("Allow once", decide("allow"), "primary"),
+        // The server names the rule, or none when no rule is safe (a chained command, a
+        // shell, sudo, git push…): then allow it once, or allow everything.
+        a.rule && action(`Allow ${a.rule} in this session`, decide("session")),
+        action("Allow all commands", decide("all")),
+        action("Deny", decide("deny"), "danger"),
+      ],
+    });
     // A new request comes into view once, from its top, so its command is visible.
     if (shownRequest !== a.id) {
       shownRequest = a.id;
@@ -491,51 +515,39 @@ export function createSession({
   }
 
   /** One step: what the agent did, a mark for its result, and its output when opened. */
-  function stepRow(step, r, index) {
-    const row = el("details", "session-step" + (step.failed ? " failed" : ""));
-    row.dataset.key = `step-${index}`;
-    const summary = el("summary");
-    const mark = el(
-      "span",
-      "session-mark",
-      step.done ? (step.failed ? "✗" : "✓") : "",
+  function stepRow(step, r, index, current) {
+    return StepRow(
+      {
+        key: `step-${index}`,
+        label: step.label,
+        code: step.code,
+        current,
+        state: step.done
+          ? step.failed
+            ? "failed"
+            : "done"
+          : r.status === "running"
+            ? "now"
+            : "open",
+      },
+      step.note && Note(step.note),
+      [...new Set(step.changed.length ? step.changed : step.files)]
+        .filter(Boolean)
+        .map((path) =>
+          Button({
+            label: `Show ${path} on the map`,
+            variant: "plain",
+            onClick: () => showOnMap(r, path),
+          }),
+        ),
+      step.output?.trim() && Command(step.output.trim().slice(-6000)),
     );
-    if (!step.done && r.status === "running") mark.classList.add("is-running");
-    summary.append(mark, el("span", "session-label", step.label));
-    if (step.code) summary.append(el("code", "session-code", step.code));
-    row.append(summary);
-    if (step.note) row.append(el("p", "read-note", step.note));
-    for (const path of [
-      ...new Set(step.changed.length ? step.changed : step.files),
-    ].filter(Boolean)) {
-      const open = el(
-        "button",
-        "link-button code-link",
-        `Show ${path} on the map`,
-      );
-      open.type = "button";
-      open.onclick = () => showOnMap(r, path);
-      row.append(open);
-    }
-    if (step.output?.trim())
-      row.append(
-        el("pre", "taskpre session-output", step.output.trim().slice(-6000)),
-      );
-    return row;
   }
 
   /** The Session view: the conversation, live state, and the session's actions. */
   function render(body, r) {
     const items = timeline(r.output || "");
     // One row that stays at the top: back, the title, the state, and Stop while it works.
-    const head = el("div", "session-head");
-    const backButton = iconButton(
-      el("button", "session-icon view-back"),
-      "back",
-      "Back",
-    );
-    backButton.type = "button";
-    backButton.onclick = back;
     const state = r.approval
       ? "Needs you"
       : r.status === "running"
@@ -545,38 +557,37 @@ export function createSession({
           : live(r)
             ? "Your turn"
             : "Ended";
-    const status = el("span", "session-status");
-    status.dataset.state = r.approval
-      ? "needs"
-      : r.waitsForRepository
-        ? "queued"
-        : r.status;
-    status.append(el("span", "session-dot"), document.createTextNode(state));
-    head.append(
-      backButton,
-      el("h2", "session-title view-title", r.title || "Session"),
-      status,
-    );
-    if (r.status === "running") {
-      const stop = iconButton(
-        el("button", "session-icon session-stop"),
-        "stop",
-        "Stop",
-      );
-      stop.type = "button";
-      stop.onclick = async () => {
-        stop.disabled = true;
-        try {
-          await write(`/api/runs/${r.id}/cancel`, {});
-          await refresh();
-        } catch (e) {
-          notice(e.message, true);
-        } finally {
-          stop.disabled = false;
-        }
-      };
-      head.append(stop);
-    }
+    const stop =
+      r.status === "running" &&
+      IconButton({
+        icon: "stop",
+        label: "Stop",
+        quiet: true,
+        onClick: async () => {
+          stop.disabled = true;
+          try {
+            await write(`/api/runs/${r.id}/cancel`, {});
+            await refresh();
+          } catch (e) {
+            notice(e.message, true);
+          } finally {
+            stop.disabled = false;
+          }
+        },
+      });
+    const head = PageHeader({
+      title: r.title || "Session",
+      meta: StatusLabel({
+        state: r.approval
+          ? "needs"
+          : r.waitsForRepository
+            ? "queued"
+            : r.status,
+        text: state,
+      }),
+      actions: stop ? [stop] : [],
+      onBack: back,
+    });
     // The header sits above the scrolling conversation, not in it (app.js #viewHead).
     const host = document.querySelector("#viewHead");
     if (host) host.replaceChildren(head);
@@ -585,29 +596,30 @@ export function createSession({
     const log = conversation(r, items);
     if (r.approval) log.append(approvalCard(r));
     // Messages that wait for a turn show as the owner wrote them, with when they go.
-    for (const m of (r.messages || []).filter((x) => !x.delivered)) {
-      const bubble = el("div", "session-owner is-waiting");
-      bubble.append(richText(m.text, "session-text"));
-      bubble.append(
-        el(
-          "p",
-          "session-anchors",
-          r.waitsForRepository
-            ? "Waits until the other agent finishes"
-            : r.status === "running"
-              ? "Goes to the agent after this turn"
-              : "Goes with your next message",
+    for (const m of (r.messages || []).filter((x) => !x.delivered))
+      log.append(
+        Message(
+          { from: "user" },
+          Prose(m.text),
+          Note(
+            r.waitsForRepository
+              ? "Waits until the other agent finishes"
+              : r.status === "running"
+                ? "Goes to the agent after this turn"
+                : "Goes with your next message",
+          ),
         ),
       );
-      log.append(bubble);
-    }
     if (r.status === "running" && !r.approval) {
-      const working = el("div", "session-working");
-      working.append(
-        peek("working", { className: "session-working-peek" }),
-        el("span", "pending-text", "Working"),
+      // Peek and the word show what the agent does now: reading, editing, and so on.
+      const now = activity(r);
+      log.append(
+        Message(
+          { pending: true },
+          Peek({ state: now.pose || "working", size: "live" }),
+          Pending(now.title),
+        ),
       );
-      log.append(working);
     }
     // The conversation already says "Stopped by you."; a note that repeats it is left out.
     if (
@@ -616,14 +628,15 @@ export function createSession({
       !r.waitsForRepository &&
       !/^Stopped\./.test(r.message)
     )
-      log.append(el("p", "read-note", r.message));
+      log.append(Note(r.message));
     body.append(log);
     renderActions(body, r);
   }
 
   /** The conversation of a session: the owner's messages, the agent's text and steps. */
   function conversation(r, items = timeline(r.output || "")) {
-    const log = el("div", "session-log");
+    const log = Thread();
+    log.setAttribute("role", "log");
     log.setAttribute("aria-label", "Session conversation");
     log.setAttribute("aria-live", "polite");
     // Names in backticks link to their place on the map, as in Ask.
@@ -659,37 +672,35 @@ export function createSession({
     items.forEach((item, index) => {
       if (item.kind !== "step") steps = null;
       if (item.kind === "owner") {
-        const bubble = el("div", "session-owner");
-        bubble.append(richText(item.text, "session-text", linked));
+        // Where the owner pointed, as quiet text under the message.
         const parts = item.anchors.filter((a) => a.kind !== "repo");
-        if (parts.length) {
-          // Where the owner pointed, as quiet text under the message.
-          bubble.append(
-            el(
-              "p",
-              "session-anchors",
-              "↳ " + parts.map(anchorLabel).join(", "),
-            ),
-          );
-        }
-        log.append(bubble);
+        log.append(
+          Message(
+            { from: "user" },
+            Prose(item.text, linked),
+            parts.length > 0 && Note("↳ " + parts.map(anchorLabel).join(", ")),
+          ),
+        );
       } else if (item.kind === "text")
-        log.append(richText(item.text, "session-text session-agent", linked));
+        log.append(Message({}, Prose(item.text, linked)));
       else if (item.kind === "step") {
         if (!steps) {
-          steps = el("div", "session-steps");
+          steps = StepList();
           log.append(steps);
         }
-        const row = stepRow(item, r, index);
         // The step the agent takes now; the map marks its place.
-        if (index === lastStep) row.classList.add("is-current");
-        steps.append(row);
+        steps.append(stepRow(item, r, index, index === lastStep));
       } else if (item.kind === "error")
-        log.append(el("p", "session-error", item.text));
+        log.append(InlineError({ title: "Error", text: item.text }));
       else if (item.kind === "end" && item.status === "cancelled")
-        log.append(el("p", "read-note session-turn-end", "Stopped by you."));
+        log.append(Note("Stopped by you."));
       else if (item.kind === "end" && item.status === "failed")
-        log.append(el("p", "session-error", "The agent's turn failed."));
+        log.append(
+          InlineError({
+            title: "The agent's turn failed",
+            text: "Reply to try again, or end the session.",
+          }),
+        );
     });
     return log;
   }
@@ -699,9 +710,7 @@ export function createSession({
   function renderActions(body, r) {
     const cost = costOf(timeline(r.output || ""));
     body.append(
-      el(
-        "p",
-        "session-info",
+      Note(
         [
           agentName(r) + (r.model ? " · " + r.model : ""),
           `${r.turns || 0} turn${r.turns === 1 ? "" : "s"}`,
@@ -712,64 +721,53 @@ export function createSession({
           .join(" · "),
       ),
     );
-    const links = el("div", "session-links");
-    const link = (text, fn) => {
-      const b = el("button", "link-button", text);
-      b.type = "button";
-      b.onclick = async () => {
-        try {
-          await fn();
-        } catch (e) {
-          notice(e.message, true);
-        }
-      };
-      return b;
-    };
+    const link = (label, fn) =>
+      Button({
+        label,
+        variant: "plain",
+        onClick: async () => {
+          try {
+            await fn();
+          } catch (e) {
+            notice(e.message, true);
+          }
+        },
+      });
+    const links = [];
     if (r.results?.length)
-      links.append(link("Changes on the map", () => showOnMap(r)));
+      links.push(link("Changes on the map", () => showOnMap(r)));
     // How the session treats commands; the next turn starts with the new choice.
     const all = r.permissions === "allow";
-    const mode =
-      asksBeforeCommands(r.agent) &&
-      link(all ? "Commands: all allowed" : "Commands: ask first", async () => {
-        await write(`/api/runs/${r.id}/permissions`, {
-          mode: all ? "ask" : "allow",
-        });
-        await refresh();
-      });
-    if (mode) {
+    if (asksBeforeCommands(r.agent)) {
+      const mode = link(
+        all ? "Commands: all allowed" : "Commands: ask first",
+        async () => {
+          await write(`/api/runs/${r.id}/permissions`, {
+            mode: all ? "ask" : "allow",
+          });
+          await refresh();
+        },
+      );
       mode.setAttribute("aria-pressed", String(all));
       mode.title = all
         ? "Commands run with no question. Tap to ask before commands outside the list"
         : "Commands outside the list wait for you. Tap to allow all commands";
-      if (all) mode.classList.add("is-open");
-      links.append(mode);
+      links.push(mode);
     }
     if (r.status === "waiting" && !ending)
-      links.append(
+      links.push(
         link("End session", () => {
           ending = true;
           return refresh();
         }),
       );
-    if (links.childElementCount) body.append(links);
+    if (links.length) body.append(Actions({}, links));
     if (r.status === "waiting" && ending) body.append(endPanel(r));
   }
 
   /** Ending: send the branch to the normal review, end without review, or keep working. */
   function endPanel(r) {
-    const panel = el("section", "session-end");
-    panel.setAttribute("aria-label", "End the session");
     const commits = r.results?.length || 0;
-    panel.append(
-      el(
-        "p",
-        "read-note",
-        commits
-          ? `${commits} commit${commits === 1 ? "" : "s"}. Send to review, then approve and merge into ${r.watched?.replace("refs/heads/", "") || "main"}. The conversation stays with the work.`
-          : "The agent made no commit. Ask it to commit its work, or end without review.",
-      ),
-    );
     const review = action(
       "Send to review",
       async () => {
@@ -777,104 +775,46 @@ export function createSession({
         ending = false;
         await openTask(r.id);
       },
-      true,
+      "primary",
     );
     review.disabled = !commits;
-    const keep = el("button", "link-button", "Keep working");
-    keep.type = "button";
-    keep.onclick = () => {
-      ending = false;
-      refresh();
-    };
-    const row = el("div", "session-end-actions");
-    row.append(
-      review,
-      action("End without review", async () => {
-        await write(`/api/runs/${r.id}/end`, { review: false });
-        ending = false;
-        await refresh();
-      }),
-      keep,
-    );
-    panel.append(row);
+    const panel = ApprovalPrompt({
+      title: "End the session",
+      icon: null,
+      reason: commits
+        ? `${commits} commit${commits === 1 ? "" : "s"}. Send to review, then approve and merge into ${r.watched?.replace("refs/heads/", "") || "main"}. The conversation stays with the work.`
+        : "The agent made no commit. Ask it to commit its work, or end without review.",
+      actions: [
+        review,
+        action("End without review", async () => {
+          await write(`/api/runs/${r.id}/end`, { review: false });
+          ending = false;
+          await refresh();
+        }),
+        Button({
+          label: "Keep working",
+          variant: "plain",
+          onClick: () => {
+            ending = false;
+            refresh();
+          },
+        }),
+      ],
+    });
     return panel;
   }
 
   /** The dock's composer in Session mode: a reply to the open session, with the selection
-   * on the map as a pointer, or the first message of a new session. */
+   * on the map as a pointer, or the first message of a new session (the send sheet starts
+   * most sessions). Returns the place that goes with the message, for the dock. */
   function renderComposer(host, current, { named = false } = {}) {
     const here = context();
-    const box = el("section", "composer");
     // Only a place the owner chose goes with a reply, not where Follow moved the map.
     const pointer =
       here && here.anchor.kind !== "repo" && pointed() ? here.anchor : null;
-    box.append(
-      el(
-        "p",
-        "composer-anchor",
-        current
-          ? pointer
-            ? anchorLabel(pointer)
-            : ""
-          : here
-            ? anchorLabel(here.anchor)
-            : "",
-      ),
-    );
-    const label = el("label", "workflow-field dock-input");
-    const input = el("textarea");
-    input.rows = 1;
-    input.maxLength = 12000;
-    input.value = draft;
-    const name = current
-      ? "Reply to the agent"
-      : "What do you want to work on?";
-    input.setAttribute("aria-label", name);
-    // With more than one open session, the box says which one the reply goes to.
-    input.placeholder = current
-      ? named
-        ? `Reply to “${(current.title || "Session").slice(0, 40)}”`
-        : current.status === "running"
-          ? "Steer the agent: it reads this after its current turn"
-          : "Reply to the agent"
-      : "What do you want to work on?";
-    input.oninput = () => {
-      draft = input.value;
-      send.disabled = !draft.trim();
-    };
-    label.append(input);
-    box.append(label);
-    const buttons = el("div", "sel-acts draft-buttons");
-    let permissions = savedPermissions();
-    if (!current) {
-      // Only a provider that asks before commands (today Claude Code) has the switch: Codex
-      // runs with its own preset, and OpenRouter runs no commands.
-      const mode = el("button", "icon-action session-mode", "");
-      mode.type = "button";
-      mode.hidden = true;
-      const show = () => {
-        const all = permissions === "allow";
-        iconButton(mode, all ? "shieldOff" : "shield", "Allow all commands");
-        mode.setAttribute("aria-pressed", String(all));
-        mode.classList.toggle("is-open", all);
-        mode.title = all
-          ? "All commands allowed: the agent runs any command with no question. Tap to ask first"
-          : "Commands outside the usual checks wait for you. Tap to allow all commands";
-      };
-      mode.onclick = () => {
-        permissions = permissions === "allow" ? "ask" : "allow";
-        savePermissions(permissions);
-        show();
-      };
-      show();
-      sessionAgent().then(
-        (agent) => (mode.hidden = !asksBeforeCommands(agent)),
-      );
-      buttons.append(mode);
-    }
-    const send = action(
-      current ? "Send" : "Start session",
-      async () => {
+    const send = async (text) => {
+      draft = text;
+      try {
         if (current) {
           await write(`/api/runs/${current.id}/message`, {
             text: draft,
@@ -890,23 +830,40 @@ export function createSession({
           ...here,
           text: draft,
           using: using("task"),
-          permissions,
+          permissions: savedPermissions(),
         });
         draft = "";
         await openTask(started.id);
-      },
-      true,
+      } catch (e) {
+        notice(e.message, true);
+      }
+    };
+    host.append(
+      ReplyComposer({
+        label: current ? "Reply to the agent" : "What do you want to work on?",
+        // With more than one open session, the box says which one the reply goes to.
+        placeholder: current
+          ? named
+            ? `Reply to “${(current.title || "Session").slice(0, 40)}”`
+            : current.status === "running"
+              ? "Steer the agent: it reads this after its current turn"
+              : "Reply to the agent"
+          : "What do you want to work on?",
+        sendLabel: current ? "Send to the agent" : "Start session",
+        sendIcon: current ? "send" : "check",
+        value: draft,
+        docked: true,
+        onInput: (text) => (draft = text),
+        onSend: send,
+      }),
     );
-    iconButton(
-      send,
-      current ? "send" : "check",
-      current ? "Send to the agent" : "Start session",
-    );
-    send.classList.add("icon-action");
-    send.disabled = !draft.trim();
-    buttons.append(send);
-    box.append(buttons);
-    host.append(box);
+    return current
+      ? pointer
+        ? anchorLabel(pointer)
+        : ""
+      : here
+        ? anchorLabel(here.anchor)
+        : "";
   }
 
   return { render, renderComposer, conversation };

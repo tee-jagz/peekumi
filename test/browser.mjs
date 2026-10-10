@@ -64,7 +64,7 @@ try {
     await page.goto(url + "/#token=" + token);
     await page.reload();
     const front = page.locator('.sheet[data-front="true"]');
-    await front.locator(".node").first().waitFor({ timeout: 45000 });
+    await front.locator(".pk-card").first().waitFor({ timeout: 45000 });
     await page.locator("#notice").waitFor({ state: "hidden" });
     if (process.env.PEEKUMI_TEST_BASE) {
       await page.locator("#revisionDetails > summary").click();
@@ -73,10 +73,13 @@ try {
       await page.locator("#revisionDetails > summary").click();
     }
     assert.equal(await page.evaluate(() => location.hash), "");
-    assert.equal(await front.locator(".node .dot, .node .kid i").count(), 0);
     assert.equal(
-      await front.locator(".node .object-type-icon").count(),
-      await front.locator(".node").count(),
+      await front.locator(".pk-card .dot, .pk-card .kid i").count(),
+      0,
+    );
+    assert.equal(
+      await front.locator(".pk-card .object-type-icon").count(),
+      await front.locator(".pk-card").count(),
     );
     assert.ok(
       await front.locator('.object-type-icon[aria-label="Directory"]').count(),
@@ -105,9 +108,11 @@ try {
       .getByRole("button", { name: "Close legend", exact: true })
       .click();
 
-    if (!(await page.locator("#helperTools").isVisible()))
-      await page.locator("#sheetHandle").click();
+    // The tabs show at Peek height: a tab raises the sheet by itself.
     await page.locator('[data-tab="changes"]').click();
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== "running"),
+    );
     assert.equal(
       await page.locator("#change-summary").getAttribute("data-count"),
       String(data.files.filter((f) => f.status !== "unchanged").length),
@@ -137,24 +142,25 @@ try {
           .trim()
           .toLowerCase(),
       ),
-      "#007aff",
+      // The design token for the accent (docs/design, D13): teal in the light theme.
+      "#087359",
     );
     await page.screenshot({
       path: `test-results/${viewport.width}-overview.png`,
       fullPage: true,
     });
     const rootColumns = await front
-      .locator(".node")
+      .locator(".pk-card")
       .evaluateAll((nodes) => new Set(nodes.map((n) => n.style.left)).size);
     assert.ok(
       rootColumns > 1,
       "Repository graph uses multiple node columns, not a vertical stack",
     );
-    const canvas = front.locator(".map-canvas");
+    const canvas = front.locator(".pk-map-viewport");
     assert.equal(await canvas.count(), 1);
     const transform = () =>
       canvas
-        .locator(":scope > .map-layer")
+        .locator(":scope > .pk-map-layer")
         .evaluate((el) => el.style.transform);
     const initialTransform = await transform();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
@@ -213,14 +219,16 @@ try {
     assert.equal(
       await front
         .locator(
-          '.node:not(.stub):not(.boundary)[data-status="unchanged"]:not([data-relationship-changed="true"])',
+          '.pk-card:not(.is-stub):not(.is-boundary)[data-status="unchanged"]:not([data-relationship-changed="true"])',
         )
         .count(),
       0,
     );
     assert.ok(
       await front
-        .locator('.node[data-status="changed"],.node[data-status="added"]')
+        .locator(
+          '.pk-card[data-status="changed"],.pk-card[data-status="added"]',
+        )
         .count(),
     );
     await page.screenshot({
@@ -235,8 +243,8 @@ try {
     const folder = target.path.split("/")[0];
     if (target.path.includes("/")) {
       const card = front
-        .locator('.node[data-kind="folder"]')
-        .filter({ has: page.locator(".n-name", { hasText: folder }) })
+        .locator('.pk-card[data-kind="folder"]')
+        .filter({ has: page.locator(".pk-card-name", { hasText: folder }) })
         .first();
       await card.focus();
       await card.click();
@@ -252,15 +260,15 @@ try {
       // A tap on empty map space clears the selection; a drag on it does not.
       const empty = await page.evaluate(() => {
         const box = document
-          .querySelector('.sheet[data-front="true"] .map-canvas')
+          .querySelector('.sheet[data-front="true"] .pk-map-viewport')
           .getBoundingClientRect();
         for (let y = box.top + 20; y < box.bottom - 20; y += 12)
           for (let x = box.left + 20; x < box.right - 20; x += 12) {
             const hit = document.elementFromPoint(x, y);
             if (
-              hit?.closest(".map-canvas") &&
+              hit?.closest(".pk-map-viewport") &&
               !hit.closest(
-                '.node, [role="button"], button, a, summary, details, input, select',
+                '.pk-card, [role="button"], button, a, summary, details, input, select',
               )
             )
               return { x, y };
@@ -297,9 +305,11 @@ try {
         fullPage: true,
       });
     }
-    if (!(await page.locator("#helperTools").isVisible()))
-      await page.locator("#sheetHandle").click();
+    // The tabs show at Peek height: a tab raises the sheet by itself.
     await page.locator('[data-tab="changes"]').click();
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== "running"),
+    );
     await page.locator("#search").fill(target.path);
     await page.locator("#changes .row").first().click();
     await page.waitForFunction(
@@ -308,7 +318,7 @@ try {
         path.split("/").at(-1),
       target.path,
     );
-    await front.locator('.node[data-kind="symbol"]').first().waitFor();
+    await front.locator('.pk-card[data-kind="symbol"]').first().waitFor();
     await page.waitForTimeout(350);
     await page.screenshot({
       path: `test-results/${viewport.width}-module.png`,
@@ -322,7 +332,7 @@ try {
     assert.ok(selectedSymbol);
     // A method's card may drop its class's name, so the full name is in the card's title.
     const symbol = front
-      .locator(`.node[data-kind="symbol"][title="${selectedSymbol.name}"]`)
+      .locator(`.pk-card[data-kind="symbol"][title="${selectedSymbol.name}"]`)
       .first();
     await symbol.focus();
     await symbol.click();
@@ -365,7 +375,8 @@ try {
           .evaluate((el) => getComputedStyle(el).borderTopWidth),
         "0px",
       );
-      assert.equal(await page.locator("#helperTools").isVisible(), false);
+      // The tabs stay at Peek height (flow 4).
+      assert.equal(await page.locator("#helperTools").isVisible(), true);
       assert.equal(await page.locator("#reviewScope .x").isVisible(), false);
       await page.waitForFunction(
         () => !document.querySelector("#panel").dataset.settling,
@@ -484,7 +495,7 @@ try {
     await page.locator("#revisionDetails").evaluate((node) => {
       node.open = true;
     });
-    const baseTrigger = page.locator("#base + .frost-select");
+    const baseTrigger = page.locator("#base + .pk-select-trigger");
     await baseTrigger.click();
     const menu = page.getByRole("listbox", { name: "Compare with revision" });
     await menu.waitFor();
@@ -564,7 +575,7 @@ try {
       await page.reload();
       await page.locator("#notice").waitFor({ state: "hidden" });
       const card = page.locator(
-        '.sheet[data-front="true"] .node[data-path="backend"]',
+        '.sheet[data-front="true"] .pk-card[data-path="backend"]',
       );
       await card.waitFor();
       await card.click();

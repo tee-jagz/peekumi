@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockups · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div class="pk gallery-box"><h1 class="pk-type-title-lg">Peekumi mockups</h1><p class="pk-note">Each page renders the real parts of <code class="pk-code">frontend/ui.js</code>. Add <code class="pk-code">?theme=dark</code>, <code class="pk-code">?theme=light-cb</code> or <code class="pk-code">?theme=dark-cb</code> to see another theme. <a href="screens.html">All screens</a>. <a href="flows.html">All flows</a>.</p><section><h2 class="pk-type-title">Basics</h2><ul><li><a href="Button.html">Button</a></li><li><a href="IconButton.html">IconButton</a></li><li><a href="SegmentedControl.html">SegmentedControl</a></li><li><a href="Tabs.html">Tabs</a></li><li><a href="TextField.html">TextField</a></li><li><a href="TextArea.html">TextArea</a></li><li><a href="Select.html">Select</a></li><li><a href="Checkbox.html">Checkbox</a></li><li><a href="Disclosure.html">Disclosure</a></li><li><a href="Choices.html">Choices</a></li></ul></section><section><h2 class="pk-type-title">Content</h2><ul><li><a href="Row.html">Row</a></li><li><a href="MetaLine.html">MetaLine</a></li><li><a href="FactGrid.html">FactGrid</a></li><li><a href="StatusLabel.html">StatusLabel</a></li><li><a href="StatusMark.html">StatusMark</a></li><li><a href="Figure.html">Figure</a></li><li><a href="InlineCode.html">InlineCode</a></li><li><a href="Layout.html">Layout</a></li></ul></section><section><h2 class="pk-type-title">Shell</h2><ul><li><a href="AppHeader.html">AppHeader</a></li><li><a href="ComparisonLine.html">ComparisonLine</a></li><li><a href="ReviewSheet.html">ReviewSheet</a></li><li><a href="SheetTitleRow.html">SheetTitleRow</a></li><li><a href="PageHeader.html">PageHeader</a></li><li><a href="Composer.html">Composer</a></li><li><a href="LiveLine.html">LiveLine</a></li><li><a href="ChangeTray.html">ChangeTray</a></li></ul></section><section><h2 class="pk-type-title">Map</h2><ul><li><a href="MapCard.html">MapCard</a></li><li><a href="MapEdge.html">MapEdge</a></li><li><a href="MapControls.html">MapControls</a></li><li><a href="MapKey.html">MapKey</a></li><li><a href="TimeRail.html">TimeRail</a></li><li><a href="MapList.html">MapList</a></li></ul></section><section><h2 class="pk-type-title">Code</h2><ul><li><a href="DiffBlock.html">DiffBlock</a></li><li><a href="SourceBlock.html">SourceBlock</a></li><li><a href="CollapsedLines.html">CollapsedLines</a></li></ul></section><section><h2 class="pk-type-title">Review</h2><ul><li><a href="TaskRow.html">TaskRow</a></li><li><a href="TaskGroup.html">TaskGroup</a></li><li><a href="InstructionReport.html">InstructionReport</a></li><li><a href="ProgressSteps.html">ProgressSteps</a></li><li><a href="ApprovalPrompt.html">ApprovalPrompt</a></li><li><a href="MergeDialog.html">MergeDialog</a></li><li><a href="ProposalRow.html">ProposalRow</a></li></ul></section><section><h2 class="pk-type-title">Feedback</h2><ul><li><a href="InlineError.html">InlineError</a></li><li><a href="EmptyState.html">EmptyState</a></li><li><a href="Skeleton.html">Skeleton</a></li><li><a href="Spinner.html">Spinner</a></li><li><a href="Toast.html">Toast</a></li><li><a href="Menu.html">Menu</a></li><li><a href="Popover.html">Popover</a></li><li><a href="Dialog.html">Dialog</a></li><li><a href="Peek.html">Peek</a></li></ul></section><section><h2 class="pk-type-title">Screens</h2><ul><li><a href="ScreenMap.html">ScreenMap</a></li><li><a href="ScreenAgent.html">ScreenAgent</a></li><li><a href="ScreenSelection.html">ScreenSelection</a></li><li><a href="ScreenDiff.html">ScreenDiff</a></li><li><a href="ScreenTime.html">ScreenTime</a></li><li><a href="ScreenTasks.html">ScreenTasks</a></li><li><a href="ScreenTask.html">ScreenTask</a></li><li><a href="ScreenSession.html">ScreenSession</a></li><li><a href="ScreenRules.html">ScreenRules</a></li><li><a href="ScreenEmpty.html">ScreenEmpty</a></li><li><a href="ScreenOffline.html">ScreenOffline</a></li><li><a href="ScreenMerge.html">ScreenMerge</a></li><li><a href="ScreenMerged.html">ScreenMerged</a></li><li><a href="ScreenDesktop.html">ScreenDesktop</a></li></ul></section><section><h2 class="pk-type-title">Flows</h2><ul><li><a href="FlowChange.html">FlowChange</a></li><li><a href="FlowFix.html">FlowFix</a></li><li><a href="FlowCompare.html">FlowCompare</a></li><li><a href="FlowStart.html">FlowStart</a></li></ul></section></div>
+</body>
+</html>

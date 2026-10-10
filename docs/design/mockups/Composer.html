@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composer · Peekumi design</title>
+<link rel="stylesheet" href="../../../frontend/tokens.css">
+<link rel="stylesheet" href="../../../frontend/ui.css">
+<style>body { margin: 0; padding: 24px; background: var(--canvas); display: grid; gap: 24px; justify-items: start; }
+.gallery-box { display: grid; gap: 16px; padding: 16px; background: var(--surface); }
+.gallery-glass { background: var(--glass); }
+.gallery-title { margin: 8px 0 0; font: 600 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-peeks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; }
+.gallery-peek { display: grid; justify-items: center; gap: 4px; margin: 0; text-align: center; }
+.gallery-peek .pk-peek { width: 64px; height: 64px; }
+.gallery-peek figcaption { display: grid; font: 400 12px/16px var(--font-ui); color: var(--ink-muted); }
+.gallery-peek figcaption code { font: 600 12px/16px var(--font-mono); color: var(--ink); }
+.gallery-flow-head { display: grid; gap: 4px; max-width: 760px; }
+.gallery-flow-head h2 { margin: 0; font: 600 20px/26px var(--font-ui); color: var(--ink); }
+.gallery-flow-head p { margin: 0; font: 400 14px/20px var(--font-ui); color: var(--ink-muted); }
+.gallery-flow-head .counts { font: 600 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-flow { display: flex; gap: 24px; align-items: flex-start; }
+.gallery-step { display: grid; gap: 8px; width: 390px; margin: 0; }
+.gallery-step figcaption { display: flex; gap: 8px; min-height: 40px; font: 400 14px/20px var(--font-ui); color: var(--ink); }
+.gallery-step figcaption b { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 12px/16px var(--font-ui); }
+</style>
+<script>const t = new URLSearchParams(location.search).get("theme"); if (t) document.documentElement.dataset.theme = t;</script>
+</head>
+<body>
+<div style="width: 390px"><div class="pk gallery-glass"><div class="pk-composer"><div class="pk-composer-top"><span class="pk-place"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M10 18s6-5.3 6-10a6 6 0 0 0-12 0c0 4.7 6 10 6 10ZM8 8a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path></svg>Repository</span></div><div class="pk-composer-input"><textarea class="pk-field" rows="1" maxlength="8000" placeholder="Ask, or describe a change" aria-label="Ask, or describe a change">Why does engine.rs call rules.rs?</textarea><button type="button" class="pk-send is-secondary" aria-label="Add as a change" title="Add as a change"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M10 4v12M4 10h12"></path></svg></button><button type="button" class="pk-send" aria-label="Ask" title="Ask"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M10 16V4M5 9l5-5 5 5"></path></svg></button></div></div><div class="pk-composer"><div class="pk-composer-top"><div class="pk-seg" role="group" aria-label="Composer mode"><button type="button" aria-pressed="true" aria-label="Ask" title="Ask"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M10 17a7 7 0 1 0-6.2-3.8L3 17l3.6-.9A7 7 0 0 0 10 17ZM8 8a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9v.4M10 13.3v.1"></path></svg></button><button type="button" aria-pressed="false" aria-label="Instruction" title="Instruction"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M4 4h12v9h-5l-4 3v-3H4ZM7 7.5h6M7 10h4"></path></svg></button><button type="button" aria-pressed="false" aria-label="Session" title="Session"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M3 4h14v9h-7l-4 3v-3H3ZM8 7l-2 1.5L8 10M12 7l2 1.5-2 1.5"></path></svg></button></div><span class="pk-place"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i is-sm"><path d="M10 18s6-5.3 6-10a6 6 0 0 0-12 0c0 4.7 6 10 6 10ZM8 8a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path></svg>Repository</span></div><div class="pk-composer-input"><input class="pk-field" placeholder="Ask about the repository" aria-label="Ask about the repository"><button type="button" class="pk-send" aria-label="Send" disabled><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" class="pk-i"><path d="M10 16V4M5 9l5-5 5 5"></path></svg></button></div></div></div></div>
+</body>
+</html>

@@ -20,7 +20,18 @@
  * instruction on the rule file and opens the task form with them, so an agent adds them in its
  * own worktree, for the normal review. Another button only saves the drafts.
  */
-import { peek } from "./peek.js";
+import {
+  Actions,
+  Button,
+  Code,
+  Disclosure,
+  EmptyState,
+  Group,
+  InlineError,
+  Note,
+  ProposalRow,
+  TextArea,
+} from "./ui.js";
 
 /** Makes the page. `api(route, options)` reads JSON; `write(route, body)` posts it;
  * `head(title, {meta})` draws the page's header row; `revision()` is the map's head commit;
@@ -43,12 +54,6 @@ export function createAudit({
   let shown = null,
     polling = false;
   const edits = new Map();
-  const el = (tag, className, text) => {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  };
   const plural = (n, word) => `${n} ${n === 1 ? word : word + "s"}`;
   const sendJson = (route, body, method = "POST") =>
     api(route, {
@@ -257,17 +262,6 @@ export function createAudit({
     const edit = editOf(r);
     const trial = edit.trial || r.trial || {};
     const done = r.status === "drafted" || r.added;
-    const box = el("div", "fix-row audit-row" + (done ? " is-drafted" : ""));
-    const label = el("label", "fix-head");
-    const tick = el("input");
-    tick.type = "checkbox";
-    tick.checked = r.status === "selected" && usable(r);
-    tick.disabled = done || !usable(r);
-    tick.onchange = () => {
-      mark(r, tick.checked ? "selected" : "proposed");
-      update();
-    };
-    const id = r.rule.id;
     // What the rule checks now, and what it cannot check: a relationship that the engine
     // cannot resolve can never break a rule, so "no break" is only as good as this number.
     const numbers = r.added
@@ -279,61 +273,55 @@ export function createAudit({
               ? `checks ${plural(trial.checked, "relationship")}`
               : "checks nothing now",
             ...(trial.unresolved ? [`cannot check ${trial.unresolved}`] : []),
-            trial.broke
-              ? `${plural(trial.broke, "break")} now`
-              : "no break now",
           ];
-    const title = el("span", "fix-title");
-    title.append(
-      el("strong", "", plainOf(r)),
-      el(
-        "small",
-        "",
-        [
+    return ProposalRow(
+      {
+        sentence: plainOf(r),
+        meta: [
           r.principle,
           ...(r.value ? [`${r.value} value`] : []),
           ...numbers,
           ...(fresh ? ["new"] : []),
           ...(r.status === "drafted" ? ["drafted"] : []),
         ].join(" · "),
-      ),
+        breaks: r.added || r.problem ? null : trial.broke || 0,
+        name: `Select the rule ${r.rule.id}`,
+        checked: r.status === "selected" && usable(r),
+        disabled: done || !usable(r),
+        done,
+        editOpen: !!edit.error,
+        editor:
+          !done &&
+          TextArea({
+            label: `Rule ${r.rule.id}`,
+            value: edit.text,
+            rows: 10,
+            code: true,
+            onInput: (event) => (edit.text = event.target.value),
+            // Leaving the box tries the rule again, when its text changed.
+            onChange: () => check(r),
+          }),
+        onToggle: (event) => {
+          mark(r, event.target.checked ? "selected" : "proposed");
+          update();
+        },
+      },
+      Note(r.why),
+      // The agent's view of the breaks now: on purpose or a mistake, and the cost of a fix. It
+      // shows only when Peekumi measured a break.
+      trial.broke > 0 && r.now && Note(`Now: ${r.now}`),
+      r.problem &&
+        (r.added
+          ? Note(r.problem)
+          : InlineError({ title: "Refused", text: r.problem })),
+      (trial.warnings || []).map((warning) => Note(warning)),
+      (trial.examples || [])
+        .slice(0, 3)
+        .map((b) => Note(Code(`${b.source} → ${b.target} (${b.kind})`))),
+      trial.broke > 3 && Note(`${trial.broke - 3} more breaks`),
+      parts.length > 0 && Note(`Also covers: ${parts.map(plainOf).join("; ")}`),
+      edit.error && InlineError({ title: "Refused", text: edit.error }),
     );
-    label.append(tick, title);
-    box.append(label, el("p", "audit-why", r.why));
-    // The agent's view of the breaks now: on purpose or a mistake, and the cost of a fix. It
-    // shows only when Peekumi measured a break.
-    if (trial.broke && r.now) box.append(el("p", "audit-now", `Now: ${r.now}`));
-    if (r.problem)
-      box.append(el("p", r.added ? "rule-coverage" : "rule-error", r.problem));
-    for (const warning of trial.warnings || [])
-      box.append(el("p", "rule-warning", warning));
-    for (const b of (trial.examples || []).slice(0, 3))
-      box.append(
-        el("p", "rule-added", `${b.source} → ${b.target} (${b.kind})`),
-      );
-    if (trial.broke > 3)
-      box.append(el("p", "rule-coverage", `${trial.broke - 3} more breaks`));
-    if (parts.length)
-      box.append(
-        el("p", "audit-parts", `Also covers: ${parts.map(plainOf).join("; ")}`),
-      );
-    if (edit.error) box.append(el("p", "rule-error", edit.error));
-    if (!done) {
-      const details = el("details", "audit-edit");
-      details.open = !!edit.error;
-      details.append(el("summary", "", "Edit rule"));
-      const text = el("textarea", "fix-text audit-text");
-      text.value = edit.text;
-      text.rows = 10;
-      text.spellcheck = false;
-      text.setAttribute("aria-label", `Rule ${id}`);
-      text.oninput = () => (edit.text = text.value);
-      // Leaving the box tries the rule again, when its text changed.
-      text.onchange = () => check(r);
-      details.append(text);
-      box.append(details);
-    }
-    return box;
   }
 
   /** Draws the page in `body`. */
@@ -361,64 +349,73 @@ export function createAudit({
         ? `${plural(roots.length, "open rule")} · ${roots.filter(breaking).length} find a problem now`
         : "",
     });
-    if (shown.error) body.append(el("p", "rule-error", shown.error));
-    if (shown.waiting) {
-      const waiting = el("div", "fix-working");
-      waiting.append(
-        peek("idle", { className: "fix-peek" }),
-        el("p", "", shown.waiting),
-      );
-      body.append(waiting);
-    }
-    if (!data) return body.append(el("p", "read-note", "Reading the list…"));
-    if (data.running) {
-      const working = el("div", "fix-working");
-      working.append(
-        peek("thinking", { className: "fix-peek" }),
-        el(
-          "p",
-          "",
-          `${agentName() || "The agent"} reads the architecture and the code, then proposes rules. This can take a few minutes. You can leave this page: Peekumi tells you when the rules are ready, if notifications are on.`,
-        ),
-      );
-      body.append(working);
-    } else if (data.error)
+    if (shown.error)
+      body.append(InlineError({ title: "No audit", text: shown.error }));
+    if (shown.waiting)
       body.append(
-        el("p", "rule-error", `The last audit failed: ${data.error}`),
+        EmptyState({
+          state: "idle",
+          title: "Waiting for the agent",
+          text: shown.waiting,
+        }),
+      );
+    if (!data) return body.append(Note("Reading the list…"));
+    if (data.running)
+      body.append(
+        EmptyState({
+          state: "thinking",
+          title: "Proposing rules",
+          text: `${agentName() || "The agent"} reads the architecture and the code, then proposes rules. This can take a few minutes. You can leave this page: Peekumi tells you when the rules are ready, if notifications are on.`,
+        }),
+      );
+    else if (data.error)
+      body.append(
+        InlineError({ title: "The last audit failed", text: data.error }),
       );
     // An audit can find that nothing is missing: that is a good result, not an error.
     if (!data.running && !data.error && data.lastRun && data.lastAdded === 0)
       body.append(
-        el(
-          "p",
-          "read-note audit-none",
+        Note(
           "The last audit found no missing rule. The current rules are enough.",
         ),
       );
-    if (!rules.length && !data.running) {
-      const first = el(
-        "button",
-        "btn primary",
-        data.lastRun ? "Audit again" : "Audit the architecture",
+    if (!rules.length && !data.running)
+      return body.append(
+        Actions(
+          {},
+          Button({
+            label: data.lastRun ? "Audit again" : "Audit the architecture",
+            variant: "primary",
+            onClick: () => start(commit),
+          }),
+        ),
       );
-      first.type = "button";
-      first.onclick = () => start(commit);
-      return body.append(first);
-    }
     if (rules.length)
       body.append(
-        el(
-          "p",
-          "read-note",
+        Note(
           `${data.provider || "The agent"} proposed these rules from the architecture, not from the imports that exist now. Each rule says which files must not use which. Select the rules to add; your selection stays. "Cannot check" counts relationships that Peekumi cannot resolve: they never break a rule.`,
         ),
       );
-    const sendButton = el("button", "btn primary"),
-      saveButton = el("button", "btn");
+    const sendButton = Button({
+        label: "",
+        variant: "primary",
+        onClick: async () => {
+          sendButton.disabled = true;
+          send(await draft());
+        },
+      }),
+      saveButton = Button({
+        label: "Save as drafts",
+        onClick: async () => {
+          saveButton.disabled = true;
+          const ids = await draft();
+          saved(ids.length);
+          redraw();
+        },
+      });
     const update = () => {
       const n = picked().length;
       sendButton.textContent = `Add ${plural(n, "rule")} with an agent`;
-      saveButton.textContent = "Save as drafts";
       sendButton.disabled = saveButton.disabled = !n;
     };
     // "New" only means something when earlier audits made the rest of the list.
@@ -441,76 +438,56 @@ export function createAudit({
     ]) {
       if (!members.length) continue;
       body.append(
-        el("h3", "workflow-group", heading),
-        el("p", "audit-principle", note),
-      );
-      for (const r of members.sort(order))
-        body.append(
-          row(
-            r,
-            update,
-            earlier && r.firstSeen === data.lastRun,
-            rules.filter((c) => c.partOf === r.id),
+        Group(
+          { title: heading },
+          Note(note),
+          members.sort(order).map((r) =>
+            row(
+              r,
+              update,
+              earlier && r.firstSeen === data.lastRun,
+              rules.filter((c) => c.partOf === r.id),
+            ),
           ),
-        );
+        ),
+      );
     }
     if (roots.length) {
-      sendButton.type = saveButton.type = "button";
-      sendButton.onclick = async () => {
-        sendButton.disabled = true;
-        send(await draft());
-      };
-      saveButton.onclick = async () => {
-        saveButton.disabled = true;
-        const ids = await draft();
-        saved(ids.length);
-        redraw();
-      };
-      const buttons = el("div", "sel-acts fix-buttons");
-      buttons.append(sendButton, saveButton);
       update();
-      body.append(buttons);
+      body.append(Actions({}, sendButton, saveButton));
     }
     if (!roots.length && finished.length && !data.running)
       body.append(
-        el(
-          "p",
-          "read-note",
-          "No open rule: each rule is added or sent to an agent.",
-        ),
+        Note("No open rule: each rule is added or sent to an agent."),
       );
-    if (finished.length) {
-      const closed = el("details", "fix-context audit-done");
-      closed.append(el("summary", "", `Done (${finished.length})`));
-      for (const r of finished)
-        closed.append(
-          el(
-            "p",
-            "fix-context-row",
-            `${plainOf(r)} · ${r.added ? "in the rule file" : "sent to an agent"}`,
+    if (finished.length)
+      body.append(
+        Disclosure(
+          { summary: `Done (${finished.length})` },
+          finished.map((r) =>
+            Note(
+              `${plainOf(r)} · ${r.added ? "in the rule file" : "sent to an agent"}`,
+            ),
           ),
-        );
-      body.append(closed);
-    }
-    if (data.dropped?.length) {
-      const left = el("details", "fix-context");
-      left.append(
-        el(
-          "summary",
-          "",
-          `The last audit left out ${plural(data.dropped.length, "proposal")}`,
         ),
       );
-      for (const d of data.dropped)
-        left.append(el("p", "fix-context-row", `${d.title}: ${d.reason}`));
-      body.append(left);
-    }
-    if (!data.running) {
-      const again = el("button", "link-button fix-other", "Audit again ›");
-      again.type = "button";
-      again.onclick = () => start(commit);
-      body.append(again);
-    }
+    if (data.dropped?.length)
+      body.append(
+        Disclosure(
+          {
+            summary: `The last audit left out ${plural(data.dropped.length, "proposal")}`,
+          },
+          data.dropped.map((d) => Note(`${d.title}: ${d.reason}`)),
+        ),
+      );
+    if (!data.running)
+      body.append(
+        Button({
+          label: "Audit again",
+          variant: "plain",
+          onClick: () => start(commit),
+        }),
+      );
   }
 
   return { render };

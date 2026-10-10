@@ -385,6 +385,9 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/audit.js" => Some(("text/javascript", include_bytes!("../frontend/audit.js"))),
         "/notify.js" => Some(("text/javascript", include_bytes!("../frontend/notify.js"))),
         "/style.css" => Some(("text/css", include_bytes!("../frontend/style.css"))),
+        "/tokens.css" => Some(("text/css", include_bytes!("../frontend/tokens.css"))),
+        "/ui.css" => Some(("text/css", include_bytes!("../frontend/ui.css"))),
+        "/ui.js" => Some(("text/javascript", include_bytes!("../frontend/ui.js"))),
         "/manifest.webmanifest" => Some((
             "application/manifest+json",
             include_bytes!("../frontend/manifest.webmanifest"),
@@ -393,6 +396,30 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/icon-192.png" => Some(("image/png", include_bytes!("../frontend/icon-192.png"))),
         "/icon-512.png" => Some(("image/png", include_bytes!("../frontend/icon-512.png"))),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
+        "/fonts/next-latin.woff2" => Some((
+            "font/woff2",
+            include_bytes!("../frontend/fonts/next-latin.woff2"),
+        )),
+        "/fonts/next-latin-ext.woff2" => Some((
+            "font/woff2",
+            include_bytes!("../frontend/fonts/next-latin-ext.woff2"),
+        )),
+        "/fonts/mono-latin.woff2" => Some((
+            "font/woff2",
+            include_bytes!("../frontend/fonts/mono-latin.woff2"),
+        )),
+        "/fonts/mono-latin-ext.woff2" => Some((
+            "font/woff2",
+            include_bytes!("../frontend/fonts/mono-latin-ext.woff2"),
+        )),
+        "/fonts/OFL-next.txt" => Some((
+            "text/plain; charset=utf-8",
+            include_bytes!("../frontend/fonts/OFL-next.txt"),
+        )),
+        "/fonts/OFL-mono.txt" => Some((
+            "text/plain; charset=utf-8",
+            include_bytes!("../frontend/fonts/OFL-mono.txt"),
+        )),
         _ => None,
     }
 }
@@ -1397,8 +1424,21 @@ mod tests {
         let main = include_str!("main.rs");
         let worker = include_str!("../frontend/sw.js");
         let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("frontend");
-        for entry in std::fs::read_dir(folder).unwrap() {
-            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+        // Every file, also in subfolders such as fonts/, by its path under frontend/.
+        let mut names = Vec::new();
+        let mut folders = vec![folder.clone()];
+        while let Some(dir) = folders.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    folders.push(path);
+                } else {
+                    let relative = path.strip_prefix(&folder).unwrap();
+                    names.push(relative.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        for name in names {
             if name == "README.md" || name == "sw.js" {
                 continue;
             }
