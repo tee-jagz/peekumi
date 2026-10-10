@@ -33,10 +33,11 @@ A 4px base. Use the seven steps only.
 
 ## Depth
 
-There are two levels.
+There are three levels.
 
 1. **The page.** The flat `canvas` ground. The map frame and the sheet are glass on it.
-2. **The floating layer.** Map controls, menus, popovers, dialogs and toasts use `shadow-float`, a soft and short shadow, and a `float-line` rim. The review sheet uses `sheet-edge` and `shadow-sheet`.
+2. **The floating layer.** Map controls and toasts use `shadow-float`, a soft and short shadow, and a `float-line` rim. The review sheet uses `sheet-edge` and `shadow-sheet`.
+3. **Pop-ups.** Menus, select lists, popovers, dialogs and the Agents sheet use the `surface-popup` ground and `shadow-popup`, a deeper shadow with a faint rim in dark. A pop-up's header with its controls stays at the top while its content scrolls.
 
 A changed card on the map lifts a little with `shadow-strata` and has a hairline `card-line` edge. An unchanged card has no shadow and no fill, and fades into the ground. The card where an agent works has a 1.5px `accent` edge and `shadow-agent`, a faint accent halo. A selected card has a 2px `accent` ring, 3px outside the card.
 

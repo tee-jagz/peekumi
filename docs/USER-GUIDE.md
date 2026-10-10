@@ -59,7 +59,7 @@ The screen has three parts. The header shows the name of the repository and the 
 
 The lines between cards are static dependencies: imports, calls, implementations and inheritance that Peekumi finds in the code. They do not show runtime behaviour. Tap a line to select it. Cards with a dashed outline are neighbours outside the current folder.
 
-When you select a card, Peekumi highlights the connections of that card and fades all unrelated items. Blue lines show what the selection uses. Teal lines show what uses the selection. If the selection has no connections, no items fade. A folder with many lines shows its unchanged lines faintly. Select a card to read its lines.
+When you select a card, Peekumi highlights the connections of that card and fades all unrelated items. Teal lines show what the selection uses. Lines in the text colour show what uses the selection. If the selection has no connections, no items fade. A folder with many lines shows its unchanged lines faintly. Select a card to read its lines.
 
 A long name takes a second line on its card. Inside a file, a method card does not repeat the name of its class when the class has a card on the same level. The full name is in the sheet.
 
@@ -86,7 +86,7 @@ A long name takes a second line on its card. Inside a file, a method card does n
 |---|---|---|
 | 1 | Colour lens | **Changes** colours the cards by Git status. **Structure** hides the change colours and shows the plain layout. |
 | 2 | Colours and types | The meaning of each change colour and shape. The icon for each type of folder, declaration and file. The icons for the parts that changed in a declaration. |
-| 3 | Line styles | Blue lines show what a selection uses. Teal lines show what uses the selection. Solid lines are imports or calls, dotted lines are implementations, and dashed lines are inheritance. Red shows a removed relationship or a broken dependency rule. |
+| 3 | Line styles | Teal lines show what a selection uses. Lines in the text colour show what uses the selection. Solid lines are imports or calls, dotted lines are implementations, and dashed lines are inheritance. Red shows a removed relationship or a broken dependency rule. |
 
 ## Choosing what to compare
 

@@ -8,7 +8,7 @@ The high-fidelity mockups of this look show 7 screens, in light and in dark. The
 
 It comes from the first Peekumi mockup (`docs/context/repo-strata-context.zip`). `AGENTS.md` names that mockup as the visual reference: glass surfaces, curved dependency lines and a zoom into the code.
 
-- **A flat ground.** Cool grey (`canvas` #eef1f0) in light, near-black (#070b0a) in dark. No gradient and no colour field.
+- **A flat ground.** Cool grey (`canvas` #eef1f0) in light, almost black (#030505) in dark. No gradient and no colour field.
 - **Glass where parts float.** The map frame, the review sheet, the composer and the floating controls are glass with a soft rim (`float-line`). Cards and rows are not glass.
 - **Four colours.** Neutral (the ground, glass, text and lines), teal for actions, the selection and added code, amber for modified, and red for removed and rule breaks. Peek keeps its own colours and shading.
 - **Change shows by contrast, not by tint.** A changed card is a clear card that lifts a little (`shadow-strata`). An unchanged card fades into the ground: no fill, no shadow, a hairline edge and less opacity. Counts are plain coloured numbers, not badges.

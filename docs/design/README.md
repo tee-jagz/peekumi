@@ -35,7 +35,7 @@ Peekumi's name comes from geology: strata are the layers of a rock face. Peek, t
 - **Type.** `Host Grotesk` for the interface and the display styles (names and titles), and `JetBrains Mono` for code, paths, hashes and counts. Peekumi serves both itself. Use the twelve type styles in **Type** only. Use weights 400 and 600 only. Nothing is smaller than 12px. Every text field is 16px.
 - **Space.** A 4px base: `space-1` (4px) to `space-7` (48px). The page gutter is `space-4`.
 - **Shape.** Soft radii: cards and menus `radius-md` (16px), the map frame and the sheet `radius-lg` (26px). Icon buttons, map controls, the composer field and segmented controls are pills.
-- **Depth.** Two levels: the page, and the floating layer with a soft `shadow-float`. A changed card lifts a little with `shadow-strata`; an unchanged card fades. Rows have no shadow.
+- **Depth.** Three levels: the page, the floating controls with a soft `shadow-float`, and pop-ups with `surface-popup` and a deeper `shadow-popup`. A pop-up's header stays at the top while it scrolls. A changed card lifts a little with `shadow-strata`; an unchanged card fades. Rows have no shadow.
 - **Glass.** The map frame, the sheet, the composer and the floating controls are glass (`glass`, `glass-strong`, `blur-glass`) with a soft rim. Cards and rows are not glass. No gradient is used anywhere, except Peek's own shading.
 - **Motion.** 150ms for feedback, 250 to 300ms for the sheet and map moves, with a decelerating curve. With reduced motion, use cross-fades only.
 

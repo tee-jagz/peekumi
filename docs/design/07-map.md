@@ -55,7 +55,7 @@ Each status has a colour and a second channel.
 
 - A selected card has a 2px `accent` ring.
 - The selected card and its direct neighbours stay at full opacity. Everything else dims to `dim` (0.25).
-- Incoming lines are solid and outgoing lines are dashed, so direction does not depend on colour.
+- Lines from the selection (what it uses) are `accent`. Lines to the selection (what uses it) are `ink`. Each line has an arrowhead, so direction does not depend on colour.
 - The sheet shows the selection at once.
 
 ## Controls

@@ -29,7 +29,7 @@
   --el-line: var(--float-line);
   --el-shadow: none;
   --field-glass: var(--surface-sunken);
-  --popover-glass: var(--surface);
+  --popover-glass: var(--surface-popup);
   --font: var(--font-ui);
   --mono: var(--font-mono);
   box-sizing: border-box;
@@ -2492,8 +2492,8 @@ select option {
   padding: 14px;
   border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--old-surface) 95%, transparent);
-  box-shadow: var(--shadow);
+  background: var(--popover-glass);
+  box-shadow: var(--shadow-popup);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2983,15 +2983,19 @@ body {
   border-radius: var(--radius-md);
   border: 1px solid var(--panel-line);
   background: var(--popover-glass);
-  box-shadow:
-    inset 0 1px 0 var(--panel-glow),
-    var(--shadow);
+  box-shadow: var(--shadow-popup);
 }
+/* The head with Refresh and Close stays at the top while the panel scrolls. */
 .comparison-head {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 10px;
+  margin: -12px -14px 10px;
+  padding: 12px 14px 8px;
+  background: var(--popover-glass);
 }
 .comparison-head strong {
   flex: 1;
@@ -3121,12 +3125,18 @@ body {
   border: 1px solid var(--panel-line);
   background: var(--popover-glass);
 }
+/* The key's head (the lens and Close) stays at the top while the key scrolls. */
 .legend-lens {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin: -14px -14px 10px;
+  padding: 14px 14px 8px;
+  background: var(--popover-glass);
   color: var(--muted);
 }
 .legend-lens .seg button {
@@ -3918,19 +3928,8 @@ details.p-section[open] > summary::before {
   z-index: 8;
 }
 
-/* Selection focus: a selected card's connections stand out by direction, unrelated lines and
-   cards recede. Outgoing (the selection uses) is the accent; incoming (uses the selection) teal. */
-:root {
-  --link-in: #0b8f9c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --link-in: #33c3c8;
-  }
-}
-:root[data-theme="dark"] {
-  --link-in: #33c3c8;
-}
+/* Selection focus: a selected card's connections stand out in the accent, unrelated lines and
+   cards recede. Outgoing (the selection uses) is the accent; incoming (uses the selection) is ink. */
 .edges path.e {
   transition:
     opacity 0.15s ease,
@@ -3949,7 +3948,7 @@ details.p-section[open] > summary::before {
   stroke: var(--old-accent);
 }
 .edges path.e.hl.in {
-  stroke: var(--link-in);
+  stroke: var(--old-ink);
 }
 .edges path.e.hl.violation {
   stroke: var(--del);
@@ -3958,7 +3957,7 @@ details.p-section[open] > summary::before {
   border-color: var(--old-accent);
 }
 .legend-line.in {
-  border-color: var(--link-in);
+  border-color: var(--old-ink);
 }
 
 /* Changed parts of a declaration: small icons beside its name, and words in the sheet. */
@@ -4170,9 +4169,7 @@ details.p-section[open] > summary::before {
   border-radius: var(--radius-md);
   border: 1px solid var(--panel-line);
   background: var(--popover-glass);
-  box-shadow:
-    inset 0 1px 0 var(--panel-glow),
-    var(--shadow);
+  box-shadow: var(--shadow-popup);
   color: var(--old-ink);
   overflow: auto;
 }

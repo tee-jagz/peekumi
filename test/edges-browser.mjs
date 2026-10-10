@@ -31,6 +31,80 @@ for (const [name, source] of Object.entries(files))
   await writeFile(join(dir, "lib", name), source);
 git("add", ".");
 git("commit", "-m", "Grid");
+/** What the lines on the front map do: the lines that pass through a card, arrowheads that
+ * almost overlap, lines that do not meet their arrowhead straight on, and arrows across that
+ * leave off the middle of a side. Runs in the page. */
+function lineReport() {
+  const sheet = document.querySelector('.sheet[data-front="true"]');
+  const box = (el) => el.getBoundingClientRect();
+  const cards = [...sheet.querySelectorAll(".pk-card[data-key]")].map((n) => ({
+    key: n.dataset.key,
+    r: box(n),
+  }));
+  const lines = [...sheet.querySelectorAll(".edges path.e")];
+  const crossings = [],
+    bent = [],
+    offCentre = [],
+    ends = new Map();
+  for (const line of lines) {
+    const matrix = line.getScreenCTM(),
+      length = line.getTotalLength(),
+      at = (d) => {
+        const p = line.getPointAtLength(d);
+        return new DOMPoint(p.x, p.y).matrixTransform(matrix);
+      };
+    for (let i = 1; i < 40; i++) {
+      const p = at((length * i) / 40);
+      for (const { key, r } of cards)
+        // A line never passes through a card, its own two included: it leaves one
+        // edge and arrives at another.
+        if (
+          p.x > r.left + 3 &&
+          p.x < r.right - 3 &&
+          p.y > r.top + 3 &&
+          p.y < r.bottom - 3
+        )
+          crossings.push(
+            `${line.dataset.from} → ${line.dataset.to} crosses ${key}`,
+          );
+    }
+    // A line that leaves a card's side leaves at that card's mid height.
+    const start = at(0),
+      source = cards.find((c) => c.key === line.dataset.from)?.r;
+    if (
+      source &&
+      (Math.abs(start.x - source.left) < 3 ||
+        Math.abs(start.x - source.right) < 3) &&
+      Math.abs(start.y - (source.top + source.bottom) / 2) > 5
+    )
+      offCentre.push(`${line.dataset.from} → ${line.dataset.to}`);
+    const end = at(length),
+      lead = at(Math.max(0, length - 12));
+    // The last stretch runs straight into the arrowhead, along its axis.
+    if (Math.abs(end.x - lead.x) > 0.6 && Math.abs(end.y - lead.y) > 0.6)
+      bent.push(`${line.dataset.from} → ${line.dataset.to}`);
+    if (!ends.has(line.dataset.to)) ends.set(line.dataset.to, []);
+    ends.get(line.dataset.to).push([end.x, end.y]);
+  }
+  const stacked = [];
+  for (const [key, points] of ends)
+    for (let i = 0; i < points.length; i++)
+      for (let j = i + 1; j < points.length; j++) {
+        // Lines merged into one trunk share an arrowhead exactly; others keep apart.
+        const apart = Math.hypot(
+          points[i][0] - points[j][0],
+          points[i][1] - points[j][1],
+        );
+        if (apart > 0.5 && apart < 6) stacked.push(key);
+      }
+  return {
+    lines: lines.length,
+    crossings: [...new Set(crossings)],
+    stacked,
+    bent,
+    offCentre,
+  };
+}
 let server, browser;
 try {
   server = await startRust(dir, { base: "HEAD", head: "HEAD" });
@@ -51,79 +125,7 @@ try {
     await folder.click();
     await front.locator('.pk-card[data-path="lib/f.mjs"]').waitFor();
     await page.waitForTimeout(400);
-    const report = await page.evaluate(() => {
-      const sheet = document.querySelector('.sheet[data-front="true"]');
-      const box = (el) => el.getBoundingClientRect();
-      const cards = [...sheet.querySelectorAll(".pk-card[data-key]")].map(
-        (n) => ({
-          key: n.dataset.key,
-          r: box(n),
-        }),
-      );
-      const lines = [...sheet.querySelectorAll(".edges path.e")];
-      const crossings = [],
-        bent = [],
-        offCentre = [],
-        ends = new Map();
-      for (const line of lines) {
-        const matrix = line.getScreenCTM(),
-          length = line.getTotalLength(),
-          at = (d) => {
-            const p = line.getPointAtLength(d);
-            return new DOMPoint(p.x, p.y).matrixTransform(matrix);
-          };
-        for (let i = 1; i < 40; i++) {
-          const p = at((length * i) / 40);
-          for (const { key, r } of cards)
-            // A line never passes through a card, its own two included: it leaves one
-            // edge and arrives at another.
-            if (
-              p.x > r.left + 3 &&
-              p.x < r.right - 3 &&
-              p.y > r.top + 3 &&
-              p.y < r.bottom - 3
-            )
-              crossings.push(
-                `${line.dataset.from} → ${line.dataset.to} crosses ${key}`,
-              );
-        }
-        // A line that leaves a card's side leaves at that card's mid height.
-        const start = at(0),
-          source = cards.find((c) => c.key === line.dataset.from)?.r;
-        if (
-          source &&
-          (Math.abs(start.x - source.left) < 3 ||
-            Math.abs(start.x - source.right) < 3) &&
-          Math.abs(start.y - (source.top + source.bottom) / 2) > 5
-        )
-          offCentre.push(`${line.dataset.from} → ${line.dataset.to}`);
-        const end = at(length),
-          lead = at(Math.max(0, length - 12));
-        // The last stretch runs straight into the arrowhead, along its axis.
-        if (Math.abs(end.x - lead.x) > 0.6 && Math.abs(end.y - lead.y) > 0.6)
-          bent.push(`${line.dataset.from} → ${line.dataset.to}`);
-        if (!ends.has(line.dataset.to)) ends.set(line.dataset.to, []);
-        ends.get(line.dataset.to).push([end.x, end.y]);
-      }
-      const stacked = [];
-      for (const [key, points] of ends)
-        for (let i = 0; i < points.length; i++)
-          for (let j = i + 1; j < points.length; j++) {
-            // Lines merged into one trunk share an arrowhead exactly; others keep apart.
-            const apart = Math.hypot(
-              points[i][0] - points[j][0],
-              points[i][1] - points[j][1],
-            );
-            if (apart > 0.5 && apart < 6) stacked.push(key);
-          }
-      return {
-        lines: lines.length,
-        crossings: [...new Set(crossings)],
-        stacked,
-        bent,
-        offCentre,
-      };
-    });
+    const report = await page.evaluate(lineReport);
     assert.ok(report.lines >= 3, "Every import of a.mjs is drawn");
     assert.deepEqual(
       report.crossings,
@@ -177,6 +179,35 @@ try {
     console.log(
       `PASS ${viewport.width}: dependency lines avoid cards and land separately`,
     );
+  }
+  // Columns are spaced independently, so cards in two columns can be staggered by a few
+  // pixels. This repository's backend folder has such columns; lines between them must go
+  // around, never diagonally across the map (read-only, as test/browser.mjs).
+  const own = await startRust(process.cwd(), { base: "HEAD", head: "HEAD" });
+  try {
+    const page = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+    });
+    await page.goto(own.url + "/#token=" + own.token);
+    const front = page.locator('.sheet[data-front="true"]'),
+      folder = front.locator('.pk-card[data-path="backend"]');
+    await folder.waitFor({ timeout: 60000 });
+    await folder.click();
+    await folder.click();
+    const engine = front.locator('.pk-card[data-path="backend/engine.rs"]');
+    await engine.waitFor();
+    await engine.click();
+    await page.waitForTimeout(600);
+    const report = await page.evaluate(lineReport);
+    assert.deepEqual(
+      report.crossings,
+      [],
+      "Lines between staggered columns pass through no card",
+    );
+    await page.close();
+    console.log("PASS staggered columns: lines go around");
+  } finally {
+    await own.close();
   }
 } finally {
   await browser?.close();

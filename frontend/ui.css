@@ -972,8 +972,8 @@
   padding: var(--space-4);
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
 }
 .pk-key h3 {
   margin: 0 0 var(--space-1);
@@ -1807,8 +1807,8 @@
   padding: var(--space-1);
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
 }
 .pk-menu button {
   display: flex;
@@ -1927,8 +1927,8 @@
   padding: var(--space-1);
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
   font: 400 14px/20px var(--font-ui);
   color: var(--ink);
   outline: none;
@@ -2065,8 +2065,8 @@
   padding: var(--space-4);
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
 }
 .pk-scrim {
   position: absolute;
@@ -2081,13 +2081,21 @@
   padding: 0;
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
   color: var(--ink);
   overflow: auto;
 }
 .pk-modal::backdrop {
   background: var(--scrim);
+}
+/* A pop-up's header with its controls stays at the top while its content scrolls. */
+.pk-modal .pk-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: var(--space-2);
+  background: var(--surface-popup);
 }
 .pk-modal-body {
   display: grid;
@@ -2105,8 +2113,8 @@
   padding: var(--space-5) var(--space-4) var(--space-4);
   border: 1px solid var(--float-line);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
+  background: var(--surface-popup);
+  box-shadow: var(--shadow-popup);
 }
 .pk-dialog h2 {
   margin: 0;

@@ -1804,10 +1804,11 @@ function routeEdges(list, positions, width) {
   const plans = list.map((edge) => {
     const a = positions.get(edge.from.key),
       b = positions.get(edge.to.key);
-    // Columns are spaced independently, so cards in one row may sit slightly apart. Any
-    // vertical overlap makes them side by side: a vertical route would have to double back.
+    // Columns are spaced independently, so cards in one row may sit slightly apart. Cards
+    // that overlap by half a card or more are side by side. A smaller overlap is a staggered
+    // card in the next row: a line there goes around (below), never across the map.
     const shared = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y),
-      level = shared > 0;
+      level = shared >= Math.min(a.h, b.h) / 2;
     // Neighbours in a row, with room between them: an arrow across, from the middle of the
     // source's side to the middle of the target's side. Level cards get a straight line; a
     // card set lower gets an S that stays in the gap between them, so it touches no card.
@@ -1931,7 +1932,9 @@ function routeEdges(list, positions, width) {
       const sample = Array.from({ length: 31 }, (_, i) =>
         bezier(curve, (i + 1) / 32),
       );
-      if (crosses(from.key, to.key, sample)) {
+      // A target edge behind the start (staggered cards) would make the line double back.
+      const back = plan.down ? y2 < y : y2 > y;
+      if (back || crosses(from.key, to.key, sample)) {
         goAround(plan);
         moved = true;
       }
@@ -2009,7 +2012,7 @@ function drawEdges(canvas, positions, width, height, arcs) {
     structure: "var(--old-edge)",
     violation: "var(--del)",
     out: "var(--old-accent)",
-    in: "var(--link-in)",
+    in: "var(--old-ink)",
   })) {
     const marker = document.createElementNS(NS, "marker");
     marker.id = "arrow-" + status;
@@ -3906,7 +3909,9 @@ function renderMapLegend() {
     element("span", "", "Outputs"),
   );
   host.append(contractKey);
-  host.append(
+  // Close sits in the key's head row, which stays at the top while the key scrolls.
+  $(".legend-lens .legend-close")?.remove();
+  $(".legend-lens").append(
     iconButton(
       button("btn legend-close", "", () => {
         $("#mapLegend").open = false;

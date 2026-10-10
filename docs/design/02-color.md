@@ -9,9 +9,10 @@ Use the role tokens only. Never use a hex value in a component.
 **Ground**
 
 - `canvas`: the map ground and the page. White paper in light, deep teal-black in dark. No gradient, no colour washes.
-- `surface`: the sheet, menus and dialogs.
+- `surface`: the sheet.
 - `surface-sunken`: code blocks, diffs, fields and the composer input.
-- `surface-raised`: changed map cards, and menus and popovers in the dark themes.
+- `surface-raised`: changed map cards.
+- `surface-popup`: every pop-up (menus, select lists, popovers, dialogs and the Agents sheet), with `shadow-popup`. In dark it is a step lighter than the sheet and the cards.
 - `glass` and `glass-strong`: the map frame, the floating controls, the sheet and the composer (see **Space and shape**).
 
 **Text and lines**
@@ -53,7 +54,7 @@ Use the role tokens only. Never use a hex value in a component.
 - A status colour is never a large fill. It colours a glyph, a count, an edge or a thin tint.
 - Diff lines tint the ground only. Text in a diff stays `ink`.
 - In the dark themes, show depth with lighter grounds (`surface`, then `surface-raised`) and a rim of light on cards.
-- The dark ground is `#0a1211`, not pure black.
+- The dark ground is `#030505`, almost black. Glass in dark is dark too, so the cards and the pop-ups stand out.
 - The colour-blind safe themes change `added`, `removed` and `success` only. Added is blue and removed is orange. Every other token stays the same.
 
 ## Contrast
@@ -63,7 +64,7 @@ Every pair below meets WCAG 2.2 AA in all four themes. Text needs 4.5:1. Lines, 
 | Text or mark | Ground | Light | Dark | Light CB | Dark CB | Needs |
 |---|---|---|---|---|---|---|
 | `ink` | `surface` | 16.79 | 15.57 | 16.79 | 15.57 | 4.5:1 |
-| `ink` | `canvas` | 14.77 | 17.41 | 14.77 | 17.41 | 4.5:1 |
+| `ink` | `canvas` | 14.77 | 17.98 | 14.77 | 17.98 | 4.5:1 |
 | `ink` | `surface-sunken` | 15.46 | 16.64 | 15.46 | 16.64 | 4.5:1 |
 | `ink` | `surface-raised` | 16.79 | 14.48 | 16.79 | 14.48 | 4.5:1 |
 | `ink` | `added-tint` | 14.64 | 12.50 | 14.28 | 13.30 | 4.5:1 |
@@ -71,11 +72,15 @@ Every pair below meets WCAG 2.2 AA in all four themes. Text needs 4.5:1. Lines, 
 | `ink` | `added-word` | 13.92 | 8.83 | 14.14 | 8.76 | 4.5:1 |
 | `ink` | `removed-word` | 10.98 | 9.92 | 11.59 | 8.78 | 4.5:1 |
 | `ink-muted` | `surface` | 6.28 | 7.79 | 6.28 | 7.79 | 4.5:1 |
-| `ink-muted` | `canvas` | 5.53 | 8.71 | 5.53 | 8.71 | 4.5:1 |
+| `ink-muted` | `canvas` | 5.53 | 9.00 | 5.53 | 9.00 | 4.5:1 |
 | `ink-muted` | `surface-raised` | 6.28 | 7.25 | 6.28 | 7.25 | 4.5:1 |
+| `ink` | `surface-popup` | 16.79 | 12.88 | 16.79 | 12.88 | 4.5:1 |
+| `ink-muted` | `surface-popup` | 6.28 | 6.45 | 6.28 | 6.45 | 4.5:1 |
+| `ink-subtle` | `surface-popup` | 5.55 | 4.89 | 5.55 | 4.89 | 4.5:1 |
+| `accent` | `surface-popup` | 5.82 | 9.13 | 5.82 | 9.13 | 4.5:1 |
 | `ink-subtle` | `surface` | 5.55 | 5.91 | 5.55 | 5.91 | 4.5:1 |
 | `ink-subtle` | `surface-sunken` | 5.12 | 6.31 | 5.12 | 6.31 | 4.5:1 |
-| `ink-subtle` | `canvas` | 4.89 | 6.61 | 4.89 | 6.61 | 4.5:1 |
+| `ink-subtle` | `canvas` | 4.89 | 6.82 | 4.89 | 6.82 | 4.5:1 |
 | `accent` | `surface` | 5.82 | 11.03 | 5.82 | 11.03 | 4.5:1 |
 | `on-accent` | `accent` | 5.82 | 11.88 | 5.82 | 11.88 | 4.5:1 |
 | `added` | `surface-raised` | 5.82 | 10.26 | 6.61 | 7.66 | 4.5:1 |
@@ -85,7 +90,7 @@ Every pair below meets WCAG 2.2 AA in all four themes. Text needs 4.5:1. Lines, 
 | `syntax-string` | `surface-sunken` | 5.63 | 11.49 | 5.63 | 11.49 | 4.5:1 |
 | `syntax-string` | `added-word` | 5.07 | 6.09 | 5.15 | 6.04 | 4.5:1 |
 | `accent` | `added-word` | 4.83 | 6.25 | 4.90 | 6.20 | 4.5:1 |
-| `edge` | `canvas` | 3.41 | 3.69 | 3.41 | 3.69 | 3:1 |
+| `edge` | `canvas` | 3.41 | 3.81 | 3.41 | 3.81 | 3:1 |
 | `line-strong` | `surface` | 3.54 | 3.49 | 3.54 | 3.49 | 3:1 |
 | `focus` | `surface` | 5.82 | 11.03 | 5.82 | 11.03 | 3:1 |
 

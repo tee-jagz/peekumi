@@ -63,6 +63,8 @@ These rules keep the interface on the parts of `frontend/ui.js`. `scripts/lint-u
 - **R40 (lint).** No native dialogs: no `alert`, `confirm` or `prompt`. Use `Dialog`.
 - **R41 (lint).** `index.html` holds only `pk-` classes and mount points. No new stylesheet rules outside `ui.css`.
 - **R42 (lint).** Every `pk-` class that `ui.js` uses exists in `ui.css`, and every rendered part has an accessible name (`test/ui.test.mjs`).
+- **R43 (review).** Every pop-up (menu, select list, popover, dialog, sheet) has the `surface-popup` ground and `shadow-popup`, so it stands clear of the page in both themes.
+- **R44 (review).** When a pop-up scrolls, its header with its controls (Close, Back, Refresh) stays at the top. The content scrolls under it.
 
 The app still has UI from before the components. `scripts/ui-baseline.json` records it for each file. A count above the baseline fails, so new code must use the parts. When a screen moves to the parts, its count goes down. Then `node scripts/lint-ui.mjs --update` writes the lower number, and the debt cannot come back.
 
