@@ -64,7 +64,7 @@ try {
       );
       await page
         .getByLabel("Extra instructions (optional)")
-        .fill("RUN: npm install left-pad");
+        .fill("RUN: npm install left-pad\nLONG_STEP");
       await page.screenshot({
         path: `test-results/session-send-${viewport.width}.png`,
       });
@@ -123,14 +123,34 @@ try {
       const steps = log.locator(".pk-step");
       assert.ok((await steps.count()) >= 2, "The agent's steps show");
       assert.match(
-        await steps.first().locator("summary").textContent(),
+        await steps
+          .filter({ hasText: "npm test" })
+          .first()
+          .locator("summary")
+          .textContent(),
         /Ran\s*npm test/,
       );
-      await steps.first().locator("summary").click();
-      assert.match(
-        await steps.first().locator(".pk-command").textContent(),
-        /78 passed/,
-      );
+      // A step with one very long line (command and output) never makes the
+      // conversation wider than the screen.
+      const long = steps.filter({ hasText: "very-long-path" }).first();
+      await long.locator("summary").click();
+      const fits = await page.evaluate(() => {
+        const log = document.querySelector(
+          '[aria-label="Session conversation"]',
+        );
+        return {
+          log: log.scrollWidth - log.clientWidth,
+          page: document.documentElement.scrollWidth - innerWidth,
+          view: innerWidth,
+          width: Math.round(log.getBoundingClientRect().width),
+        };
+      });
+      assert.ok(fits.log <= 0 && fits.page <= 0, JSON.stringify(fits));
+      assert.ok(fits.width <= fits.view, JSON.stringify(fits));
+      await long.locator("summary").click();
+      const ran = steps.filter({ hasText: "npm test" }).first();
+      await ran.locator("summary").click();
+      assert.match(await ran.locator(".pk-command").textContent(), /78 passed/);
       const edit = steps
         .filter({ hasText: "Edited session-notes.txt" })
         .first();

@@ -638,6 +638,37 @@ if (
       name: "route",
     });
   } else if (claude) {
+    // LONG_STEP: a step whose command and output are one long line with no space, as a
+    // generated file path or a minified file can be. The conversation must still fit a phone.
+    if (task.includes("LONG_STEP")) {
+      say({
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: `long-${turn}`,
+              name: "Bash",
+              input: {
+                command: "cat " + "very-long-path/".repeat(40) + "end.txt",
+              },
+            },
+          ],
+        },
+      });
+      say({
+        type: "user",
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: `long-${turn}`,
+              content: "x".repeat(3000),
+            },
+          ],
+        },
+      });
+    }
     // Two visible steps: a check with its output, and an edit in the worktree.
     say({
       type: "assistant",

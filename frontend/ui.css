@@ -1524,6 +1524,7 @@
 }
 .pk-step-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 .pk-step > summary {
   display: flex;
@@ -1574,6 +1575,7 @@
 }
 .pk-step-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   padding: 0 0 var(--space-3) var(--space-5);
 }
@@ -1626,8 +1628,12 @@
 }
 
 /* ---------- Conversation ---------- */
+/* The thread, a step list and a step body are grids whose one column can shrink: one long
+   line (a command, a path, minified output) wraps or scrolls in its own box, and never makes
+   the conversation wider than the screen. */
 .pk-thread {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 .pk-message {
