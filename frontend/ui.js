@@ -401,6 +401,30 @@ export function Note(...children) {
   return h("p", { class: "pk-note" }, children);
 }
 
+/** The section of SECURITY.md that lists what Ask, tasks and sessions send to a model
+ * provider. */
+export const WHERE_CODE_GOES =
+  "https://github.com/tee-jagz/peekumi/blob/main/SECURITY.md#where-your-code-goes";
+
+/** A link that opens outside Peekumi, in a new tab, with the external icon. */
+export function ExternalLink({ label, href }) {
+  return h(
+    "a",
+    { class: "pk-link", href, target: "_blank", rel: "noopener noreferrer" },
+    label,
+    Icon("external", true),
+  );
+}
+
+/** A quiet note where code leaves the computer: `text` says what this place sends, and the
+ * link opens the full list. */
+export function DataNote(text) {
+  return Note(
+    text + " ",
+    ExternalLink({ label: "Where your code goes", href: WHERE_CODE_GOES }),
+  );
+}
+
 /** Parts in a column with the standard gap. */
 export function Stack(...children) {
   return h("div", { class: "pk-stack" }, children);
@@ -1812,6 +1836,100 @@ export function ProposalRow(
     details.flat().filter(Boolean).length > 0 &&
       h("div", { class: "more" }, details.flat().filter(Boolean)),
     editor && Disclosure({ summary: editLabel, open: editOpen }, editor),
+  );
+}
+
+/** The result of a rule check (the server's `rule_check`): the breaks that the work adds, what
+ * limits the check, uncommitted work that it cannot see, and a rule change that the owner
+ * decides. A check that did not run says why: it never looks clean. `loading` while it runs.
+ * `actions`: plain buttons (`{label, onClick}`), for example Retry or "Ask the agent to fix". */
+export function RuleCheck({ check, loading = false, actions = [] }) {
+  // A repository with no rules says so quietly: there is nothing to check, not a failure.
+  const none =
+    check?.state === "not checked" && check.configState === "not configured";
+  const state = loading
+    ? "loading"
+    : none
+      ? "none"
+      : { "not checked": "unchecked", "no commits": "empty" }[check?.state] ||
+        check?.state ||
+        "unchecked";
+  const count = check?.addedCount || 0;
+  const title =
+    {
+      loading: "Checking the rules…",
+      empty: "No commits to check yet",
+      none: "No dependency rules to check",
+      unchecked: "Rules not checked",
+    }[state] ||
+    (count > 0
+      ? `Adds ${count} rule break${count === 1 ? "" : "s"}`
+      : state === "limited"
+        ? "No rule break found, with limits"
+        : "Rules checked: no rule break");
+  const detail =
+    state === "unchecked"
+      ? check?.reason || check?.summary
+      : state === "limited"
+        ? check.summary
+        : null;
+  const change = !loading && check?.ruleChange;
+  return h(
+    "div",
+    {
+      class: "pk-rule-check",
+      data: { state, breaks: count > 0 ? "yes" : null },
+    },
+    h(
+      "span",
+      { class: "pk-rule-check-mark" },
+      count > 0
+        ? Icon("broken", true)
+        : Icon(state === "checked" ? "check" : "shield", true),
+    ),
+    h(
+      "div",
+      { class: "pk-rule-check-body" },
+      h(
+        "strong",
+        {},
+        title,
+        check?.head && !loading
+          ? h("code", {}, " · " + check.head.slice(0, 7))
+          : null,
+      ),
+      detail && h("p", {}, detail),
+      count > 0 &&
+        h(
+          "ul",
+          {},
+          (check.added || [])
+            .slice(0, 5)
+            .map((b) =>
+              h(
+                "li",
+                {},
+                `${b.rule}: ${b.source?.path || ""} → ${b.target?.path || ""}`,
+              ),
+            ),
+          count > 5 && h("li", {}, `and ${count - 5} more`),
+        ),
+      check?.uncommitted && h("p", {}, "Uncommitted changes are not checked."),
+      change &&
+        h(
+          "p",
+          { class: "pk-rule-check-change" },
+          `This work changes ${change.files.join(" and ")}. The check uses the rules at the start. Under the work's own rules it adds ${change.addedCount} break${change.addedCount === 1 ? "" : "s"}. You decide about the change.`,
+        ),
+      actions.length > 0 &&
+        h(
+          "div",
+          { class: "pk-rule-check-actions" },
+          actions.map((a) =>
+            Button({ label: a.label, variant: "plain", onClick: a.onClick }),
+          ),
+        ),
+    ),
   );
 }
 

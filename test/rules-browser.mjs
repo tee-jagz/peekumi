@@ -1,4 +1,4 @@
-/** Dependency rules in the browser: a task that adds a rule break says so before Approve; the
+/** Dependency rules in the browser: a task's rule check names the break it adds before Approve; the
  * rule summary shows the breaks a comparison adds and each rule's coverage; a card counts its
  * breaks, and the sheet names them in one line, with Fix that writes the change; and
  * "Forbid this dependency" on a relationship starts a change that asks for a rule only.
@@ -58,14 +58,18 @@ try {
       const front = page.locator('.sheet[data-front="true"]');
       await front.locator(".pk-card").first().waitFor();
 
-      // The task names the break before Approve.
+      // The task's rule check names the break before Approve, with the commit it checked.
       await page.locator("#openTasks").click();
       await page.locator(".task-link").first().click();
-      const note = page.locator(".rule-added-note");
+      const note = page.locator('.pk-rule-check[data-state="checked"]');
       await note.waitFor();
       assert.match(
-        await note.innerText(),
-        /adds 1 dependency rule break: ui-no-db \(view\.py → store\.py\)/,
+        await note.locator("strong").innerText(),
+        /^Adds 1 rule break · [0-9a-f]{7}$/,
+      );
+      assert.equal(
+        await note.locator("li").first().innerText(),
+        "ui-no-db: ui/view.py → db/store.py",
       );
       await page.screenshot({
         path: `test-results/rules-task-${viewport.width}.png`,

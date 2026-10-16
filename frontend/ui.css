@@ -232,15 +232,17 @@
   place-items: center;
   width: var(--tap);
   height: var(--tap);
-  border: 1px solid var(--line);
+  border: 1px solid var(--float-line);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--glass-control);
+  box-shadow: var(--shadow-control);
   color: var(--ink);
   cursor: pointer;
 }
 .pk-icon-button.is-quiet {
   border-color: transparent;
   background: none;
+  box-shadow: none;
   color: var(--ink-muted);
 }
 .pk-icon-button[aria-pressed="true"] {
@@ -336,7 +338,8 @@
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  background: var(--glass-groove);
+  box-shadow: var(--shadow-groove);
   color: var(--ink);
   font: 400 16px/24px var(--font-ui);
 }
@@ -735,13 +738,17 @@
   border: 1px solid var(--card-line);
   border-top-color: var(--card-rim);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(var(--blur-card)) saturate(170%);
+  backdrop-filter: blur(var(--blur-card)) saturate(170%);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
-/* Change shows by contrast: a changed card lifts a little; an unchanged one fades into the
-   ground (below). */
+/* Cards are frosted glass. Change shows by contrast: a changed card is clear glass that lifts a
+   little; an unchanged one is a thin frost that fades into the frame (below). Only a changed card
+   blurs: inside the frosted frame, a blur sees only the frame's own fill, so a clear card would
+   turn dark. */
 .pk-card:not(.is-unchanged) {
   box-shadow: var(--shadow-strata);
 }
@@ -798,10 +805,12 @@
   opacity: var(--dim);
 }
 .pk-card.is-unchanged {
-  border-color: var(--line);
-  background: transparent;
+  border-color: var(--float-line);
+  background: var(--glass-card-quiet);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: none;
-  opacity: 0.6;
+  opacity: 0.66;
 }
 .pk-card.is-unchanged .pk-card-name {
   color: var(--ink-muted);
@@ -855,7 +864,10 @@
 .pk-card.is-stub {
   min-height: 36px;
   border-style: dotted;
-  background: var(--canvas);
+  border-color: var(--float-line);
+  background: var(--glass-card-quiet);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .pk-card.is-stub .pk-card-name {
   font: 400 12px/16px var(--font-ui);
@@ -863,8 +875,10 @@
 }
 .pk-card.is-boundary {
   z-index: 0;
-  border-color: var(--line);
-  background: transparent;
+  border-color: var(--float-line);
+  background: var(--glass-card-quiet);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   pointer-events: none;
 }
 .pk-card.is-boundary .pk-card-name {
@@ -1252,7 +1266,8 @@
   flex: none;
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--accent);
+  background: var(--accent-glass);
+  box-shadow: var(--shadow-control);
   color: var(--on-accent);
   cursor: pointer;
 }
@@ -1260,8 +1275,8 @@
   opacity: var(--disabled);
 }
 .pk-send.is-secondary {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  border: 1px solid var(--float-line);
+  background: var(--glass-control);
   color: var(--accent);
 }
 
@@ -2748,4 +2763,91 @@
 .pk-toast .pk-peek {
   width: 24px;
   height: 24px;
+}
+
+/* Reduce transparency: glass becomes solid surfaces, and the field goes. */
+@media (prefers-reduced-transparency: reduce) {
+  :root:root,
+  :root:root[data-theme] {
+    --field: none;
+    --glass: var(--surface);
+    --glass-strong: var(--surface);
+    --glass-card: var(--surface-raised);
+    --glass-card-quiet: transparent;
+    --glass-control: var(--surface);
+    --glass-control-on: var(--surface-raised);
+    --glass-groove: var(--surface-sunken);
+    --accent-glass: var(--accent);
+  }
+}
+
+/* ---------- RuleCheck ---------- */
+/* It takes a whole line, also inside a row of actions. */
+.pk-rule-check {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) 0;
+  color: var(--ink);
+}
+.pk-rule-check-mark {
+  display: inline-grid;
+  margin-top: 2px;
+  color: var(--ink-muted);
+}
+.pk-rule-check[data-state="checked"] .pk-rule-check-mark {
+  color: var(--success);
+}
+.pk-rule-check[data-breaks] .pk-rule-check-mark {
+  color: var(--danger);
+}
+.pk-rule-check[data-state="unchecked"] .pk-rule-check-mark,
+.pk-rule-check[data-state="unchecked"] strong {
+  color: var(--warning);
+}
+.pk-rule-check-body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.pk-rule-check strong {
+  font: 600 14px/20px var(--font-ui);
+}
+.pk-rule-check code {
+  font: 400 12px/20px var(--font-mono);
+  color: var(--ink-muted);
+}
+.pk-rule-check p,
+.pk-rule-check ul {
+  margin: 0;
+  font: 400 13px/18px var(--font-ui);
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+.pk-rule-check ul {
+  padding-left: var(--space-4);
+}
+.pk-rule-check .pk-rule-check-change {
+  color: var(--warning);
+}
+.pk-rule-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ---------- ExternalLink ---------- */
+.pk-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pk-link .pk-i {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }

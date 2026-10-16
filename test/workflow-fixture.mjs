@@ -796,6 +796,12 @@ if (checkRules) {
     readFileSync("ui/view.py", "utf8") + "from db.store import save\n",
   );
   git("add", "ui/view.py");
+  // WEAKEN_RULES: the same commit also removes every rule, so its own rules see no break.
+  if (first.text.includes("WEAKEN_RULES")) {
+    const config = JSON.parse(readFileSync(".peekumi.json", "utf8"));
+    writeFileSync(".peekumi.json", JSON.stringify({ ...config, rules: [] }));
+    git("add", ".peekumi.json");
+  }
 }
 git("commit", "-m", "Fixture change without attribution");
 let sha = git("rev-parse", "HEAD");

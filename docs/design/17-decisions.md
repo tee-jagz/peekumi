@@ -74,4 +74,4 @@ These choices change Peekumi's rules or look. Each one has a recommendation. The
 
 ## D13. The look
 
-**Decided (2026-10-09):** Survey in light and Strata in dark. **Changed (2026-10-10):** the owner said that Survey looked like AI output. After three studies and a high-fidelity canvas that the owner reviewed in several rounds, the owner asked to implement glass strata in both themes. **Looks** gives the reasons.
+**Decided (2026-10-09):** Survey in light and Strata in dark. **Changed (2026-10-10):** the owner said that Survey looked like AI output. After three studies and a high-fidelity canvas that the owner reviewed in several rounds, the owner asked to implement glass strata in both themes. **Changed (2026-10-11):** the owner preferred the earlier glass and colour field with the new interface. The owner asked for frosted glass and a gradient that does not look cheap. Of three mockup fields (Tide, Strata, Lumen), the owner agreed to Tide, the recommended one. The owner also asked for frosted glass on map cards and on the buttons in the sheet. **Looks** gives the reasons.

@@ -9,9 +9,9 @@ Every screen obeys these rules. A rule marked **lint** is checked by a tool in C
 - **R3 (lint).** Font weights are 400 or 600.
 - **R4 (lint).** Spacing (`padding`, `margin`, `gap`) uses the spacing tokens only, or 0, 1px and 2px for hairlines and fine alignment.
 - **R5 (lint).** Radii use the radius tokens only.
-- **R6 (lint).** `box-shadow` is a shadow token or none: `shadow-float` on floating layers, `shadow-sheet` on the sheet, `shadow-strata` on a changed folder card, `shadow-agent` on the agent's card.
-- **R7 (lint).** `backdrop-filter` appears only on the parts that float: the map frame, the floating map controls, the review sheet and the composer.
-- **R8 (lint).** No gradients (`linear-gradient`, `radial-gradient`) in component CSS.
+- **R6 (lint).** `box-shadow` is a shadow token or none. Use `shadow-glass` on the map frame, `shadow-sheet` on the sheet and `shadow-float` on floating layers. Use `shadow-strata` on a changed card and `shadow-agent` on the agent's card. Use `shadow-control` on a glass button and `shadow-groove` on a track or a field.
+- **R7 (lint).** `backdrop-filter` appears only on the map frame, the floating map controls, the review sheet, the composer and map cards.
+- **R8 (lint).** No gradients (`linear-gradient`, `radial-gradient`) in component CSS. The glass tokens and the `field` token hold the only gradients.
 - **R9 (lint).** No `!important`, except the `[hidden]` rule and the reduced-motion rule that stops all animation.
 - **R10 (lint).** Each selector is declared once. No later section that overrides an earlier one.
 

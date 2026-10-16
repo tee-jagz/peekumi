@@ -209,7 +209,7 @@ A card that starts a dependency rule break shows a red broken-link icon and the 
 
 **Propose rules**, also in Relations, asks your Ask agent to audit the architecture and propose new dependency rules. The audit runs in the background: you can leave the page, and a notification tells you when it ends. Each rule is one plain sentence, for example "frontend/model.js must not use other frontend files". The rules show in two sections: **Finds a problem now** and **Guards against future mistakes**. Each rule shows its principle, its value, what it checks, what it cannot check and how many breaks it has now. No rule is selected at first. Each audit adds to the same list, and your selection stays. The agent proposes only rules that are missing, so an audit can find nothing new. Select, edit or clear the rules. Then tap **Add N rules with an agent**: an agent adds them to `.peekumi.json` in a task, and you review the task as usual.
 
-When you select a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it. Edit the text, then save the draft. A task that adds rule breaks names them before **Approve**.
+When you select a relationship, **Forbid this dependency** starts an instruction that asks for a rule against it. Edit the text, then save the draft. A task shows its rule check before **Approve**: the breaks that it adds, or that it adds none. The check uses the rules of the commit that the task started from, so the agent cannot hide a break when it changes `.peekumi.json`. A change to the rules shows as its own line, and you decide about it. If some code could not be judged, the check says so. If the check could not run, it says why and offers **Retry**.
 
 ## Pages and the way back
 
@@ -294,7 +294,7 @@ To start a session, write what you want in the composer and tap **Add as a chang
 | 3 | Answer | **Allow once**, **Allow … in this session**, **Allow all commands** or **Deny**. You can add a note for the agent. |
 | 4 | Reply | Your next message to the agent. If a part of the map is selected, the message includes it. If you send while the agent works, the message waits for the next turn. |
 
-Each step of the agent shows in the conversation. Tap a step to see its output. A file or declaration name in the conversation is a link: tap it, and the map moves there while the session stays on the screen. Under the conversation, one line gives the agent, the turns, the commits and the cost. Links there show the changes on the map, change how the session treats commands, and end the session.
+Each step of the agent shows in the conversation. Tap a step to see its output. After each turn, Peekumi checks the rules itself and shows one line: the breaks that the session adds, with the commit that it checked. If the session adds breaks, **Ask the agent to fix** sends a message that asks the agent to fix them. A file or declaration name in the conversation is a link: tap it, and the map moves there while the session stays on the screen. Under the conversation, one line gives the agent, the turns, the commits and the cost. Links there show the changes on the map, change how the session treats commands, and end the session.
 
 **Allow all commands** lets the agent run any command with no question. Use it only for work that you trust. With Claude Code, **Allow all commands** in the send sheet sets it before you start. Codex and OpenRouter have no shield, because they never ask before commands. Refer to [SECURITY.md](../SECURITY.md#agent-tasks-and-sessions).
 

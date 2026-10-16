@@ -10,6 +10,7 @@ import {
   Peek,
   Pending,
   ReplyComposer,
+  DataNote,
   SubjectMark,
   Suggestion,
   Text,
@@ -258,6 +259,9 @@ export function createAsk({
         body.append(
           Text(
             `Ask about ${subject}: what it does, what changed or what to check. Answers use the code, its callers and dependencies at this revision, and can look up more of the repository read-only.`,
+          ),
+          DataNote(
+            "Ask sends this code and your question to the provider that you chose in Agents.",
           ),
         );
       const thread = Thread();

@@ -288,6 +288,27 @@ impl Rules {
     pub fn count(&self) -> usize {
         self.rules.len()
     }
+    /// True when some rule looks at relationships that start in `path`, for any kind.
+    pub fn watches(&self, path: &str) -> bool {
+        self.rules.iter().any(|rule| match rule["from"].as_str() {
+            Some(from) => self.has(from, path),
+            None => self.layer(rule, path).is_some(),
+        })
+    }
+    /// The number of relationships in `relations` that some rule looks at but that stayed
+    /// unresolved, so no rule can judge them. Each counts once, also when several rules look
+    /// at it.
+    pub fn unresolved_in_scope(&self, relations: &[Value]) -> usize {
+        relations
+            .iter()
+            .filter(|r| {
+                r["resolution"] != "resolved"
+                    && self.rules.iter().any(|rule| {
+                        self.in_scope(rule, &r["kind"], r["source"]["path"].as_str().unwrap_or(""))
+                    })
+            })
+            .count()
+    }
     /// The pairs of `paths` (source, target) that would break the only rule of `self`, and its
     /// kinds. `None` when it has no rule, or more than 200,000 pairs would need a check.
     pub fn breaking_pairs<'a>(&self, paths: &[&'a str]) -> Option<Breaks<'a>> {
@@ -345,6 +366,71 @@ impl Rules {
             .map(|other| other["id"].as_str().unwrap_or("").to_string())
     }
 }
+/// One plain sentence for a rule check (the engine's `rule_check`): what the work adds, what
+/// limits the check, and a rule change. The agent and the session conversation read it.
+pub fn check_summary(check: &Value) -> String {
+    if check["state"] == "not checked" {
+        return format!(
+            "Not checked: {}",
+            check["reason"]
+                .as_str()
+                .unwrap_or("the rules could not be read.")
+        );
+    }
+    let count = check["addedCount"].as_u64().unwrap_or(0);
+    let mut text = match count {
+        0 => "The work adds no rule break.".to_string(),
+        1 => "The work adds 1 rule break.".to_string(),
+        n => format!("The work adds {n} rule breaks."),
+    };
+    if check["state"] == "limited" {
+        let limits = &check["limits"];
+        let unresolved = limits["unresolved"].as_u64().unwrap_or(0);
+        let files = ["start", "head"]
+            .iter()
+            .map(|at| limits["gaps"][at].as_array().map_or(0, Vec::len))
+            .max()
+            .unwrap_or(0)
+            + limits["unanalysed"].as_array().map_or(0, Vec::len);
+        let warnings = limits["warnings"].as_array().map_or(0, Vec::len);
+        let mut parts = vec![];
+        if unresolved > 0 {
+            parts.push(format!(
+                "{unresolved} unresolved relationship{}",
+                plural(unresolved)
+            ));
+        }
+        if files > 0 {
+            parts.push(format!(
+                "{files} file{} with no analysis",
+                plural(files as u64)
+            ));
+        }
+        if warnings > 0 {
+            parts.push(format!(
+                "{warnings} rule warning{}",
+                plural(warnings as u64)
+            ));
+        }
+        text.push_str(&format!(
+            " Some code in the rules' scope could not be judged: {}.",
+            parts.join(", ")
+        ));
+    }
+    if let Some(files) = check["ruleChange"]["files"].as_array() {
+        let names: Vec<&str> = files.iter().filter_map(Value::as_str).collect();
+        text.push_str(&format!(
+            " The work changes {}. The check uses the rules at the start commit, and the owner decides about the change.",
+            names.join(" and ")
+        ));
+    }
+    text
+}
+/// "s" for a count other than 1.
+fn plural(n: u64) -> &'static str {
+    if n == 1 { "" } else { "s" }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,5 +578,27 @@ mod tests {
                 .any(|w| w.contains("\"dead\" checked no relationship"))
         );
         assert_eq!(warnings.len(), 2);
+    }
+
+    #[test]
+    fn a_rule_check_summary_never_reads_as_clean_when_the_check_did_not_run() {
+        let not_run = json!({"state":"not checked","reason":"The rules at the start commit are invalid: bad"});
+        assert_eq!(
+            check_summary(&not_run),
+            "Not checked: The rules at the start commit are invalid: bad"
+        );
+        let clean = json!({"state":"checked","addedCount":0,"ruleChange":null});
+        assert_eq!(check_summary(&clean), "The work adds no rule break.");
+        let limited = json!({"state":"limited","addedCount":2,"ruleChange":null,"limits":{
+            "unresolved":3,"warnings":[],"gaps":{"start":[],"head":[{"path":"a.py"}]},"unanalysed":["b.go"]}});
+        assert_eq!(
+            check_summary(&limited),
+            "The work adds 2 rule breaks. Some code in the rules' scope could not be judged: 3 unresolved relationships, 2 files with no analysis."
+        );
+        let changed =
+            json!({"state":"checked","addedCount":1,"ruleChange":{"files":[".peekumi.json"]}});
+        assert!(check_summary(&changed).ends_with(
+            "The work changes .peekumi.json. The check uses the rules at the start commit, and the owner decides about the change."
+        ));
     }
 }

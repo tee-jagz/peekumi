@@ -40,6 +40,8 @@ Every screen is built from these parts. Each part is a function in `frontend/ui.
 | `Figure` | One key number with its unit. | New |
 | `InlineCode` | Code in running text, `mono` on `surface-sunken`. | New |
 | `CodeLink` | `InlineCode` that opens a place on the map, with a dotted `accent` underline. | `.code-link` |
+| `ExternalLink` | A link that opens outside Peekumi in a new tab, in `accent` with an underline and the external icon. | New |
+| `DataNote` | A `Note` where code leaves the computer: what this place sends, and the **Where your code goes** link. In Ask, the send sheet and Agents. | New |
 
 ## The shell
 
@@ -85,6 +87,7 @@ Every screen is built from these parts. Each part is a function in `frontend/ui.
 | `ApprovalPrompt` | A command to allow or deny in a session. |
 | `MergeDialog` | The modal confirmation of a merge, with its facts and undo note. |
 | `ProposalRow` | A proposed fix or rule: `Checkbox`, the plain sentence, a `MetaLine`, the figure, its notes and errors, and a `Disclosure` to edit. A row that went to an agent is muted. |
+| `RuleCheck` | The result of a rule check: a mark, one line with the commit that it checked, the added breaks (at most five), the limits, uncommitted work, a rule change for the owner, and plain actions (Retry, Ask the agent to fix). A check that did not run says why: it never looks clean. A repository with no rules says so quietly. It takes a whole line. |
 
 ## Feedback
 

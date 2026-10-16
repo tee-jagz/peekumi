@@ -17,8 +17,8 @@ The map shows one level of the real folder tree at a time. Opening a card zooms 
 
 ## Cards
 
-- A changed card has a `surface-raised` ground, a hairline `card-line` edge, `radius-md` and a small lift (`shadow-strata`). No glass and no tint.
-- An unchanged card fades into the ground: no fill, no shadow, a `line` edge, less opacity, and its name in `ink-muted` at weight 400. So the changed cards stand out first. Change shows by contrast, not by colour.
+- A changed card is frosted glass (`glass-card` with `blur-card`). It has a thin light `card-line` rim, `radius-md` and a small lift with a top highlight (`shadow-strata`). Lines behind it blur. It has no tint.
+- An unchanged card is a thin frost (`glass-card-quiet`). It has no shadow, a `float-line` rim, less opacity, and its name in `ink-muted` at weight 400. So the changed cards stand out first. Change shows by contrast, not by colour.
 - Name in `label`, two lines at most. Meta and counts in `caption`, `ink-muted`.
 - A changed folder card ends with the change bar: one 6px pill that splits its files into added, modified, removed and unchanged parts. It shows how much of the folder changed. It is `aria-hidden`, because the counts above it carry the same facts.
 - The map ground has a dot grid: 1px dots every 16px in `line-strong` at `dim` opacity. It shows that the canvas moves.

@@ -96,7 +96,7 @@ impl Workflow {
             c.as_object_mut().unwrap().remove("history");
             let first = json!({"text": c["text"], "anchors": [c["anchor"]], "at": now(), "delivered": false});
             let run = json!({"id": id, "kind": "session", "agent": agent, "model": chosen["model"], "effort": chosen["effort"],
-                "graph": graph, "branch": branch, "base": base, "watched": self.watched, "title": title,
+                "graph": graph, "branch": branch, "base": base, "start": base, "watched": self.watched, "title": title,
                 "comments": [c], "rules": rules, "task": task, "status": "running", "createdAt": now(),
                 "startedAt": now(), "results": [], "messages": [first], "turns": 0,
                 "conversation": conversation, "permissions": permissions, "allow": [], "approval": null, "decisions": {}});

@@ -28,9 +28,15 @@ pub struct Workflow {
     /// Writes the repository map of a task's text for its instructions at a commit (see the
     /// graph_brief module). The server sets it; without it, tasks have no map.
     pub briefing: std::sync::Arc<std::sync::OnceLock<Briefing>>,
+    /// Runs the engine's rule check of the work from a start commit to a head (see the engine's
+    /// `rule_check`), from any thread that is not an async worker. The server sets it; without
+    /// it, a session turn records that its rules were not checked.
+    pub rule_checker: std::sync::Arc<std::sync::OnceLock<RuleChecker>>,
 }
 /// See [`Workflow::briefing`].
 pub type Briefing = Box<dyn Fn(&[Value], &str) -> String + Send + Sync>;
+/// See [`Workflow::rule_checker`].
+pub type RuleChecker = Box<dyn Fn(&str, &str) -> Result<Value> + Send + Sync>;
 /// Milliseconds since the Unix epoch for audit events, independent of commit dates.
 pub fn now() -> u64 {
     SystemTime::now()
@@ -94,6 +100,7 @@ impl Workflow {
             repository_id: String::new(),
             grants: Default::default(),
             briefing: Default::default(),
+            rule_checker: Default::default(),
         };
         #[cfg(unix)]
         {
@@ -467,6 +474,28 @@ impl Workflow {
             json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"uncommitted":uncommitted,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}),
         )
     }
+    /// The commit that the owner started a run's work from (its `start`): the base of the first
+    /// round, or the target of the last update from the watched branch. Its rules are the rules
+    /// for every round, and rule checks compare with it (see the engine's `rule_check`). A run
+    /// from before `start` existed uses the base of its first round.
+    pub(crate) fn start_of(&self, run: &Value) -> Result<String> {
+        if let Some(start) = run["start"].as_str() {
+            return Ok(start.to_string());
+        }
+        let state = self.read()?;
+        let runs = state["runs"].as_array().cloned().unwrap_or_default();
+        let mut first = run.clone();
+        while let Some(previous) = first["revises"].as_str() {
+            match runs.iter().find(|r| r["id"] == previous) {
+                Some(r) => first = r.clone(),
+                None => break,
+            }
+        }
+        first["base"]
+            .as_str()
+            .map(String::from)
+            .context("Missing base")
+    }
     /// The dependency rule configuration at `base`, or a note that there is none.
     pub(crate) fn rules_at(&self, base: &str) -> Result<String> {
         let rules = crate::rules::CONFIG_FILES
@@ -536,7 +565,7 @@ impl Workflow {
             let start = format!("Start from {base} on {}.", self.watched);
             let graph = graph_enabled();
             let task = self.task_text(agent, &id, &branch, &start, "", brief, &comments, &[], &rules, graph, &section);
-            let r=json!({"id":id,"agent":agent,"model":model,"effort":effort,"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
+            let r=json!({"id":id,"agent":agent,"model":model,"effort":effort,"graph":graph,"branch":branch,"base":base,"start":base,"watched":self.watched,"brief":brief,"comments":comments,"rules":rules,"task":task,"status":"preview","createdAt":now(),"results":[]});
             // Unsent previews have no audit value after a new preview and cannot be dispatched again.
             list(v,"runs").retain(|r| r["status"]!="preview");
             list(v,"runs").push(r.clone());
@@ -638,9 +667,12 @@ impl Workflow {
                 .context("Missing base")?
                 .to_string(),
         };
+        // The rules of the commit that the owner started the task from apply to every round,
+        // so a round cannot weaken them for the next one.
+        let rule_start = self.start_of(&earlier)?;
         let rules = crate::rules::CONFIG_FILES
             .iter()
-            .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
+            .find_map(|name| self.git(&["show", &format!("{rule_start}:{name}")]).ok())
             .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
         ensure!(rules.len() <= 65536, "Rule configuration is too large");
         // The graph section for this round's work and the requested changes, written before
@@ -727,7 +759,7 @@ impl Workflow {
                 event(c, "owner");
             }
             find_mut(v, "runs", previous)?["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::hash::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"start":rule_start,"watched":self.watched,"brief":brief,"feedback":requested,"comments":comments,"done":done,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"reportHash":crate::hash::hash(token.as_bytes())});
             list(v, "runs").push(next.clone());
             Ok(next)
         })?;

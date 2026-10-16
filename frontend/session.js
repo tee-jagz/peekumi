@@ -16,6 +16,7 @@ import {
   Peek,
   Pending,
   ReplyComposer,
+  RuleCheck,
   StatusLabel,
   StepList,
   StepRow,
@@ -273,7 +274,7 @@ function claudeStep(part) {
 }
 
 /** Reads a session log into a timeline: the owner's messages, the agent's text, its steps
- * with their output, the end of each turn, and errors. It reads Claude Code's stream-json,
+ * with their output, the end of each turn, Peekumi's rule check after it, and errors. It reads Claude Code's stream-json,
  * Codex's JSON events and Peekumi's own agent, so every provider looks the same. */
 export function timeline(output = "") {
   const items = [];
@@ -297,6 +298,11 @@ export function timeline(output = "") {
     }
     if (event.type === "peekumi.turn") {
       items.push({ kind: "end", status: event.status, turn: event.turn });
+      continue;
+    }
+    // Peekumi's own rule check at the end of a turn (backend/runner.rs).
+    if (event.type === "peekumi.rules") {
+      items.push({ kind: "rules", check: event.check || {}, turn: event.turn });
       continue;
     }
     if (
@@ -667,6 +673,8 @@ export function createSession({
       r.status === "running"
         ? items.map((i) => i.kind).lastIndexOf("step")
         : -1;
+    // Only the latest rule check offers a fix: an older one is about an older head.
+    const lastRules = items.map((i) => i.kind).lastIndexOf("rules");
     // Steps in a row form one compact list.
     let steps = null;
     items.forEach((item, index) => {
@@ -690,7 +698,24 @@ export function createSession({
         }
         // The step the agent takes now; the map marks its place.
         steps.append(stepRow(item, r, index, index === lastStep));
-      } else if (item.kind === "error")
+      } else if (item.kind === "rules")
+        log.append(
+          RuleCheck({
+            check: item.check,
+            actions:
+              index === lastRules &&
+              r.status === "waiting" &&
+              item.check.addedCount > 0
+                ? [
+                    {
+                      label: "Ask the agent to fix",
+                      onClick: () => askToFix(r),
+                    },
+                  ]
+                : [],
+          }),
+        );
+      else if (item.kind === "error")
         log.append(InlineError({ title: "Error", text: item.text }));
       else if (item.kind === "end" && item.status === "cancelled")
         log.append(Note("Stopped by you."));
@@ -703,6 +728,20 @@ export function createSession({
         );
     });
     return log;
+  }
+
+  /** The owner's message that asks the agent to fix what the last rule check found. Peekumi
+   * adds the fresh check to that turn's prompt (backend/runner.rs). */
+  async function askToFix(r) {
+    try {
+      await write(`/api/runs/${r.id}/message`, {
+        text: "Fix the rule breaks that this session adds. Do not change the rule files to remove a break. If a break is needed, tell me why.",
+        anchors: [],
+      });
+      await refresh();
+    } catch (e) {
+      notice(e.message, true);
+    }
   }
 
   /** Below the conversation: the session's details, then quiet links: its changes on the

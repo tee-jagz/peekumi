@@ -275,6 +275,7 @@ pub fn launch_session<S: RunStore + Clone + Send + Sync + 'static>(store: S, id:
                         &id,
                         json!({"type": "peekumi.error", "message": e.to_string()}),
                     );
+                    record_rule_check(&store, &id, Value::Null);
                     let _ = store.close_turn(
                         &id,
                         current_results(&store, &id),
@@ -373,7 +374,9 @@ fn session_turn<S: RunStore>(store: &S, id: &str) -> Result<bool> {
             run["task"].as_str().unwrap_or("")
         )
     } else {
-        format!("The owner's message:\n{said}\n")
+        // The rules again, at the current head: a result for an older head is never sent.
+        let rules = rule_note(&session_rule_check(store, id));
+        format!("The owner's message:\n{said}\n{rules}")
     };
     append(
         store,
@@ -483,12 +486,106 @@ fn session_turn<S: RunStore>(store: &S, id: &str) -> Result<bool> {
         id,
         json!({"type": "peekumi.turn", "turn": turn, "status": status, "at": S::now()}),
     )?;
+    record_rule_check(store, id, json!(turn));
     let note = match status {
         "completed" => None,
         "cancelled" => Some("Stopped. Send a message to continue.".to_string()),
         _ => Some(format!("The agent's turn failed: {message}")),
     };
     store.close_turn(id, current_results(store, id), summary, conversation, note)
+}
+/// Checks a session's rules at the end of a turn, also a failed or stopped one, and saves the
+/// result in the run (`ruleCheck`) and in the log, where the conversation shows it to the
+/// owner. Peekumi runs it itself, so it does not depend on the agent or its lookup grant.
+fn record_rule_check<S: RunStore>(store: &S, id: &str, turn: Value) {
+    let check = session_rule_check(store, id);
+    let _ = store.patch_run(id, json!({"ruleCheck": check}));
+    let _ = append(
+        store,
+        id,
+        json!({"type": "peekumi.rules", "turn": turn, "at": S::now(), "check": check}),
+    );
+}
+/// The rule check of a session's branch head against its start (see the engine's
+/// `rule_check`), with `uncommitted` when its worktree has changes that the check cannot see
+/// and a one-sentence `summary`. A check that cannot run says why; it never looks clean.
+fn session_rule_check<S: RunStore>(store: &S, id: &str) -> Value {
+    let Ok(run) = store.run(id) else {
+        return json!({"state": "not checked", "reason": "The session was not found."});
+    };
+    let start = run["start"]
+        .as_str()
+        .or(run["base"].as_str())
+        .unwrap_or("")
+        .to_string();
+    let worktree = store.state().join("runs").join(id).join("worktree");
+    let uncommitted = worktree.exists()
+        && worktree
+            .to_str()
+            .and_then(|dir| store.git(&["-C", dir, "status", "--porcelain"]).ok())
+            .is_some_and(|status| !status.is_empty());
+    let head = run["branch"].as_str().and_then(|branch| {
+        store
+            .git(&[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{branch}^{{commit}}"),
+            ])
+            .ok()
+            .filter(|sha| !sha.is_empty())
+    });
+    let mut check = match head {
+        None => json!({"state": "no commits"}),
+        Some(head) if head == start => json!({"state": "no commits", "head": head}),
+        Some(head) => store.rule_check(&start, &head).unwrap_or_else(|e| {
+            json!({"state": "not checked", "reason": format!("The rule check failed: {e}"), "head": head})
+        }),
+    };
+    if let Some(limits) = check["limits"].as_object_mut() {
+        limits.remove("coverage");
+    }
+    if check["summary"].is_null() {
+        check["summary"] = json!(if check["state"] == "no commits" {
+            "No commits yet, so no rule is checked.".to_string()
+        } else {
+            crate::rules::check_summary(&check)
+        });
+    }
+    check["uncommitted"] = json!(uncommitted);
+    check
+}
+/// The part of a turn's prompt about the rules: empty when the check found nothing that the
+/// agent can act on (no break, no rule change, and rules that are valid or absent), else the
+/// summary and each added break, from a check of the current head.
+fn rule_note(check: &Value) -> String {
+    let act = check["addedCount"].as_u64().unwrap_or(0) > 0
+        || !check["ruleChange"].is_null()
+        || check["configState"] == "invalid";
+    if !act {
+        return String::new();
+    }
+    let mut text = format!(
+        "\n## Rule check\nPeekumi checked the dependency rules on this session's branch just now, at {}. {}\n",
+        check["head"]
+            .as_str()
+            .map_or("its head", |h| &h[..h.len().min(12)]),
+        check["summary"].as_str().unwrap_or("")
+    );
+    for b in check["added"].as_array().into_iter().flatten() {
+        text.push_str(&format!(
+            "- {} ({}): {} uses {}\n",
+            b["rule"].as_str().unwrap_or(""),
+            b["kind"].as_str().unwrap_or(""),
+            b["source"]["path"].as_str().unwrap_or(""),
+            b["target"]["path"].as_str().unwrap_or("")
+        ));
+    }
+    if check["uncommitted"] == true {
+        text.push_str("Uncommitted changes in the worktree are not checked.\n");
+    }
+    text.push_str("Fix each added break, or tell the owner why it is needed. Do not change the rule files to remove a break: the owner decides about the rules.\n");
+    text
 }
 /// Appends one Peekumi event line to a session's log.
 fn append(store: &impl RunStore, id: &str, event: Value) -> Result<()> {
@@ -559,6 +656,11 @@ impl<'a, S: RunStore> GraphGrant<'a, S> {
                     crate::lookup::Grant::for_task(
                         key.clone(),
                         run["base"].clone(),
+                        if run["start"].is_string() {
+                            run["start"].clone()
+                        } else {
+                            run["base"].clone()
+                        },
                         run["branch"].as_str().map(String::from),
                         crate::lookup::TASK_CALLS,
                     ),

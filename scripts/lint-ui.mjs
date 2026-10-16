@@ -260,7 +260,7 @@ function checkComponents() {
             errors.push(`R6 shadow: ${where}`);
           if (
             /backdrop-filter$/.test(p) &&
-            !/\.pk-(?:sheet|composer|map|map-controls)\b/.test(selector)
+            !/\.pk-(?:sheet|composer|map|map-controls|card)\b/.test(selector)
           )
             errors.push(`R7 glass: ${where}`);
           if (/gradient\(/.test(v)) errors.push(`R8 gradient: ${where}`);

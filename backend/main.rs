@@ -117,6 +117,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
         ),
         "commits" => repo.earlier_commits(argument(args, 0)),
         "fixes" => repo.fixes(argument(args, 0)),
+        "rule_check" => repo.rule_check(argument(args, 0), argument(args, 1)),
         "rule_trial" => repo.rule_trial(argument(args, 0), &args[1]),
         "cycles" => repo.cycles(argument(args, 0)),
         "rule_overlaps" => repo.rule_overlaps(argument(args, 0), &args[1]),
@@ -293,6 +294,24 @@ fn open_repository(
                 .map(|runtime| runtime.block_on(graph_brief::map(&app, comments, base)))
                 .unwrap_or_default()
         }));
+    // A session turn runs on its own thread and checks the rules when it ends (see the
+    // runner), so the check keeps a handle to this runtime.
+    let weak = Arc::downgrade(&app);
+    let runtime = tokio::runtime::Handle::try_current().ok();
+    let _ = app
+        .workflow
+        .rule_checker
+        .set(Box::new(move |start: &str, head: &str| {
+            let app = weak
+                .upgrade()
+                .ok_or_else(|| anyhow::anyhow!("The server is closing"))?;
+            let runtime = runtime
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Rule checks are not available here"))?;
+            runtime
+                .block_on(app.engine.call("rule_check", json!([start, head])))
+                .map_err(|e| anyhow::anyhow!(e))
+        }));
     Ok((id, app))
 }
 
@@ -396,6 +415,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/icon-192.png" => Some(("image/png", include_bytes!("../frontend/icon-192.png"))),
         "/icon-512.png" => Some(("image/png", include_bytes!("../frontend/icon-512.png"))),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
+        "/grain.png" => Some(("image/png", include_bytes!("../frontend/grain.png"))),
         "/fonts/next-latin.woff2" => Some((
             "font/woff2",
             include_bytes!("../frontend/fonts/next-latin.woff2"),
@@ -591,6 +611,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/favicon.svg",
             "/icon-192.png",
             "/icon-512.png",
+            "/grain.png",
         ]
         .iter()
         .flat_map(|path| asset(path).unwrap().1.iter().copied())
@@ -1201,6 +1222,11 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,
         "/api/fixes" => app.engine.call("fixes", json!([head])).await,
+        "/api/rule-check" => {
+            app.engine
+                .call("rule_check", json!([query.get("start"), head]))
+                .await
+        }
         "/api/commits" => {
             app.engine
                 .call("commits", json!([query.get("before")]))

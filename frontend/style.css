@@ -2,7 +2,7 @@
    whole app takes the Peekumi look while its parts move to frontend/ui.js. Light and dark come
    from the tokens. */
 :root {
-  --bg: var(--canvas);
+  --bg: transparent;
   --old-surface: var(--surface);
   --old-ink: var(--ink);
   --muted: var(--ink-muted);
@@ -18,17 +18,17 @@
   --old-edge: var(--edge);
   --old-glass: var(--glass);
   --card: var(--surface-raised);
-  --old-glass-line: var(--line);
+  --old-glass-line: var(--float-line);
   --shadow: var(--shadow-float);
   --card-shadow: var(--shadow-strata);
-  --wall: var(--canvas);
+  --wall: transparent;
   --panel-glass: var(--glass-strong);
   --panel-line: var(--sheet-edge);
   --panel-glow: transparent;
-  --el-glass: var(--glass);
+  --el-glass: var(--glass-control);
   --el-line: var(--float-line);
-  --el-shadow: none;
-  --field-glass: var(--surface-sunken);
+  --el-shadow: var(--shadow-control);
+  --field-glass: var(--glass-groove);
   --popover-glass: var(--surface-popup);
   --font: var(--font-ui);
   --mono: var(--font-mono);
@@ -102,9 +102,12 @@ button {
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: var(--glass-groove);
+  box-shadow: var(--shadow-groove);
 }
-.seg button {
+/* The second selector outranks the global button rule, so a segment stays clear in its groove. */
+.seg button,
+.seg button:not([class*="pk-"]) {
   border: 0;
   background: transparent;
   border-radius: var(--radius-full);
@@ -114,8 +117,8 @@ button {
   color: var(--old-ink);
 }
 .seg button[aria-pressed="true"] {
-  background: var(--old-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  background: var(--glass-control-on);
+  box-shadow: var(--shadow-control);
 }
 .seg.glass {
   background: var(--old-glass);
@@ -152,8 +155,10 @@ button {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--old-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(180%);
+  backdrop-filter: blur(var(--blur-glass)) saturate(180%);
   border: 1px solid var(--old-glass-line);
-  box-shadow: none;
+  box-shadow: var(--shadow-glass);
   transform-origin: 50% 0;
   transition:
     transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -2186,9 +2191,9 @@ button {
 /* Controls: glass with a soft hairline (the glass strata look). A pressed control is a raised
    white segment, not an outlined box. */
 :root {
-  --control-glass: var(--glass);
-  --control-border: var(--line);
-  --control-highlight: none;
+  --control-glass: var(--glass-control);
+  --control-border: var(--float-line);
+  --control-highlight: var(--shadow-control);
 }
 button:not([class*="pk-"]),
 .btn,
@@ -2213,13 +2218,13 @@ button[aria-selected="true"],
 button[aria-pressed="true"],
 .seg button[aria-pressed="true"],
 #reviewActions button[aria-selected="true"] {
-  background: var(--surface);
+  background: var(--glass-control-on);
   color: var(--old-ink);
   border: 1px solid transparent;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-control);
 }
 .btn.primary {
-  background: var(--accent);
+  background: var(--accent-glass);
   color: var(--on-accent);
   border: 1px solid var(--accent);
 }
@@ -2774,6 +2779,7 @@ select option {
   font: 12px/1.5 var(--font-ui);
   color: var(--muted);
   margin: 10px 0;
+  padding: 0 8px;
   white-space: normal;
 }
 .readable-diff {
@@ -2787,12 +2793,14 @@ select option {
 .readable-diff .code-line {
   min-width: 0;
   display: grid;
-  grid-template-columns: 29px 29px 14px minmax(0, 1fr);
+  /* Each number column holds four digits and a one-digit gap at 12px. */
+  grid-template-columns: 5ch 5ch 14px minmax(0, 1fr);
   padding-right: 6px;
+  padding-left: 8px;
 }
 .readable-diff .line-number {
   min-width: 0;
-  padding-right: 5px;
+  padding-right: 1ch;
   font-size: 12px;
 }
 .diff-sign {
@@ -2887,8 +2895,11 @@ select option {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* The ground: grain over the colour field over the base colour. Keep one blend mode for each
+   layer (the grain, the four field shapes and the base). */
 body {
-  background: var(--wall);
+  background: url("/grain.png"), var(--field), var(--canvas);
+  background-blend-mode: soft-light, normal, normal, normal, normal, normal;
 }
 .top {
   position: relative;
@@ -3156,8 +3167,8 @@ body {
 /* The review sheet and every control inside it share frosted glass. */
 .panel {
   background: var(--panel-glass);
-  -webkit-backdrop-filter: blur(30px) saturate(1.6);
-  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(180%);
+  backdrop-filter: blur(var(--blur-glass)) saturate(180%);
   border-top: 1px solid var(--panel-line);
   box-shadow: var(--shadow-sheet);
 }
@@ -3172,10 +3183,9 @@ body {
   button:not([aria-pressed="true"]):not([aria-selected="true"]):not(
     .primary
   ):not(#sheetHandle):not(.row):not(.link-button):not(.crumbs button):not(
-    [class*="pk-"]
-  ),
+    .seg button
+  ):not([class*="pk-"]),
 .panel select,
-.panel .seg,
 .panel .tabs,
 .panel details {
   background: var(--el-glass);
@@ -3187,7 +3197,7 @@ body {
   background: var(--field-glass);
   border-color: var(--el-line);
 }
-/* The tabs: one quiet track; the open tab is a raised segment with its name, the others are
+/* The tabs: one glass groove; the open tab is a raised glass segment with its name, the others are
    icons. (!important: the panel's button rule carries an ID in its :not() list.) */
 #helperTools {
   gap: 4px;
@@ -3195,7 +3205,8 @@ body {
   margin: 0 12px 10px;
   padding: 3px;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: var(--glass-groove);
+  box-shadow: var(--shadow-groove);
 }
 #helperTools button {
   display: inline-flex;
@@ -3216,8 +3227,8 @@ body {
 #helperTools button[aria-pressed="true"] {
   flex: 1;
   color: var(--old-ink);
-  background: var(--surface) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14) !important;
+  background: var(--glass-control-on) !important;
+  box-shadow: var(--shadow-control) !important;
 }
 #helperTools .tab-label {
   display: none;
@@ -5493,10 +5504,10 @@ a.pr-link .glyph {
   min-height: 36px;
   padding: 0;
   outline-offset: 4px;
-  border: 1px solid var(--line) !important;
+  border: 1px solid var(--float-line) !important;
   border-radius: var(--radius-full);
-  background: var(--glass) !important;
-  box-shadow: none !important;
+  background: var(--glass-control) !important;
+  box-shadow: var(--shadow-control) !important;
 }
 .panel #dockAgent.agent-chip[hidden] {
   display: none;
@@ -5582,12 +5593,6 @@ a.pr-link .glyph {
   margin: 2px 0;
   color: var(--muted);
   font: 12px var(--mono);
-}
-/* A task that adds a rule break says so before Approve and in the merge sheet: plain text. */
-.rule-added-note {
-  margin: 4px 0;
-  font-size: 13px;
-  color: var(--del);
 }
 /* "Forbid this dependency" reads like the other quiet links, not like code. */
 .panel .selection-facts .forbid-edge {

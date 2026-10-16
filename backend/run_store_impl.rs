@@ -26,6 +26,13 @@ impl RunStore for Workflow {
     fn read(&self) -> Result<Value> {
         Workflow::read(self)
     }
+    fn rule_check(&self, start: &str, head: &str) -> Result<Value> {
+        let check = self
+            .rule_checker
+            .get()
+            .ok_or_else(|| anyhow::anyhow!("Rule checks are not available on this server"))?;
+        check(start, head)
+    }
     fn update<T>(&self, f: impl FnOnce(&mut Value) -> Result<T>) -> Result<T> {
         Workflow::update(self, f)
     }

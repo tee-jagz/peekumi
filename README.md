@@ -24,6 +24,8 @@ peekumi pair    # prints the link to open on your phone
 
 Prebuilt releases are available for macOS and Linux (glibc 2.34+). Git is the only necessary software. The script downloads the [latest release](https://github.com/tee-jagz/peekumi/releases/latest) and checks its SHA-256 checksum. To read [install.sh](install.sh) first, or to download and check the archive yourself, see [install without the script](docs/SETUP.md#install-without-the-script). For more details, phone pairing and how to build from source, see [setup](docs/SETUP.md). You can also give your agent the [setup skill](skills/peekumi-setup/SKILL.md).
 
+Ask, tasks and sessions send code to the model provider that you choose. [Where your code goes](SECURITY.md#where-your-code-goes) lists what each one sends.
+
 ## Learn more
 
 - [User guide](docs/USER-GUIDE.md): all controls, views and icons, with screenshots.

@@ -16,6 +16,7 @@ import {
   List,
   Modal,
   Note,
+  DataNote,
   PageHeader,
   Row,
   SegmentedControl,
@@ -210,6 +211,9 @@ export function createAgents({ api, repo }) {
           ),
         ),
         Note("Saved on this device, for this repository."),
+        DataNote(
+          "Ask, tasks and sessions send code to the provider that you choose here.",
+        ),
       );
     /** One choice from a list: a segmented control for two to four, else rows. */
     const pick = (label, options, value, onChange) =>

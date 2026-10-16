@@ -14,6 +14,8 @@ import {
   List,
   Note,
   PickRow,
+  DataNote,
+  RuleCheck,
   SegmentedControl,
   Spinner,
   TextArea,
@@ -1094,6 +1096,9 @@ export function createWorkflow({
           onChange: (e) => (notifyMe = e.target.checked),
         }),
       );
+    body.append(
+      DataNote("The agent sends the code that it reads to its provider."),
+    );
     const note = TextArea({
       label: "Extra instructions (optional)",
       value: brief,
@@ -1236,44 +1241,74 @@ export function createWorkflow({
       await refresh();
     }
   }
-  /** The dependency-rule breaks that a task's work adds to its start commit (the server's
-   * `checks.added` for the start commit and the last result), loaded once for each pair of
-   * commits. Empty while it loads, and when the repository has no rules. */
-  const ruleBreaks = new Map();
-  function addedBreaks(r) {
+  /** The rule check of a task's last result (the server's `rule_check`): against the commit
+   * that the owner started the task from, under the rules of that commit. Loaded once for each
+   * pair of commits. A failure keeps its reason, so it never looks clean. */
+  const ruleChecks = new Map();
+  function ruleCheckOf(r) {
     const head = r.results?.at(-1);
-    if (!r.base || !head) return [];
-    const key = `${r.base}:${head}`;
-    if (!ruleBreaks.has(key)) {
-      ruleBreaks.set(key, []);
-      api(`/api/relationships?base=${r.base}&head=${head}&view=overview`)
-        .then((d) => {
-          const found =
-            d.checks?.after?.state === "evaluated" ? d.checks.added || [] : [];
-          ruleBreaks.set(key, found);
-          if (found.length) redraw();
-        })
-        .catch(() => {});
+    const start = r.start || r.base;
+    if (!start || !head) return null;
+    const key = `${start}:${head}`;
+    if (!ruleChecks.has(key)) {
+      ruleChecks.set(key, { loading: true });
+      api(`/api/rule-check?start=${start}&head=${head}`)
+        .then((check) => ruleChecks.set(key, { check }))
+        .catch((e) =>
+          ruleChecks.set(key, {
+            failed: true,
+            check: {
+              state: "not checked",
+              reason: `The rule check failed: ${e.message}`,
+              head,
+            },
+          }),
+        )
+        .finally(redraw);
     }
-    return ruleBreaks.get(key);
+    return { key, ...ruleChecks.get(key) };
   }
-  /** One plain line that names the rule breaks a task adds, or null when it adds none. */
-  function breaksNote(r, ending) {
-    const found = addedBreaks(r);
-    if (!found.length) return null;
-    const names = found
-      .slice(0, 3)
-      .map(
-        (b) =>
-          `${b.rule} (${b.source.path.split("/").pop()} → ${b.target.path.split("/").pop()})`,
-      )
-      .join(", ");
-    const more = found.length > 3 ? ` and ${found.length - 3} more` : "";
-    return el(
-      "p",
-      "rule-added-note",
-      `This task adds ${plural(found.length, "dependency rule break")}: ${names}${more}. ${ending}`,
-    );
+  /** The rule check of a task before Approve. It always shows, also when it finds nothing, and
+   * a failed check offers Retry. */
+  function ruleCheckView(r) {
+    const known = ruleCheckOf(r);
+    if (!known) return null;
+    return RuleCheck({
+      check: known.check,
+      loading: known.loading,
+      actions: known.failed
+        ? [
+            {
+              label: "Retry",
+              onClick: () => {
+                ruleChecks.delete(known.key);
+                redraw();
+              },
+            },
+          ]
+        : [],
+    });
+  }
+  /** A fresh rule check of the commit that a merge moves to (`head`), for the merge
+   * confirmation: the branch can change after the review. */
+  function freshRuleCheck(r, head) {
+    const start = r.start || r.base;
+    if (!start || !head) return null;
+    const shown = RuleCheck({ loading: true });
+    api(`/api/rule-check?start=${start}&head=${head}`)
+      .then((check) => shown.replaceWith(RuleCheck({ check })))
+      .catch((e) =>
+        shown.replaceWith(
+          RuleCheck({
+            check: {
+              state: "not checked",
+              reason: `The rule check failed: ${e.message}`,
+              head,
+            },
+          }),
+        ),
+      );
+    return shown;
   }
   /** Records the owner's approval of the finished instructions `ready`, against their
    * commit, with the note when one is written. */
@@ -1358,9 +1393,7 @@ export function createWorkflow({
         ),
         fileList(m.files || []),
         el("p", "merge-note", note),
-        ...[
-          breaksNote(r, "A merge brings them into the target branch."),
-        ].filter(Boolean),
+        ...[freshRuleCheck(r, m.head || r.results?.at(-1))].filter(Boolean),
         buttons,
         el(
           "p",
@@ -1893,10 +1926,9 @@ export function createWorkflow({
         body.append(card);
       }
     }
-    // A rule break that the task adds shows before Approve, in plain words.
-    const broken =
-      decide && ready.length && breaksNote(r, "Check them before you approve.");
-    if (broken) actions.append(broken);
+    // The rule check shows before Approve: what the task adds, its limits, and a rule change.
+    const rules = decide && ready.length && ruleCheckView(r);
+    if (rules) actions.append(rules);
     // Approve covers the finished instructions only; say which ones stay open.
     const left = undecided(r).length;
     if (decide && ready.length && left)

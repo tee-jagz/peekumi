@@ -28,6 +28,8 @@ pub trait RunStore {
     fn run(&self, id: &str) -> Result<Value>;
     /// Saves runner progress in a run.
     fn patch_run(&self, id: &str, patch: Value) -> Result<Value>;
+    /// The rule check of the work from `start` to `head` (see the engine's `rule_check`).
+    fn rule_check(&self, start: &str, head: &str) -> Result<Value>;
     /// Ends a run and marks every unanswered comment Unreported.
     fn finish(&self, id: &str, status: &str, message: &str, results: Value) -> Result<Value>;
     /// Accepts a report from the active run with the reporting credential `token`.

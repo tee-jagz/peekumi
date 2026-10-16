@@ -4,16 +4,16 @@ The Rust backend serves the authenticated API. It reads committed Git objects an
 
 - `main.rs`: The Axum HTTP server, authentication, the embedded frontend and the operations of the repository worker.
 - `worker.rs`: The worker thread. It runs queued operations in order through one handler that it gets from `main.rs`.
-- `engine.rs`: Git snapshots, comparisons, directory descriptions and the control of the adapters.
+- `engine.rs`: Git snapshots, comparisons, directory descriptions and the control of the adapters. Its `rule_check` checks work from a start commit to a head. It uses the rules of the start commit, so work cannot hide a break when it changes the rules.
 - `relationships.rs`: Shared relationship evidence, relationship resolution and comparisons of revisions.
-- `rules.rs`: Validation of the committed dependency configuration, and checks for violations.
+- `rules.rs`: Validation of the committed dependency configuration, checks for violations, and the one-sentence summary of a rule check.
 - `ask.rs`: Limited committed context and Claude conversations. For files and declarations, the context is the source, the diff, the static relationships and the code that calls them. For folders, the context is the README, the declarations and the diffs of changed files. Each conversation has all built-in tools disabled and uses low effort on a fast model. The answer comes as one whole reply or as a stream of events. Answers follow ASD-STE100 Simplified Technical English.
 - `lookup.rs`: The read-only lookup tools for Ask (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`, `highlight`, `route`). They use Streamable HTTP MCP at `/mcp/ask`. The tools are open only while one answer runs, and they accept a maximum of 30 calls.
 - `audit.rs`: The saved list of proposed rules for one repository, and the rule audit that runs in the background. It has the audit agent's instructions. Each audit adds to the list. A rule that checks the same files counts once, and the owner's choices stay.
 - `fix_proposals.rs`: Proposed fixes as a background job, with the agent's instructions. It keeps the last proposal with its commit, and it tells the owner's devices when the proposal ends.
 - `agent_call.rs`: The read-only agent. It runs the agent that the owner chose for Ask, with every built-in tool off and only the read-only lookups. Ask, the rule audit and Proposed fixes use it, so no service uses another service.
 - `workflow.rs`: Durable draft instructions (the backend keeps them as comments), frozen task previews, agent reports and owner verification.
-- `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP. It also runs the turns of a session, and its bridge has the `approve` tool for a session agent's command requests.
+- `runner.rs`: Isolated agent worktrees, the supervision of processes and scoped reports through stdio MCP. It also runs the turns of a session, and its bridge has the `approve` tool for a session agent's command requests. At the end of each turn, it checks the session's rules itself. It adds a fresh result to the next turn when there is something to fix.
 - `run_store.rs`: The `RunStore` trait. The runner and the task agent use it to read and change runs, and they do not use the `Workflow` type. `run_store_impl.rs` implements it for `Workflow`.
 - `agent_session.rs`: Sessions, a live conversation with an agent on its own branch. It starts a session, keeps the owner's messages for the next turn, stores the agent's command requests and the owner's decisions, and ends a session in the normal review.
 - `index.rs`: The persistent SQLite syntax cache.

@@ -298,6 +298,9 @@ test("requesting changes starts a next round that builds on the agent's own comm
   );
   assert.equal(next.round, 2);
   assert.equal(next.revises, p.id);
+  // The rules and the rule checks of every round stay with the commit the owner started from.
+  assert.equal(next.start, (await f.req("/api/runs/" + p.id)).start);
+  assert.notEqual(next.start, next.base);
   assert.equal(next.agent, "codex");
   assert.notEqual(next.branch, first.branch);
   assert.equal(
@@ -1272,6 +1275,10 @@ test("a session continues one conversation over turns, asks before commands, and
     true,
   );
   let run = await waiting(1);
+  // Peekumi checked the rules itself when the turn ended; this repository has none.
+  assert.equal(run.ruleCheck.state, "not checked");
+  assert.equal(run.ruleCheck.configState, "not configured");
+  assert.match(run.output, /"type":"peekumi.rules","turn":1/);
   assert.deepEqual(
     JSON.parse(
       await readFile(path.join(f.state, "session-approval-1.json"), "utf8"),
@@ -2200,12 +2207,15 @@ test("a task agent checks its committed work against the rules, and the comparis
   );
   assert.ok(used.tools.includes("check_rules"), used.tools.join(","));
   assert.equal(used.error, false);
-  assert.match(used.result.result, /add 1 rule break/);
+  assert.match(used.result.result, /adds 1 rule break/);
   assert.deepEqual(
     used.result.added.map((b) => [b.rule, b.source.path, b.target.path]),
     [["ui-no-db", "ui/view.py", "db/store.py"]],
   );
-  assert.match(used.result.warnings.join(" "), /"typo" matches no file/);
+  // A rule warning limits the check, and the agent is told so.
+  assert.equal(used.result.state, "limited");
+  assert.match(used.result.limits.warnings.join(" "), /"typo" matches no file/);
+  assert.equal(used.result.ruleChange, null);
   // The comparison of the task gives coverage for each rule, and the breaks it adds.
   const head = run.results.at(-1);
   const data = await f.req(
@@ -2222,6 +2232,80 @@ test("a task agent checks its committed work against the rules, and the comparis
     `/api/relationships?base=${head}&head=${f.sha}&view=overview`,
   );
   assert.deepEqual(back.checks.added, []);
+});
+
+test("work cannot hide a rule break by changing the rules: the start commit's rules apply, and the change shows", async (t) => {
+  const rules = {
+    version: 1,
+    groups: { ui: ["ui/**"], db: ["db/**"] },
+    rules: [
+      {
+        id: "ui-no-db",
+        from: "ui",
+        to: ["db"],
+        kinds: ["imports", "calls"],
+        message: "The UI goes through services.",
+      },
+    ],
+  };
+  const f = await fixture({
+    files: {
+      ".peekumi.json": JSON.stringify(rules),
+      "ui/__init__.py": "",
+      "ui/view.py": "def show():\n    return 1\n",
+      "db/__init__.py": "",
+      "db/store.py": "def save():\n    return 2\n",
+    },
+  });
+  t.after(() => f.close());
+  const c = await f.req("/api/comments", {
+    text: "Write the result file. CHECK_RULES WEAKEN_RULES",
+    sha: f.sha,
+    anchor: { kind: "repo", path: "" },
+  });
+  const p = await f.req("/api/runs/preview", {
+    commentIds: [c.id],
+    using: { agent: "claude" },
+  });
+  await f.req("/api/runs", { previewId: p.id });
+  const run = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + p.id);
+    return r.status === "completed" && r;
+  });
+  assert.equal(run.start, f.sha);
+  // The agent's own check uses the start commit's rules: the break stays, and the change shows.
+  const used = JSON.parse(
+    await readFile(path.join(f.state, "agent-rules.json"), "utf8"),
+  );
+  assert.equal(used.result.addedCount, 1);
+  assert.deepEqual(used.result.ruleChange.files, [".peekumi.json"]);
+  assert.equal(used.result.ruleChange.addedCount, 0);
+  assert.match(
+    used.result.result,
+    /changes \.peekumi\.json\. The check uses the rules at the start commit/,
+  );
+  // The owner's check says the same.
+  const head = run.results.at(-1);
+  const check = await f.req(`/api/rule-check?start=${run.start}&head=${head}`);
+  assert.equal(check.state, "checked", JSON.stringify(check.limits));
+  assert.equal(check.configState, "evaluated");
+  assert.equal(check.addedCount, 1);
+  assert.equal(check.added[0].rule, "ui-no-db");
+  assert.deepEqual(check.ruleChange.files, [".peekumi.json"]);
+  // Under each commit's own rules there is no break: that is what the work hid.
+  const own = await f.req(
+    `/api/relationships?base=${f.sha}&head=${head}&view=overview`,
+  );
+  assert.deepEqual(own.checks.added, []);
+  // A check that cannot read the rules says so; it never looks clean.
+  const plain = await fixture({ files: { "a.py": "x = 1\n" } });
+  t.after(() => plain.close());
+  const none = await plain.req(
+    `/api/rule-check?start=${plain.sha}&head=${plain.sha}`,
+  );
+  assert.equal(none.state, "not checked");
+  assert.equal(none.configState, "not configured");
+  assert.match(none.reason, /no rule configuration/);
 });
 
 test("Peekumi proposes one fix for each rule and declaration that its breaks reach", async (t) => {

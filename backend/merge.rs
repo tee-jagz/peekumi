@@ -411,6 +411,9 @@ impl Workflow {
                         .as_array_mut()
                         .unwrap()
                         .push(json!({"target": target_sha, "commit": commit, "at": now()}));
+                    // The work now starts from the target: rule checks compare with it and use
+                    // its rules, the owner's.
+                    r["start"] = json!(target_sha);
                     Ok(Value::Null)
                 })?;
                 Ok(json!({"merged": self.merge_status(id)?}))
@@ -441,9 +444,10 @@ impl Workflow {
             earlier["branch"].as_str().context("Missing branch")?
         ))?;
         let target = self.watched.trim_start_matches("refs/heads/").to_string();
+        // After the update, the work starts again from the target: its rules are the owner's.
         let rules = crate::rules::CONFIG_FILES
             .iter()
-            .find_map(|name| self.git(&["show", &format!("{base}:{name}")]).ok())
+            .find_map(|name| self.git(&["show", &format!("{target_sha}:{name}")]).ok())
             .unwrap_or_else(|| "No dependency rule configuration at this revision.".into());
         let token = crate::random_token();
         let run = self.update(|v| {
@@ -499,7 +503,7 @@ impl Workflow {
                 }
             }
             v["runs"].as_array_mut().unwrap().iter_mut().find(|r| r["id"] == previous).unwrap()["revisedBy"] = json!(id);
-            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"open":open,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::hash::hash(token.as_bytes())});
+            let next = json!({"id":id,"agent":agent,"model":r["model"],"effort":r["effort"],"graph":graph,"branch":branch,"base":base,"start":target_sha,"watched":self.watched,"brief":brief,"feedback":requested,"comments":[],"done":done,"open":open,"rules":rules,"task":task,"status":"starting","createdAt":now(),"startedAt":now(),"results":[],"revises":previous,"round":round,"kind":"update","mergeTarget":target_sha,"conflicts":conflicts,"reportHash":crate::hash::hash(token.as_bytes())});
             v["runs"].as_array_mut().unwrap().push(next.clone());
             Ok(next)
         })?;

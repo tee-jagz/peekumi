@@ -39,6 +39,9 @@ pub struct Grant {
     /// A task run's branch (`peekumi/run-…`): `check_rules` compares its committed work with
     /// the start commit. `None` for Ask.
     branch: Option<String>,
+    /// The commit that the owner started the run's work from (the run's `start`): `check_rules`
+    /// uses its rules and compares with it. Null for Ask.
+    start: Value,
 }
 impl Grant {
     /// An Ask answer's grant, with [`MAX_CALLS`].
@@ -55,12 +58,21 @@ impl Grant {
             places: vec![],
             limit,
             branch: None,
+            start: Value::Null,
         }
     }
-    /// A task run's grant: the code graph of its start commit, and `check_rules` on `branch`.
-    pub fn for_task(key: String, base: Value, branch: Option<String>, limit: usize) -> Self {
+    /// A task run's grant: the code graph of its base commit, and `check_rules` on `branch`
+    /// against `start`.
+    pub fn for_task(
+        key: String,
+        base: Value,
+        start: Value,
+        branch: Option<String>,
+        limit: usize,
+    ) -> Self {
         Self {
             branch,
+            start,
             ..Self::with_limit(key, base.clone(), base, limit)
         }
     }
@@ -68,7 +80,7 @@ impl Grant {
 
 /// The task-only tool: the dependency rules on the work that the agent committed.
 fn check_rules_tool() -> Value {
-    json!({"name":"check_rules","description":"Check the repository's dependency rules (.peekumi.json) on the work you committed on this task's branch, compared with the start commit. Returns each rule break that your commits add (old breaks are left out), and warnings about rules that check nothing. Commit first: uncommitted changes are not checked. Static relationships only.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"check_rules","description":"Check the repository's dependency rules on the work you committed on this branch, compared with the commit that the owner started the work from. The rules at that start commit apply: a change to .peekumi.json on the branch does not change the check, and the owner decides about it. Returns each rule break that your commits add (old breaks are left out), the state (checked, limited or not checked), what limits the check (unresolved relationships and files with no analysis in the rules' scope, rule warnings), and any rule change. Commit first: uncommitted changes are not checked. Static relationships only.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 /// The tools for the grant of `key`: a task's grant also has `check_rules`.
@@ -204,7 +216,12 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
         Some(g) => {
             g.calls.push(describe(name, args));
             g.places.push(place_of(args));
-            Ok((g.base.clone(), g.head.clone(), g.branch.clone()))
+            Ok((
+                g.base.clone(),
+                g.head.clone(),
+                g.branch.clone(),
+                g.start.clone(),
+            ))
         }
     };
     let revisions = {
@@ -227,7 +244,12 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
         Err(error) => return error,
     };
     let result = if name == "check_rules" {
-        check_rules(app, &revisions.0, revisions.2.as_deref()).await
+        let start = if revisions.3.is_null() {
+            &revisions.0
+        } else {
+            &revisions.3
+        };
+        check_rules(app, start, revisions.2.as_deref()).await
     } else {
         run(app, name, args, &revisions.0, &revisions.1).await
     };
@@ -237,46 +259,32 @@ async fn call(app: &App, key: &str, params: &Value) -> Value {
     }
 }
 
-/// `check_rules`: the rule breaks that the task's committed work adds to its start commit, with
-/// the rules' warnings. Errors outside a task, and says so when nothing is committed yet.
-async fn check_rules(app: &App, base: &Value, branch: Option<&str>) -> Result<Value> {
+/// `check_rules`: the rule check of the task's committed work against `start`, under the rules
+/// at `start` (see the engine's `rule_check`): the breaks it adds, what limits the check, and
+/// a rule change that the owner must decide. Errors outside a task, and says so when nothing
+/// is committed yet.
+async fn check_rules(app: &App, start: &Value, branch: Option<&str>) -> Result<Value> {
     let branch = branch.context("check_rules works only in a task")?;
     let head = app
         .engine
         .call("resolve", json!([format!("refs/heads/{branch}")]))
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    if head == *base {
+    if head == *start {
         return Ok(
             json!({"result":"No commits on the task branch yet. Commit your work, then check again."}),
         );
     }
-    let data = app
+    let mut check = app
         .engine
-        .call("relationships", json!([base, head, "", "overview"]))
+        .call("rule_check", json!([start, head]))
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    let checks = &data["checks"];
-    let after = &checks["after"];
-    if after["state"] != "evaluated" {
-        return Ok(json!({"result": if after["state"] == "invalid" {
-            format!("The rule configuration is invalid: {}", after["errors"])
-        } else {
-            "This repository has no .peekumi.json, so there are no rules to check.".into()
-        }}));
+    check["result"] = check["summary"].take();
+    if let Some(object) = check["limits"].as_object_mut() {
+        object.remove("coverage");
     }
-    let added = checks["added"].as_array().cloned().unwrap_or_default();
-    Ok(json!({
-        "result": if added.is_empty() {
-            "Your commits add no rule break.".to_string()
-        } else {
-            format!("Your commits add {} rule break{}. Fix each one, or explain it in your report.", added.len(), if added.len() == 1 { "" } else { "s" })
-        },
-        "head": head,
-        "rules": after["rules"],
-        "added": added.into_iter().take(50).collect::<Vec<_>>(),
-        "warnings": after["warnings"],
-    }))
+    Ok(check)
 }
 
 /// A short, human description of a call, shown under the answer.

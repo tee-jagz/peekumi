@@ -33,10 +33,26 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 
 ### Where your code goes
 
-- **Ask** sends the selected code and its context to Anthropic through the Claude Code client on your computer. All built-in tools of Claude Code are disabled for Ask. While one answer runs, Ask can use read-only lookups through a key that is valid only for that answer. The lookups read committed code and cannot run code or change files.
-- **Proposed fixes** use the same agent, the same restrictions and the same read-only lookups as Ask. The agent gets the rule breaks and reads the code at that commit. It changes nothing. Its proposals become instructions only when you save or send them.
-- **Proposed rules** use the same agent, restrictions and read-only lookups as Ask. The agent changes nothing. Its rules go into `.peekumi.json` only through a task that you start and review.
-- **Tasks** and **sessions** run Codex or Claude Code, which send code to OpenAI or Anthropic. If you choose OpenRouter for Ask, Ask sends your question and the code that it reads to OpenRouter, which sends them to the provider of the model that you chose. An OpenRouter task or session runs in Peekumi's own task agent. It can change files only in the worktree of the task, and it cannot run commands. The server keeps the OpenRouter key in its private state folder and never sends it to the browser. Do not use Ask or tasks on code that must not leave your computer.
+Peekumi itself sends no code to a model provider. The features below send code when you use them. Do not use them on code that must not leave your computer.
+
+**Ask** sends one request to the provider that you chose for Ask. That is Anthropic, through the Claude Code client on your computer, or OpenRouter. OpenRouter sends the request to the provider of the model that you chose. The request holds:
+
+- the name of the repository folder and the two commits that you compare;
+- your question, and the earlier questions and answers of the same conversation (at most 12);
+- for a declaration or a file: its diff, its code before and after the change, its relationships, and the code of at most four declarations that call it;
+- for a folder or the whole repository: its files with their change status, its README, its declarations and its diffs;
+- your instructions about the selection, or all your instructions when you ask about the whole repository;
+- the dependency rules (`.peekumi.json`).
+
+Each part has a size limit, and the answer says when Peekumi cut a part. While it answers, Ask can make at most 30 read-only lookups. It uses a key that is valid only for that answer. Each lookup sends more committed code to the provider, and the answer lists each lookup. All built-in tools of Claude Code are disabled for Ask.
+
+**Proposed fixes** and **proposed rules** use the same agent, restrictions and lookups as Ask. The agent gets the rule breaks or the repository map, reads the code at that commit and changes nothing. A proposal becomes an instruction only when you save or send it. A rule goes into `.peekumi.json` only through a task that you start and review.
+
+**Tasks and sessions with Claude Code or Codex** run that client in the worktree of the task. The client sends the task text to Anthropic or OpenAI: your instructions, the repository map and the rules. It also sends everything that the agent reads. The agent can read every file in the worktree. It can also read files outside the worktree that your user account can read, because the worktree is not a sandbox.
+
+**Tasks and sessions with OpenRouter** run in Peekumi's own task agent. It sends the task text and each file that it reads in the worktree to OpenRouter. OpenRouter sends them to the provider of the model that you chose. It can change files only in the worktree of the task, and it cannot run commands. The server keeps the OpenRouter key in its private state folder and never sends it to the browser.
+
+**Files that Peekumi holds back.** Ask, fixes and rules never get the content of the files that Peekumi labels (see **Inspection**). These are binary files, large files, submodules and common secret filenames. This is a filename filter, not a secret scanner. Other files can contain secrets, and an agent client in a task can still read a labelled file in its worktree.
 
 - **Notifications** go from the server through the push service of the device's browser (Apple, Google, Mozilla or Microsoft). Peekumi encrypts each notification for the device, so the push service cannot read it. A notification contains the name of the task or session, a short line about what changed and a link that opens the run. A notification never contains code or a diff. The server keeps the subscriptions and its VAPID key in its private state folder. It accepts subscriptions only for the push services of these four companies.
 

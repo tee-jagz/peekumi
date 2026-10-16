@@ -31,12 +31,12 @@ Peekumi's name comes from geology: strata are the layers of a rock face. Peek, t
 
 ## Visual foundations
 
-- **Colour.** The tokens in **Colour** are the only colours. A flat ground with glass on it: cool grey in light, near-black in dark. Four colours: neutral, teal for actions, the selection and added code, amber for modified, and red for removed and breaks. No gradient. Light and dark themes, plus two colour-blind safe themes in which added is blue and removed is orange. Every text and mark pair meets WCAG 2.2 in all four themes.
+- **Colour.** The tokens in **Colour** are the only colours. Frosted glass sits on a soft colour field (Tide): sky blue at the top and deep teal at the bottom. The base is cool grey in light and near-black in dark. Four colours carry meaning: neutral, teal for actions, the selection and added code, amber for modified, and red for removed and breaks. The field carries no meaning. Light and dark themes, plus two colour-blind safe themes in which added is blue and removed is orange. Every text and mark pair meets WCAG 2.2 in all four themes.
 - **Type.** `Host Grotesk` for the interface and the display styles (names and titles), and `JetBrains Mono` for code, paths, hashes and counts. Peekumi serves both itself. Use the twelve type styles in **Type** only. Use weights 400 and 600 only. Nothing is smaller than 12px. Every text field is 16px.
 - **Space.** A 4px base: `space-1` (4px) to `space-7` (48px). The page gutter is `space-4`.
 - **Shape.** Soft radii: cards and menus `radius-md` (16px), the map frame and the sheet `radius-lg` (26px). Icon buttons, map controls, the composer field and segmented controls are pills.
-- **Depth.** Three levels: the page, the floating controls with a soft `shadow-float`, and pop-ups with `surface-popup` and a deeper `shadow-popup`. A pop-up's header stays at the top while it scrolls. A changed card lifts a little with `shadow-strata`; an unchanged card fades. Rows have no shadow.
-- **Glass.** The map frame, the sheet, the composer and the floating controls are glass (`glass`, `glass-strong`, `blur-glass`) with a soft rim. Cards and rows are not glass. No gradient is used anywhere, except Peek's own shading.
+- **Depth.** There are four levels. They are the ground with its field, frosted glass (the map frame and the sheet), glass parts (cards, buttons, tabs and fields) and solid pop-ups. A pop-up's header stays at the top while it scrolls. A changed card is clear glass that lifts; an unchanged card is a thin frost that fades. Rows have no shadow.
+- **Glass.** Frosted glass has a strong blur with more saturation. Its fill is lighter at the top, and it has a thin light rim, a top highlight and a soft shadow. The map frame, the sheet, the composer, the map controls and map cards blur what is behind them. Buttons, tabs and fields are flat frost with a faint rim, so the field colour shows through them. The only gradients are the field and the light of glass, plus Peek's own shading.
 - **Motion.** 150ms for feedback, 250 to 300ms for the sheet and map moves, with a decelerating curve. With reduced motion, use cross-fades only.
 
 ## Iconography

@@ -622,6 +622,108 @@ impl Repository {
         let b = self.snapshot(head)?;
         Ok(json!({"head": b.sha, "checks": b.checks, "fixes": propose_fixes(&b.relationships)}))
     }
+    /// The rule check of work from `start` (the commit that the owner started it from) to
+    /// `head`. The rules at `start` are the rules for both commits, so work cannot hide a
+    /// break by changing the rules. Returns:
+    /// - `state`: "checked", "limited" (checked, but some of the code in a rule's scope could
+    ///   not be judged, see `limits`) or "not checked" (see `reason`);
+    /// - `added` (at most 50) and `addedCount`: the breaks at `head` that `start` does not have;
+    /// - `limits`: the relationships in a rule's scope that stayed unresolved, the rule
+    ///   warnings, the files in a rule's scope with no analysis at either commit (`gaps`), and
+    ///   the source files in a rule's scope with no language adapter (`unanalysed`);
+    /// - `ruleChange`: null, or the rule files that the work changes, with the breaks that the
+    ///   work adds under its own rules. The owner decides about a rule change;
+    /// - `configState`: "evaluated", "invalid" or "not configured", for the rules at `start`;
+    /// - `summary`: one plain sentence (see `rules::check_summary`).
+    pub fn rule_check(&mut self, start: &str, head: &str) -> Result<Value> {
+        let a = self.snapshot(start)?;
+        let b = self.snapshot(head)?;
+        let config = rule_config(&a.files);
+        let clean = |snapshot: &Snapshot| -> Vec<Value> {
+            snapshot
+                .relationships
+                .iter()
+                .cloned()
+                .map(|mut r| {
+                    if let Some(object) = r.as_object_mut() {
+                        object.remove("violations");
+                    }
+                    r
+                })
+                .collect()
+        };
+        let (mut before, mut after) = (clean(&a), clean(&b));
+        let at_start = evaluate_rules(&mut before, &a.files, config);
+        let at_head = evaluate_rules(&mut after, &b.files, config);
+        let added = added_breaks(&before, &after);
+        let gaps = json!({"start": at_start["gapsInScope"], "head": at_head["gapsInScope"]});
+        let warnings = at_head["warnings"].clone();
+        let limited = at_head["unresolvedInScope"].as_u64().unwrap_or(0) > 0
+            || warnings.as_array().is_some_and(|w| !w.is_empty())
+            || [&gaps["start"], &gaps["head"], &at_head["unanalysed"]]
+                .iter()
+                .any(|list| list.as_array().is_some_and(|l| !l.is_empty()));
+        let (state, reason) = match at_head["state"].as_str() {
+            Some("evaluated") => (if limited { "limited" } else { "checked" }, Value::Null),
+            Some("invalid") => (
+                "not checked",
+                json!(format!(
+                    "The rules at the start commit are invalid: {}",
+                    at_head["errors"][0].as_str().unwrap_or("unknown error")
+                )),
+            ),
+            _ => (
+                "not checked",
+                json!(format!(
+                    "The start commit has no rule configuration ({}).",
+                    config.0
+                )),
+            ),
+        };
+        let source = |files: &BTreeMap<String, File>, name: &str| {
+            files
+                .get(name)
+                .map(|f| f.source.clone().unwrap_or_default())
+        };
+        let changed: Vec<&str> = crate::rules::CONFIG_FILES
+            .iter()
+            .copied()
+            .filter(|name| source(&a.files, name) != source(&b.files, name))
+            .collect();
+        let rule_change = if changed.is_empty() {
+            Value::Null
+        } else {
+            let own = added_breaks(&a.relationships, &b.relationships);
+            json!({
+                "files": changed,
+                "state": b.checks["state"],
+                "rules": b.checks["rules"],
+                "addedCount": own.len(),
+                "added": own.into_iter().take(50).collect::<Vec<_>>(),
+            })
+        };
+        let mut check = json!({
+            "state": state,
+            "reason": reason,
+            "start": a.sha,
+            "head": b.sha,
+            "config": config.0,
+            "configState": at_head["state"],
+            "rules": at_head["rules"],
+            "addedCount": added.len(),
+            "added": added.into_iter().take(50).collect::<Vec<_>>(),
+            "limits": {
+                "unresolved": at_head["unresolvedInScope"],
+                "warnings": warnings,
+                "gaps": gaps,
+                "unanalysed": at_head["unanalysed"],
+                "coverage": at_head["coverage"],
+            },
+            "ruleChange": rule_change,
+        });
+        check["summary"] = json!(crate::rules::check_summary(&check));
+        Ok(check)
+    }
     /// Tries a proposed rule at `head` without a commit: `proposal` is `{groups, rule}`, added
     /// to the committed `.peekumi.json` (or to an empty one). A group name that the file uses
     /// for other patterns gets a new name (`ui-2`), so the rule keeps its own files and the
@@ -1058,13 +1160,39 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
         }
     }
     let mut values = merged.into_values().collect::<Vec<_>>();
-    // `.peekumi.json` holds dependency rules; `.strata.json` is read in repositories that
-    // configured rules before the rename.
-    let (name, config) = crate::rules::CONFIG_FILES
+    let checks = evaluate_rules(&mut values, files, rule_config(files));
+    (values, checks)
+}
+/// The rule configuration in `files`: `.peekumi.json`, or `.strata.json` in repositories that
+/// configured rules before the rename. Returns the file name and the file, when it exists.
+fn rule_config(files: &BTreeMap<String, File>) -> (&'static str, Option<&File>) {
+    crate::rules::CONFIG_FILES
         .iter()
         .find_map(|name| files.get(*name).map(|file| (*name, Some(file))))
-        .unwrap_or((crate::rules::CONFIG_FILES[0], None));
+        .unwrap_or((crate::rules::CONFIG_FILES[0], None))
+}
+/// Checks `values` (the relationships of `files`) against the rules in `config`, which can come
+/// from another snapshot, and sets each resolved relationship's `violations`. Returns the
+/// rule state: `state` ("evaluated", "invalid" or "not configured"), the rule count, coverage
+/// and warnings, and what limits the check. `unresolvedInScope` counts the relationships that
+/// a rule looks at but cannot judge. `gapsInScope` lists the files in a rule's scope that have
+/// a language adapter but no analysis, and `unanalysed` lists the files in a rule's scope that
+/// look like source but have no language adapter.
+fn evaluate_rules(
+    values: &mut [Value],
+    files: &BTreeMap<String, File>,
+    (name, config): (&str, Option<&File>),
+) -> Value {
     let mut checks = json!({"config":name,"state":"not configured","rules":0,"errors":[]});
+    let gaps: Vec<&File> = files
+        .values()
+        .filter(|f| {
+            adapters::for_path(&f.path).is_some()
+                && (f.source.is_none()
+                    || f.analysis.contains("unavailable")
+                    || f.analysis.contains("parse error"))
+        })
+        .collect();
     if let Some(file) = config {
         match file
             .source
@@ -1073,13 +1201,30 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
             .and_then(crate::rules::parse)
         {
             Ok(rules) => {
-                rules.apply(&mut values);
+                rules.apply(values);
                 checks["state"] = json!("evaluated");
                 checks["rules"] = json!(rules.count());
                 let paths: Vec<&str> = files.keys().map(String::as_str).collect();
-                let (coverage, warnings) = rules.coverage(&values, &paths);
+                let (coverage, warnings) = rules.coverage(values, &paths);
                 checks["coverage"] = json!(coverage);
                 checks["warnings"] = json!(warnings);
+                checks["unresolvedInScope"] = json!(rules.unresolved_in_scope(values));
+                checks["gapsInScope"] = json!(
+                    gaps.iter()
+                        .filter(|f| rules.watches(&f.path))
+                        .map(|f| json!({"path":f.path,"reason":f.analysis}))
+                        .collect::<Vec<_>>()
+                );
+                checks["unanalysed"] = json!(
+                    files
+                        .values()
+                        .filter(|f| adapters::for_path(&f.path).is_none()
+                            && f.source.is_some()
+                            && looks_like_source(&f.path)
+                            && rules.watches(&f.path))
+                        .map(|f| f.path.clone())
+                        .collect::<Vec<_>>()
+                );
             }
             Err(error) => {
                 checks["state"] = json!("invalid");
@@ -1100,16 +1245,66 @@ fn analyze_relationships(files: &BTreeMap<String, File>) -> (Vec<Value>, Value) 
             .sum::<usize>()
     );
     checks["analysisGaps"] = json!(
-        files
-            .values()
-            .filter(|f| adapters::for_path(&f.path).is_some()
-                && (f.source.is_none()
-                    || f.analysis.contains("unavailable")
-                    || f.analysis.contains("parse error")))
+        gaps.iter()
             .map(|f| json!({"path":f.path,"reason":f.analysis}))
             .collect::<Vec<_>>()
     );
-    (values, checks)
+    checks
+}
+/// False for files that are documents, data, styles or media, which no rule can judge, so a
+/// rule check does not call them unanalysed. Any other file in a rule's scope with no language
+/// adapter is a limit of the check.
+fn looks_like_source(path: &str) -> bool {
+    const NOT_SOURCE: &[&str] = &[
+        "md",
+        "markdown",
+        "txt",
+        "rst",
+        "adoc",
+        "json",
+        "jsonc",
+        "yaml",
+        "yml",
+        "toml",
+        "lock",
+        "ini",
+        "cfg",
+        "csv",
+        "tsv",
+        "xml",
+        "html",
+        "htm",
+        "css",
+        "scss",
+        "svg",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "ico",
+        "pdf",
+        "woff",
+        "woff2",
+        "ttf",
+        "otf",
+        "zip",
+        "gz",
+        "map",
+        "snap",
+        "license",
+        "gitignore",
+        "gitattributes",
+        "editorconfig",
+    ];
+    let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
+    match name.rsplit_once('.') {
+        Some((_, ext)) => !NOT_SOURCE.contains(&ext),
+        None => !matches!(
+            name.as_str(),
+            "license" | "readme" | "makefile" | "dockerfile" | "changelog" | "notice"
+        ),
+    }
 }
 /// Renames group `from` to `to` where `rule` names it: in `from`, `to`, `only` and `layers`.
 fn rename_group(rule: &mut Value, from: &str, to: &str) {
@@ -1462,6 +1657,21 @@ fn resolve_imports(files: &mut BTreeMap<String, File>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn documents_data_and_media_are_not_unanalysed_source() {
+        for path in [
+            "README.md",
+            "docs/a.json",
+            "ui/logo.svg",
+            "LICENSE",
+            "x/Makefile",
+        ] {
+            assert!(!super::looks_like_source(path), "{path}");
+        }
+        for path in ["src/main.go", "lib/a.rb", "bin/run", "app/View.kt"] {
+            assert!(super::looks_like_source(path), "{path}");
+        }
+    }
     #[test]
     fn a_renamed_group_changes_only_its_own_names() {
         let mut deny = json!({"id":"r","from":"ui","to":["ui","db"],"kinds":["calls"]});

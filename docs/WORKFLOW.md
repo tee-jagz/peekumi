@@ -127,6 +127,8 @@ A **Session** is a live conversation with an agent. Use it when you want to work
 
 Some options make an allowed program start another program, load code, or read or write outside the worktree: for example `go test -exec`, `npm test --script-shell`, `node --test --import`, `cargo test --config`, `pytest -p`, `git log --output` and `git diff --no-index`. A command with one of them always waits for you, also when the program is on the session's list or has a rule. The listed test commands still run the project's own tests, which the agent can change: "ask first" stops other commands, but it is not a sandbox.
 
+**Rule check.** At the end of each turn, also a failed or stopped turn, Peekumi checks the rules itself. It checks the head of the session's branch against its start commit (see [The code graph in tasks](#the-code-graph-in-tasks)). It does not use the agent or its lookups. The conversation shows the result as one line, with the commit that it checked. If the worktree has uncommitted changes, the line says that they are not checked. When you start the next turn, Peekumi checks the current head again. If the work adds breaks, changes the rules or has invalid rules, Peekumi adds that fresh result to the turn's prompt. It never sends a result for an older commit. **Ask the agent to fix** under the last result sends your message that asks the agent to fix the breaks. A check never starts a turn by itself.
+
 **Allow all commands.** In this mode, no command waits for you. Set it before you start with **Allow all commands** in the send sheet (the device keeps your choice). Change it at any time with **Commands: ask first** under the conversation. The checkbox and the link show only when sessions use Claude Code: Codex runs with its own preset, and OpenRouter runs no commands. **Allow all commands** on a request also sets it. The next turn starts the agent in the new mode, and a request that waits is allowed at once.
 
 **While you look elsewhere.** When a session is open and its view is not on screen, a small Peek and one word show at the right of the sheet's title row, on every sheet height: **Working**, **Needs you** or **Your turn**. They take no row of their own and never cover the selection's description. Tap them to open the session. Their accessible name says what the agent does now, for example "Working: Ran `cargo test`". A task at work shows in the same place. Conversations lists every open session.
@@ -234,7 +236,19 @@ The task text tells the agent to use the map and these tools before it searches 
 **What the graph resolves.** The graph records static calls, not runtime calls. In Rust, it resolves calls on `self`, `Self::name`, `Type::name`, parameters with a written type, struct fields with a written type, and calls inside macros such as `json!` and `format!`. A call on a `dyn Trait` value goes to each implementation of that trait. In Python, it resolves calls on `self` and `cls`, and calls through an import inside the function. When a package `__init__.py` imports a name again, the graph follows that import to the declaration. In JavaScript and TypeScript, it resolves calls on `this` in a class. Other calls stay unresolved. Calls into libraries also stay unresolved.
 
 
-The task agent also gets `check_rules`. It checks the dependency rules (`.peekumi.json`) on the work that the agent committed, and it returns the breaks that the work adds to the start commit. The task tells the agent to call it before it reports. A session agent calls it before it ends a turn with commits. The owner sees the breaks that a task adds before **Approve** and in the merge sheet. See [RELATIONSHIPS.md](RELATIONSHIPS.md#rules).
+The task agent also gets `check_rules`. It checks the work that the agent committed against the **start commit**: the commit that you started the task from. It uses the rules at the start commit, so a change to `.peekumi.json` on the branch cannot hide a break. It returns the breaks that the work adds, the state of the check, what limits the check and any rule change. The task tells the agent to call it before it reports. A session agent calls it before it ends a turn with commits. See [RELATIONSHIPS.md](RELATIONSHIPS.md#rules).
+
+**The start commit.** Each run keeps its start commit (`start`). A new task or session starts from its base. A later round keeps the start of the first round, so a round cannot weaken the rules for the next one. An update from the watched branch moves the start to the commit of that branch, because its rules are the rules that you approved. The rules in the task text also come from the start commit.
+
+**The rule check result** (`GET /api/rule-check?start=&head=`) has one of three states:
+
+- **checked**: the work adds N breaks (N can be 0);
+- **limited**: checked, but some code in the scope of a rule could not be judged. The result lists the unresolved relationships in a rule's scope, the rule warnings, the files in a rule's scope with no analysis at either commit, and the source files in a rule's scope with no language adapter;
+- **not checked**: the start commit has no rules, its rules are invalid, or the check failed. The result gives the reason.
+
+A rule change is separate (`ruleChange`). It names the rule files that the work changes, and the breaks that the work adds under its own rules. You decide about a rule change: Peekumi marks it and does not block **Approve**.
+
+The task shows the result before **Approve**, also when the work adds no break, and while it loads. A failed check offers **Retry**. The merge confirmation checks again, on the exact commit that the merge moves to.
 ### Tasks with OpenRouter
 
 OpenRouter is a provider on its own, and it does not need a different program. For an OpenRouter task, Peekumi runs its own task agent (`backend/task_agent.rs`). The agent sends the task to the model with a fixed set of tools, and it runs each tool in the worktree of the task:
