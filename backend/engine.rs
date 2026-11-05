@@ -148,6 +148,22 @@ pub struct Repository {
     pub snapshots: u64,
 }
 impl Repository {
+    /// Captures or renews an integration baseline in private state. No checkout files change.
+    /// The binding must name this registered repository. Snapshot and storage errors propagate.
+    pub fn integration_baseline(&self, binding: &Value) -> Result<Value> {
+        Ok(serde_json::to_value(crate::worktree::capture_baseline(
+            &self.directory,
+            &self.state,
+            serde_json::from_value::<crate::worktree::Binding>(binding.clone())?,
+        )?)?)
+    }
+
+    /// Releases the baseline pins of one integration session in private state.
+    pub fn integration_release(&self, profile: &str, session: &str) -> Result<Value> {
+        crate::worktree::release_session(&self.state, profile, session)?;
+        Ok(json!({"released": true}))
+    }
+
     /// Creates repository analysis state and opens its private syntax index.
     /// `directory` identifies the inspected repository; `state` stores the cache, while `parser_root`,
     /// `python` and `node` locate installed helpers. No snapshot is parsed until requested.

@@ -110,6 +110,8 @@ fn argument(args: &Value, index: usize) -> &str {
 /// Returns an error for unknown operations or failed repository work.
 fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> {
     match method {
+        "integration_baseline" => repo.integration_baseline(&args[0]),
+        "integration_release" => repo.integration_release(argument(args, 0), argument(args, 1)),
         "resolve" => Ok(json!(repo.resolve(argument(args, 0))?)),
         "metadata" => repo.metadata(
             args[0].as_str().unwrap_or("HEAD~1"),

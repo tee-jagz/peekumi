@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Keep integration baselines and their rule revisions across retries, commits and snapshot cleanup.
+
 ### Proposed rules
 
 - **Propose rules** in Relations: the Ask agent audits the architecture and proposes the dependency rules that are missing and needed, with no fixed number. It gets the current rules and the earlier proposals, and it proposes only rules that are missing and needed. Each rule is one plain sentence with file names. It has a value (high, medium or low) and one engineering principle, for example Layering or Open-closed. The page shows two sections: **Finds a problem now** and **Guards against future mistakes**. A rule that another rule covers shows under it. The agent starts from the map, the folder descriptions and the current `.peekumi.json`. It gets each rule from the job of each part, not from the imports that exist now.
