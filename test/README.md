@@ -12,6 +12,8 @@ Run these commands from the repository root:
 
 The `reference/` directory keeps the previous Node implementation for equivalence checks. It is not the production backend.
 
+The optional [Hermes probes](hermes/README.md) check the installed Hermes hooks and crapper with private test copies.
+
 Workflow integration tests use temporary Git repositories and a deterministic local agent. This agent uses the production stdio MCP protocol. `workflow-browser.mjs` completes draft → preview → dispatch → report → inspect → verify on phone and desktop. These tests do not run a real paid agent session.
 
 To run only the management and tunnel checks, run `node --test test/manage.test.mjs test/tunnel.test.mjs test/cloudflare.test.mjs`. These checks cover:
