@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Accept canonical path aliases when an owner creates a scoped integration token.
+
 - Keep exact import lines from the syntax adapters for rule evidence.
 
 - Add Hermes hooks and tools for frozen-baseline impact checks and private-copy coverage measurements.

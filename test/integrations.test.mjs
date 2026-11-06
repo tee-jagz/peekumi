@@ -74,6 +74,23 @@ test("integration credentials are hashed, scoped to the five endpoints and revok
     { name: "hermes", repository: f.repo },
   ]);
   assert.equal(f.cli("create", "--name", "hermes", "--repo", f.repo).status, 1);
+  const canonical = JSON.parse(listing.stdout)[0].repository;
+  const directory = await realpath(f.dir);
+  assert.equal(
+    f.cli(
+      "create",
+      "--name",
+      "alias",
+      "--repo",
+      `${directory}/../${path.basename(directory)}`,
+    ).status,
+    0,
+  );
+  assert.equal(
+    JSON.parse(f.cli("list").stdout).find((g) => g.name === "alias").repository,
+    canonical,
+  );
+  assert.equal(f.cli("revoke", "alias").status, 0);
   for (const route of ["baseline", "coverage", "impact", "map", "export"]) {
     const post = ["baseline", "coverage"].includes(route);
     const result = await f.integration(

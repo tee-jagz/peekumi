@@ -123,6 +123,7 @@ pub fn command() -> Result<()> {
             let repositories = config["repositories"]
                 .as_array()
                 .context("Missing registered repositories")?;
+            let requested_path = Path::new(&repo).canonicalize().ok();
             let matches: Vec<_> = repositories
                 .iter()
                 .filter_map(|v| v.as_str())
@@ -130,6 +131,7 @@ pub fn command() -> Result<()> {
                     let path = Path::new(p).canonicalize().ok()?;
                     let id = crate::repository_id(&path);
                     (repo == p
+                        || requested_path.as_ref() == Some(&path)
                         || repo == id
                         || path.file_name().is_some_and(|n| n == repo.as_str()))
                     .then_some(id)
