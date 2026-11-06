@@ -82,6 +82,7 @@ with patch("hermes_cli.plugins.get_plugin_manager",return_value=manager), patch(
     repaired = tool("peekumi_measure",{})
     assert repaired["status"]=="passed",repaired
     after("turn-one")
+    manager.invoke_hook("on_session_end",session_id=agent.session_id,turn_id="turn-one",completed=True)
     assert api.risk_map(session_id=agent.session_id,focus="")["status"]=="passed"
     before("turn-two")
     agent._turn_file_mutation_paths = set()
@@ -91,7 +92,7 @@ with patch("hermes_cli.plugins.get_plugin_manager",return_value=manager), patch(
     shell = api.risk_map(session_id=agent.session_id,focus="")
     assert shell["status"]=="findings",shell
     assert args["token"] not in json.dumps(shell)
-    manager.invoke_hook("on_session_end",session_id=agent.session_id)
+    manager.invoke_hook("on_session_finalize",session_id=agent.session_id,reason="fixture ended")
     closed = api.risk_map(session_id=agent.session_id,focus="")
     assert closed["status"]=="unavailable"
-print(json.dumps({"cap":"exhausted","repair":"passed","shell_only":"findings","session_end":"unavailable","token_in_renderer":False}))
+print(json.dumps({"cap":"exhausted","repair":"passed","shell_only":"findings","session_finalize":"unavailable","token_in_renderer":False}))

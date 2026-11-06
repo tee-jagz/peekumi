@@ -13,7 +13,7 @@ provides_hooks:
   - pre_llm_call
   - pre_verify
   - post_llm_call
-  - on_session_end
+  - on_session_finalize
 requires_env:
   - PEEKUMI_TOKEN
 config_schema:

@@ -277,7 +277,7 @@ class IntegrationTests(unittest.TestCase):
             "token":self.client.token,"python":self.measure_python,"refund_source":REFUND}),capture_output=True,text=True,timeout=120)
         self.assertEqual(result.returncode,0,result.stderr)
         verdict = json.loads(result.stdout.splitlines()[-1])
-        self.assertEqual(verdict,{"cap":"exhausted","repair":"passed","shell_only":"findings","session_end":"unavailable","token_in_renderer":False})
+        self.assertEqual(verdict,{"cap":"exhausted","repair":"passed","shell_only":"findings","session_finalize":"unavailable","token_in_renderer":False})
 
     def test_submission_outage_retains_evidence_and_exact_retry_is_idempotent(self):
         from peekumi_hermes.measure import resume_pending

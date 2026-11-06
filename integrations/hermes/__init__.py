@@ -86,7 +86,8 @@ def register(ctx):
     ctx.register_hook("pre_llm_call", before)
     ctx.register_hook("pre_verify", verify)
     ctx.register_hook("post_llm_call", after)
-    ctx.register_hook("on_session_end", lambda session_id="", **_: gate.end(session_id))
+    # Hermes calls on_session_end after every turn. Only real teardown releases pins.
+    ctx.register_hook("on_session_finalize", lambda session_id="", **_: gate.end(session_id))
     ctx.register_tool("peekumi_impact", "peekumi", {
         "name": "peekumi_impact", "description": "Inspect changed files, dependents, frozen dependency rules and measured CRAP before editing.",
         "parameters": {"type": "object", "properties": {"path_or_symbol": {"type": "string"}, "finding_id":{"type":"string"},"reason":{"type":"string"}}, "required": ["path_or_symbol"]},
