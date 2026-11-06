@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Set up the Hermes demo directly from a built Peekumi source root. Check prerequisites before creating its files or token.
+
 - Use Google Gemini TTS for the review narration. Keep earlier cuts and disclose the speech provider.
 
 - Give the Hermes graph more space and keep the selected changed node visible in the native demo.

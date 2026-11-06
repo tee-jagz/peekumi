@@ -70,8 +70,13 @@ The API suite checks real exports, coverage, crapper, schemas and Hermes tool di
 It also compares scores with an independent crapper CLI run on the same source and report.
 The clean install test uses a new registry and profile. It redacts its temporary token.
 It does not install into the owner's active profile.
+It uses `PEEKUMI_SOURCE` directly, without a test-only command wrapper.
+It starts the printed service command in a clean environment and measures real coverage and CRAP.
+Missing prerequisites fail before the fixture or token exists.
 
 The native scenario uses a scripted local provider and the real Hermes conversation loop.
+It installs only the unified package and verifies Desktop's automatic copy and package marker.
+It does not place a test-only renderer file in the Desktop plugin directory.
 It performs two measurements and observes the actual stop-gate nudge before the repair.
 It also selects the rule and unsupported language.
 The native agent turn uses no external model account.

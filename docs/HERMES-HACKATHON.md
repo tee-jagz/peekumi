@@ -80,6 +80,8 @@ The default CRAP threshold is 30.
 - `test/hermes/pane.mjs`: findings, repair, rule selection, unsupported language and narrow width pass.
 - `test/hermes/native-pane.mjs`: the actual Desktop SDK and full scripted tool turn pass.
 - `test/hermes/clean_install.py`: fresh setup, token, enable and `--install-deps` validation pass.
+- Source setup uses no global-command wrapper. The printed service command supplies real coverage and CRAP.
+- Desktop discovers its half from the unified package. The native test checks the synchronized file and package marker.
 - `npm run format` and `npm run lint`: pass; no new document errors.
 
 Native evidence is in `test-results/hermes/`.

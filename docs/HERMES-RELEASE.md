@@ -4,6 +4,12 @@ All files here are local review material.
 No publication step has run.
 The v5 plan reserves those steps for Tolu.
 
+Local source installation passes. Public catalog installation is not ready.
+The source route uses `PEEKUMI_SOURCE` and needs no test-only command wrapper.
+Setup prints the foreground service command with the analyzer environment.
+The user still installs the plugin and saves the printed Hermes settings and profile secret.
+Publication of the required Peekumi build and pinned plugin source remains necessary.
+
 ## Local artifacts
 
 The current release folder is `test-results/hermes/release-google/`.

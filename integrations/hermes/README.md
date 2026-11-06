@@ -15,38 +15,51 @@ The package adds two tools, four hooks, one skill and a right-side Desktop pane.
 Peekumi supplies the analysis. The plugin supplies the Hermes connection and gate.
 It does not patch Hermes or embed the Peekumi page.
 
+## Installation status
+
+The local source package passes installation checks on macOS x86_64.
+Public catalog installation is not ready yet.
+The required Peekumi API build and pinned plugin commit must be published first.
+The steps below are a manual source installation.
+
 ## Prepare a local demo
 
-Install Hermes 0.21.6 or later and Peekumi with the integration API first.
-Use Python 3.14 for the pinned analysis-tool installer.
-Run these commands from this plugin folder:
+This path starts at the full Peekumi source root.
+Install Hermes 0.21.6 or later, Git, Node 22 or later, Rust and Python 3.14 first.
+Then run:
 
 ```sh
-python3.14 setup_crapper.py --prefix "$HOME/.local/share/peekumi-crapper"
-bash demo/setup.sh "$HOME/peekumi-risk-demo"
-hermes desktop
+npm ci
+npm run build:rust
+python3.14 integrations/hermes/setup_crapper.py --prefix "$HOME/.local/share/peekumi-crapper"
+PEEKUMI_SOURCE="$PWD" bash integrations/hermes/demo/setup.sh "$HOME/peekumi-risk-demo"
 ```
 
-The setup command prints the profile secret and plugin settings.
-Save them in the active Hermes profile before you start the demo session.
-Set the printed CRAP environment values on the process that starts Peekumi.
-The coverage commands use the new analysis environment.
-The setup script refuses to overwrite an existing demo folder or token name.
-It creates a local fixture repository. It does not create a remote repository or push.
+The last command uses the source management script.
+It needs no global `peekumi` command.
+If you already installed the required Peekumi build, run `bash demo/setup.sh` from this plugin folder instead.
+Give it the same new demo path as its first argument.
+The setup command refuses to overwrite the demo folder or an existing token name.
+It creates a local fixture repository. It creates no remote repository and pushes nothing.
 
-For a local source install, copy this folder to `$HERMES_HOME/plugins/peekumi-risk-map`.
-Use `~/.hermes` when `HERMES_HOME` is not set.
-Then run `hermes plugins enable peekumi-risk-map`.
+Complete these steps after setup:
+
+1. Copy `integrations/hermes/` to `$HERMES_HOME/plugins/peekumi-risk-map` if the plugin is not installed.
+2. Use `~/.hermes` when `HERMES_HOME` is not set. Use the active profile's home for a named profile.
+3. Save the printed `PEEKUMI_TOKEN` in that profile's secrets. Save the printed plugin settings in that profile.
+4. Run `hermes plugins enable peekumi-risk-map`.
+5. Run the printed foreground Peekumi service command in a separate terminal. Keep that terminal running.
+6. Start `hermes desktop`. In **Capabilities → Plugins**, enable the Desktop half of **Peekumi Risk Map** too.
+7. Use **Rescan** if the local package is not listed yet.
+8. Select the demo folder as the Desktop project directory. Start a new session and open the right pane.
+
 Keep the `desktop/`, `dashboard/` and `skills/` folders with the Python files.
-The Desktop app loads the pane from this one package.
-Select the demo folder as the Desktop project directory before you start a new session.
-Open the right sidebar to show Risk Map.
-
-The Peekumi service must include this branch's integration endpoints.
-The current public Peekumi release does not include them yet.
-For a source build, use `npm ci` and `npm run build:rust` at the Peekumi repository root.
-Use `node scripts/manage.mjs` in place of `peekumi` until you install that build.
-The service environment needs all three values from `peekumi-crapper.json`.
+Desktop copies its half from this one package. No manual renderer-file copy is needed.
+The agent and Desktop halves have separate enable switches.
+The printed service command supplies the analyzer path, parser cache and parser checksum.
+The coverage commands use that analysis environment.
+The current public Peekumi release does not contain the integration endpoints.
+Use this source build until the updated service is published.
 
 ## Use the tools
 

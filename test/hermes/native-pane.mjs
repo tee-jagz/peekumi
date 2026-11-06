@@ -45,13 +45,6 @@ await cp(
   path.join(hermesHome, "plugins/peekumi-risk-map"),
   { recursive: true, filter: (source) => !source.includes("__pycache__") },
 );
-await mkdir(path.join(hermesHome, "desktop-plugins/peekumi-risk-map"), {
-  recursive: true,
-});
-await cp(
-  path.join(root, "integrations/hermes/desktop/plugin.js"),
-  path.join(hermesHome, "desktop-plugins/peekumi-risk-map/plugin.js"),
-);
 const settings = scenario
   ? {
       repository_id: scenario.repo,
@@ -204,6 +197,20 @@ try {
   await page.screenshot({
     path: path.join(artifacts, "native-desktop-pane.png"),
   });
+  await readFile(
+    path.join(
+      hermesHome,
+      "desktop-plugins/peekumi-risk-map/.hermes-package.json",
+    ),
+  );
+  const copied = await readFile(
+    path.join(hermesHome, "desktop-plugins/peekumi-risk-map/plugin.js"),
+  );
+  const authored = await readFile(
+    path.join(root, "integrations/hermes/desktop/plugin.js"),
+  );
+  if (!copied.equals(authored))
+    throw Error("Desktop did not synchronize the installed package");
   console.log(
     "Native Desktop loaded the pane with the real SDK. No paid model is used. Screenshot: " +
       path.join(artifacts, "native-desktop-pane.png"),
