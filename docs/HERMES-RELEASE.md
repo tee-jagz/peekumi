@@ -19,13 +19,17 @@ That commit must become public before the catalog entry can work.
 The ZIP contains only committed plugin files.
 It has no snapshot state, coverage reports or tokens.
 
-The current review video is `test-results/hermes/native-demo-google.mp4`.
+The current review video is `test-results/hermes/native-demo-focused.mp4`.
 It stays below the 90-second limit.
 Numbered stages and Google Gemini TTS explain the workflow.
 The voice is Charon. Only the narration text goes to Google.
 Google TTS produces review audio. It is not a plugin runtime dependency.
 The graph has the main pane width. The diff supports the graph.
-The edit uses native recording segments and holds the selected evidence screenshots.
+The edit uses high-resolution native captures with timed close-ups and highlights.
+Each spoken clause points to a node, edge, metric or supporting diff.
+A small full-window view identifies each close-up's location.
+The gate's actual feedback appears as a labelled excerpt.
+The original Google audio track stays unchanged. Its packet hash is checked.
 It explains the required Peekumi service before the demo starts.
 A visible caption identifies the scripted local provider throughout.
 The provider drives the actual Hermes conversation and tools.
@@ -33,6 +37,7 @@ The edits, stop-gate nudge, tests, coverage and CRAP scores are real.
 The recording does not establish the behavior of an external model.
 The original 43-second cut remains in `test-results/hermes/native-demo-v1.mp4`.
 The earlier macOS-narrated cut remains in `test-results/hermes/native-demo-v2.mp4`.
+The earlier Google-narrated full-window cut remains in `test-results/hermes/native-demo-google.mp4`.
 Approve this disclosed take, or record a model-driven take with your own provider.
 
 The plugin README contains native screenshots of our own fixture.

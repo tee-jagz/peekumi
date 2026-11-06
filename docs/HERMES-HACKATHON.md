@@ -20,7 +20,7 @@ The default CRAP threshold is 30.
 | Item | State | Evidence |
 | --- | --- | --- |
 | P1: frozen baseline | Pass | Six Rust checks cover dirty starts, retry, identity, commits, expiry and cleanup |
-| P1: retention | Pass | Active cleanup preserves source, frozen rules and accepted coverage evidence |
+| P1: retention | Pass | Active cleanup preserves source, rules and coverage. A completed turn retains evidence until real session teardown |
 | P2: scoped token | Pass | Wrong repository and non-integration routes refused; immediate revocation; owner and reader behavior unchanged |
 | P3: five endpoints | Pass | Real fixture responses validate against `docs/integrations.schema.json` |
 | P3: frozen rules | Pass | A rule-file edit stays visible; checks still use baseline rules and exact import lines |
@@ -29,7 +29,7 @@ The default CRAP threshold is 30.
 | P4: evidence | Pass | Stale, absent and omitted coverage stays unknown; valid same-tree coverage clears risk |
 | H1: gate | Pass | Real Hermes hooks and full native turn; cap becomes exhausted; final observer sees shell-only edits |
 | H2: tools | Pass | Real registry dispatch; tests run only in fresh private copies; export uses private Git objects |
-| H4: pane | Pass | Native Desktop loads the pane with the real SDK; screenshots show 42 to 6 and exact rule evidence |
+| H4: pane | Pass | Native SDK checks show 42 to 6. Selected rule evidence survives automatic map refresh |
 | H5: skill | Done | Impact before edits, private measurement, explicit exceptions and honest unknown states |
 | Day 5: validation | Pass | Manifest, declarations, security scan, no core override and Desktop surface |
 | Day 5: clean install | Pass | Fresh analyzer prefix and fresh Hermes/Peekumi state checks |
@@ -90,6 +90,10 @@ The current MP4 stays below 90 seconds and has a visible scripted-provider discl
 Numbered stages and Google Gemini TTS explain the gate and required Peekumi service.
 The graph has the main pane width. Native checks keep the changed refund node visible.
 Only narration text goes to Google. The plugin has no Google runtime dependency.
+The latest cut uses 25 timed close-ups and highlights of the native UI.
+Each close-up uses captured element positions. A small window view shows its location.
+The actual gate feedback appears as a labelled excerpt.
+The original Google voice stream stays unchanged, with a matching packet hash.
 The native test uses the normal Hermes read/write tools, tool bridge, hooks and finalizer.
 It makes two real coverage runs and a real stop-gate nudge.
 It uses no external model account.
@@ -112,6 +116,7 @@ Active baselines retain the complete private object store.
 The 1 GiB cleanup threshold is a soft limit while any baseline is active.
 Evidence and score caches remain in private state; this slice has no evidence garbage collector.
 Coverage execution is trusted configured code in a private copy, not a hostile-code sandbox.
+The backend and plugin use the tested source pin. Explicit API version negotiation is not implemented yet.
 The measurement client attests command exits and fresh-folder provenance.
 No cryptographic proof of arbitrary execution is claimed.
 The nudge cap and shell-only limitation come from Hermes; the final observer reports the result.

@@ -51,6 +51,7 @@ node test/hermes/pane.mjs
 PEEKUMI_NATIVE_SCENARIO=1 node test/hermes/native-pane.mjs
 node test/hermes/encode-demo.mjs
 node test/hermes/explain-demo.mjs
+node test/hermes/focus-demo.mjs
 ```
 
 The native test needs a source-built Hermes Desktop at `HERMES_SOURCE`.
@@ -88,3 +89,11 @@ Selected screenshots of our own fixture also go in the plugin README.
 The explained cut adds numbered stages, native screenshot holds and narration.
 It states that a running Peekumi service is required.
 It preserves the earlier cuts and writes `native-demo-google.mp4`.
+The focused cut uses the same Google audio stream, without another speech request.
+Native capture records the exact UI element rectangles and high-resolution PNG files.
+It also records the gate feedback and two successful measurement receipts.
+The focused cut magnifies each target when the narration describes it.
+It shows a small original-window view and marks the crop there.
+The exporter checks highlight bounds, caption layout, duration and media decoding.
+It checks that the output audio packet hash matches the original.
+The result is `native-demo-focused.mp4`.

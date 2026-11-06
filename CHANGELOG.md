@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Match the approved Google demo voice to native close-ups, highlights and actual gate feedback.
+
 - Keep selected rule evidence open when the Hermes map refreshes.
 
 - Keep Hermes evidence available after a turn. Release its baseline only at real session finalization.

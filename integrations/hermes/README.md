@@ -79,6 +79,9 @@ At the configured nudge cap, the final observer refreshes the evidence.
 If findings remain, the pane shows `exhausted` and says that the agent stopped.
 Shell-only edits can skip `pre_verify`. The final observer still refreshes them.
 A service outage fails open with a visible `unavailable` state.
+An ordinary turn keeps the baseline available for inspection.
+The `on_session_finalize` hook releases it at real session teardown.
+Hermes calls `on_session_end` after each turn, so this plugin does not release pins there.
 
 ## Read the pane
 
@@ -191,6 +194,9 @@ The local review MP4 is under 90 seconds and has a scripted-provider label throu
 Its narration uses Google Gemini TTS. Only the narration text goes to Google.
 Google TTS is a demo production tool, not a plugin dependency.
 The graph has the main pane width, with the code diff as supporting detail.
+The review edit magnifies each node, edge or metric when the voice describes it.
+Highlights and captions are video annotations. They do not change the measured evidence.
+The original Google voice track stays unchanged.
 It needs the owner's approval before publication.
 The test commands and acceptance record are in Peekumi's `test/hermes/README.md` and `docs/HERMES-HACKATHON.md`.
 
