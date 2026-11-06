@@ -77,6 +77,11 @@ try {
   await page.screenshot({ path: path.join(artifacts, "pane-findings.png") });
   await page.getByRole("button", { name: /Rule ui-no-db at line 1/ }).click();
   await page.getByText("FROZEN RULE EVIDENCE", { exact: true }).waitFor();
+  await page.waitForTimeout(3500);
+  if (
+    !(await page.getByText("FROZEN RULE EVIDENCE", { exact: true }).isVisible())
+  )
+    throw Error("Automatic map refresh cleared the selected rule edge");
   await page.screenshot({ path: path.join(artifacts, "pane-rule.png") });
   await page
     .getByRole("button", { name: "shop/ui/cart.py::refund", exact: true })

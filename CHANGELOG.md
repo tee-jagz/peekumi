@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Keep selected rule evidence open when the Hermes map refreshes.
+
 - Keep Hermes evidence available after a turn. Release its baseline only at real session finalization.
 
 - Set up the Hermes demo directly from a built Peekumi source root. Check prerequisites before creating its files or token.

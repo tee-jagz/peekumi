@@ -569,7 +569,13 @@ export function RiskPane({ ctx }) {
         );
         if (alive) {
           setData(result);
-          select((old) => result.nodes?.find((n) => n.id === old?.id) || null);
+          select((old) => {
+            if (old?.kind === "edge") {
+              const edge = result.edges?.find((item) => item.id === old.id);
+              return edge ? { ...edge, kind: "edge" } : null;
+            }
+            return result.nodes?.find((node) => node.id === old?.id) || null;
+          });
         }
       } catch {
         if (alive)
