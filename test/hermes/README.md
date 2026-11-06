@@ -1,4 +1,4 @@
-# Hermes day 1 probes
+# Hermes integration checks
 
 These probes use installed upstream packages.
 They do not run with `npm test`.
@@ -31,3 +31,8 @@ Install crapper and its dependencies in a separate environment with `requirement
 Install its Python parser before the probe.
 The installed parser checksum is in the progress record.
 Do not let the analysis service download a parser at runtime.
+
+Run `python3 test/hermes/gate_test.py` for the gate against a local stub server.
+Run `python3 test/hermes/measure_test.py` for archive traversal, link and size checks.
+The gate tests cover retries, session separation, the nudge cap, shell edits and outages.
+They also keep pending evidence from showing a previous pass as current.
