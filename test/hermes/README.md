@@ -50,6 +50,7 @@ Run the API suite with a Python environment that has `jsonschema` and the pinned
 node test/hermes/pane.mjs
 PEEKUMI_NATIVE_SCENARIO=1 node test/hermes/native-pane.mjs
 node test/hermes/encode-demo.mjs
+node test/hermes/explain-demo.mjs
 ```
 
 The native test needs a source-built Hermes Desktop at `HERMES_SOURCE`.
@@ -57,6 +58,8 @@ Set `PEEKUMI_TEST_CRAPPER_PYTHON` to the fixture Python environment for that tes
 The browser adapter needs React, React DOM and esbuild in `PEEKUMI_PANE_DEPS`.
 It defaults to `~/.local/share/peekumi-hackathon/pane-preview`.
 The encoder needs FFmpeg and Playwright Chromium.
+The explained cut also uses the installed macOS Daniel voice through `/usr/bin/say`.
+Speech synthesis is local. It sends no recording to an external service.
 
 The API suite checks real exports, coverage, crapper, schemas and Hermes tool dispatch.
 It also compares scores with an independent crapper CLI run on the same source and report.
@@ -71,3 +74,6 @@ The MP4 keeps the native frame timing and adds reading pauses at the inspected e
 Its visible caption identifies the scripted provider.
 Artifacts stay in the ignored `test-results/hermes/` folder.
 Selected screenshots of our own fixture also go in the plugin README.
+The explained cut adds numbered stages, native screenshot holds and narration.
+It states that a running Peekumi service is required.
+It preserves the original capture and writes `native-demo-v2.mp4`.

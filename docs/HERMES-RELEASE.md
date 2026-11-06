@@ -6,20 +6,23 @@ The v5 plan reserves those steps for Tolu.
 
 ## Local artifacts
 
-The release folder is `test-results/hermes/release/`.
+The current release folder is `test-results/hermes/release-v2/`.
 It contains the plugin ZIP, full Peekumi source archive, checksums and catalog draft.
 The draft pins the complete local commit SHA.
 That commit must become public before the catalog entry can work.
 The ZIP contains only committed plugin files.
 It has no snapshot state, coverage reports or tokens.
 
-The native review video is `test-results/hermes/native-demo.mp4`.
-It is 43 seconds long.
-Reading pauses hold the native frames at selected evidence.
+The current review video is `test-results/hermes/native-demo-v2.mp4`.
+It is 75 seconds long.
+Numbered stages and local synthetic narration explain the workflow.
+The edit uses native recording segments and holds the selected evidence screenshots.
+It explains the required Peekumi service before the demo starts.
 A visible caption identifies the scripted local provider throughout.
 The provider drives the actual Hermes conversation and tools.
 The edits, stop-gate nudge, tests, coverage and CRAP scores are real.
 The recording does not establish the behavior of an external model.
+The original 43-second cut remains in `test-results/hermes/native-demo-v1.mp4`.
 Approve this disclosed take, or record a model-driven take with your own provider.
 
 The plugin README contains native screenshots of our own fixture.

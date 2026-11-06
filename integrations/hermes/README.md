@@ -5,6 +5,12 @@ The gate checks changes against the rules at the pre-edit baseline.
 Every result names its source revision and coverage run.
 Unknown coverage stays grey.
 
+**Peekumi is a required dependency.**
+Run the Peekumi service on the same computer, or configure an HTTPS service URL.
+The plugin connects Hermes to that service. It does not include the analysis engine.
+The Peekumi browser app does not need to stay open.
+Python risk measurement also needs the pinned crapper and coverage tools described below.
+
 The package adds two tools, four hooks, one skill and a right-side Desktop pane.
 Peekumi supplies the analysis. The plugin supplies the Hermes connection and gate.
 It does not patch Hermes or embed the Peekumi page.
