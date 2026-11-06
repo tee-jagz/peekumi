@@ -161,7 +161,7 @@ function Graph({ data, selected, select, zoom }) {
       style: {
         overflow: "auto",
         flex: 1,
-        minHeight: 180,
+        minHeight: 260,
         position: "relative",
         borderTop: "1px solid var(--ui-stroke-secondary)",
         borderBottom: "1px solid var(--ui-stroke-secondary)",
@@ -468,8 +468,8 @@ function Inspector({ node, data }) {
     "div",
     {
       style: {
-        padding: "17px 20px",
-        minHeight: 200,
+        padding: "12px 16px",
+        minHeight: 190,
         flexShrink: 0,
         maxHeight: 265,
         overflow: "auto",
@@ -494,7 +494,7 @@ function Inspector({ node, data }) {
           ...mono,
           fontSize: 12,
           overflowWrap: "anywhere",
-          marginBottom: 14,
+          marginBottom: 8,
         },
       },
       node.path + (node.kind === "symbol" ? "::" + node.name : ""),
@@ -508,7 +508,7 @@ function Inspector({ node, data }) {
     functions.map((fn) =>
       h(
         "div",
-        { key: fn.id, style: { marginBottom: 16 } },
+        { key: fn.id, style: { marginBottom: 10 } },
         node.kind !== "symbol" &&
           h(
             "div",
@@ -603,7 +603,7 @@ export function RiskPane({ ctx }) {
     },
     h(
       "header",
-      { style: { padding: "20px 20px 15px" } },
+      { style: { padding: "12px 16px 10px" } },
       h(
         "div",
         {
@@ -611,7 +611,7 @@ export function RiskPane({ ctx }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 13,
+            marginBottom: 8,
           },
         },
         h(
@@ -684,7 +684,7 @@ export function RiskPane({ ctx }) {
           style: {
             fontSize: 12,
             color: "var(--ui-text-secondary)",
-            marginBottom: 15,
+            marginBottom: 8,
           },
         },
         status === "exhausted"
@@ -789,7 +789,7 @@ export default {
       id: "risk-map",
       area: "panes",
       title: "Risk Map",
-      data: { placement: "right", width: "460px" },
+      data: { placement: "right", width: "760px" },
       render: () => h(RiskPane, { ctx }),
     });
   },

@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Give the Hermes graph more space and keep the selected changed node visible in the native demo.
+
 - State the required Peekumi service before setup. Explain the native Hermes demo with numbered stages and local narration.
 
 - Show measured risk and clickable rule evidence in a native Hermes pane. Include a private demo setup and local validation checks.

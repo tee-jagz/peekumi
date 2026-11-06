@@ -202,6 +202,11 @@ export async function createScenario(root, artifacts) {
     providerUrl: `http://127.0.0.1:${server.address().port}/v1`,
     async run(page) {
       const pane = page.getByRole("region", { name: "Peekumi Risk Map" });
+      const hideTerminal = page
+        .getByRole("button", { name: "Hide terminal", exact: true })
+        .first();
+      if (await hideTerminal.isVisible()) await hideTerminal.click();
+      await pane.getByRole("button", { name: "Zoom out", exact: true }).click();
       const cdp = await page.context().newCDPSession(page);
       const samples = [],
         writes = [],
@@ -234,6 +239,12 @@ export async function createScenario(root, artifacts) {
           exact: true,
         });
         if (await hide.isVisible()) await hide.click();
+        await page.waitForFunction(
+          () =>
+            document
+              .querySelector('[aria-label="Peekumi Risk Map"]')
+              .getBoundingClientRect().width >= 600,
+        );
         const composer = page
           .locator('[data-slot="composer-root"] [contenteditable="true"]')
           .first();
@@ -248,6 +259,23 @@ export async function createScenario(root, artifacts) {
         await pane
           .getByRole("button", { name: "shop/ui/cart.py::refund", exact: true })
           .click();
+        const refundVisible = await pane
+          .getByRole("button", { name: "shop/ui/cart.py::refund", exact: true })
+          .evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            const viewport =
+              node.ownerSVGElement.parentElement.getBoundingClientRect();
+            return (
+              box.top >= viewport.top &&
+              box.bottom <= viewport.bottom &&
+              box.left >= viewport.left &&
+              box.right <= viewport.right
+            );
+          });
+        if (!refundVisible)
+          throw Error(
+            "The changed refund node must be fully visible in the graph",
+          );
         await pane
           .getByText("CC 6 · coverage 0%", { exact: true })
           .waitFor({ timeout: 30000 });
