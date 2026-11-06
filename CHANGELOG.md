@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Install pinned CRAP tools and checksum-verified parsers before local analysis. Runtime analysis refuses downloads.
+
 - Accept canonical path aliases when an owner creates a scoped integration token.
 
 - Keep exact import lines from the syntax adapters for rule evidence.

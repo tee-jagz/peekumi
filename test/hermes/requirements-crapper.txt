@@ -8,6 +8,7 @@ ply==3.11
 Pygments==2.21.0
 pyRFC3339==2.1.1
 pytest==9.2.0
+jsonschema==4.25.1
 pytz==2026.6
 tree-sitter==0.26.0
 tree-sitter-language-pack==1.23.1
