@@ -90,7 +90,9 @@ class Gate:
         state = self.current(session)
         state["exhaust_pending"] = attempt >= cap - 1
         self.save(session, state)
-        details = [finding.get("message", finding.get("id", "Open finding")) for finding in result.get("findings", [])]
+        details = [finding.get("message", finding.get("id", "Open finding")) for finding in result.get("findings", []) if not finding.get("exception")]
+        if not details:
+            details = ["Additional findings exceed the detailed response limit. Read the rule-check limits before finishing."]
         return {"action": "continue", "message": "Peekumi findings:\n" + "\n".join(details) + "\nFix these findings and call peekumi_measure. If a finding must stay, record its ID and reason with peekumi_impact."}
 
     def after(self, session, turn):

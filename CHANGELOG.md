@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Show measured risk and clickable rule evidence in a native Hermes pane. Include a private demo setup and local validation checks.
+
 - Check integration changes against frozen rules and source-bound coverage. Show measured Python risk, unknown coverage and bounded dependency maps.
 
 - Install pinned CRAP tools and checksum-verified parsers before local analysis. Runtime analysis refuses downloads.

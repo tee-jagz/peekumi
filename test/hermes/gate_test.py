@@ -64,8 +64,11 @@ class GateTests(unittest.TestCase):
 
     def test_cap_marks_only_remaining_findings_exhausted(self):
         self.gate.before("session", "turn")
+        self.result["findings"].insert(0, {"id":"kept", "message":"Excepted finding", "exception":"Keep this for review"})
         self.assertEqual(self.gate.verify("session", 0, 3)["action"], "continue")
-        self.assertIn("CRAP 42", self.gate.verify("session", 2, 3)["message"])
+        message = self.gate.verify("session", 2, 3)["message"]
+        self.assertIn("CRAP 42", message)
+        self.assertNotIn("Excepted finding", message)
         self.assertEqual(self.gate.after("session", "turn")["status"], "exhausted")
         for outcome in ["passed", "incomplete", "exception", "unavailable"]:
             self.result = {"status": outcome, "limits": ["coverage unknown"] if outcome == "incomplete" else [], "findings": []}

@@ -13,7 +13,7 @@ def register(ctx):
     from agent.secret_scope import get_secret
     from hermes_constants import get_hermes_home
 
-    home = get_hermes_home()
+    home = get_hermes_home().resolve()
 
     def client():
         return Client(os.environ.get("PEEKUMI_URL") or ctx.get_config("peekumi_url", "http://127.0.0.1:4317"),
