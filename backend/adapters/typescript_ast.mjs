@@ -188,6 +188,7 @@ function jsAnalyze(file, source) {
           " ",
         ),
     };
+  const import_sites = [];
   const symbols = [],
     imports = [];
   const printer = ts.createPrinter({ removeComments: true });
@@ -352,21 +353,32 @@ function jsAnalyze(file, source) {
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
       node.moduleSpecifier &&
       ts.isStringLiteral(node.moduleSpecifier)
-    )
+    ) {
       imports.push({ specifier: node.moduleSpecifier.text });
+      import_sites.push({
+        specifier: node.moduleSpecifier.text,
+        line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
+      });
+    }
     if (
       ts.isCallExpression(node) &&
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         node.expression.getText(tree) === "require") &&
       node.arguments[0] &&
       ts.isStringLiteral(node.arguments[0])
-    )
+    ) {
       imports.push({ specifier: node.arguments[0].text });
+      import_sites.push({
+        specifier: node.arguments[0].text,
+        line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
+      });
+    }
     ts.forEachChild(node, visit);
   }
   visit(tree);
   return {
     symbols,
+    import_sites,
     imports,
     relationships: relationships(tree, symbols),
     details: {

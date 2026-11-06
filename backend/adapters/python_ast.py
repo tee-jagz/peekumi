@@ -163,12 +163,15 @@ def analyze(source):
                     walk(node.body, name + '.')
     walk(tree.body)
     imports = []
+    import_sites = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.extend({'specifier': item.name, 'level': 0, 'names': []} for item in node.names)
+            import_sites.extend({'specifier': item.name, 'line': node.lineno} for item in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.append({'specifier': node.module or '', 'level': node.level, 'names': [item.name for item in node.names]})
-    return {'symbols': symbols, 'imports': imports, 'details': details(tree), 'relationships': relationships(tree, symbols), 'analysis': 'Python AST'}
+            import_sites.append({'specifier': node.module or '', 'line': node.lineno})
+    return {'symbols': symbols, 'imports': imports, 'import_sites': import_sites, 'details': details(tree), 'relationships': relationships(tree, symbols), 'analysis': 'Python AST'}
 
 
 json.dump([analyze(source) for source in json.load(sys.stdin)], sys.stdout)
