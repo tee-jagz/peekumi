@@ -548,6 +548,17 @@ async function main() {
   )
     throw new Error("--tunnel is supported only by peekumi share");
   if (command === "doctor") return doctor();
+  if (command === "token") {
+    console.log(
+      run(executable, [
+        "token",
+        "--state-dir",
+        state,
+        ...process.argv.slice(3),
+      ]),
+    );
+    return;
+  }
   if (command === "repo") {
     const c = await config();
     if (sub === "list") {

@@ -10,6 +10,9 @@ mod fix_proposals;
 mod graph_brief;
 mod hash;
 mod index;
+mod integration_http;
+mod integration_tokens;
+use integration_http::integration_request;
 mod lookup;
 mod merge;
 mod process;
@@ -704,6 +707,9 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
     let bearer = header(request.headers(), "authorization")
         .strip_prefix("Bearer ")
         .unwrap_or("");
+    if path.starts_with("/api/integrations/") || bearer.starts_with("pki_") {
+        return integration_request(fleet, request, gzip).await;
+    }
     // The current cookie wins; one saved before the rename is only a fallback, so a stale
     // former cookie left in the browser cannot shadow a fresh pairing.
     let cookies: Vec<&str> = header(request.headers(), "cookie")
@@ -1291,6 +1297,9 @@ fn adopt_former_settings() {
 }
 fn main() -> Result<()> {
     adopt_former_settings();
+    if std::env::args().nth(1).as_deref() == Some("token") {
+        return integration_tokens::command();
+    }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?

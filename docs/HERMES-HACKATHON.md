@@ -66,7 +66,7 @@ Browser checks and the pane screenshot remain in day 4.
 | Plan item | Current evidence | Remaining work |
 | --- | --- | --- |
 | P1 | Six Rust tests pass for dirty starts, commits, retries, retention, identity and repository contents | Connect the scoped API; attach coverage evidence to the baseline lifetime |
-| P2 | Not started | Repository scope, route restrictions, token commands, revocation and regression tests |
+| P2 | Pass: CLI and HTTP security tests; owner and reader checks pass | Add clean-install coverage in day 5 |
 | P3 | Not started | API schemas, fixture responses, snapshot export, frozen rule checks and bounded map |
 | P4 | Day 1 private-copy probe passes | LCOV validation, evidence identity, EDN mapping and coverage-only refresh |
 | H1 | Hook behavior checked against pinned Hermes | Baseline client, gate outcomes, exceptions, outages and cap handling |
@@ -80,7 +80,19 @@ The 1 GiB cleanup threshold is therefore a soft limit during active sessions.
 This conservative rule protects baseline source and rule objects.
 Coverage evidence storage is not implemented yet.
 The worker has internal `integration_baseline` and `integration_release` operations.
-There are no new HTTP routes yet.
+The scoped baseline HTTP route is installed.
+The other four integration routes remain unavailable until their analysis is installed.
+
+## Day 2 token boundary
+
+The token and baseline slice passes 109 server tests and 58 Rust tests.
+Creation prints a token once and saves only its hash.
+The CLI lists names and repository IDs without secrets.
+Revocation takes effect without a service restart.
+The HTTP tests cover every integration endpoint with another repository ID.
+They also refuse non-integration reads and write methods across the workflow routes.
+A baseline stays fixed through a dirty start, a commit, a service restart and a retry.
+Owner and reader access keep their existing behavior.
 
 ## Required boundary tests
 
@@ -91,12 +103,12 @@ A probe result does not replace an integration test.
 | --- | --- | --- | --- |
 | B01 | Dirty start | Keep the dirty source, rules and pre-existing path list | Rust baseline test passes |
 | B02 | Commit during the turn | Keep the original baseline SHA and rule revision | Rust baseline test passes |
-| B03 | Retry or service restart | Load the same baseline; renew its last-use time | Rust baseline test passes |
+| B03 | Retry or service restart | Load the same baseline; renew its last-use time | Rust and HTTP restart tests pass |
 | B04 | Cleanup with an active baseline | Keep the snapshot and rule objects readable | Rust baseline test passes |
 | B05 | Session end and 24-hour idle expiry | Release only the matching pins | Rust baseline tests pass |
-| B06 | Wrong repository or identity | Refuse the request; keep other sessions isolated | Storage test passes; token test pending |
-| B07 | Revoked token | Return 401 | Pending P2 |
-| B08 | Every write route | Refuse an integration token; keep owner and reader behavior | Pending P2 |
+| B06 | Wrong repository or identity | Refuse the request; keep other sessions isolated | Storage and scoped HTTP tests pass |
+| B07 | Revoked token | Return 401 | Pass without restart |
+| B08 | Every write route | Refuse an integration token; keep owner and reader behavior | HTTP method matrix passes |
 | B09 | Stale, absent or omitted LCOV | Show unknown with a reason for each affected function | Pending P4 |
 | B10 | Test or export command fails | Record failed evidence; keep coverage unknown | Pending P4/H2 |
 | B11 | Fresh coverage, same source tree | Recompute risk; clear findings only with valid evidence | Pending P4 |

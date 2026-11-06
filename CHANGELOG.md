@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Add repository-scoped integration tokens and a baseline API. Revocation does not require a server restart.
+
 - Add local Hermes hook and private-copy CRAP probes for the Risk Map integration.
 - Keep integration baselines and their rule revisions across retries, commits and snapshot cleanup.
 
