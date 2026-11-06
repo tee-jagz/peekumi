@@ -5,6 +5,14 @@ use crate::{
     index::Index,
 };
 use anyhow::{Context, Result, bail};
+#[path = "integration_analysis.rs"]
+mod integration_analysis;
+#[path = "integration_export.rs"]
+mod integration_export;
+#[path = "integration_map.rs"]
+mod integration_map;
+#[path = "integration_risk.rs"]
+mod integration_risk;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
@@ -93,6 +101,7 @@ struct File {
     source: Option<String>,
     symbols: Vec<Value>,
     imports: Vec<Value>,
+    import_sites: Vec<Value>,
     relationships: Vec<Value>,
     details: Option<Value>,
     deps: Vec<String>,
@@ -102,6 +111,7 @@ impl File {
     fn apply(&mut self, v: Value) {
         self.symbols = array(&v["symbols"]);
         self.imports = array(&v["imports"]);
+        self.import_sites = array(&v["import_sites"]);
         self.relationships = array(&v["relationships"]);
         self.details = v.get("details").cloned();
         self.analysis = text(&v["analysis"]).into();

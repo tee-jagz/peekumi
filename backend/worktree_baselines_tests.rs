@@ -170,9 +170,20 @@ fn active_baseline_and_rules_survive_cleanup_then_session_release_allows_cleanup
     );
     let baseline = f.capture();
     let rules = f.read(&baseline.rules_sha, ".peekumi.json");
+    let run = crate::integration_evidence::reserve(&f.state, &baseline.id, &baseline.sha).unwrap();
+    let report = "SF:shop.py\nDA:1,1\nend_of_record\n";
+    crate::integration_evidence::record(&f.state, &baseline.id, &serde_json::json!({
+        "run_id":run,"snapshot":baseline.sha,"report":report,"report_hash":crate::hash::hash(report),
+        "test_exit":0,"export_exit":0,"fresh_directory":true
+    })).unwrap();
     cleanup(&f.state, 0).unwrap();
     assert!(objects(&f.state).is_dir());
     assert_eq!(f.read(&baseline.rules_sha, ".peekumi.json"), rules);
+    let evidence = crate::integration_evidence::for_snapshot(&f.state, &baseline.sha)
+        .unwrap()
+        .unwrap();
+    assert!(evidence.valid);
+    assert_eq!(evidence.report, report);
     release_session(&f.state, "other-profile", "session-1").unwrap();
     cleanup(&f.state, 0).unwrap();
     assert!(objects(&f.state).is_dir());

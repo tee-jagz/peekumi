@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:peekumi:integrations:v1",
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "baselineId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "outcome": {
+      "type": "object",
+      "required": ["status", "limits"],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "findings",
+            "exception",
+            "incomplete",
+            "unavailable",
+            "exhausted"
+          ]
+        },
+        "limits": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "baselineRequest": {
+      "type": "object",
+      "required": ["repo", "profile", "session", "turn"],
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+        "profile": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "session": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "turn": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "baselineResponse": {
+      "allOf": [{ "$ref": "#/$defs/outcome" }],
+      "required": ["id", "sha", "rules_sha", "already_changed"],
+      "properties": {
+        "id": { "$ref": "#/$defs/baselineId" },
+        "sha": { "$ref": "#/$defs/sha" },
+        "rules_sha": { "$ref": "#/$defs/sha" },
+        "already_changed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "coverageRequest": {
+      "type": "object",
+      "required": [
+        "repo",
+        "baseline",
+        "snapshot",
+        "run_id",
+        "test_exit",
+        "export_exit",
+        "fresh_directory",
+        "report",
+        "report_hash"
+      ],
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+        "baseline": { "$ref": "#/$defs/baselineId" },
+        "snapshot": { "$ref": "#/$defs/sha" },
+        "run_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "test_exit": { "type": "integer" },
+        "export_exit": { "type": "integer" },
+        "fresh_directory": { "type": "boolean" },
+        "report": { "type": "string", "maxLength": 4194304 },
+        "report_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "score": {
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["measured", "unknown", "new", "removed"] },
+        "reason": { "type": "string" },
+        "complexity": { "type": "integer", "minimum": 1 },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 100 },
+        "crap": { "type": "number", "minimum": 0 },
+        "snapshot": { "$ref": "#/$defs/sha" },
+        "run_id": { "type": "string" },
+        "report_hash": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "measured" } } },
+          "then": {
+            "required": [
+              "complexity",
+              "coverage",
+              "crap",
+              "snapshot",
+              "run_id",
+              "report_hash"
+            ]
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "kind", "message"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["crap", "rule", "rule_change"] },
+        "message": { "type": "string" },
+        "exception": { "type": "string", "minLength": 1 },
+        "stale": { "type": "boolean" },
+        "rule": { "type": "string" },
+        "line": { "type": ["integer", "null"] },
+        "import_line": { "type": "string" }
+      }
+    },
+    "impact": {
+      "allOf": [{ "$ref": "#/$defs/outcome" }],
+      "required": [
+        "baseline",
+        "baseline_sha",
+        "snapshot_sha",
+        "coverage_sha",
+        "changed_files",
+        "changed_symbols",
+        "dependents",
+        "findings",
+        "rule_check"
+      ],
+      "properties": {
+        "baseline": { "$ref": "#/$defs/baselineId" },
+        "baseline_sha": { "$ref": "#/$defs/sha" },
+        "snapshot_sha": { "$ref": "#/$defs/sha" },
+        "coverage_sha": {
+          "anyOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
+        },
+        "changed_files": {
+          "type": "array",
+          "items": { "type": "object", "required": ["path", "status"] }
+        },
+        "changed_symbols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "name", "before", "after"],
+            "properties": {
+              "before": { "$ref": "#/$defs/score" },
+              "after": { "$ref": "#/$defs/score" }
+            }
+          }
+        },
+        "dependents": { "type": "array", "items": { "type": "string" } },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "rule_check": { "type": "object" }
+      }
+    },
+    "map": {
+      "allOf": [{ "$ref": "#/$defs/outcome" }],
+      "required": [
+        "baseline_sha",
+        "snapshot_sha",
+        "coverage_sha",
+        "nodes",
+        "edges",
+        "aggregation",
+        "hidden_nodes",
+        "findings"
+      ],
+      "properties": {
+        "baseline_sha": { "$ref": "#/$defs/sha" },
+        "snapshot_sha": { "$ref": "#/$defs/sha" },
+        "coverage_sha": {
+          "anyOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
+        },
+        "nodes": {
+          "type": "array",
+          "maxItems": 300,
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "path", "changed", "crap"],
+            "properties": {
+              "kind": { "enum": ["folder", "file", "symbol"] },
+              "crap": { "type": ["number", "null"] }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 600,
+          "items": {
+            "type": "object",
+            "required": ["id", "source", "target", "resolution"],
+            "properties": {
+              "resolution": { "enum": ["resolved", "unresolved", "ambiguous"] },
+              "target": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "aggregation": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "hidden_nodes": { "type": "integer", "minimum": 0 },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      }
+    }
+  }
+}

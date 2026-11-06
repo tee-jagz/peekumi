@@ -1,5 +1,16 @@
 //! Scoped integration transport. Inspection stays on the repository worker.
 use super::*;
+use base64::Engine as _;
+
+async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
+    json_response(
+        code,
+        json!({"status":"unavailable","limits":[message],"error":message}),
+        gzip,
+        None,
+    )
+    .await
+}
 
 /// Authorizes one registered repository and rejects routes outside the allowlist.
 /// POSTs change private analysis state only. Checkout files remain read-only.
@@ -100,17 +111,64 @@ pub(super) async fn integration_request(
     let Some(app) = fleet.get(repo) else {
         return error(StatusCode::NOT_FOUND, "Repository is not registered", gzip).await;
     };
+    let baseline = body["baseline"]
+        .as_str()
+        .or_else(|| query.get("baseline").map(String::as_str))
+        .unwrap_or("");
+    let threshold = body["threshold"]
+        .as_f64()
+        .or_else(|| query.get("threshold").and_then(|v| v.parse::<f64>().ok()))
+        .unwrap_or(30.0);
     let result = match path.as_str() {
+        "/api/integrations/map" => app.engine.call("integration_map",json!([baseline,threshold,query.get("focus")])).await,
+        "/api/integrations/baseline" if body["action"] == "exception" => app.engine.call("integration_exception", json!([baseline,threshold,body["finding_id"],body["reason"]])).await,
         "/api/integrations/baseline" if body["action"] == "release" => app.engine.call("integration_release", json!([body["profile"],body["session"]])).await,
         "/api/integrations/baseline" => app.engine.call("integration_baseline", json!([{
             "profile":body["profile"], "session":body["session"], "turn":body["turn"], "repository":repo
         }])).await,
+        "/api/integrations/impact" => app.engine.call("integration_impact", json!([baseline,threshold,query.get("focus")])).await,
+        "/api/integrations/coverage" => app.engine.call("integration_coverage", json!([baseline,body])).await,
+        "/api/integrations/export" => app.engine.call("integration_export", json!([baseline,query.get("snapshot")])).await,
         _ => return json_response(StatusCode::SERVICE_UNAVAILABLE, json!({"status":"unavailable","limits":["This integration operation is not installed yet"]}), gzip, None).await,
     };
     match result {
         Ok(mut value) => {
-            value["status"] = json!("incomplete");
-            value["limits"] = json!(["Baseline captured; analysis has not run"]);
+            if path == "/api/integrations/export" {
+                let bytes = match base64::engine::general_purpose::STANDARD
+                    .decode(value["archive"].as_str().unwrap_or(""))
+                {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        return error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Snapshot export encoding failed",
+                            gzip,
+                        )
+                        .await;
+                    }
+                };
+                let mut response =
+                    respond(StatusCode::OK, "application/x-tar", bytes, false, None).await;
+                for (name, field) in [
+                    ("x-peekumi-run-id", "run_id"),
+                    ("x-peekumi-snapshot", "snapshot"),
+                    ("x-peekumi-status", "status"),
+                ] {
+                    if let Ok(header) = HeaderValue::from_str(value[field].as_str().unwrap_or("")) {
+                        response.headers_mut().insert(name, header);
+                    }
+                }
+                let encoded =
+                    base64::engine::general_purpose::STANDARD.encode(value["limits"].to_string());
+                response
+                    .headers_mut()
+                    .insert("x-peekumi-limits", HeaderValue::from_str(&encoded).unwrap());
+                return response;
+            }
+            if value.get("status").is_none() {
+                value["status"] = json!("incomplete");
+                value["limits"] = json!(["Baseline state saved; analysis has not run"]);
+            }
             json_response(StatusCode::OK, value, gzip, None).await
         }
         Err(message) => error(StatusCode::BAD_REQUEST, &message, gzip).await,

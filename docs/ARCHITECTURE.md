@@ -35,6 +35,59 @@ The old Node backend is in `test/reference/`. It is an equivalence oracle and a 
 
 All API requests, except pairing, need a session or a bearer token. Peekumi uses the browser `textContent` to render repository strings. The internal `--stdio` protocol is for local tests and benchmarks. It is not an HTTP endpoint.
 
+## Integration API schemas
+
+The [integration JSON schemas](integrations.schema.json) use JSON Schema 2020-12.
+Select `baselineRequest`, `baselineResponse`, `coverageRequest`, `impact` or `map` from `$defs`.
+For example, this schema selects the impact response:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "integrations.schema.json#/$defs/impact"
+}
+```
+
+| Method and route | Inputs | Response |
+| --- | --- | --- |
+| `POST /api/integrations/baseline` | `baselineRequest` | `baselineResponse` |
+| `GET /api/integrations/export` | `repo`, `baseline`, `snapshot` | Read-only USTAR stream |
+| `POST /api/integrations/coverage` | `coverageRequest` | Outcome, accepted flag, source SHA, run ID and report hash |
+| `GET /api/integrations/impact` | `repo`, `baseline`, optional `threshold` and `focus` | `impact` |
+| `GET /api/integrations/map` | Same query as impact | `map` |
+
+All routes require a repository-scoped integration bearer token.
+Owner and reader credentials retain their existing routes.
+The integration credential cannot use those routes.
+These operations never change the inspected checkout.
+POST requests change private analysis state only.
+JSON requests have an 8 MiB limit. Reports have a 4 MiB limit.
+Exports have limits of 5,000 files and 64 MiB.
+Restricted files, links, submodules and prior measurement files are excluded with reasons.
+
+The export headers are `X-Peekumi-Run-Id`, `X-Peekumi-Snapshot`, `X-Peekumi-Status` and `X-Peekumi-Limits`.
+The limits header contains a base64-encoded JSON string array.
+The run receipt belongs to one baseline and one source snapshot.
+A coverage submission consumes it once.
+The receipt and evidence update use one atomic state-file replacement.
+The measurement client attests the command exits and fresh-folder provenance.
+The service does not claim to prove arbitrary command execution cryptographically.
+Only a successful test command, successful report export and valid fresh LCOV can supply coverage.
+Missing file or function records stay unknown.
+
+The API uses `passed`, `findings`, `exception`, `incomplete` and `unavailable`.
+Only the plugin can set `exhausted` after the nudge cap and final refresh.
+`passed` requires complete rules, graph and coverage checks for changed Python declarations.
+The API retains open measured risks while their current coverage is unknown.
+A coverage-only rerun for the same source can clear a risk with new valid evidence.
+An explanation never clears evidence.
+
+Two actions use the baseline POST route for private metadata.
+`action: release` takes `repo`, `profile` and `session` and releases session pins.
+`action: exception` takes `repo`, `baseline`, `finding_id` and a nonempty `reason` of at most 1,000 bytes.
+An exception can name only a current finding.
+Its reason remains visible with that finding.
+
 ## Boundaries
 
 Repository inspection is read-only. An explicit owner dispatch creates an isolated agent worktree. Source comes from committed Git objects. Uncommitted changes are an exception: `backend/worktree.rs` records them as a private commit on top of `HEAD`, in an object folder in the state folder. Only read-only Git commands read that folder. Peekumi does not follow symlinks. Restricted filenames, binary content, large files and submodules keep their labels.

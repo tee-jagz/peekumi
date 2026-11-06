@@ -17,7 +17,7 @@
 use anyhow::{Context, Result, ensure};
 #[path = "worktree_baselines.rs"]
 mod baselines;
-pub use baselines::{Binding, capture_baseline, release_session};
+pub use baselines::{Binding, capture_baseline, get_baseline, release_session, update_baseline};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

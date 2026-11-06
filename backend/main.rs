@@ -10,6 +10,7 @@ mod fix_proposals;
 mod graph_brief;
 mod hash;
 mod index;
+mod integration_evidence;
 mod integration_http;
 mod integration_tokens;
 use integration_http::integration_request;
@@ -113,6 +114,24 @@ fn argument(args: &Value, index: usize) -> &str {
 /// Returns an error for unknown operations or failed repository work.
 fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> {
     match method {
+        "integration_map" => repo.integration_map(
+            argument(args, 0),
+            args[1].as_f64().unwrap_or(30.0),
+            argument(args, 2),
+        ),
+        "integration_impact" => repo.integration_impact(
+            argument(args, 0),
+            args[1].as_f64().unwrap_or(30.0),
+            argument(args, 2),
+        ),
+        "integration_export" => repo.integration_export(argument(args, 0), argument(args, 1)),
+        "integration_coverage" => repo.integration_coverage(argument(args, 0), &args[1]),
+        "integration_exception" => repo.integration_exception(
+            argument(args, 0),
+            args[1].as_f64().unwrap_or(30.0),
+            argument(args, 2),
+            argument(args, 3),
+        ),
         "integration_baseline" => repo.integration_baseline(&args[0]),
         "integration_release" => repo.integration_release(argument(args, 0), argument(args, 1)),
         "resolve" => Ok(json!(repo.resolve(argument(args, 0))?)),
