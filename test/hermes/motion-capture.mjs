@@ -4,7 +4,11 @@ import path from "node:path";
 
 /** Record one real agent turn, user selections and cursor actions in an isolated Desktop. */
 export async function recordMotion(page, { artifacts, release, receipt }) {
-  const folder = path.join(artifacts, "motion-capture");
+  const benefits = process.env.PEEKUMI_DEMO_STORY === "benefits";
+  const folder = path.join(
+    artifacts,
+    benefits ? "benefit-capture" : "motion-capture",
+  );
   await mkdir(folder, { recursive: true });
   await page.setViewportSize({ width: 1600, height: 1000 });
   const cdp = await page.context().newCDPSession(page);
@@ -93,7 +97,13 @@ export async function recordMotion(page, { artifacts, release, receipt }) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
       steps: 24,
     });
-    await locator.hover();
+    const element = await locator.boundingBox();
+    await locator.hover({
+      position: {
+        x: box.x + box.width / 2 - element.x,
+        y: box.y + box.height / 2 - element.y,
+      },
+    });
   };
   await cdp.send("Page.startScreencast", {
     format: "jpeg",
@@ -136,19 +146,62 @@ export async function recordMotion(page, { artifacts, release, receipt }) {
         refund: refund(),
       });
     });
-    await chapter("risk", async () => {
-      await point(refund());
-      await refund().click();
-      await pane.getByText("CC 6 · coverage 0%", { exact: true }).waitFor();
-      await wait(1400);
-      const metrics = pane.getByText("CC 6 · coverage 0%", { exact: true });
-      await point(metrics);
-      await wait(2800);
-      const score = pane.getByText("42", { exact: true }).last();
-      await point(score);
-      await wait(1600);
-      return targets({ refund: refund(), metrics, score });
-    });
+    if (benefits) {
+      await chapter("overview", async () => {
+        await pane
+          .getByRole("button", { name: "Zoom out", exact: true })
+          .click();
+        await wait(1500);
+        await point(button("shop/ui/cart.py"));
+        await wait(1600);
+        await pane
+          .getByRole("button", { name: "Zoom in", exact: true })
+          .click();
+        await wait(1400);
+        return targets({
+          graph: pane
+            .getByRole("img", { name: "Repository dependency map" })
+            .locator(".."),
+          file: button("shop/ui/cart.py"),
+        });
+      });
+      await chapter("drill", async () => {
+        const file = button("shop/ui/cart.py");
+        await point(file);
+        await file.click();
+        await pane
+          .getByText("shop/ui/cart.py", { exact: true })
+          .last()
+          .waitFor();
+        await wait(1800);
+        await point(refund());
+        await refund().click();
+        const metrics = pane.getByText("CC 6 · coverage 0%", { exact: true });
+        await metrics.waitFor();
+        await point(metrics);
+        await wait(1800);
+        return targets({
+          file,
+          refund: refund(),
+          metrics,
+          score: pane.getByText("42", { exact: true }).last(),
+        });
+      });
+    } else {
+      await chapter("risk", async () => {
+        await point(refund());
+        await refund().click();
+        await pane.getByText("CC 6 · coverage 0%", { exact: true }).waitFor();
+        await wait(1400);
+        const metrics = pane.getByText("CC 6 · coverage 0%", { exact: true });
+        await point(metrics);
+        await wait(2800);
+        const score = pane.getByText("42", { exact: true }).last();
+        await point(score);
+        await wait(1600);
+        return targets({ refund: refund(), metrics, score });
+      });
+    }
     await chapter("rule", async () => {
       await point(edge());
       await wait(1200);
@@ -198,20 +251,22 @@ export async function recordMotion(page, { artifacts, release, receipt }) {
         run: pane.getByText("Run", { exact: true }).locator(".."),
       });
     });
-    await chapter("unknown", async () => {
-      const file = button("view.ts");
-      await file.scrollIntoViewIfNeeded();
-      await point(file);
-      await file.click();
-      const reason = pane
-        .getByText("CRAP not available for this language", { exact: true })
-        .first();
-      await reason.waitFor();
-      await wait(1500);
-      await point(reason);
-      await wait(2000);
-      return targets({ file, reason });
-    });
+    if (!benefits) {
+      await chapter("unknown", async () => {
+        const file = button("view.ts");
+        await file.scrollIntoViewIfNeeded();
+        await point(file);
+        await file.click();
+        const reason = pane
+          .getByText("CRAP not available for this language", { exact: true })
+          .first();
+        await reason.waitFor();
+        await wait(1500);
+        await point(reason);
+        await wait(2000);
+        return targets({ file, reason });
+      });
+    }
     await chapter("close", async () => {
       await refund().click();
       await wait(1000);
