@@ -36,3 +36,38 @@ Run `python3 test/hermes/gate_test.py` for the gate against a local stub server.
 Run `python3 test/hermes/measure_test.py` for archive traversal, link and size checks.
 The gate tests cover retries, session separation, the nudge cap, shell edits and outages.
 They also keep pending evidence from showing a previous pass as current.
+
+## Full local verification
+
+Set `PEEKUMI_TEST_CRAPPER_CONFIG` to the clean install's `peekumi-crapper.json`.
+Set `PEEKUMI_TEST_HERMES_PYTHON` to the pinned Hermes environment's Python.
+Run the API suite with a Python environment that has `jsonschema` and the pinned crapper dependencies:
+
+```sh
+"$CRAPPER_PYTHON" test/hermes/integration_e2e_test.py
+"$CRAPPER_PYTHON" test/hermes/clean_install.py
+"$CRAPPER_PYTHON" test/hermes/pane_fixture.py
+node test/hermes/pane.mjs
+PEEKUMI_NATIVE_SCENARIO=1 node test/hermes/native-pane.mjs
+node test/hermes/encode-demo.mjs
+```
+
+The native test needs a source-built Hermes Desktop at `HERMES_SOURCE`.
+Set `PEEKUMI_TEST_CRAPPER_PYTHON` to the fixture Python environment for that test.
+The browser adapter needs React, React DOM and esbuild in `PEEKUMI_PANE_DEPS`.
+It defaults to `~/.local/share/peekumi-hackathon/pane-preview`.
+The encoder needs FFmpeg and Playwright Chromium.
+
+The API suite checks real exports, coverage, crapper, schemas and Hermes tool dispatch.
+It also compares scores with an independent crapper CLI run on the same source and report.
+The clean install test uses a new registry and profile. It redacts its temporary token.
+It does not install into the owner's active profile.
+
+The native scenario uses a scripted local provider and the real Hermes conversation loop.
+It performs two measurements and observes the actual stop-gate nudge before the repair.
+It also selects the rule and unsupported language.
+No paid model or real account is used.
+The MP4 keeps the native frame timing and adds reading pauses at the inspected evidence.
+Its visible caption identifies the scripted provider.
+Artifacts stay in the ignored `test-results/hermes/` folder.
+Selected screenshots of our own fixture also go in the plugin README.

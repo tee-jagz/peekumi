@@ -1,0 +1,57 @@
+# Hermes release review
+
+All files here are local review material.
+No publication step has run.
+The v5 plan reserves those steps for Tolu.
+
+## Local artifacts
+
+The release folder is `test-results/hermes/release/`.
+It contains the plugin ZIP, full Peekumi source archive, checksums and catalog draft.
+The draft pins the complete local commit SHA.
+That commit must become public before the catalog entry can work.
+The ZIP contains only committed plugin files.
+It has no snapshot state, coverage reports or tokens.
+
+The native review video is `test-results/hermes/native-demo.mp4`.
+It is 43 seconds long.
+Reading pauses hold the native frames at selected evidence.
+A visible caption identifies the scripted local provider throughout.
+The provider drives the actual Hermes conversation and tools.
+The edits, stop-gate nudge, tests, coverage and CRAP scores are real.
+The recording does not establish the behavior of an external model.
+Approve this disclosed take, or record a model-driven take with your own provider.
+
+The plugin README contains native screenshots of our own fixture.
+The full acceptance record is in [HERMES-HACKATHON.md](HERMES-HACKATHON.md).
+
+## Source and service
+
+The draft uses `https://github.com/tee-jagz/peekumi` and `subdir: integrations/hermes`.
+This uses the catalog's monorepo support.
+You can instead select a separate public repository.
+That choice needs a new catalog URL and full SHA.
+
+The Peekumi service changes must also be public and available to judges.
+The existing public release does not supply the five new integration endpoints.
+The source build and clean installation pass on macOS x86_64.
+Do not claim tested Windows, Linux or ARM64 support from the parser pins alone.
+The catalog draft limits the tested platform to macOS.
+
+## Publication checklist for Tolu
+
+1. Review the acceptance record, source diff, screenshots and video.
+2. Select the plugin source location.
+3. Publish the exact source commit and required Peekumi build.
+4. Check that the catalog's full SHA can be cloned without private access.
+5. Run `hermes plugins validate <plugin-path> --install-deps` at that SHA.
+6. Open the one-file PR for `plugin-catalog/peekumi-risk-map.yaml` in `NousResearch/hermes-agent`.
+7. Use the prepared PR description. Include the screenshots and execution disclosure.
+8. Post the approved video on X with @NousResearch.
+9. Send the catalog PR link and X post link to `http://form.typeform.com/to/FwJLvOln`.
+10. Complete the form before 2026-11-11 at 17:00 EST (22:00 London).
+
+The isolated source-installed Hermes runtime reports a managed-artifact sync warning.
+Plugin validation still passes, including the security scan.
+The source-built native Desktop scenario also passes.
+Read that warning when you prepare a packaged Hermes install.
