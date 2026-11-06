@@ -84,8 +84,10 @@ The default CRAP threshold is 30.
 
 Native evidence is in `test-results/hermes/`.
 The README keeps selected screenshots from our own fixture.
-The revised 75-second MP4 has a visible scripted-provider disclosure.
-Numbered stages and local synthetic narration explain the gate and required Peekumi service.
+The current MP4 stays below 90 seconds and has a visible scripted-provider disclosure.
+Numbered stages and Google Gemini TTS explain the gate and required Peekumi service.
+The graph has the main pane width. Native checks keep the changed refund node visible.
+Only narration text goes to Google. The plugin has no Google runtime dependency.
 The native test uses the normal Hermes read/write tools, tool bridge, hooks and finalizer.
 It makes two real coverage runs and a real stop-gate nudge.
 It uses no external model account.

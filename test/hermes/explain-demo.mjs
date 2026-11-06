@@ -3,12 +3,13 @@ import { chromium } from "@playwright/test";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { narrate, speechModel, speechVoice } from "./google-tts.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../test-results/hermes");
 const output = path.resolve(
-  process.argv[2] || path.join(root, "native-demo-v2.mp4"),
+  process.argv[2] || path.join(root, "native-demo-google.mp4"),
 );
-const folder = path.join(root, "explained-demo");
+const folder = path.join(root, "google-demo");
 await mkdir(folder, { recursive: true });
 const frames = JSON.parse(
   await readFile(path.join(root, "native-demo-frames.json"), "utf8"),
@@ -53,7 +54,7 @@ const scenes = [
       "Hermes plugin → local Peekumi service → graph, rules and measured risk",
     note: "Required: Peekumi service + crapper + Python coverage tools",
     voice:
-      "Tests can pass while new code remains untested. Peekumi Risk Map checks the change inside Hermes. It requires a running local Peekumi service.",
+      "This is Peekumi Risk Map inside Hermes. The graph shows changed code, dependency rules and measured risk. A local Peekumi service supplies the analysis.",
   },
   {
     title: "1 / Hermes adds refunds and runs the existing tests",
@@ -61,7 +62,7 @@ const scenes = [
       "Watch the left: code edit → peekumi_measure. Tests run in a private snapshot copy.",
     samples: capture(first, event("findings")),
     voice:
-      "Hermes adds refunds, then runs the existing tests through the measurement tool. The tests pass. But do they cover the new refund function?",
+      "Hermes adds refunds and measures the change in a private copy. The existing tests pass. Now look at what the graph tells us.",
   },
   {
     title: "2 / The new function has zero test coverage",
@@ -69,7 +70,7 @@ const scenes = [
       "Look at AFTER: complexity 6 · coverage 0% · CRAP risk 42, above the limit of 30.",
     samples: still("native-findings.png", 10),
     voice:
-      "The pane finds two problems. First, refund has zero test coverage. Its complexity is six, and its CRAP risk score is forty two, above the limit of thirty. Lower is better.",
+      "The changed refund node is red. Select it: complexity six, zero test coverage, and a risk score of forty two. The limit is thirty. Lower is better.",
   },
   {
     title: "3 / The UI imports the database directly",
@@ -77,7 +78,7 @@ const scenes = [
       "Selected red edge: ui-no-db. The exact import breaks the rule saved before the edit.",
     samples: still("native-rule.png", 9),
     voice:
-      "Second, the user interface now imports the database directly. The red edge opens the saved dependency rule and the exact import that breaks it.",
+      "The red dependency edge explains the second problem. The interface now imports the database directly. Select the edge to see the frozen rule and the exact import.",
   },
   {
     title: "4 / The finish gate asks Hermes to repair both findings",
@@ -85,7 +86,7 @@ const scenes = [
       "Watch the left: the forbidden import is removed, tests are added, and measurement runs again.",
     samples: capture(event("rule evidence"), event("measured repair")),
     voice:
-      "When Hermes tries to finish, the plugin sends the findings back. Hermes removes the forbidden import, adds tests for refunds, and runs a fresh measurement.",
+      "The finish gate sends both findings back to Hermes. The supporting diff shows the repair: remove the forbidden import, add refund tests, then measure again.",
   },
   {
     title: "5 / Fresh evidence confirms the repair",
@@ -93,7 +94,7 @@ const scenes = [
       "Coverage: 0% → 100% · CRAP: 42 → 6 · no new rule breaks. Source and run IDs identify the evidence.",
     samples: still("native-passed.png", 10),
     voice:
-      "The new measurement shows full refund coverage. Complexity stays six, but CRAP falls from forty two to six. No new rule breaks remain. The source and run identifiers tie the result to evidence.",
+      "Back on the graph, refund is green. Coverage is now one hundred percent, and risk falls from forty two to six. The rule break is gone. Revision and run identifiers link the result to evidence.",
   },
   {
     title: "Unknown stays unknown",
@@ -112,7 +113,7 @@ const scenes = [
       "More test coverage. The same frozen rules. Fresh source-bound evidence.",
     note: "Dependency: running Peekumi service. Review demo: scripted local provider; real tools, gate and measurements.",
     voice:
-      "That is the loop: measure, find the risk, repair, and verify. The Hermes plugin connects to Peekumi for the analysis.",
+      "The graph leads. The diff explains the repair. Peekumi verifies the result before Hermes finishes.",
   },
 ];
 
@@ -141,17 +142,10 @@ try {
   for (const [index, scene] of scenes.entries()) {
     const stem = path.join(folder, "scene-" + index);
     await writeFile(stem + ".txt", scene.voice + "\n");
-    // Narration is local macOS speech. It does not send the recording to a service.
-    await run("/usr/bin/say", [
-      "-v",
-      "Daniel",
-      "-r",
-      "185",
-      "-f",
-      stem + ".txt",
-      "-o",
-      stem + ".aiff",
-    ]);
+    const narration = await narrate(
+      scene.voice,
+      path.join(root, "google-tts-cache"),
+    );
     const audio = Number(
       await run("ffprobe", [
         "-v",
@@ -160,7 +154,7 @@ try {
         "format=duration",
         "-of",
         "csv=p=0",
-        stem + ".aiff",
+        narration,
       ]),
     );
     const samples = scene.samples || [
@@ -182,7 +176,7 @@ try {
           (await readFile(sample.filename)).toString("base64")
         : "";
       await page.setContent(
-        `<style>*{box-sizing:border-box}body{margin:0;background:#101827;color:#f8fafc;font-family:Arial,sans-serif}.disclosure{height:32px;padding:8px 20px;font-size:13px;background:#080f1b;color:#cbd5e1}img{display:block;width:1280px;height:900px}.caption{height:108px;padding:18px 28px;background:#101827;border-top:3px solid #60a5fa}.title{font-size:26px;font-weight:700;margin-bottom:10px}.detail{font-size:19px;color:#cbd5e1}.card{height:900px;padding:130px 84px;display:flex;flex-direction:column;justify-content:center}.card .title{font-size:49px;line-height:1.15;max-width:1050px}.body{font-size:68px;font-weight:700;color:#93c5fd;margin:35px 0}.card .detail{font-size:27px;line-height:1.5;max-width:1050px}.note{font-size:21px;color:#94a3b8;margin-top:45px;line-height:1.5;max-width:1050px}</style><div class="disclosure">EDITED NATIVE DEMO · Scripted local provider · Real Hermes tools, gate, coverage and CRAP · Local synthetic narration</div>${scene.card ? `<div class="card"><div class="title">${scene.title}</div><div class="body">${scene.body}</div><div class="detail">${scene.detail}</div><div class="note">${scene.note}</div></div>` : `<img src="${image}">`}<div class="caption"><div class="title">${scene.card ? "Peekumi Risk Map / Hermes Desktop" : scene.title}</div><div class="detail">${scene.card ? "Required: running Peekumi service, pinned crapper and Python coverage tools" : scene.detail}</div></div>`,
+        `<style>*{box-sizing:border-box}body{margin:0;background:#101827;color:#f8fafc;font-family:Arial,sans-serif}.disclosure{height:32px;padding:8px 20px;font-size:13px;background:#080f1b;color:#cbd5e1}img{display:block;width:1280px;height:900px}.caption{height:108px;padding:18px 28px;background:#101827;border-top:3px solid #60a5fa}.title{font-size:26px;font-weight:700;margin-bottom:10px}.detail{font-size:19px;color:#cbd5e1}.card{height:900px;padding:130px 84px;display:flex;flex-direction:column;justify-content:center}.card .title{font-size:49px;line-height:1.15;max-width:1050px}.body{font-size:68px;font-weight:700;color:#93c5fd;margin:35px 0}.card .detail{font-size:27px;line-height:1.5;max-width:1050px}.note{font-size:21px;color:#94a3b8;margin-top:45px;line-height:1.5;max-width:1050px}</style><div class="disclosure">EDITED NATIVE DEMO · Scripted local provider · Real Hermes tools, gate, coverage and CRAP · Google TTS narration</div>${scene.card ? `<div class="card"><div class="title">${scene.title}</div><div class="body">${scene.body}</div><div class="detail">${scene.detail}</div><div class="note">${scene.note}</div></div>` : `<img src="${image}">`}<div class="caption"><div class="title">${scene.card ? "Peekumi Risk Map / Hermes Desktop" : scene.title}</div><div class="detail">${scene.card ? "Required: running Peekumi service, pinned crapper and Python coverage tools" : scene.detail}</div></div>`,
       );
       await page
         .locator("img")
@@ -208,13 +202,13 @@ try {
       "-i",
       stem + ".ffconcat",
       "-i",
-      stem + ".aiff",
+      narration,
       "-t",
       String(seconds),
       "-vf",
       "fps=12,format=yuv420p",
       "-af",
-      "apad",
+      "loudnorm=I=-16:TP=-1.5:LRA=11,apad",
       "-c:v",
       "libx264",
       "-c:a",
@@ -270,7 +264,9 @@ await writeFile(
     {
       edited_native_capture: true,
       scripted_provider: true,
-      local_synthetic_narration: true,
+      narration_provider: "Google Gemini",
+      narration_model: speechModel,
+      narration_voice: speechVoice,
       estimated_seconds: total,
       clips,
     },

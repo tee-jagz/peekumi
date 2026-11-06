@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Use Google Gemini TTS for the review narration. Keep earlier cuts and disclose the speech provider.
+
 - Give the Hermes graph more space and keep the selected changed node visible in the native demo.
 
 - State the required Peekumi service before setup. Explain the native Hermes demo with numbered stages and local narration.

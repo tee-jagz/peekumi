@@ -160,7 +160,7 @@ It does not fail plugin validation. The built native Desktop test also passes.
 ## Native Desktop evidence
 
 These screenshots use our small shop fixture in native Hermes Desktop.
-The local provider is scripted. No external model account is used.
+The agent provider is scripted. No external model drives the agent in this recording.
 Hermes runs the real edit tools, private coverage tool and stop gate.
 The first measurement is complexity 6, coverage 0% and CRAP 42.
 The repair removes the forbidden import and adds tests.
@@ -175,6 +175,9 @@ The second measurement is complexity 6, coverage 100% and CRAP 6.
 ![Unsupported TypeScript stays labelled](docs/unsupported.png)
 
 The local review MP4 is under 90 seconds and has a scripted-provider label throughout.
+Its narration uses Google Gemini TTS. Only the narration text goes to Google.
+Google TTS is a demo production tool, not a plugin dependency.
+The graph has the main pane width, with the code diff as supporting detail.
 It needs the owner's approval before publication.
 The test commands and acceptance record are in Peekumi's `test/hermes/README.md` and `docs/HERMES-HACKATHON.md`.
 

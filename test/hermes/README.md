@@ -58,8 +58,13 @@ Set `PEEKUMI_TEST_CRAPPER_PYTHON` to the fixture Python environment for that tes
 The browser adapter needs React, React DOM and esbuild in `PEEKUMI_PANE_DEPS`.
 It defaults to `~/.local/share/peekumi-hackathon/pane-preview`.
 The encoder needs FFmpeg and Playwright Chromium.
-The explained cut also uses the installed macOS Daniel voice through `/usr/bin/say`.
-Speech synthesis is local. It sends no recording to an external service.
+The explained cut uses Google Gemini TTS with the Charon voice.
+Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` for new narration.
+The script sends only the demo narration text to Google.
+It keeps verified WAV files in the ignored `google-tts-cache/` folder.
+It does not send the recording, repository source or Peekumi token.
+It does not fall back to the macOS voice.
+The API follows [Google's speech guide](https://ai.google.dev/gemini-api/docs/speech-generation).
 
 The API suite checks real exports, coverage, crapper, schemas and Hermes tool dispatch.
 It also compares scores with an independent crapper CLI run on the same source and report.
@@ -69,11 +74,12 @@ It does not install into the owner's active profile.
 The native scenario uses a scripted local provider and the real Hermes conversation loop.
 It performs two measurements and observes the actual stop-gate nudge before the repair.
 It also selects the rule and unsupported language.
-No paid model or real account is used.
+The native agent turn uses no external model account.
+The separate narration step uses the configured Google account.
 The MP4 keeps the native frame timing and adds reading pauses at the inspected evidence.
 Its visible caption identifies the scripted provider.
 Artifacts stay in the ignored `test-results/hermes/` folder.
 Selected screenshots of our own fixture also go in the plugin README.
 The explained cut adds numbered stages, native screenshot holds and narration.
 It states that a running Peekumi service is required.
-It preserves the original capture and writes `native-demo-v2.mp4`.
+It preserves the earlier cuts and writes `native-demo-google.mp4`.
