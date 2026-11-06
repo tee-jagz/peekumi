@@ -116,3 +116,22 @@ The video discloses edited time, camera moves and cursor annotations.
 Checks require distinct native frames in every chapter and two successful measurements.
 They also verify the real gate, unchanged audio hash, duration and media decoding.
 The result is `native-demo-motion.mp4`. Earlier cuts stay available.
+
+## User-benefit story
+
+Use the same isolated fixture to record the review flow:
+
+```sh
+PEEKUMI_NATIVE_SCENARIO=1 PEEKUMI_NATIVE_MOTION=1 PEEKUMI_DEMO_STORY=benefits node test/hermes/native-pane.mjs
+node test/hermes/benefit-voice.mjs
+PEEKUMI_DEMO_STORY=benefits node test/hermes/motion-demo.mjs
+```
+
+Set the configured Google speech key for `benefit-voice.mjs`.
+It sends only the narration in `benefit-story.mjs` to Google.
+It uses the same Charon voice and caches the WAV files.
+The recording shows the overview, file-to-function selection, findings and agent repair.
+It has no language-support segment. Required map labels remain in the product.
+The edit copies the new narration stream without changing it.
+Artifacts use `benefit-capture/` and `benefit-demo/`. Earlier takes stay available.
+The result is `native-demo-benefits.mp4`.

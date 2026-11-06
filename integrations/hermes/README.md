@@ -1,7 +1,11 @@
 # Peekumi Risk Map
 
-See the code that Hermes changes on a dependency map with measured Python CRAP scores.
-The gate checks changes against the rules at the pre-edit baseline.
+Keep a clear view of your repository while Hermes changes the code.
+Use the dependency graph to focus your review on changed areas.
+Select a file or function to inspect its evidence. Use the diff for exact code.
+The gate gives Hermes specific findings to fix. New measurements verify the repair.
+
+Dependency rules and measured Python CRAP support the review.
 Every result names its source revision and coverage run.
 Unknown coverage stays grey.
 
@@ -195,9 +199,11 @@ Its narration uses Google Gemini TTS. Only the narration text goes to Google.
 Google TTS is a demo production tool, not a plugin dependency.
 The graph has the main pane width, with the code diff as supporting detail.
 The review edit shows continuous native video, including actual edits and tool updates.
-Cursor actions open node, edge and unsupported-file evidence.
+The story shows the user's repository overview, focused review and verified agent repair.
+Cursor actions move from file to function and open the rule evidence.
 Smooth camera moves follow the spoken evidence. Video annotations do not change measured data.
-The original Google voice track stays unchanged.
+The benefit story uses new narration in the same Google Charon voice.
+Video editing keeps that narration stream unchanged.
 It needs the owner's approval before publication.
 The test commands and acceptance record are in Peekumi's `test/hermes/README.md` and `docs/HERMES-HACKATHON.md`.
 

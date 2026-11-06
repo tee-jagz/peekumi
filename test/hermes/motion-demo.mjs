@@ -4,18 +4,38 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { benefitStory } from "./benefit-story.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../test-results/hermes");
-const folder = path.join(root, "motion-demo");
+const benefits = process.env.PEEKUMI_DEMO_STORY === "benefits";
+const folder = path.join(root, benefits ? "benefit-demo" : "motion-demo");
 const output = path.resolve(
-  process.argv[2] || path.join(root, "native-demo-motion.mp4"),
+  process.argv[2] ||
+    path.join(
+      root,
+      benefits ? "native-demo-benefits.mp4" : "native-demo-motion.mp4",
+    ),
 );
 await mkdir(folder, { recursive: true });
 const recording = JSON.parse(
-  await readFile(path.join(root, "motion-capture/recording.json"), "utf8"),
+  await readFile(
+    path.join(
+      root,
+      benefits
+        ? "benefit-capture/recording.json"
+        : "motion-capture/recording.json",
+    ),
+    "utf8",
+  ),
 );
 const speech = JSON.parse(
-  await readFile(path.join(root, "google-demo/chapters.json"), "utf8"),
+  await readFile(
+    path.join(
+      root,
+      benefits ? "benefit-demo/chapters.json" : "google-demo/chapters.json",
+    ),
+    "utf8",
+  ),
 );
 if (
   !recording.nudge_received ||
@@ -68,7 +88,7 @@ if (Math.abs(sourceSize.height / recording.viewport.height - pixelScale) > 0.01)
 const full = { x: 800, y: 500, z: 1 };
 const key = (at, z, box) => ({ at, z, ...center(box) });
 // Camera moves are editorial. Every source frame comes from the native recording.
-const scenes = [
+const technicalScenes = [
   {
     id: "intro",
     title: "Peekumi Risk Map inside Hermes",
@@ -168,6 +188,61 @@ const scenes = [
     ],
   },
 ];
+const scenes = benefits
+  ? benefitStory.map((scene) => {
+      const original = technicalScenes.find((item) => item.id === scene.id);
+      if (scene.id === "overview")
+        return {
+          ...scene,
+          camera: (t, seconds) => [
+            { at: 0, ...full },
+            key(1.5, 1.45, t.graph),
+            key(seconds - 1, 1.6, t.file),
+            { at: seconds, ...full },
+          ],
+        };
+      if (scene.id === "drill")
+        return {
+          ...scene,
+          camera: (t, seconds) => [
+            { at: 0, ...full },
+            key(1.1, 1.6, t.file),
+            key(3.2, 1.8, t.refund),
+            { at: seconds - 1.8, z: 1.55, x: 350, y: 350, region: "diff" },
+            { at: seconds, ...full },
+          ],
+        };
+      if (scene.id === "verify")
+        return {
+          ...scene,
+          camera: (t, seconds) => [
+            { at: 0, ...full },
+            key(1, 1.6, t.refund),
+            key(2.3, 2, t.metrics),
+            key(seconds - 2.1, 2, t.metrics),
+            key(seconds - 0.9, 1.45, t.status),
+            { at: seconds, ...full },
+          ],
+        };
+      return {
+        ...original,
+        ...scene,
+        camera: (t, seconds) => {
+          const reference = {
+            intro: 9.92,
+            rule: 10.67,
+            repair: 10.04,
+            verify: 13.92,
+            close: 7,
+          }[scene.id];
+          return original.camera(t, reference).map((point) => ({
+            ...point,
+            at: (point.at * seconds) / reference,
+          }));
+        },
+      };
+    })
+  : technicalScenes;
 // Smoothstep interpolation avoids abrupt camera starts and stops.
 function curve(points, property) {
   let expression = String(points.at(-1)[property]);
@@ -191,17 +266,19 @@ try {
       (chapter) => chapter.id === scene.id,
     );
     if (!captured) throw Error("Missing native motion chapter: " + scene.id);
-    const seconds = Number(
-      await run("ffprobe", [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "csv=p=0",
-        path.join(root, "google-demo", `scene-${index}.mp4`),
-      ]),
-    );
+    const seconds = benefits
+      ? speech.clips[index].seconds
+      : Number(
+          await run("ffprobe", [
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            path.join(root, "google-demo", `scene-${index}.mp4`),
+          ]),
+        );
     const previous = recording.frames.findLast(
       (frame) => frame.time <= captured.start,
     );
@@ -236,7 +313,7 @@ try {
     const concat = path.join(folder, scene.id + ".ffconcat");
     await writeFile(concat, list.join("\n") + "\n");
     await page.setContent(
-      `<style>*{box-sizing:border-box}body{margin:0;background:#101827;color:white;font-family:Arial,sans-serif}.top{height:28px;padding:7px 18px;font-size:12px;color:#c7d5e8;background:#080f1b}.bottom{position:absolute;top:828px;height:72px;width:1280px;padding:9px 22px;border-top:2px solid #60a5fa}.title{font-size:23px;font-weight:700;white-space:nowrap}.detail{font-size:16px;color:#cbd5e1;margin-top:6px;white-space:nowrap}</style><div class="top">NATIVE HERMES RECORDING · Scripted provider · Time edited · Camera and cursor annotations · Original Google voice</div><div class="bottom"><div class="title">${escape(scene.title)}</div><div class="detail">${escape(scene.detail)}</div></div>`,
+      `<style>*{box-sizing:border-box}body{margin:0;background:#101827;color:white;font-family:Arial,sans-serif}.top{height:28px;padding:7px 18px;font-size:12px;color:#c7d5e8;background:#080f1b}.bottom{position:absolute;top:828px;height:72px;width:1280px;padding:9px 22px;border-top:2px solid #60a5fa}.title{font-size:23px;font-weight:700;white-space:nowrap}.detail{font-size:16px;color:#cbd5e1;margin-top:6px;white-space:nowrap}</style><div class="top">NATIVE HERMES RECORDING · Scripted provider · Time edited · Camera and cursor annotations · ${benefits ? "Google TTS · Charon" : "Original Google voice"}</div><div class="bottom"><div class="title">${escape(scene.title)}</div><div class="detail">${escape(scene.detail)}</div></div>`,
     );
     if (
       await page
@@ -260,7 +337,11 @@ try {
       .targets.graph;
     const points = scene.camera(captured.targets, seconds).map((point) => {
       // Keep evidence close-ups centred on the pane instead of the neighbouring chat.
-      if (!["add", "repair"].includes(scene.id) && point.z > 1) {
+      if (
+        !["add", "repair"].includes(scene.id) &&
+        point.region !== "diff" &&
+        point.z > 1
+      ) {
         const width = recording.viewport.width / point.z;
         point.x =
           width >= graph.width
@@ -292,7 +373,7 @@ try {
       "-i",
       bottom,
       "-filter_complex",
-      `[0:v]setpts=(PTS-STARTPTS)*${seconds / sourceSeconds},fps=25,${camera},pad=1280:900:0:28:color=0x101827[v];[v][1:v]overlay=0:0[h];[h][2:v]overlay=0:828`,
+      `[0:v]setpts=(PTS-STARTPTS)*${seconds / sourceSeconds},fps=25,scale=in_range=auto:out_range=tv,${camera},pad=1280:900:0:28:color=0x101827[v];[v][1:v]overlay=0:0[h];[h][2:v]overlay=0:828`,
       "-t",
       String(seconds),
       "-r",
@@ -305,6 +386,8 @@ try {
       "19",
       "-pix_fmt",
       "yuv420p",
+      "-color_range",
+      "tv",
       "-movflags",
       "+faststart",
       clip,
@@ -348,7 +431,9 @@ await writeFile(
       .join("\n") +
     "\n",
 );
-const voice = path.join(root, "native-demo-google.mp4");
+const voice = benefits
+  ? speech.audio
+  : path.join(root, "native-demo-google.mp4");
 const duration = Number(
   await run("ffprobe", [
     "-v",
@@ -405,13 +490,18 @@ const audioHash = (file) =>
 const original = await audioHash(voice),
   edited = await audioHash(output);
 if (original !== edited)
-  throw Error("The approved Google voice must remain unchanged");
+  throw Error(
+    "The narration source audio must remain unchanged during video editing",
+  );
 await run("ffmpeg", ["-v", "error", "-i", output, "-f", "null", "-"]);
 await writeFile(
   path.join(folder, "verification.json"),
   JSON.stringify(
     {
       duration,
+      story: benefits ? "benefits" : "technical",
+      narration_provider: "Google Gemini",
+      narration_voice: "Charon",
       audio_unchanged: true,
       audio_packet_hash: original.trim(),
       source:
@@ -427,5 +517,5 @@ await writeFile(
   ) + "\n",
 );
 console.log(
-  `Native motion demo: ${duration.toFixed(1)} seconds; ${recording.frames.length} source frames; Google audio unchanged. ${output}`,
+  `Native motion demo: ${duration.toFixed(1)} seconds; ${recording.frames.length} source frames; Google narration copied unchanged. ${output}`,
 );
