@@ -90,9 +90,10 @@ The current MP4 stays below 90 seconds and has a visible scripted-provider discl
 Numbered stages and Google Gemini TTS explain the gate and required Peekumi service.
 The graph has the main pane width. Native checks keep the changed refund node visible.
 Only narration text goes to Google. The plugin has no Google runtime dependency.
-The latest cut uses 25 timed close-ups and highlights of the native UI.
-Each close-up uses captured element positions. A small window view shows its location.
-The actual gate feedback appears as a labelled excerpt.
+The latest cut uses continuous native video with actual edits and tool updates.
+Cursor actions select nodes, the red rule edge and the unsupported file.
+Smooth camera moves follow the spoken evidence. Time and annotations are disclosed.
+The earlier static cut keeps its 25 timed close-ups and gate feedback excerpt.
 The original Google voice stream stays unchanged, with a matching packet hash.
 The native test uses the normal Hermes read/write tools, tool bridge, hooks and finalizer.
 It makes two real coverage runs and a real stop-gate nudge.

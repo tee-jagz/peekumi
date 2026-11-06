@@ -97,3 +97,22 @@ It shows a small original-window view and marks the crop there.
 The exporter checks highlight bounds, caption layout, duration and media decoding.
 It checks that the output audio packet hash matches the original.
 The result is `native-demo-focused.mp4`.
+
+## Motion recording
+
+Record the continuous native turn with the same isolated fixture:
+
+```sh
+PEEKUMI_NATIVE_SCENARIO=1 PEEKUMI_NATIVE_MOTION=1 node test/hermes/native-pane.mjs
+node test/hermes/motion-demo.mjs
+```
+
+This route keeps a fixed 1600 by 1000 viewport.
+It captures actual code edits, tool updates and user selections.
+Playwright annotates the real cursor actions. The plugin data stays unchanged.
+The exporter adds smooth camera moves and short captions over continuous footage.
+It reuses the approved Google audio stream. It makes no speech API call.
+The video discloses edited time, camera moves and cursor annotations.
+Checks require distinct native frames in every chapter and two successful measurements.
+They also verify the real gate, unchanged audio hash, duration and media decoding.
+The result is `native-demo-motion.mp4`. Earlier cuts stay available.

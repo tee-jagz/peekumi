@@ -194,8 +194,9 @@ The local review MP4 is under 90 seconds and has a scripted-provider label throu
 Its narration uses Google Gemini TTS. Only the narration text goes to Google.
 Google TTS is a demo production tool, not a plugin dependency.
 The graph has the main pane width, with the code diff as supporting detail.
-The review edit magnifies each node, edge or metric when the voice describes it.
-Highlights and captions are video annotations. They do not change the measured evidence.
+The review edit shows continuous native video, including actual edits and tool updates.
+Cursor actions open node, edge and unsupported-file evidence.
+Smooth camera moves follow the spoken evidence. Video annotations do not change measured data.
 The original Google voice track stays unchanged.
 It needs the owner's approval before publication.
 The test commands and acceptance record are in Peekumi's `test/hermes/README.md` and `docs/HERMES-HACKATHON.md`.
