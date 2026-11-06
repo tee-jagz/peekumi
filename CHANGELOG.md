@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Show actual Hermes interactions with cursor actions and smooth camera moves in the demo.
+
 - Match the approved Google demo voice to native close-ups, highlights and actual gate feedback.
 
 - Keep selected rule evidence open when the Hermes map refreshes.
