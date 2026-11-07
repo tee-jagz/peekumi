@@ -24,9 +24,9 @@ The default CRAP threshold is 30.
 | P2: scoped token | Pass | Wrong repository and non-integration routes refused; immediate revocation; owner and reader behavior unchanged |
 | P3: five endpoints | Pass | Real fixture responses validate against `docs/integrations.schema.json` |
 | P3: frozen rules | Pass | A rule-file edit stays visible; checks still use baseline rules and exact import lines |
-| P3: map | Pass | Real hierarchy, unresolved edges, unsupported labels, 300-node cap and disclosed aggregation |
+| P3: map | Pass | Real hierarchy, unresolved edges, special-file and unsupported labels, 300-node cap and disclosed aggregation |
 | P4: measured risk | Pass | Independent crapper CLI agrees on the same exported source and accepted report |
-| P4: evidence | Pass | Stale, absent and omitted coverage stays unknown; valid same-tree coverage clears risk |
+| P4: evidence | Pass | Existing-function edits measure both revisions. Failed baseline tests, stale and omitted coverage stay unknown |
 | H1: gate | Pass | Real Hermes hooks and full native turn; cap becomes exhausted; final observer sees shell-only edits |
 | H2: tools | Pass | Real registry dispatch; tests run only in fresh private copies; export uses private Git objects |
 | H4: pane | Pass | Native SDK checks show 42 to 6. Selected rule evidence survives automatic map refresh |
@@ -65,19 +65,25 @@ The default CRAP threshold is 30.
 | B23 | Local package | Fresh profile, enable, manifest validation and native pane load |
 | B24 | Lost acceptance reply | Copy remains private; exact retry is idempotent; different replay refused |
 | B25 | Partial file coverage | Parent stays grey when a function has unknown coverage |
+| B26 | Existing-function edits | Independent baseline and current reports; a failed baseline never borrows current coverage |
+| B27 | Concurrent edit during baseline tests | Current measurement keeps its original SHA; a newer checkout stays unknown |
+| B28 | Large export omission list | Header stays below 4096 bytes; remaining omissions are counted |
+| B29 | Null or invalid nudge cap | Default is three; a failed baseline capture cannot retry after editing |
+| B30 | Slow analysis | All routes allow queued revision checks; automatic and manual pane requests do not overlap |
+| B31 | Dependency integrity | Full wheel lock installs cleanly; an altered wheel checksum is refused |
 
 ## Release checks
 
 - `npm test`: 111 tests pass.
-- `npm run test:rust`: 58 tests pass.
+- `npm run test:rust`: 59 tests pass.
 - `npm run test:browser`: the full suite passes, including phone and desktop checks.
-- `test/hermes/integration_e2e_test.py`: eleven checks pass with the clean analyzer and real Hermes environment.
+- `test/hermes/integration_e2e_test.py`: seventeen checks pass with the clean analyzer and real Hermes environment.
 - The same-source manual crapper comparison passes inside that suite.
-- `test/hermes/gate_test.py`: seven checks pass.
+- `test/hermes/gate_test.py`: eleven checks pass.
 - `test/hermes/measure_test.py`: two archive boundary checks pass.
 - `test/hermes/hooks_probe.py`: two checks pass through the upstream turn seams.
 - `test/hermes/crapper_probe.py`: one private-copy measurement check passes.
-- `test/hermes/pane.mjs`: findings, repair, rule selection, unsupported language and narrow width pass.
+- `test/hermes/pane.mjs`: findings, repair, rule selection, special-file labels, slow polling and narrow width pass.
 - `test/hermes/native-pane.mjs`: the actual Desktop SDK and full scripted tool turn pass.
 - `test/hermes/clean_install.py`: fresh setup, token, enable and `--install-deps` validation pass.
 - Source setup uses no global-command wrapper. The printed service command supplies real coverage and CRAP.
@@ -116,6 +122,8 @@ Crapper: `unclebob/crapper@6fd92c4c9bcc56efb64a2f8743d5a2993bcfd42d`, version 0.
 Python: 3.14.7. Coverage: 7.17.2. Parser pack: 1.23.1.
 The catalog at this Hermes revision has no `peekumi-risk-map` collision.
 The clean analyzer installer verifies the pinned source and parser archive checksums.
+It checks hashes for all dependency wheels and build tools in `requirements-crapper.lock`.
+It builds the verified source with package downloads disabled.
 The macOS x86_64 Python parser SHA-256 is `72ac8b7b168524c011204984ab4a276c9403e88188275b09fb1d755e92849885`.
 Runtime analysis refuses parser downloads.
 Only macOS x86_64 has a clean-install and native Desktop check here.
@@ -123,6 +131,7 @@ Other platform pins do not establish a successful install.
 
 Active baselines retain the complete private object store.
 The 1 GiB cleanup threshold is a soft limit while any baseline is active.
+An open pane uses its baseline and renews the 24-hour idle timer.
 Evidence and score caches remain in private state; this slice has no evidence garbage collector.
 Coverage execution is trusted configured code in a private copy, not a hostile-code sandbox.
 The backend and plugin use the tested source pin. Explicit API version negotiation is not implemented yet.

@@ -4,6 +4,14 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Measure both revisions of existing Hermes function edits. Preserve unknown baseline failures and retry evidence.
+
+- Bound export headers, allow cold analysis time, and handle invalid Hermes nudge caps.
+
+- Keep special file labels visible in the Hermes map. Wait for each analysis poll to finish.
+
+- Check hashes for all CRAP setup dependencies and build tools.
+
 - Render the Hermes demo with Remotion and HyperFrames. Keep native playback speed and the current Google narration.
 
 - Lead the Hermes demo with the repository overview, focused review and verified agent repair.

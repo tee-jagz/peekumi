@@ -27,7 +27,8 @@ It also checks that missing coverage becomes zero upstream.
 P4 must replace that result with unknown when the report has no evidence.
 All temporary folders are removed when the probe ends.
 
-Install crapper and its dependencies in a separate environment with `requirements-crapper.txt`.
+Use `integrations/hermes/setup_crapper.py` for the hash-locked analyzer installation.
+`requirements-crapper.txt` describes the separate probe environment, including test-only `jsonschema`.
 Install its Python parser before the probe.
 The installed parser checksum is in the progress record.
 Do not let the analysis service download a parser at runtime.
@@ -36,6 +37,12 @@ Run `python3 test/hermes/gate_test.py` for the gate against a local stub server.
 Run `python3 test/hermes/measure_test.py` for archive traversal, link and size checks.
 The gate tests cover retries, session separation, the nudge cap, shell edits and outages.
 They also keep pending evidence from showing a previous pass as current.
+They cover invalid cap settings, oversized HTTP headers and analysis timeout budgets.
+The API suite checks both revisions of existing-function edits and concurrent checkout edits.
+It checks failed baseline tests and large export omission lists.
+The pane suite checks special-file labels and serial polling during slow analysis.
+Manual refreshes also wait for the current request.
+The API queue check uses a scorer that waits longer than 30 seconds.
 
 ## Full local verification
 

@@ -107,6 +107,9 @@ Large maps state their aggregation limits.
 | `unavailable` | Peekumi or the configured analyzer could not supply evidence |
 | `exhausted` | The agent stopped after the nudge cap with findings open |
 
+An exception keeps a finding open. It does not certify that all checks completed.
+Unknown parts stay grey. Read the limits for checks that could not run.
+
 ## Settings
 
 | Setting | Default |
@@ -137,6 +140,8 @@ The service token permits five integration routes for one repository.
 It cannot access general Source, Ask, workflow or repository-management routes.
 
 `peekumi_measure` executes the configured test and report commands in a new private folder.
+It measures the frozen baseline when a changed existing function has no before evidence.
+Each revision has a separate copy and report. Failed baseline tests keep the before score unknown.
 These commands execute repository tests. This is not a sandbox for hostile code.
 The normal test caches and bytecode cannot write in the user's checkout.
 The exported snapshot excludes restricted files, links, submodules and old measurement data.
@@ -151,14 +156,20 @@ Peekumi runs pinned crapper 0.1.0 against a separate private source copy with ex
 It never runs tests itself.
 The explicit `setup_crapper.py` command downloads pinned source and a parser archive from GitHub.
 It verifies their committed SHA-256 checksums before use.
-It installs pinned Python dependencies from PyPI.
+It installs the full Python dependency lock from PyPI with SHA-256 checks.
+It uses wheels only and builds the verified crapper source with package downloads disabled.
 Runtime analysis refuses parser downloads.
 The installer includes pins for macOS, Linux and Windows on x86_64 and ARM64.
 The current clean-install check uses macOS x86_64.
 
+API requests allow 300 seconds for queued and current revision checks.
+The pane waits for each request to finish, including manual refreshes.
+Export headers retain bounded omission details and count the remaining omissions.
+
 Active baselines hold the private object store against cleanup.
 The 1 GiB cleanup threshold is a soft limit while a baseline is active.
 Pins end with the session or after 24 hours without use.
+An open pane uses its baseline and renews this idle timer.
 
 ## Validate
 
