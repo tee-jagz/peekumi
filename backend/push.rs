@@ -18,7 +18,7 @@ use hkdf::Hkdf;
 use p256::{
     PublicKey, SecretKey,
     ecdsa::{Signature, SigningKey, signature::Signer},
-    elliptic_curve::sec1::ToEncodedPoint,
+    elliptic_curve::sec1::ToSec1Point,
 };
 use serde_json::{Value, json};
 use sha2::Sha256;
@@ -86,7 +86,7 @@ fn vapid_key(secrets: &Path) -> Result<SigningKey> {
 /// The VAPID public key that devices subscribe with (base64url, uncompressed point).
 pub fn public_key(secrets: &Path) -> Result<String> {
     let key = vapid_key(secrets)?;
-    Ok(B64.encode(key.verifying_key().to_encoded_point(false).as_bytes()))
+    Ok(B64.encode(key.verifying_key().to_sec1_point(false).as_bytes()))
 }
 
 /// Encrypts `payload` for a device (RFC 8291, `aes128gcm`): with the device's public key
@@ -105,7 +105,7 @@ pub fn encrypt(
         "The message is too long"
     );
     let device = PublicKey::from_sec1_bytes(ua_public).context("The device key is invalid")?;
-    let sender_public = sender.public_key().to_encoded_point(false);
+    let sender_public = sender.public_key().to_sec1_point(false);
     let shared = p256::ecdh::diffie_hellman(sender.to_nonzero_scalar(), device.as_affine());
     let mut info = b"WebPush: info\0".to_vec();
     info.extend_from_slice(ua_public);
@@ -153,7 +153,7 @@ fn vapid_header(secrets: &Path, endpoint: &str) -> Result<String> {
     Ok(format!(
         "vapid t={signed}.{}, k={}",
         B64.encode(signature.to_bytes()),
-        B64.encode(key.verifying_key().to_encoded_point(false).as_bytes())
+        B64.encode(key.verifying_key().to_sec1_point(false).as_bytes())
     ))
 }
 
@@ -309,7 +309,7 @@ mod tests {
         let sender =
             SecretKey::from_slice(&decode("yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw")).unwrap();
         assert_eq!(
-            B64.encode(sender.public_key().to_encoded_point(false).as_bytes()),
+            B64.encode(sender.public_key().to_sec1_point(false).as_bytes()),
             "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8"
         );
         let salt: [u8; 16] = decode("DGv6ra1nlYgDCS1FRnbzlw").try_into().unwrap();

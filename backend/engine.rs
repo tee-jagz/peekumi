@@ -5,6 +5,14 @@ use crate::{
     index::Index,
 };
 use anyhow::{Context, Result, bail};
+#[path = "integration_analysis.rs"]
+mod integration_analysis;
+#[path = "integration_export.rs"]
+mod integration_export;
+#[path = "integration_map.rs"]
+mod integration_map;
+#[path = "integration_risk.rs"]
+mod integration_risk;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
@@ -93,6 +101,7 @@ struct File {
     source: Option<String>,
     symbols: Vec<Value>,
     imports: Vec<Value>,
+    import_sites: Vec<Value>,
     relationships: Vec<Value>,
     details: Option<Value>,
     deps: Vec<String>,
@@ -102,6 +111,7 @@ impl File {
     fn apply(&mut self, v: Value) {
         self.symbols = array(&v["symbols"]);
         self.imports = array(&v["imports"]);
+        self.import_sites = array(&v["import_sites"]);
         self.relationships = array(&v["relationships"]);
         self.details = v.get("details").cloned();
         self.analysis = text(&v["analysis"]).into();
@@ -148,6 +158,22 @@ pub struct Repository {
     pub snapshots: u64,
 }
 impl Repository {
+    /// Captures or renews an integration baseline in private state. No checkout files change.
+    /// The binding must name this registered repository. Snapshot and storage errors propagate.
+    pub fn integration_baseline(&self, binding: &Value) -> Result<Value> {
+        Ok(serde_json::to_value(crate::worktree::capture_baseline(
+            &self.directory,
+            &self.state,
+            serde_json::from_value::<crate::worktree::Binding>(binding.clone())?,
+        )?)?)
+    }
+
+    /// Releases the baseline pins of one integration session in private state.
+    pub fn integration_release(&self, profile: &str, session: &str) -> Result<Value> {
+        crate::worktree::release_session(&self.state, profile, session)?;
+        Ok(json!({"released": true}))
+    }
+
     /// Creates repository analysis state and opens its private syntax index.
     /// `directory` identifies the inspected repository; `state` stores the cache, while `parser_root`,
     /// `python` and `node` locate installed helpers. No snapshot is parsed until requested.

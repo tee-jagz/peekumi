@@ -220,7 +220,13 @@ fn walk(items: &[Item], prefix: &str, symbols: &mut Vec<Value>, imports: &mut Ve
                     imports.push(json!({"specifier":format!("self::{}",n.ident),"module":true}));
                 }
             }
-            Item::Use(n) => use_paths(&n.tree, "", imports),
+            Item::Use(n) => {
+                let start = imports.len();
+                use_paths(&n.tree, "", imports);
+                for entry in &mut imports[start..] {
+                    entry["line"] = json!(n.span().start().line);
+                }
+            }
             _ => {}
         }
     }
@@ -233,7 +239,15 @@ pub fn analyze(source: &str) -> Value {
             let mut symbols = vec![];
             let mut imports = vec![];
             walk(&file.items, "", &mut symbols, &mut imports);
-            json!({"symbols":symbols,"imports":imports,"analysis":"Rust AST · macros not expanded","relationships":super::rust_relationships::extract(&file,&symbols),"details":{"description":docs(&file.attrs),"provenance":"Rust module documentation"}})
+            let import_sites: Vec<_> = imports
+                .iter()
+                .filter(|i| i["line"].is_number())
+                .map(|i| json!({"specifier":i["specifier"],"line":i["line"]}))
+                .collect();
+            for import in &mut imports {
+                import.as_object_mut().unwrap().remove("line");
+            }
+            json!({"symbols":symbols,"imports":imports,"import_sites":import_sites,"analysis":"Rust AST · macros not expanded","relationships":super::rust_relationships::extract(&file,&symbols),"details":{"description":docs(&file.attrs),"provenance":"Rust module documentation"}})
         }
         Err(e) => json!({"symbols":[],"imports":[],"analysis":format!("parse error: {e}")}),
     }
@@ -372,6 +386,8 @@ mod tests {
             result["imports"][0]["specifier"],
             "crate::engine::Repository"
         );
+        assert_eq!(result["import_sites"][0]["line"], 8);
+        assert_eq!(result["import_sites"][1]["line"], 8);
     }
     #[test]
     fn resolves_crate_and_relative_modules() {

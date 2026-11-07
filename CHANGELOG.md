@@ -4,6 +4,54 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Update P-256 and Tokio to remove known Rust dependency advisories.
+- Build the macOS ARM package on the supported macOS 15 runner.
+
+- Measure both revisions of existing Hermes function edits. Preserve unknown baseline failures and retry evidence.
+
+- Bound export headers, allow cold analysis time, and handle invalid Hermes nudge caps.
+
+- Keep special file labels visible in the Hermes map. Wait for each analysis poll to finish.
+
+- Check hashes for all CRAP setup dependencies and build tools.
+
+- Render the Hermes demo with Remotion and HyperFrames. Keep native playback speed and the current Google narration.
+
+- Lead the Hermes demo with the repository overview, focused review and verified agent repair.
+
+- Show actual Hermes interactions with cursor actions and smooth camera moves in the demo.
+
+- Match the approved Google demo voice to native close-ups, highlights and actual gate feedback.
+
+- Keep selected rule evidence open when the Hermes map refreshes.
+
+- Keep Hermes evidence available after a turn. Release its baseline only at real session finalization.
+
+- Set up the Hermes demo directly from a built Peekumi source root. Check prerequisites before creating its files or token.
+
+- Use Google Gemini TTS for the review narration. Keep earlier cuts and disclose the speech provider.
+
+- Give the Hermes graph more space and keep the selected changed node visible in the native demo.
+
+- State the required Peekumi service before setup. Explain the native Hermes demo with numbered stages and local narration.
+
+- Show measured risk and clickable rule evidence in a native Hermes pane. Include a private demo setup and local validation checks.
+
+- Check integration changes against frozen rules and source-bound coverage. Show measured Python risk, unknown coverage and bounded dependency maps.
+
+- Install pinned CRAP tools and checksum-verified parsers before local analysis. Runtime analysis refuses downloads.
+
+- Accept canonical path aliases when an owner creates a scoped integration token.
+
+- Keep exact import lines from the syntax adapters for rule evidence.
+
+- Add Hermes hooks and tools for frozen-baseline impact checks and private-copy coverage measurements.
+
+- Add repository-scoped integration tokens and a baseline API. Revocation does not require a server restart.
+
+- Add local Hermes hook and private-copy CRAP probes for the Risk Map integration.
+- Keep integration baselines and their rule revisions across retries, commits and snapshot cleanup.
+
 ### Proposed rules
 
 - **Propose rules** in Relations: the Ask agent audits the architecture and proposes the dependency rules that are missing and needed, with no fixed number. It gets the current rules and the earlier proposals, and it proposes only rules that are missing and needed. Each rule is one plain sentence with file names. It has a value (high, medium or low) and one engineering principle, for example Layering or Open-closed. The page shows two sections: **Finds a problem now** and **Guards against future mistakes**. A rule that another rule covers shows under it. The agent starts from the map, the folder descriptions and the current `.peekumi.json`. It gets each rule from the job of each part, not from the imports that exist now.

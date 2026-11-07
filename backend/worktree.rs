@@ -15,6 +15,9 @@
 //! until a file changes. Peekumi reads symbolic links as links and does not follow them, and it
 //! runs no Git filter to read a file. Submodules keep their committed state.
 use anyhow::{Context, Result, ensure};
+#[path = "worktree_baselines.rs"]
+mod baselines;
+pub use baselines::{Binding, capture_baseline, get_baseline, release_session, update_baseline};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -24,7 +27,7 @@ use std::{
 /// The most changed files in one snapshot.
 const MAX_FILES: usize = 5000;
 /// When the private object folder is larger than this, Peekumi empties it before the next
-/// snapshot. Older snapshots are then unreadable.
+/// snapshot, unless an active integration baseline holds it.
 const MAX_STORE: u64 = 1 << 30;
 
 /// The private object folder in a repository's state folder.
@@ -130,9 +133,7 @@ pub fn snapshot(repo: &Path, state: &Path) -> Result<Option<(String, Vec<String>
     );
 
     let store = objects(state);
-    if size(&store) > MAX_STORE {
-        std::fs::remove_dir_all(&store)?;
-    }
+    cleanup(state, MAX_STORE)?;
     std::fs::create_dir_all(store.join("info"))?;
     std::fs::create_dir_all(store.join("pack"))?;
     let common = text(git(repo, &[], &["rev-parse", "--git-common-dir"], vec![])?);
@@ -243,4 +244,15 @@ pub fn snapshot(repo: &Path, state: &Path) -> Result<Option<(String, Vec<String>
     })();
     let _ = std::fs::remove_file(&index);
     result
+}
+
+/// Clears an oversized snapshot store only when no integration baseline holds it.
+/// Active baselines retain the whole store, including rules and attached evidence.
+/// Malformed retention state stops cleanup rather than deleting possible baselines.
+fn cleanup(state: &Path, limit: u64) -> Result<()> {
+    let store = objects(state);
+    if size(&store) > limit && !baselines::has_active(state)? {
+        std::fs::remove_dir_all(store)?;
+    }
+    Ok(())
 }

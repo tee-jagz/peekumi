@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "groups": { "ui": ["shop/ui/**"], "db": ["shop/db/**"] },
+  "rules": [
+    {
+      "id": "ui-no-db",
+      "from": "ui",
+      "to": ["db"],
+      "kinds": ["imports"],
+      "message": "UI must not depend on DB"
+    }
+  ]
+}

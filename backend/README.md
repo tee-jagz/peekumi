@@ -7,6 +7,15 @@ The Rust backend serves the authenticated API. It reads committed Git objects an
 - `engine.rs`: Git snapshots, comparisons, directory descriptions and the control of the adapters. Its `rule_check` checks work from a start commit to a head. It uses the rules of the start commit, so work cannot hide a break when it changes the rules.
 - `relationships.rs`: Shared relationship evidence, relationship resolution and comparisons of revisions.
 - `rules.rs`: Validation of the committed dependency configuration, checks for violations, and the one-sentence summary of a rule check.
+- `worktree_baselines.rs`: Private integration baselines, scoped by profile, session, turn and repository. Retries keep the original source and rule revision. Active baselines hold the snapshot store against cleanup.
+- `integration_tokens.rs`: Named integration credentials. Each token permits five analysis routes for one registered repository. Private state keeps only the token hash.
+- `integration_http.rs`: The integration HTTP boundary. It checks the route, method, repository and request size before it queues repository work.
+- `integration_analysis.rs`: Baseline comparisons, frozen-rule findings, exceptions and the shared outcome contract.
+- `integration_export.rs`: Bounded snapshot tar streams and private source copies. It reads private Git objects and excludes restricted content.
+- `integration_evidence.rs`: Source-bound export receipts, accepted LCOV reports and open risk that stays visible through unknown coverage.
+- `integration_risk.rs`: Python score mapping from pinned crapper and accepted coverage. Missing function evidence stays unknown.
+- `integration_map.rs`: Real folder, file and declaration nodes, rule edges and explicit map limits.
+- `crapper_helper.py`: Isolated existing-coverage analysis. It verifies the installed parser and refuses runtime downloads.
 - `ask.rs`: Limited committed context and Claude conversations. For files and declarations, the context is the source, the diff, the static relationships and the code that calls them. For folders, the context is the README, the declarations and the diffs of changed files. Each conversation has all built-in tools disabled and uses low effort on a fast model. The answer comes as one whole reply or as a stream of events. Answers follow ASD-STE100 Simplified Technical English.
 - `lookup.rs`: The read-only lookup tools for Ask (`find_declarations`, `search_code`, `read_declaration`, `read_file`, `relationships`, `highlight`, `route`). They use Streamable HTTP MCP at `/mcp/ask`. The tools are open only while one answer runs, and they accept a maximum of 30 calls.
 - `audit.rs`: The saved list of proposed rules for one repository, and the rule audit that runs in the background. It has the audit agent's instructions. Each audit adds to the list. A rule that checks the same files counts once, and the owner's choices stay.

@@ -62,6 +62,8 @@ try {
     await page.locator("#connect").waitFor({ state: "visible" });
     errors.length = 0;
     await page.goto(url + "/#token=" + token);
+    // Let the token exchange set its session cookie before testing a reload.
+    await page.locator("#connect").waitFor({ state: "hidden" });
     await page.reload();
     const front = page.locator('.sheet[data-front="true"]');
     await front.locator(".pk-card").first().waitFor({ timeout: 45000 });

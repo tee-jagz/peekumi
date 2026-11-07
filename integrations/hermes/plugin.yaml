@@ -1,0 +1,42 @@
+name: peekumi-risk-map
+version: "0.1.0"
+description: >-
+  Show changed code, frozen dependency rules and measured Python CRAP in Hermes Desktop.
+  Reads repository snapshots through a local Peekumi service. Runs a configured coverage
+  command and report export only in a new private snapshot copy. Never runs inspected tests
+  in the user's checkout. Network calls use a repository-scoped Peekumi token.
+requires_hermes: ">=0.21.6"
+provides_tools:
+  - peekumi_impact
+  - peekumi_measure
+provides_hooks:
+  - pre_llm_call
+  - pre_verify
+  - post_llm_call
+  - on_session_finalize
+requires_env:
+  - PEEKUMI_TOKEN
+config_schema:
+  repository_id:
+    type: string
+    description: Registered Peekumi repository ID.
+  repository_path:
+    type: string
+    description: Absolute path of the registered repository.
+  peekumi_url:
+    type: string
+    default: "http://127.0.0.1:4317"
+  crap_threshold:
+    type: number
+    default: 30
+  gate_mode:
+    type: string
+    enum: [nudge, off]
+    default: nudge
+  coverage_command:
+    type: array
+    description: Coverage command arguments, run only in a new private snapshot copy.
+  report_command:
+    type: array
+    description: Report export arguments. Must write a fresh lcov.info in the private copy.
+capabilities: []

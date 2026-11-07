@@ -2,6 +2,24 @@
 
 Peekumi keeps its current map and review workflow. One private server can examine several local Git checkouts. Agents continue to work in isolated worktrees. A connected browser has owner access or read-only access to all registered repositories. Register only the repos that are for those devices. Device permissions for each repository are not available yet.
 
+## Integration access
+
+Register the repository before you create an integration token.
+Use its name, full path or registered ID.
+
+```sh
+peekumi token create --name hermes --repo my-repository
+peekumi token list
+peekumi token revoke hermes
+```
+
+Creation prints the token once.
+Keep it in the integration client's secret settings.
+The state directory stores only its hash.
+An integration token permits the integration analysis routes for one repository.
+It cannot use Source, Ask, workflow or repository management routes.
+Revocation takes effect on the next request.
+
 ## Ask your agent
 
 “Set up Peekumi for these local repositories and make it accessible from my phone.” Give the agent this repository/distribution and `skills/peekumi-setup/SKILL.md`.

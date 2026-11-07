@@ -1,0 +1,7 @@
+name: peekumi-hook-probe
+version: "0.0.1"
+description: Local lifecycle probe. Makes no network calls and runs no tools.
+provides_hooks:
+  - pre_llm_call
+  - pre_verify
+  - post_llm_call

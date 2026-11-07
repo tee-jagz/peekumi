@@ -1,5 +1,9 @@
 # Language adapters
 
+Python, TypeScript and Rust results include internal `import_sites` metadata.
+Each record names the written import and its exact source line.
+Integration rule evidence uses these records without changing the existing import payload.
+
 Language adapters change source syntax into a shared model. This model contains symbols, documentation, explicit types and imports. The Rust, Python and TypeScript adapters implement the same LanguageAdapter contract. The repository engine controls Git access, the cache and comparisons. These functions do not depend on the language.
 
 - `mod.rs`: The interface, the registry, the capabilities and the shared resolution context.

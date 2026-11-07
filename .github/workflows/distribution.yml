@@ -18,7 +18,7 @@ jobs:
           # Ubuntu 22.04 (glibc 2.35) keeps the Linux binaries compatible with older systems.
           - { target: linux-x64, os: ubuntu-22.04, browser: true }
           - { target: linux-arm64, os: ubuntu-22.04-arm, browser: false }
-          - { target: darwin-arm64, os: macos-14, browser: true }
+          - { target: darwin-arm64, os: macos-15, browser: true }
           - { target: darwin-x64, os: macos-15-intel, browser: false }
     runs-on: ${{ matrix.os }}
     steps:

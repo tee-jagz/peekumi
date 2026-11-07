@@ -1,0 +1,21 @@
+{
+  "name": "peekumi-demo-video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs",
+    "prepare:video": "node prepare.mjs",
+    "test": "node --test timeline.test.mjs",
+    "verify": "node verify.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.541",
+    "@remotion/renderer": "4.0.541",
+    "hyperframes": "0.9.19",
+    "remotion": "4.0.541",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "gsap": "3.13.0"
+  }
+}
