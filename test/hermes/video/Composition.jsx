@@ -142,6 +142,7 @@ function Review(props) {
         <div
           style={{
             fontSize: 23,
+            visibility: intro || outro ? "hidden" : "visible",
             fontWeight: 700,
             transform: `translateY(${interpolate(elapsed, [0, 0.4], [4, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })}px)`,
             opacity: interpolate(elapsed, [0, 0.3], [0, 1], {
@@ -152,7 +153,14 @@ function Review(props) {
         >
           {chapter.title}
         </div>
-        <div style={{ fontSize: 16, marginTop: 6, color: "#bdcde1" }}>
+        <div
+          style={{
+            fontSize: 16,
+            marginTop: 6,
+            color: "#bdcde1",
+            visibility: intro || outro ? "hidden" : "visible",
+          }}
+        >
           {chapter.detail}
         </div>
         {(intro || outro) && (
