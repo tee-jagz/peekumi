@@ -100,6 +100,42 @@ try {
     .first()
     .waitFor();
   await page.screenshot({ path: path.join(artifacts, "pane-unsupported.png") });
+  for (const [name, label] of [
+    ["image.png", "binary · source omitted"],
+    ["large.ts", "large file · source omitted"],
+    ["link.ts", "symlink · not followed"],
+    [".env", "restricted · source hidden"],
+    ["vendor", "submodule · not expanded"],
+  ]) {
+    const node = page.getByRole("button", { name, exact: true });
+    if (!(await node.getByText(label, { exact: true }).isVisible()))
+      throw Error("Missing graph label: " + label);
+    await node.click();
+    await page.getByText(label, { exact: true }).last().waitFor();
+  }
+  await page.screenshot({
+    path: path.join(artifacts, "pane-special-files.png"),
+  });
+  // A cold analysis may take longer than two poll intervals. Do not queue more.
+  const waiting = [];
+  await page.route("**/data.json", (route) => {
+    waiting.push(route);
+    if (waiting.length > 1) return route.continue();
+  });
+  await page.waitForRequest("**/data.json");
+  await page.waitForTimeout(6500);
+  if (waiting.length !== 1)
+    throw Error(`Slow analysis queued ${waiting.length} overlapping requests`);
+  for (let click = 0; click < 3; click++)
+    await page.getByRole("button", { name: "Refresh evidence" }).click();
+  await page.waitForTimeout(200);
+  if (waiting.length !== 1)
+    throw Error("Manual refresh queued overlapping requests");
+  const refreshed = page.waitForResponse("**/data.json");
+  await waiting[0].continue();
+  await refreshed;
+  await page.getByText("passed", { exact: true }).waitFor();
+  await page.unroute("**/data.json");
   await page.setViewportSize({ width: 480, height: 900 });
   await page.getByRole("button", { name: "Refresh evidence" }).click();
   await page.getByText("passed", { exact: true }).waitFor();

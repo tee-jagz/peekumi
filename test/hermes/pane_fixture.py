@@ -10,6 +10,7 @@ out.mkdir(parents=True, exist_ok=True)
 fixture = IntegrationTests()
 fixture.setUp()
 try:
+    fixture.add_special_files()
     fixture.add_refund()
     cart = fixture.repo / "shop/ui/cart.py"
     cart.write_text("from shop.db.orders import save\n" + cart.read_text())

@@ -1,5 +1,5 @@
 /** @module Native Hermes pane for revision-bound Peekumi risk evidence. Uses only the public SDK. */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { host, useValue, Button, EmptyState } from "@hermes/plugin-sdk";
 
 const h = React.createElement;
@@ -336,14 +336,18 @@ function Graph({ data, selected, select, zoom }) {
           const label =
             node.name.length > 22 ? node.name.slice(0, 21) + "…" : node.name;
           const annotation =
-            !symbol &&
-            (node.analysis?.includes("restricted")
-              ? "restricted · source hidden"
+            node.kind === "file" &&
+            ([
+              "restricted",
+              "binary",
+              "large file",
+              "symlink",
+              "submodule",
+            ].some((kind) => node.analysis?.startsWith(kind))
+              ? node.analysis
               : !node.path.endsWith(".py")
                 ? "CRAP not available"
-                : node.analysis?.includes("symlink")
-                  ? "symlink · not followed"
-                  : "");
+                : "");
           return h(
             "g",
             {
@@ -552,8 +556,10 @@ export function RiskPane({ ctx }) {
   const [selected, select] = useState(null);
   const [zoom, setZoom] = useState(0.9);
   const [refresh, setRefresh] = useState(0);
+  const inFlight = useRef(null);
   useEffect(() => {
     let alive = true;
+    let loading = false;
     setData({
       status: "unavailable",
       limits: [
@@ -562,11 +568,23 @@ export function RiskPane({ ctx }) {
     });
     select(null);
     const load = async () => {
-      if (!session) return;
+      if (!session || !alive || loading) return;
+      loading = true;
       try {
-        const result = await ctx.rest(
-          "/map?session_id=" + encodeURIComponent(session),
+        // A refresh or session switch retires the old effect, but its HTTP request
+        // still runs. Wait for it before issuing the current session's request.
+        while (inFlight.current) await inFlight.current.catch(() => {});
+        if (!alive) return;
+        const pending = Promise.resolve().then(() =>
+          ctx.rest("/map?session_id=" + encodeURIComponent(session)),
         );
+        inFlight.current = pending;
+        let result;
+        try {
+          result = await pending;
+        } finally {
+          inFlight.current = null;
+        }
         if (alive) {
           setData(result);
           select((old) => {
@@ -583,6 +601,8 @@ export function RiskPane({ ctx }) {
             status: "unavailable",
             limits: ["Peekumi did not answer"],
           });
+      } finally {
+        loading = false;
       }
     };
     load();
