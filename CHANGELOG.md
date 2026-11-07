@@ -4,6 +4,8 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Render the Hermes demo with Remotion and HyperFrames. Keep native playback speed and the current Google narration.
+
 - Lead the Hermes demo with the repository overview, focused review and verified agent repair.
 
 - Show actual Hermes interactions with cursor actions and smooth camera moves in the demo.

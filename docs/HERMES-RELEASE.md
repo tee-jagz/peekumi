@@ -19,18 +19,22 @@ That commit must become public before the catalog entry can work.
 The ZIP contains only committed plugin files.
 It has no snapshot state, coverage reports or tokens.
 
-The current review video is `test-results/hermes/native-demo-benefits.mp4`.
+The current review video is `test-results/hermes/release-google/peekumi-remotion.mp4`.
 It stays below the 90-second limit.
 The story starts with the user's repository overview and focused review.
 It shows file-to-function inspection, specific findings and a verified agent repair.
 The voice is Charon. Only the narration text goes to Google.
 Google TTS produces review audio. It is not a plugin runtime dependency.
 The graph has the main pane width. The diff supports the graph.
-The edit uses continuous native video of the real Hermes turn.
+The edit uses continuous native video of the real Hermes turn at its original speed.
+Remotion renders camera and cursor motion at 60 frames per second.
+HyperFrames renders the short identity overlay. FFmpeg encodes the delivery file.
+The yt-dlp importer verifies a loopback transfer of our own footage.
+The existing Google audio stays unchanged. Whisper is not used.
 It shows actual edits, tool updates, cursor actions and evidence selections.
 Smooth camera moves follow the graph, rule evidence and supporting diff.
 The caption states that time, camera and cursor annotations are edited.
-The revised narration uses the same Google voice, with new text about user benefits.
+The narration uses Google Charon and describes user benefits.
 The edited video copies that narration unchanged. Its packet hash is checked.
 Setup documents the required Peekumi service.
 The video has no language-support segment. It makes no future-support claim.
@@ -43,6 +47,7 @@ The earlier macOS-narrated cut remains in `test-results/hermes/native-demo-v2.mp
 The earlier Google-narrated full-window cut remains in `test-results/hermes/native-demo-google.mp4`.
 The static close-up cut remains in `test-results/hermes/native-demo-focused.mp4`.
 The earlier technical motion cut remains in `test-results/hermes/native-demo-motion.mp4`.
+The first benefit cut remains in `test-results/hermes/native-demo-benefits.mp4`.
 Approve this disclosed take, or record a model-driven take with your own provider.
 
 The plugin README contains native screenshots of our own fixture.

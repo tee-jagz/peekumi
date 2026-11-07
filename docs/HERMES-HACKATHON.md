@@ -92,7 +92,11 @@ The graph has the main pane width. Native checks keep the changed refund node vi
 Only narration text goes to Google. The plugin has no Google runtime dependency.
 The latest cut starts with the user benefit: keep repo knowledge while agents change code.
 It shows an overview, file-to-function inspection, specific findings and a verified repair.
-It uses continuous native video with actual edits and tool updates.
+It uses continuous native video with actual edits and tool updates at their original speed.
+Remotion renders camera and cursor motion at 60 frames per second.
+HyperFrames supplies the identity overlay. FFmpeg encodes the delivery file.
+The yt-dlp source importer verifies our own loopback video transfer.
+The current Google narration is unchanged. Whisper is not used.
 Cursor actions select a file, its function and the red rule edge.
 The benefit story has no language-support segment.
 Smooth camera moves follow the spoken evidence. Time and annotations are disclosed.

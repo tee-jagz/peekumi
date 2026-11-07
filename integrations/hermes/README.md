@@ -201,7 +201,8 @@ The graph has the main pane width, with the code diff as supporting detail.
 The review edit shows continuous native video, including actual edits and tool updates.
 The story shows the user's repository overview, focused review and verified agent repair.
 Cursor actions move from file to function and open the rule evidence.
-Smooth camera moves follow the spoken evidence. Video annotations do not change measured data.
+Remotion renders smooth camera and cursor motion over continuous native footage.
+HyperFrames supplies the short identity overlay. Video annotations do not change measured data.
 The benefit story uses new narration in the same Google Charon voice.
 Video editing keeps that narration stream unchanged.
 It needs the owner's approval before publication.

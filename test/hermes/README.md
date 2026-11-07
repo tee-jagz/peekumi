@@ -135,3 +135,11 @@ It has no language-support segment. Required map labels remain in the product.
 The edit copies the new narration stream without changing it.
 Artifacts use `benefit-capture/` and `benefit-demo/`. Earlier takes stay available.
 The result is `native-demo-benefits.mp4`.
+
+## Remotion and HyperFrames edit
+
+The current edit uses the isolated package in [video/](video/README.md).
+It keeps the existing Google narration and omits Whisper.
+The native recording follows the narration timing at its original speed.
+The final render uses 60 frames per second and one continuous video track.
+The package README gives the pinned install, render and check commands.

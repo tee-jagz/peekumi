@@ -1,0 +1,94 @@
+<!-- HyperFrames renders a small identity strip. Native footage stays visible above it. -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 72px;
+        overflow: hidden;
+        background: #101827;
+        font-family: Arial, sans-serif;
+        color: #f7f9ff;
+      }
+      #identity {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        padding: 0 26px;
+      }
+      #name {
+        font-size: 27px;
+        font-weight: 700;
+        letter-spacing: -0.7px;
+      }
+      #divider {
+        height: 25px;
+        width: 1px;
+        background: #3c4b65;
+      }
+      #promise {
+        font-size: 20px;
+        color: #c3d1e6;
+      }
+      #line {
+        position: absolute;
+        left: 26px;
+        bottom: 9px;
+        height: 2px;
+        width: 1228px;
+        background: #63a8ff;
+        transform-origin: left;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="peekumi-brand"
+      data-width="1280"
+      data-height="72"
+      data-start="0"
+      data-duration="2"
+      data-fps="60"
+    >
+      <div
+        id="identity"
+        class="clip"
+        data-start="0"
+        data-duration="2"
+        data-track-index="1"
+      >
+        <span id="name">Peekumi</span><span id="divider"></span
+        ><span id="promise">Keep the big picture.</span>
+      </div>
+      <div
+        id="line"
+        class="clip"
+        data-start="0"
+        data-duration="2"
+        data-track-index="2"
+      ></div>
+    </div>
+    <script src="gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.from(
+        "#identity",
+        { opacity: 0, y: 9, duration: 0.55, ease: "power3.out" },
+        0,
+      )
+        .from("#line", { scaleX: 0, duration: 1.35, ease: "power2.out" }, 0.15)
+        .set({}, {}, 2);
+      window.__timelines = { "peekumi-brand": tl };
+    </script>
+  </body>
+</html>
