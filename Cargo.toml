@@ -11,7 +11,7 @@ path = "backend/main.rs"
 [dependencies]
 anyhow = "1"
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "signal"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "sync", "signal"] }
 tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -27,7 +27,7 @@ clap = { version = "4", features = ["derive", "env"] }
 syn = { version = "2", features = ["full", "visit"] }
 quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
-p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
+p256 = { version = "0.14", features = ["ecdh", "ecdsa"] }
 hkdf = "0.12"
 aes-gcm = "0.10"
 base64 = "0.22"

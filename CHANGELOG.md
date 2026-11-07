@@ -4,6 +4,9 @@ This file records the changes in each release of Peekumi. The format follows [Ke
 
 ## [Unreleased]
 
+- Update P-256 and Tokio to remove known Rust dependency advisories.
+- Build the macOS ARM package on the supported macOS 15 runner.
+
 - Measure both revisions of existing Hermes function edits. Preserve unknown baseline failures and retry evidence.
 
 - Bound export headers, allow cold analysis time, and handle invalid Hermes nudge caps.
