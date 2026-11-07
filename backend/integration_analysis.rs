@@ -188,6 +188,7 @@ impl Repository {
         Ok(
             json!({"status":status,"limits":limits,"baseline":start.id,"baseline_sha":start.sha,"rules_sha":start.rules_sha,"snapshot_sha":sha,
             "coverage_sha":crate::integration_evidence::for_snapshot(&self.state,&sha)?.filter(|e|e.valid).map(|e|e.snapshot),
+            "baseline_coverage_sha":crate::integration_evidence::for_snapshot(&self.state,&start.sha)?.filter(|e|e.valid).map(|e|e.snapshot),
             "already_changed":start.already_changed,"changed_files":files,"changed_symbols":symbols,"dependents":dependents,
             "findings":findings,"rule_check":check,"focus":focus,"threshold":threshold}),
         )

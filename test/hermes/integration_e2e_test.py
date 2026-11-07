@@ -13,7 +13,10 @@ import tarfile
 import subprocess
 import sys
 import tempfile
+import time
+import shlex
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from jsonschema import Draft202012Validator
 
 import gate_test
@@ -109,6 +112,81 @@ class IntegrationTests(unittest.TestCase):
     def add_refund(self):
         cart = self.repo / "shop/ui/cart.py"
         cart.write_text(cart.read_text() + REFUND)
+
+    def add_special_files(self):
+        (self.repo / "image.png").write_bytes(b"PNG\0binary fixture")
+        (self.repo / "large.ts").write_text("x" * (512 * 1024 + 1))
+        (self.repo / "link.ts").symlink_to("/etc/passwd")
+        (self.repo / ".env").write_text("FIXTURE=hidden\n")
+        self.git("update-index", "--add", "--cacheinfo", "160000," + self.git("rev-parse", "HEAD") + ",vendor")
+        self.git("commit", "-m", "Add fixture submodule")
+
+    def test_existing_function_gets_independent_baseline_and_current_measurements(self):
+        cart = self.repo / "shop/ui/cart.py"
+        cart.write_text(cart.read_text().replace("return total(amount)", "return total(amount) if amount else 0"))
+        result = self.measurement()
+        self.assertEqual(result["status"], "passed", result["limits"])
+        symbol = next(s for s in result["changed_symbols"] if s["name"] == "cart_total")
+        self.assertEqual(symbol["before"]["state"], "measured")
+        self.assertEqual(symbol["after"]["state"], "measured")
+        previous = result["baseline_measurement"]["measurement"]
+        current = result["measurement"]
+        self.assertEqual(previous["snapshot"], result["baseline_sha"])
+        self.assertEqual(current["snapshot"], result["snapshot_sha"])
+        self.assertNotEqual(previous["snapshot"], current["snapshot"])
+        self.assertNotEqual(previous["run_id"], current["run_id"])
+        # A known baseline is reused, but current coverage gets a fresh run.
+        repeated = self.measurement()
+        self.assertNotIn("baseline_measurement", repeated)
+        self.assertNotEqual(repeated["measurement"]["run_id"], current["run_id"])
+
+    def test_failed_baseline_tests_do_not_borrow_current_coverage(self):
+        cart = self.repo / "shop/ui/cart.py"
+        cart.write_text(cart.read_text().replace("return total(amount)", "return total(amount) if amount else 0"))
+        script = self.state / "measure-existing.py"
+        script.write_text("import sys\nsys.path.insert(0, '.')\nfrom shop.ui.cart import cart_total\nassert cart_total(None) == 0\n")
+        result = measure(self.client, self.baseline, self.state / "client-copies",
+            [self.measure_python, "-m", "coverage", "run", str(script)],
+            [self.measure_python, "-m", "coverage", "lcov", "-o", "lcov.info"])
+        self.assertFalse(result["baseline_measurement"]["measurement_accepted"])
+        self.assertTrue(result["measurement_accepted"])
+        self.assertEqual(result["status"], "incomplete")
+        symbol = next(s for s in result["changed_symbols"] if s["name"] == "cart_total")
+        self.assertEqual(symbol["before"]["state"], "unknown")
+        self.assertEqual(symbol["after"]["state"], "measured")
+
+    def test_measurement_keeps_original_current_sha_during_baseline_run_and_recovery(self):
+        from peekumi_hermes.measure import resume_pending
+        cart = self.repo / "shop/ui/cart.py"
+        cart.write_text(cart.read_text().replace("return total(amount)", "return total(amount) if amount else 0"))
+        client = self.client
+        class LostBaselineReply:
+            def call(self, endpoint, *args, **kwargs):
+                result = client.call(endpoint, *args, **kwargs)
+                if endpoint == "coverage":
+                    raise Unavailable("Lost baseline acknowledgement")
+                return result
+        folder = self.state / "client-copies"
+        commands = ([self.measure_python, "-m", "coverage", "run", "-m", "pytest", "-q"],
+                    [self.measure_python, "-m", "coverage", "lcov", "-o", "lcov.info"])
+        with self.assertRaises(Unavailable):
+            measure(LostBaselineReply(), self.baseline, folder, *commands)
+        resume_pending(client, folder)
+        self.assertEqual(list(folder.glob("run-*")), [])
+        # This next turn starts from an unmeasured revision. Edit during its baseline run.
+        turn = client.call("baseline", {"profile":"test", "session":"race", "turn":"race"})
+        cart.write_text(cart.read_text().replace("else 0", "else 1"))
+        original = client.call("impact", baseline=turn["id"])["snapshot_sha"]
+        class ConcurrentEdit:
+            def call(self, endpoint, *args, **kwargs):
+                result = client.call(endpoint, *args, **kwargs)
+                if endpoint == "coverage" and args[0]["snapshot"] == turn["sha"]:
+                    cart.write_text(cart.read_text() + "\n# Newer checkout tree B\n")
+                return result
+        result = measure(ConcurrentEdit(), turn["id"], folder, *commands)
+        self.assertEqual(result["measurement"]["snapshot"], original)
+        self.assertNotEqual(result["snapshot_sha"], original)
+        self.assertEqual(result["status"], "incomplete")
 
     def test_measured_42_and_coverage_only_rerun_clear_findings(self):
         self.add_refund()
@@ -217,10 +295,48 @@ class IntegrationTests(unittest.TestCase):
         self.start({**self.server_env, "PEEKUMI_CRAPPER_PATH": str(self.state / "not-installed-crapper")})
         self.client = Client(self.url, self.client.token, self.repo_id, timeout=30)
         self.add_refund()
+        cart = self.repo / "shop/ui/cart.py"
+        cart.write_text(cart.read_text().replace("return total(amount)", "return total(amount) if amount else 0"))
         result = self.measurement()
         self.assertTrue(result["measurement_accepted"])
         self.assertEqual(result["status"], "unavailable")
         self.assertTrue(any("crapper is unavailable" in limit for limit in result["limits"]))
+        self.assertEqual(result["baseline_coverage_sha"], result["baseline_sha"])
+        repeated = self.measurement()
+        self.assertNotIn("baseline_measurement", repeated)
+        self.assertEqual(repeated["status"], "unavailable")
+
+    def test_control_routes_wait_for_cold_scoring_in_the_shared_worker_queue(self):
+        self.add_refund()
+        result = self.measurement()
+        self.stop()
+        binary = self.state / "slow-analyzer"
+        binary.mkdir()
+        crapper = binary / "crapper"
+        crapper.write_text("Fixture analyzer marker\n")
+        marker = binary / "started"
+        python = binary / "python"
+        # The service invokes its configured analyzer interpreter. This trusted stub
+        # holds that worker longer than the old 30-second control-route timeout.
+        python.write_text("#!/bin/sh\nprintf started > " + shlex.quote(str(marker)) + "\nsleep 32\nprintf '[]\\n'\n")
+        python.chmod(0o755)
+        self.start({**self.server_env, "PEEKUMI_CRAPPER_PATH":str(crapper)})
+        client = Client(self.url, self.client.token, self.repo_id)
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            scoring = workers.submit(client.call, "map", baseline=self.baseline)
+            deadline = time.monotonic() + 10
+            while not marker.exists():
+                self.assertLess(time.monotonic(), deadline, "Cold scorer did not start")
+                time.sleep(0.05)
+            started = time.monotonic()
+            baseline = workers.submit(client.call, "baseline", {"profile":"queue", "session":"queue", "turn":"queue"})
+            exported = client.call("export", baseline=self.baseline, snapshot=result["snapshot_sha"])
+            self.assertGreater(time.monotonic() - started, 30)
+            self.assertTrue(exported["run_id"])
+            self.assertTrue(baseline.result()["id"])
+            graph = scoring.result()
+            self.assertEqual(graph["status"], "findings")
+            self.assertTrue(any(finding.get("stale") for finding in graph["findings"]))
 
     def test_export_reads_private_objects_and_omits_restricted_files_and_links(self):
         self.add_refund()
@@ -237,6 +353,21 @@ class IntegrationTests(unittest.TestCase):
         # A plain Git command cannot read this dirty snapshot from the checkout's store.
         result = subprocess.run(["git","-C",str(self.repo),"cat-file","-e",impact["snapshot_sha"]],capture_output=True)
         self.assertNotEqual(result.returncode,0)
+
+    def test_many_export_omissions_fit_the_http_header_and_remain_counted(self):
+        folder = self.repo / "links"
+        folder.mkdir()
+        for index in range(600):
+            (folder / (f"link-{index:03d}-" + "x" * 100 + ".ts")).symlink_to("/etc/passwd")
+        sha = self.impact()["snapshot_sha"]
+        exported = self.client.call("export", baseline=self.baseline, snapshot=sha)
+        self.assertTrue(any("additional export omissions" in limit for limit in exported["limits"]))
+        shown = len(exported["limits"]) - 1
+        omitted = int(exported["limits"][-1].split()[0])
+        self.assertEqual(shown + omitted, 600)
+        with tarfile.open(fileobj=io.BytesIO(exported["archive"])) as archive:
+            self.assertIn("shop/ui/cart.py", archive.getnames())
+            self.assertFalse(any(name.startswith("links/") for name in archive.getnames()))
 
     def test_map_has_real_folders_risk_evidence_rule_edges_and_unsupported_labels(self):
         self.add_refund()
@@ -255,6 +386,17 @@ class IntegrationTests(unittest.TestCase):
         edge = next(e for e in graph["edges"] if e.get("rule_break"))
         self.assertEqual(edge["rule_break"]["rule"],"ui-no-db")
         self.assertEqual(edge["rule_break"]["line"],1)
+
+    def test_special_file_labels_take_priority_over_language_availability(self):
+        self.add_special_files()
+        graph = self.client.call("map", baseline=self.baseline)
+        files = {n["path"]: n for n in graph["nodes"] if n["kind"] == "file"}
+        for path, label in {"image.png":"binary · source omitted", "large.ts":"large file · source omitted",
+                            "link.ts":"symlink · not followed", ".env":"restricted · source hidden",
+                            "vendor":"submodule · not expanded"}.items():
+            with self.subTest(path=path):
+                self.assertEqual(files[path]["reason"], label)
+                self.assertEqual(files[path]["analysis"], label)
 
     def test_large_map_aggregates_above_300_nodes(self):
         folder = self.repo / "large"

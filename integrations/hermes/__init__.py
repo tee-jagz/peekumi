@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from .gate import Gate, Store
+from .gate import Gate, Store, nudge_limit
 from .peekumi_client import Client, Unavailable
 from .measure import measure, resume_pending
 
@@ -40,7 +40,7 @@ def register(ctx):
     def verify(session_id="", attempt=0, **_):
         if gate.current(session_id) and in_repository():
             from hermes_cli.config import load_config_readonly
-            cap = max(0, int((load_config_readonly() or {}).get("agent", {}).get("max_verify_nudges", 3)))
+            cap = nudge_limit(load_config_readonly())
             return gate.verify(session_id, attempt, cap)
 
     def after(session_id="", turn_id="", **_):
@@ -79,7 +79,8 @@ def register(ctx):
         except (Unavailable, OSError, ValueError) as exc:
             if getattr(exc,"pending_run",None):
                 state["pending_measurement"] = exc.pending_run
-            state["result"] = gate.unavailable("Measurement unavailable; private evidence retained for recovery")
+            reason = str(exc) if isinstance(exc, Unavailable) else "Measurement could not complete"
+            state["result"] = gate.unavailable(reason)
             gate.save(kwargs.get("session_id", ""),state)
             return json.dumps(state["result"])
 

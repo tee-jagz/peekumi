@@ -8,14 +8,15 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 PLUGIN = Path(__file__).resolve().parents[2] / "integrations/hermes"
 spec = importlib.util.spec_from_file_location("peekumi_hermes", PLUGIN / "__init__.py", submodule_search_locations=[str(PLUGIN)])
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
-from peekumi_hermes.gate import Gate, Store
-from peekumi_hermes.peekumi_client import Client
+from peekumi_hermes.gate import Gate, Store, nudge_limit
+from peekumi_hermes.peekumi_client import Client, Unavailable
 
 
 class GateTests(unittest.TestCase):
@@ -25,6 +26,7 @@ class GateTests(unittest.TestCase):
         self.requests = []
         self.result = {"status": "findings", "findings": [{"id": "risk:refund", "message": "refund CRAP 42; add tests"}], "limits": []}
         self.http_status = 200
+        self.large_header = False
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -34,13 +36,15 @@ class GateTests(unittest.TestCase):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 owner.requests.append(("POST", self.path, body))
-                self.send_response(200)
+                self.send_response(owner.http_status)
                 self.end_headers()
                 self.wfile.write(json.dumps({"id": "base-" + body.get("turn", "released"), "sha": "a" * 40, "status": "incomplete", "limits": []}).encode())
 
             def do_GET(self):
                 owner.requests.append(("GET", self.path, None))
                 self.send_response(owner.http_status)
+                if owner.large_header:
+                    self.send_header("X-Peekumi-Limits", "x" * 70000)
                 self.end_headers()
                 self.wfile.write(json.dumps(owner.result).encode())
 
@@ -90,6 +94,46 @@ class GateTests(unittest.TestCase):
         self.assertEqual(self.gate.after("session", "turn")["status"], "unavailable")
         self.assertEqual(self.gate.after("session", "wrong-turn")["status"], "unavailable")
         self.assertEqual(self.gate.after("no-baseline", "turn")["status"], "unavailable")
+
+    def test_capture_outage_never_retries_after_edits_in_the_same_turn(self):
+        self.http_status = 503
+        first = self.gate.before("session", "turn")
+        self.assertEqual(first["result"]["status"], "unavailable")
+        self.http_status = 200
+        restarted = Gate(self.client, Store(self.folder.name), "profile-one")
+        self.assertEqual(restarted.before("session", "turn"), first)
+        self.assertEqual(len(self.requests), 1)
+        self.assertNotIn("baseline", restarted.current("session"))
+        self.assertIn("baseline", restarted.before("session", "next-turn"))
+
+    def test_null_and_invalid_nudge_caps_match_core_defaults(self):
+        self.gate.before("session", "turn")
+        for config in [None, [], {}, {"agent":None}, {"agent":[]},
+                       {"agent":{"max_verify_nudges":None}}, {"agent":{"max_verify_nudges":"invalid"}}]:
+            with self.subTest(config=config):
+                cap = nudge_limit(config)
+                self.assertEqual(cap, 3)
+                self.assertEqual(self.gate.verify("session", 0, cap)["action"], "continue")
+                self.assertIsNone(self.gate.verify("session", 3, cap))
+        self.assertEqual(nudge_limit({"agent":{"max_verify_nudges":-1}}), 0)
+        self.assertEqual(nudge_limit({"agent":{"max_verify_nudges":"2"}}), 2)
+
+    def test_oversized_http_headers_become_visible_unavailable(self):
+        self.large_header = True
+        with self.assertRaises(Unavailable):
+            self.client().call("impact", baseline="fixture")
+
+    def test_analysis_timeout_covers_both_server_runs_and_explicit_override_wins(self):
+        client = Client(self.client().url, "test-token", "repo-one")
+        with patch.object(client.opener, "open", wraps=client.opener.open) as opened:
+            client.call("impact", baseline="fixture")
+            client.call("map", baseline="fixture")
+            client.call("baseline", {"turn":"fixture"})
+        self.assertEqual([call.kwargs["timeout"] for call in opened.call_args_list], [300, 300, 300])
+        custom = self.client()
+        with patch.object(custom.opener, "open", wraps=custom.opener.open) as opened:
+            custom.call("impact", baseline="fixture")
+        self.assertEqual(opened.call_args.kwargs["timeout"], 0.2)
 
     def test_session_end_releases_pins_and_off_mode_observes_without_nudging(self):
         self.gate.before("session", "turn")

@@ -116,6 +116,7 @@
         "baseline_sha",
         "snapshot_sha",
         "coverage_sha",
+        "baseline_coverage_sha",
         "changed_files",
         "changed_symbols",
         "dependents",
@@ -127,6 +128,9 @@
         "baseline_sha": { "$ref": "#/$defs/sha" },
         "snapshot_sha": { "$ref": "#/$defs/sha" },
         "coverage_sha": {
+          "anyOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
+        },
+        "baseline_coverage_sha": {
           "anyOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }]
         },
         "changed_files": {

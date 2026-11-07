@@ -13,6 +13,9 @@ Do not claim that you created those changes.
 Call `peekumi_measure()` to measure coverage after an edit or a test change.
 Do not run a coverage command by hand.
 The tool runs the configured commands in a new private copy of the exact snapshot.
+For an existing changed function, it also measures the frozen baseline if needed.
+Each revision has its own copy and coverage report.
+Failed baseline tests keep the before score unknown.
 It records command failures as failed evidence.
 It binds the report to the source SHA that the copy contains.
 An edit in the checkout during measurement does not change that evidence.

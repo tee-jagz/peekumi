@@ -2,6 +2,35 @@
 use super::*;
 use base64::Engine as _;
 
+/// Keeps omission details below common HTTP header limits and counts the rest.
+fn limits_header(limits: &Value) -> String {
+    const MAX_HEADER: usize = 4096;
+    let encode =
+        |value: &Value| base64::engine::general_purpose::STANDARD.encode(value.to_string());
+    let full = encode(limits);
+    if full.len() <= MAX_HEADER {
+        return full;
+    }
+    let all = limits.as_array().map(Vec::as_slice).unwrap_or_default();
+    let summary = |count| {
+        json!(format!(
+            "{count} additional export omissions not listed in the header"
+        ))
+    };
+    let mut shown = vec![];
+    for item in all {
+        let mut candidate = shown.clone();
+        candidate.push(item.clone());
+        candidate.push(summary(all.len() - candidate.len()));
+        if encode(&json!(candidate)).len() > MAX_HEADER {
+            break;
+        }
+        shown.push(item.clone());
+    }
+    shown.push(summary(all.len() - shown.len()));
+    encode(&json!(shown))
+}
+
 async fn error(code: StatusCode, message: &str, gzip: bool) -> Response {
     json_response(
         code,
@@ -158,8 +187,7 @@ pub(super) async fn integration_request(
                         response.headers_mut().insert(name, header);
                     }
                 }
-                let encoded =
-                    base64::engine::general_purpose::STANDARD.encode(value["limits"].to_string());
+                let encoded = limits_header(&value["limits"]);
                 response
                     .headers_mut()
                     .insert("x-peekumi-limits", HeaderValue::from_str(&encoded).unwrap());
@@ -172,5 +200,53 @@ pub(super) async fn integration_request(
             json_response(StatusCode::OK, value, gzip, None).await
         }
         Err(message) => error(StatusCode::BAD_REQUEST, &message, gzip).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_limits_are_bounded_without_silent_omissions() {
+        for count in [1, 600, 5000] {
+            let limits: Vec<_> = (0..count)
+                .map(|i| format!("Export omitted {i}/{}: symlink", "長".repeat(2000)))
+                .collect();
+            let encoded = limits_header(&json!(limits));
+            assert!(encoded.len() <= 4096);
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .unwrap();
+            let value: Value = serde_json::from_slice(&decoded).unwrap();
+            assert_eq!(
+                value,
+                json!([format!(
+                    "{count} additional export omissions not listed in the header"
+                )])
+            );
+        }
+        let limits = json!(["Export omitted link.py: symlink"]);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(limits_header(&limits))
+            .unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), limits);
+        let limits: Vec<_> = (0..600)
+            .map(|i| format!("Export omitted {i}: symlink"))
+            .collect();
+        let encoded = limits_header(&json!(limits));
+        assert!(encoded.len() <= 4096);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap();
+        let shown: Vec<String> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(shown[0], limits[0]);
+        assert_eq!(
+            shown.last().unwrap(),
+            &format!(
+                "{} additional export omissions not listed in the header",
+                limits.len() - shown.len() + 1
+            )
+        );
     }
 }

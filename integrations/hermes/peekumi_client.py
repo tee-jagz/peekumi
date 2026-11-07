@@ -1,6 +1,7 @@
 """Bounded HTTP access to the local Peekumi analysis API. No hidden retries."""
 import json
 import base64
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
@@ -20,7 +21,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 class Client:
     """Use one repository-scoped credential, a timeout and explicit response limits."""
-    def __init__(self, url, token, repository, timeout=10):
+    def __init__(self, url, token, repository, timeout=None):
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise Unavailable("Invalid PEEKUMI_URL")
@@ -44,7 +45,10 @@ class Client:
             data = json.dumps({**body, "repo": self.repository}).encode()
             headers["Content-Type"] = "application/json"
         try:
-            with self.opener.open(Request(url, data=data, headers=headers), timeout=self.timeout) as response:
+            # Every operation shares the repository worker. Allow a queued two-revision
+            # check plus this request's two scorers (4 x 60 seconds), with headroom.
+            timeout = self.timeout if self.timeout is not None else 300
+            with self.opener.open(Request(url, data=data, headers=headers), timeout=timeout) as response:
                 limit = 64 * 1024 * 1024 if endpoint == "export" else 16 * 1024 * 1024
                 raw = response.read(limit + 1)
                 if len(raw) > limit:
@@ -57,5 +61,5 @@ class Client:
         except HTTPError as exc:
             exc.close()
             raise Unavailable(f"Peekumi returned HTTP {exc.code}") from None
-        except (URLError, OSError, ValueError) as exc:
+        except (URLError, OSError, ValueError, HTTPException):
             raise Unavailable("Peekumi did not return valid evidence") from None

@@ -8,6 +8,16 @@ import threading
 from .peekumi_client import Unavailable
 
 
+def nudge_limit(config):
+    """Match Hermes' cap default for absent, null or invalid agent settings."""
+    agent = config.get("agent") if isinstance(config, dict) else None
+    value = agent.get("max_verify_nudges") if isinstance(agent, dict) else None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return 3
+
+
 class Store:
     """Save latest session evidence atomically in private plugin state, without secrets."""
     def __init__(self, root):
@@ -54,7 +64,7 @@ class Gate:
         """Capture once per turn. A failed capture never becomes a baseline after editing."""
         with self.store.lock:
             state = self.current(session)
-            if state and state["turn"] == turn and state.get("baseline", {}).get("id"):
+            if state and state["turn"] == turn:
                 return state
             state = {"turn": turn, "session": session, "profile": self.profile, "exhaust_pending": False}
             try:

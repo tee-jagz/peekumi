@@ -85,7 +85,15 @@ impl Repository {
                 "folder:{}",
                 path.rsplit_once('/').map(|(p, _)| p).unwrap_or("")
             );
-            nodes.insert(file_id.clone(), json!({"id":file_id,"kind":"file","path":path,"name":parts.last(),"parent":parent,"changed":changed.contains(&path),"analysis":current.analysis,"reason":if path.ends_with(".py"){current.analysis.clone()}else{"CRAP not available for this language".into()},"functions":functions.iter().take(60).collect::<Vec<_>>(),"function_count":functions.len(),"crap":null}));
+            let omitted = ["restricted", "symlink", "submodule", "large file", "binary"]
+                .iter()
+                .any(|kind| current.analysis.starts_with(kind));
+            let reason = if path.ends_with(".py") || omitted {
+                current.analysis.as_str()
+            } else {
+                "CRAP not available for this language"
+            };
+            nodes.insert(file_id.clone(), json!({"id":file_id,"kind":"file","path":path,"name":parts.last(),"parent":parent,"changed":changed.contains(&path),"analysis":current.analysis,"reason":reason,"functions":functions.iter().take(60).collect::<Vec<_>>(),"function_count":functions.len(),"crap":null}));
         }
         let symbol_data: Vec<_> = nodes
             .values()

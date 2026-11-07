@@ -41,13 +41,34 @@ def unpack(archive, root):
 
 
 def measure(client, baseline, private_root, coverage_command, report_command, threshold=30, timeout=120):
-    """Run the configured commands in a new snapshot copy and submit their exact exits.
+    """Measure both revisions when a changed existing function lacks baseline evidence.
 
-    The measurement client attests fresh-folder provenance. The service binds the report
-    to its one-use export receipt. A failed submission keeps the private copy for recovery.
+    Capture the current SHA before either run. Concurrent checkout edits never move
+    either measurement. Failed baseline tests stay unknown, rather than reusing the
+    current revision's coverage. New functions need only the current measurement.
     """
     impact = client.call("impact", baseline=baseline, threshold=threshold)
     sha = impact["snapshot_sha"]
+    needs_baseline = not impact.get("baseline_coverage_sha") and any(symbol.get("path", "").endswith(".py")
+                         and symbol.get("kind") in {"function", "method"}
+                         and symbol.get("before", {}).get("state") == "unknown"
+                         for symbol in impact.get("changed_symbols", []))
+    previous = None
+    if needs_baseline:
+        previous = measure_snapshot(client, baseline, impact["baseline_sha"], private_root,
+                                    coverage_command, report_command, timeout)
+    current = measure_snapshot(client, baseline, sha, private_root,
+                               coverage_command, report_command, timeout)
+    result = client.call("impact", baseline=baseline, threshold=threshold)
+    return {**result, **current, **({"baseline_measurement": previous} if previous else {})}
+
+
+def measure_snapshot(client, baseline, sha, private_root, coverage_command, report_command, timeout):
+    """Submit one exact revision with a one-use export receipt and fresh-folder proof.
+
+    Keep the private copy for recovery only until the service records its evidence.
+    A successful acknowledgement consumes the receipt, including failed test runs.
+    """
     exported = client.call("export", baseline=baseline, snapshot=sha)
     run = exported.get("run_id")
     if not run or exported.get("snapshot") != sha:
@@ -92,8 +113,7 @@ def measure(client, baseline, private_root, coverage_command, report_command, th
         except Unavailable:
             raise Unavailable("Measurement evidence is waiting for submission", pending_run=run) from None
         accepted = True  # The server recorded success or failure and consumed the receipt.
-        result = client.call("impact", baseline=baseline, threshold=threshold)
-        return {**result, "measurement": {key: evidence[key] for key in ["snapshot", "run_id", "test_exit", "export_exit", "report_hash"]},
+        return {"measurement": {key: evidence[key] for key in ["snapshot", "run_id", "test_exit", "export_exit", "report_hash"]},
                 "measurement_accepted": response.get("accepted", False), "export_limits": exported["limits"]}
     finally:
         if accepted:

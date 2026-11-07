@@ -56,6 +56,10 @@ For example, this schema selects the impact response:
 | `GET /api/integrations/impact` | `repo`, `baseline`, optional `threshold` and `focus` | `impact` |
 | `GET /api/integrations/map` | Same query as impact | `map` |
 
+Impact returns `baseline_coverage_sha` when the frozen tree has valid coverage evidence.
+The client reuses that report when scoring is unavailable or a symbol cannot be matched.
+It retries failed baseline tests on an explicit measurement call.
+
 All routes require a repository-scoped integration bearer token.
 Owner and reader credentials retain their existing routes.
 The integration credential cannot use those routes.
