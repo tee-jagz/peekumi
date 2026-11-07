@@ -40,8 +40,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prefix",type=Path,required=True)
     args = parser.parse_args()
-    if sys.version_info < (3,14):
-        parser.error("Use Python 3.14 for the pinned parser archive")
+    if sys.version_info[:2] != (3,14):
+        parser.error("Use Python 3.14 for the locked wheels and pinned parser archive")
     prefix = args.prefix.expanduser().resolve()
     if prefix.exists():
         parser.error("Use a new installation folder; existing installations are not overwritten")
@@ -60,8 +60,13 @@ def main():
     venv.EnvBuilder(with_pip=True).create(prefix/"venv")
     binary = prefix/"venv"/("Scripts" if system=="windows" else "bin")
     python = binary/("python.exe" if system=="windows" else "python")
-    subprocess.run([str(python),"-m","pip","install",str(cache/("crapper-"+REVISION)),
-        "tree-sitter==0.26.0","tree-sitter-language-pack==1.23.1","coverage==7.17.2","pytest==9.2.0","edn_format==0.8.0"],check=True)
+    # Hash-check the full dependency graph, including the local build backend.
+    # Wheels avoid isolated source builds that could fetch unpinned build tools.
+    lock = Path(__file__).with_name("requirements-crapper.lock")
+    subprocess.run([str(python),"-m","pip","--isolated","install","--disable-pip-version-check",
+        "--index-url","https://pypi.org/simple","--require-hashes","--only-binary=:all:","-r",str(lock)],check=True)
+    subprocess.run([str(python),"-m","pip","--isolated","install","--disable-pip-version-check",
+        "--no-index","--no-deps","--no-build-isolation",str(cache/("crapper-"+REVISION))],check=True)
     parser_archive = cache/("parsers-"+target+".tar.zst")
     fetch(f"https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.23.1/parsers-{target}.tar.zst",parser_archive,PARSER_HASHES[target])
     parser_cache = prefix/"parser-cache"
