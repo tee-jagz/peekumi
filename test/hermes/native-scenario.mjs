@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { spawn } from "node:child_process";
 import { recordMotion } from "./motion-capture.mjs";
+import { recordFramework } from "./video/capture.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -238,6 +239,17 @@ export async function createScenario(root, artifacts) {
     providerUrl: `http://127.0.0.1:${server.address().port}/v1`,
     async run(page) {
       const pane = page.getByRole("region", { name: "Peekumi Risk Map" });
+      if (process.env.PEEKUMI_VIDEO_CAPTURE === "framework")
+        return recordFramework(page, {
+          artifacts,
+          release,
+          receipt: () => ({
+            measurements,
+            gate_feedback: gateFeedback,
+            nudge_received: nudgeSeen,
+            scripted_provider: true,
+          }),
+        });
       if (process.env.PEEKUMI_NATIVE_MOTION)
         return recordMotion(page, {
           artifacts,
