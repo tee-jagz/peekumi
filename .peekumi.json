@@ -310,5 +310,59 @@
       "kinds": ["imports", "calls", "implements", "inherits"],
       "message": "A language adapter must not use a different language adapter. Put shared code in the adapter contract."
     }
-  ]
+  ],
+  "checks": {
+    "prepare": {
+      "command": [
+        "sh",
+        "-c",
+        "cargo vendor --locked \"$PEEKUMI_VERIFY_CACHE/vendor\" > \"$PEEKUMI_VERIFY_CACHE/cargo-config.toml\""
+      ],
+      "timeoutSeconds": 300,
+      "cacheKey": ["Cargo.lock"]
+    },
+    "items": [
+      {
+        "id": "lint-docs",
+        "name": "Docs writing rules",
+        "command": ["node", "scripts/lint-docs.mjs"],
+        "timeoutSeconds": 60
+      },
+      {
+        "id": "lint-ui",
+        "name": "UI components lint",
+        "command": ["node", "scripts/lint-ui.mjs"],
+        "timeoutSeconds": 60
+      },
+      {
+        "id": "unit-js",
+        "name": "JavaScript unit tests",
+        "command": [
+          "node",
+          "--test",
+          "test/model.test.mjs",
+          "test/docs.test.mjs",
+          "test/pilot.test.mjs",
+          "test/ui.test.mjs"
+        ],
+        "timeoutSeconds": 120
+      },
+      {
+        "id": "rust-fmt",
+        "name": "Rust format",
+        "command": ["cargo", "fmt", "--check"],
+        "timeoutSeconds": 60
+      },
+      {
+        "id": "rust-tests",
+        "name": "Rust unit tests",
+        "command": [
+          "sh",
+          "-c",
+          "if [ ! -f \"$PEEKUMI_VERIFY_CACHE/cargo-config.toml\" ]; then echo 'No cached crates yet: run Prepare and run once (peekumi verify --prepare).' >&2; exit 1; fi; cargo test --locked --offline --config \"$PEEKUMI_VERIFY_CACHE/cargo-config.toml\""
+        ],
+        "timeoutSeconds": 300
+      }
+    ]
+  }
 }
