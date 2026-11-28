@@ -94,7 +94,7 @@ impl Workflow {
             event(&mut c, "owner");
             list(v, "comments").push(c.clone());
             c.as_object_mut().unwrap().remove("history");
-            let first = json!({"text": c["text"], "anchors": [c["anchor"]], "at": now(), "delivered": false});
+            let first = json!({"id": format!("m{}", &crate::random_token()[..16]), "text": c["text"], "anchors": [c["anchor"]], "at": now(), "delivered": false});
             let run = json!({"id": id, "kind": "session", "agent": agent, "model": chosen["model"], "effort": chosen["effort"],
                 "graph": graph, "branch": branch, "base": base, "start": base, "watched": self.watched, "title": title,
                 "comments": [c], "rules": rules, "task": task, "status": "running", "createdAt": now(),
@@ -145,6 +145,22 @@ impl Workflow {
     /// another agent holds the repository, the message waits for it.
     fn session_message(&self, id: &str, body: &Value) -> Result<Value> {
         let content = text(body, "text", 12000)?.to_string();
+        // The app's own ID for the message: a send that it repeats (after a timeout, say) is
+        // kept once. A message with no ID gets one.
+        let message_id = match body["id"].as_str() {
+            Some(given) => {
+                ensure!(
+                    !given.is_empty()
+                        && given.len() <= 64
+                        && given
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+                    "Invalid message ID"
+                );
+                given.to_string()
+            }
+            None => format!("m{}", &crate::random_token()[..16]),
+        };
         let anchors = body["anchors"].as_array().cloned().unwrap_or_default();
         ensure!(anchors.len() <= 10, "Point at 10 parts or fewer");
         for anchor in &anchors {
@@ -165,6 +181,12 @@ impl Workflow {
                 .any(|r| active(r) && r["id"] != id);
             let r = find_mut(v, "runs", id)?;
             ensure!(r["kind"] == "session", "This is not a session");
+            if r["messages"]
+                .as_array()
+                .is_some_and(|m| m.iter().any(|m| m["id"] == message_id.as_str()))
+            {
+                return Ok(None);
+            }
             let status = r["status"].as_str().unwrap_or("").to_string();
             ensure!(
                 ["running", "waiting"].contains(&status.as_str()),
@@ -175,7 +197,7 @@ impl Workflow {
                 "This session has too many messages; end it and start a new one"
             );
             list(r, "messages").push(
-                json!({"text": content, "anchors": anchors, "at": now(), "delivered": false}),
+                json!({"id": message_id, "text": content, "anchors": anchors, "at": now(), "delivered": false}),
             );
             if status == "waiting" {
                 // Another agent holds the repository: the message waits, and the turn starts
@@ -185,18 +207,22 @@ impl Workflow {
                     r["message"] = json!(
                         "Your message waits until the other agent finishes, then the turn starts."
                     );
-                    return Ok(false);
+                    return Ok(Some(false));
                 }
                 r["status"] = json!("running");
                 r["message"] = Value::Null;
-                return Ok(true);
+                return Ok(Some(true));
             }
-            Ok(false)
+            Ok(Some(false))
         })?;
+        // A repeated send: the message is kept already, and nothing starts again.
+        let Some(launch) = launch else {
+            return Ok(json!({"ok": true, "id": message_id, "duplicate": true}));
+        };
         if launch {
             crate::runner::launch_session(self.clone(), id.to_string());
         }
-        Ok(json!({"ok": true, "queued": !launch}))
+        Ok(json!({"ok": true, "id": message_id, "queued": !launch}))
     }
 
     /// The owner's answer to the agent's command request: `{approval, decision}` with
@@ -451,10 +477,14 @@ impl Workflow {
                 }
                 return Ok(None);
             }
-            for m in list(r, "messages") {
-                m["delivered"] = json!(true);
-            }
             let turn = r["turns"].as_u64().unwrap_or(0) + 1;
+            for m in list(r, "messages") {
+                if m["delivered"] != true {
+                    m["delivered"] = json!(true);
+                    // The turn that took it, so the app can say when it was answered.
+                    m["turn"] = json!(turn);
+                }
+            }
             r["turns"] = json!(turn);
             r["status"] = json!("running");
             r["message"] = Value::Null;
@@ -611,25 +641,15 @@ fn uuid() -> String {
 /// rule never covers it. A single `&` also covers `&&`.
 const CHAINS: [&str; 10] = ["&", "||", ";", "|", "`", "$(", ">", "<", "\n", "\r"];
 
-/// Programs that run other commands or code (shells, interpreters, wrappers, package runners,
-/// containers), act as another user, or send data over the network. A rule for one of them
-/// would allow far more than its name says, so they have none: the owner allows such a
-/// command once, or allows all commands.
+/// Programs that escalate privileges, invoke arbitrary shells, control containers, or send data
+/// over the network. A session-wide rule for one of these would be overly broad, so the owner
+/// allows them once or enables "allow all".
 const NO_RULE: &[&str] = &[
     "sudo",
     "doas",
     "su",
-    "env",
-    "nohup",
-    "nice",
-    "ionice",
-    "timeout",
-    "time",
-    "xargs",
     "exec",
     "eval",
-    "command",
-    "builtin",
     "source",
     ".",
     "sh",
@@ -640,20 +660,8 @@ const NO_RULE: &[&str] = &[
     "ksh",
     "csh",
     "tcsh",
-    "node",
-    "deno",
-    "perl",
-    "ruby",
-    "php",
-    "lua",
     "osascript",
-    "awk",
-    "gawk",
-    "find",
-    "watch",
-    "parallel",
     "ssh",
-    "script",
     "scp",
     "rsync",
     "curl",
@@ -662,11 +670,6 @@ const NO_RULE: &[&str] = &[
     "docker",
     "podman",
     "kubectl",
-    "npx",
-    "pnpx",
-    "bunx",
-    "uvx",
-    "pipx",
 ];
 
 /// Subcommands that run any package or script, or change Git's own settings (which could make
@@ -723,18 +726,8 @@ const RISKY_OPTIONS: &[(&str, &[&str])] = &[
             "--env-file",
         ],
     ),
-    ("cargo", &["--config", "-Z", "--manifest-path"]),
-    (
-        "pytest",
-        &[
-            "-p",
-            "-c",
-            "-o",
-            "--override-ini",
-            "--rootdir",
-            "--confcutdir",
-        ],
-    ),
+    ("cargo", &["--config", "-Z"]),
+    ("pytest", &["-p", "--rootdir", "--confcutdir"]),
     (
         "git",
         &[
@@ -744,7 +737,6 @@ const RISKY_OPTIONS: &[(&str, &[&str])] = &[
             "--exec-path",
             "--git-dir",
             "--work-tree",
-            "-C",
             "--ext-diff",
             "--textconv",
             "--upload-pack",
@@ -875,9 +867,6 @@ mod tests {
             "FOO=1 npm test",
             "python3 -c 'print(1)'",
             "node -e 1",
-            "env npm test",
-            "find . -name x",
-            "xargs rm",
             "npm",
             "npm install x & rm -rf y",
             "npm install x &",
@@ -890,11 +879,10 @@ mod tests {
             "\"npm\" ci",
             "./run.sh",
             "n\\pm install",
-            // Runners, network tools and settings.
+            // Network tools, containers and settings.
             "curl -s https://x",
             "docker run alpine",
             "uv run x.py",
-            "npx echo",
             "npm exec x",
             "git config core.hooksPath x",
             "rsync -e sh a b",
@@ -905,6 +893,14 @@ mod tests {
         ] {
             assert_eq!(rule("Bash", broad), None, "{broad}");
         }
+        assert_eq!(
+            rule("Bash", "find . -name x").as_deref(),
+            Some("Bash(find:*)")
+        );
+        assert_eq!(
+            rule("Bash", "node script.mjs").as_deref(),
+            Some("Bash(node:*)")
+        );
         assert_eq!(rule("WebFetch", "{}").as_deref(), Some("WebFetch"));
         for chained in [
             "ls; (cargo test 2>&1 | tail -15)",
@@ -946,12 +942,22 @@ mod tests {
             "git log --output=/tmp/x",
             "git diff --no-index /etc/hosts /dev/null",
             "git -c core.pager=x log",
-            "git -C /etc status",
         ] {
             assert!(!allowed(&listed, "Bash", &bash(risky)), "{risky}");
         }
         assert!(allowed(&listed, "Bash", &bash("pytest -q tests")));
+        assert!(allowed(
+            &listed,
+            "Bash",
+            &bash("pytest -o addopts=-q tests")
+        ));
         assert!(allowed(&listed, "Bash", &bash("npm test -- --runInBand")));
+        assert!(allowed(&listed, "Bash", &bash("npm run lint")));
+        assert!(allowed(
+            &listed,
+            "Bash",
+            &bash("cargo clippy --all-targets")
+        ));
         assert!(allowed(&listed, "Bash", &bash("git log --oneline -5")));
         assert!(!allowed(
             &rules,

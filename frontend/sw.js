@@ -34,6 +34,8 @@ const SHELL = [
   "/favicon.svg",
   "/icon-192.png",
   "/icon-512.png",
+  "/icon-maskable-192.png",
+  "/icon-maskable-512.png",
   "/grain.png",
 ];
 self.addEventListener("install", (event) =>

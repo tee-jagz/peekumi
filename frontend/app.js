@@ -13,8 +13,18 @@ import { mountCanvas } from "./canvas.js";
 import { frostSelects } from "./select.js";
 import { peek } from "./peek.js";
 import {
+  Actions,
   Button,
   AgentMark,
+  Command,
+  Disclosure,
+  EvidenceItem,
+  EvidenceQuestion,
+  EvidenceSection,
+  Note,
+  ProvenanceChips,
+  Spinner,
+  Stack,
   ChangeTray,
   Choices,
   HeaderNote,
@@ -42,6 +52,8 @@ import {
   connections,
   visibleOnSide,
   patchForSymbol,
+  summarizeChecks,
+  tamperFiles,
 } from "./model.js";
 const $ = (selector) => document.querySelector(selector);
 /** The address the app shows. Every change of it goes through `replaceUrl`, so the back
@@ -109,6 +121,11 @@ let viewingBranch = new URL(location.href).searchParams.get("branch"),
   viewingPr = new URL(location.href).searchParams.get("pr"),
   // Its details from GitHub (title, description, checks, reviews) for the sheet.
   prData = null,
+  // The PR head that the map shows: the head when the PR was opened, kept in the address.
+  // GitHub's current head can differ after a reload (see prChecks).
+  prHeadShown = viewingPr
+    ? new URL(location.href).searchParams.get("branch")
+    : null,
   // Open and recently merged PRs for the View list; null until the first load.
   prList = null,
   // The PR description shows in full only after "Read full description".
@@ -118,6 +135,7 @@ let viewingBranch = new URL(location.href).searchParams.get("branch"),
 function leavePr() {
   viewingPr = null;
   prData = null;
+  prHeadShown = null;
   const url = new URL(location.href);
   url.searchParams.delete("pr");
   replaceUrl(url);
@@ -382,6 +400,18 @@ const workflow = createWorkflow({
     const id = exploring()?.id;
     return id && workflow.revisable(id) ? id : null;
   },
+  openBranch: async (start, head) => {
+    await mapVerify.nav.inspect(start, head, { kind: "repo" });
+    nav.toMap("details");
+    setSheetHeight("half");
+  },
+  openPr: async (number) => {
+    await mapVerify.nav.pr(number);
+    nav.toMap("details");
+    setSheetHeight("half");
+  },
+  loadedPrs: () =>
+    (prList || []).filter((pr) => (pr.state || "OPEN") === "OPEN"),
   // The watched branch moved: show its new commits, as the Refresh button does.
   moved: () => {
     if (!viewingPr && !exploring()) boot(true).catch(() => {});
@@ -792,9 +822,11 @@ for (const b of document.querySelectorAll("#viewKind button"))
   b.onclick = () => showViewKind(b.dataset.kind);
 /** A pull request's state as one word: Draft, Open, Merged or Closed. */
 const prState = (pr) =>
-  pr.isDraft && (pr.state || "OPEN") === "OPEN"
-    ? "Draft"
-    : { MERGED: "Merged", CLOSED: "Closed" }[pr.state] || "Open";
+  pr.lookupError
+    ? "Unknown"
+    : pr.isDraft && (pr.state || "OPEN") === "OPEN"
+      ? "Draft"
+      : { MERGED: "Merged", CLOSED: "Closed" }[pr.state] || "Open";
 /** Lists the pull requests as rows: open ones, then recently merged ones, each with its
  * state, author and date. The PR on view has a check mark; a tap on another opens it. */
 function renderPrRows() {
@@ -886,8 +918,11 @@ async function loadPrDetails() {
     if (viewingPr !== number) return;
     prData = pr;
     render();
-  } catch {
-    /* The map still shows the PR's changes; the sheet keeps the repository view. */
+  } catch (error) {
+    // The map still shows the PR's changes; the sheet says that the details are missing.
+    if (viewingPr !== number) return;
+    prData = { lookupError: error.message };
+    render();
   }
 }
 /** Fetches a PR into private refs and shows its changes: merge base → head. The checkout
@@ -913,6 +948,7 @@ async function openPr(number) {
     baseRef = data.base;
     viewingPr = String(number);
     prData = data.pr;
+    prHeadShown = data.head;
     prExpanded = false;
     setSheetHeight("peek");
     $("#revisionDetails").open = false;
@@ -1022,6 +1058,10 @@ async function loadComparison() {
             }),
         ),
       );
+      data.crapData = await api(
+        "/api/crap?" +
+          new URLSearchParams({ base: data.base, head: data.head }),
+      ).catch(() => null);
       comparisons.set(key, data);
       if (comparisons.size > 6)
         comparisons.delete(comparisons.keys().next().value);
@@ -1552,18 +1592,34 @@ function renderGraph(body) {
  * select-then-open behavior. */
 function graphNode({ node, x, y, w, h }, owners = new Set()) {
   const changes = lens === "changes";
+  const crapKey =
+    node.kind === "symbol" && scope.kind === "file"
+      ? `${scope.path}::${node.name}`
+      : "";
+  const crapEntry = crapKey ? comparison?.crapData?.byKey?.[crapKey] : null;
+  const crapAfter =
+    crapEntry?.after?.state === "measured" ? crapEntry.after : null;
   const states = [
     node.kind === "stub" && "stub",
     node.kind === "boundary" && "boundary",
     node.kind === "symbol" && "symbol",
     changes && node.status === "unchanged" && "unchanged",
     changes && node.status === "removed" && "removed",
+    changes && crapAfter && (crapAfter.risky ? "crap-risky" : "crap-measured"),
     selected?.key === node.key && "selected",
     linkedKeys &&
       node.kind !== "boundary" &&
       selected?.key !== node.key &&
       (linkedKeys.has(node.key) ? "linked" : "dim"),
   ].filter(Boolean);
+  const crapBadge =
+    changes && crapAfter
+      ? {
+          text: `CRAP ${Number(crapAfter.crap).toFixed(1)}`,
+          risky: Boolean(crapAfter.risky),
+          title: `CRAP ${Number(crapAfter.crap).toFixed(1)} · complexity ${crapAfter.complexity} · ${Math.round((crapAfter.coverage || 0) * 100)}% coverage`,
+        }
+      : null;
   const uncommitted = Boolean(uncommittedMark(node));
   const changedFiles =
     node.files?.filter((f) => f.status !== "unchanged").length || 0;
@@ -1611,14 +1667,27 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
     parts: changes && node.changes?.length ? node.changes.map(partIcon) : [],
     breaks,
     breaksTitle: [...new Set(found.map((b) => b.message))].join("; "),
+    crap: crapBadge,
     bars:
       node.kind === "file"
         ? (node.symbols || node.symbolPreview || [])
             .slice(0, 22)
-            .map((symbol) => ({
-              title: symbol.name,
-              color: changes ? tones[symbol.status] : "var(--line-strong)",
-            }))
+            .map((symbol) => {
+              const symCrap =
+                comparison?.crapData?.byKey?.[`${node.path}::${symbol.name}`];
+              return {
+                title:
+                  symCrap?.after?.state === "measured"
+                    ? `${symbol.name} (CRAP ${Number(symCrap.after.crap).toFixed(1)})`
+                    : symbol.name,
+                color:
+                  changes && symCrap?.after?.risky
+                    ? "var(--danger)"
+                    : changes
+                      ? tones[symbol.status]
+                      : "var(--line-strong)",
+              };
+            })
         : null,
     uncommitted,
     states,
@@ -1626,6 +1695,7 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
       key: node.key,
       path: node.path || "",
       status: node.status || "unchanged",
+      crap: crapAfter ? String(crapAfter.crap) : null,
       "relationship-changed": String(
         nodeRelations(node).some((r) => r.status !== "unchanged"),
       ),
@@ -1633,7 +1703,7 @@ function graphNode({ node, x, y, w, h }, owners = new Set()) {
     label:
       node.kind === "boundary"
         ? null
-        : `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${uncommitted ? ", uncommitted changes" : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
+        : `${node.name}, ${node.symbolKind || node.targetKind || node.kind}${node.status ? ", " + labels[node.status] : ""}${crapAfter ? `, CRAP ${Number(crapAfter.crap).toFixed(1)}${crapAfter.risky ? " risky" : ""}` : ""}${uncommitted ? ", uncommitted changes" : ""}${node.changes?.length ? ": " + partWords(node.changes) : ""}${node.files ? `, ${changedFiles} of ${node.files.length} files changed` : ""}`,
     title: node.name,
     onClick: () => {
       if (busy) return;
@@ -3354,6 +3424,302 @@ function prRow(label, value, tone, items = []) {
   row.append(line, ...items);
   return row;
 }
+/** The CI evidence of the open PR: the checks that GitHub reports for the head on the map,
+ * each with its outcome, its link and the time Peekumi read it. "All passed" needs an
+ * explicit success from every check. When GitHub's head is not the head on the map (the PR
+ * changed after it was opened), or GitHub did not say which head, or the lookup failed, the
+ * checks are not shown as evidence for this code. */
+function prChecks(pr) {
+  const shown = prHeadShown || "",
+    short = (sha) => (sha || "").slice(0, 7),
+    read = pr.readAt
+      ? new Date(pr.readAt).toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "",
+    changed = !!pr.headRefOid && pr.headRefOid !== shown,
+    summary = summarizeChecks(pr.statusCheckRollup || []),
+    tones = { good: "good", bad: "bad", wait: "wait" };
+  let value,
+    tone,
+    items,
+    before = [];
+  if (pr.lookupError) {
+    value = "Lookup failed";
+    tone = "bad";
+    items = [
+      EvidenceItem({
+        label: "Peekumi could not read this PR from GitHub",
+        outcome: "Unavailable",
+        tone: "bad",
+        meta: pr.lookupError,
+      }),
+      Button({ label: "Try again", onClick: () => loadPrDetails() }),
+    ];
+  } else if (!pr.headRefOid || changed) {
+    // Never the new head's checks as evidence for the code on the map.
+    value = changed ? "Not for this head" : "Not matched";
+    tone = "";
+    items = [];
+    before = [
+      EvidenceItem({
+        label: changed
+          ? "This PR changed after you opened it"
+          : "GitHub did not say which commit these checks are for",
+        outcome: changed ? "New head" : "Commit unknown",
+        tone: "open",
+        meta: changed
+          ? `The map shows ${short(shown)}. GitHub now has ${short(pr.headRefOid)}.`
+          : `The map shows ${short(shown)}.`,
+      }),
+      Button({
+        label: "Open latest version",
+        onClick: () => openPr(Number(viewingPr)),
+      }),
+    ];
+  } else {
+    value = summary.headline;
+    tone = tones[summary.tone] || "";
+    items = [
+      Note(
+        `Reported by GitHub for head ${short(shown)}${read ? `, read at ${read}` : ""}. On a pull_request event, GitHub Actions often tests GitHub's merge of the PR into its base, not the head alone.`,
+      ),
+      ...summary.entries.map((c) =>
+        EvidenceItem({
+          label: c.name,
+          outcome: c.outcome,
+          tone:
+            { passed: "good", failed: "bad", pending: "wait" }[c.outcome] ||
+            "open",
+          meta: [c.producer, c.raw.toLowerCase()].filter(Boolean).join(" · "),
+          href: /^https:\/\//.test(c.url) ? c.url : null,
+        }),
+      ),
+    ];
+  }
+  return [...before, prRow("Checks", value, tone, items)];
+}
+/** Universal Verify controller for committed map comparisons and read-only GitHub PRs
+ * (never runs on uncommitted working-tree edits; never adds merge/push to PRs or branches). */
+const mapVerify = {
+  cache: new Map(),
+  pollTimer: null,
+  nav: {
+    inspect: inspectRevision,
+    pr: openPr,
+    place: openPlace,
+    panel: renderPanel,
+    notice: showNotice,
+  },
+  key(start, head) {
+    return `${start}:${head}`;
+  },
+  ensure(start, head) {
+    if (
+      !isOwner() ||
+      !start ||
+      !head ||
+      head === "uncommitted" ||
+      start === "uncommitted" ||
+      commit(head).worktree ||
+      commit(start).worktree ||
+      start === head
+    )
+      return null;
+    const k = this.key(start, head);
+    if (!this.cache.has(k)) {
+      this.cache.set(k, { loading: true, run: null });
+      api(`/api/verify/runs?${new URLSearchParams({ base: start, head })}`)
+        .then((res) => {
+          const run = (res.runs || [])[0] || null;
+          this.cache.set(k, { loading: false, run });
+          if (run?.state === "running") this.schedulePoll(start, head);
+          this.nav.panel();
+        })
+        .catch(() => this.cache.set(k, { loading: false, run: null }));
+    }
+    return this.cache.get(k);
+  },
+  schedulePoll(start, head) {
+    clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(() => {
+      const k = this.key(start, head);
+      this.cache.delete(k);
+      this.ensure(start, head);
+    }, 2000);
+  },
+  async start(start, head, prepare = false, configRef = null) {
+    try {
+      const res = await api("/api/verify/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          start,
+          head,
+          prepare,
+          ...(configRef ? { configRef } : {}),
+        }),
+      });
+      this.cache.set(this.key(start, head), { loading: false, run: res });
+      this.nav.notice(
+        prepare
+          ? "Preparing and running checks in sandbox…"
+          : "Running checks in sandbox…",
+      );
+      setTimeout(() => this.nav.notice(""), 3000);
+      this.schedulePoll(start, head);
+      this.nav.panel();
+    } catch (e) {
+      this.nav.notice(e.message, true);
+    }
+  },
+  panel(start, head, { source = "branch", defaultBranch = "main" } = {}) {
+    const entry = this.ensure(start, head);
+    if (!entry) return null;
+    const run = entry.run;
+    const short = (sha) => String(sha || "").slice(0, 7);
+    const items = [];
+    if (entry.loading) items.push(Note("Checking sandboxed runs…"));
+    else if (run?.state === "running")
+      items.push(Spinner("Running checks in sandbox"));
+    else if (run?.state === "blocked") {
+      items.push(
+        EvidenceItem({
+          label: "Sandboxed verification blocked",
+          outcome: "Blocked",
+          tone: "open",
+          meta: run.reason || run.summary,
+        }),
+      );
+    } else if (run) {
+      for (const c of run.checks || []) {
+        const obs = String(c.observed || "unknown").toLowerCase();
+        const label =
+          {
+            fail_to_pass: "Fail → Pass",
+            weak_test: "Weak test",
+            inconclusive: "Inconclusive",
+            skipped: "Skipped",
+          }[obs] || obs;
+        const tone = c.matched
+          ? "good"
+          : ["blocked", "skipped", "inconclusive"].includes(obs)
+            ? "open"
+            : "bad";
+        items.push(
+          EvidenceItem({
+            label: c.name || c.id || "Check",
+            outcome: label,
+            tone,
+            meta: [
+              c.skipReason || c.detail,
+              c.durationMs != null && obs !== "skipped" && `${c.durationMs}ms`,
+              run.sandbox?.engine && obs !== "skipped" && run.sandbox.engine,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            onClick: c.file
+              ? () => this.nav.place({ kind: "file", path: c.file })
+              : undefined,
+          }),
+        );
+        if (!c.matched && obs !== "skipped" && c.output)
+          items.push(
+            Disclosure(
+              { summary: `${c.name || c.id} output` },
+              Command(c.output),
+            ),
+          );
+      }
+      if (run.limits?.notes?.length)
+        for (const n of run.limits.notes) items.push(Note(n));
+    } else {
+      items.push(
+        EvidenceItem({
+          label: "Sandboxed tests",
+          outcome: "Not run",
+          tone: "open",
+        }),
+      );
+    }
+    const btns = [];
+    if (!run || run.state !== "running") {
+      const missingAtStart =
+        run?.state === "blocked" &&
+        !run.configRef &&
+        /has no checks section|No \.peekumi\.json configuration/i.test(
+          run.reason || "",
+        );
+      const activeRef =
+        run?.configRef || (source === "pr" ? defaultBranch : null);
+      if (missingAtStart) {
+        btns.push(
+          Button({
+            label: `Run checks from ${defaultBranch}`,
+            variant: "secondary",
+            onClick: () => this.start(start, head, false, defaultBranch),
+          }),
+        );
+      } else {
+        btns.push(
+          Button({
+            label: run
+              ? activeRef
+                ? `Run checks again (${activeRef})`
+                : "Run checks again"
+              : source === "pr"
+                ? `Run checks (${defaultBranch})`
+                : "Run checks",
+            variant: "secondary",
+            onClick: () => this.start(start, head, false, activeRef),
+          }),
+        );
+        if (
+          run &&
+          (run.manifestsChanged ||
+            run.limits?.notes?.some((n) => /--prepare/.test(n)))
+        )
+          btns.push(
+            Button({
+              label: "Prepare and run",
+              variant: "secondary",
+              onClick: () => this.start(start, head, true, activeRef),
+            }),
+          );
+      }
+    }
+    if (btns.length) items.push(Actions({}, ...btns));
+    const chips = [
+      { text: `${short(start)} → ${short(head)}` },
+      run?.configCommit &&
+        run.configCommit !== start && {
+          text: `checks from ${run.configRef || defaultBranch}@${short(run.configCommit)}`,
+          tone: "open",
+        },
+    ].filter(Boolean);
+    const tone =
+      run?.state === "failed"
+        ? "bad"
+        : run?.state === "running"
+          ? "wait"
+          : run?.state === "passed" &&
+              !(run.counts?.skipped || run.counts?.inconclusive)
+            ? "good"
+            : "open";
+    return Stack(
+      ProvenanceChips(chips),
+      EvidenceSection(
+        {
+          title: "Peekumi checks",
+          tone,
+          summary: run?.summary || "Not run",
+        },
+        ...items,
+      ),
+    );
+  },
+};
 /** The pull request in the sheet: the start of its description, then one row each for
  * checks, reviews and the link to GitHub. Lists open only when the reader asks. */
 function prCard() {
@@ -3392,43 +3758,79 @@ function prCard() {
         },
       ),
     );
-  // Checks: one line that says what matters most; the list opens on request.
-  const checks = pr.statusCheckRollup || [],
-    result = (c) => (c.conclusion || c.state || c.status || "").toUpperCase(),
-    failing = checks.filter((c) =>
-      [
-        "FAILURE",
-        "ERROR",
-        "CANCELLED",
-        "TIMED_OUT",
-        "ACTION_REQUIRED",
-      ].includes(result(c)),
-    ).length,
-    running = checks.filter((c) =>
-      ["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING"].includes(
-        result(c),
-      ),
-    ).length;
-  box.append(
-    prRow(
-      "Checks",
-      !checks.length
-        ? "None reported"
-        : failing
-          ? `${failing} failing of ${checks.length}`
-          : running
-            ? `${running} running of ${checks.length}`
-            : `All ${checks.length} passed`,
-      !checks.length ? "" : failing ? "bad" : running ? "wait" : "good",
-      checks.map((c) =>
-        element(
-          "p",
-          "pr-entry",
-          `${c.name || c.context}: ${(result(c) || "unknown").toLowerCase()}`,
-        ),
-      ),
+  const prVerify =
+    comparison?.base && comparison?.head && comparison.head !== "uncommitted"
+      ? mapVerify.panel(comparison.base, comparison.head, {
+          source: "pr",
+          defaultBranch: (metadata?.branch || "main").replace(
+            /^refs\/heads\//,
+            "",
+          ),
+        })
+      : null;
+  if (prVerify) box.append(prVerify);
+  box.append(...prChecks(pr));
+  // Blind spots for this PR: changed test, CI and configuration files, plus CRAP exclusions.
+  const prTamper = tamperFiles(comparison?.files || []);
+  const prSpots = [
+    ...prTamper.tests.map((f) =>
+      EvidenceItem({
+        label: f.path,
+        outcome: "Test changed",
+        tone: "open",
+        meta: `${f.status} · tap to inspect on map`,
+        onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+      }),
     ),
-  );
+    ...prTamper.ci.map((f) =>
+      EvidenceItem({
+        label: f.path,
+        outcome: "CI changed",
+        tone: "open",
+        meta: `${f.status} · tap to inspect on map`,
+        onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+      }),
+    ),
+    ...prTamper.config.map((f) =>
+      EvidenceItem({
+        label: f.path,
+        outcome: "Rules or checks changed",
+        tone: "open",
+        meta: `${f.status} · tap to inspect on map`,
+        onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+      }),
+    ),
+  ];
+  if (comparison?.crapData?.filesChanged > 0) {
+    const c = comparison.crapData;
+    prSpots.push(
+      EvidenceItem({
+        label: `CRAP analysed ${c.filesAnalysed} of ${c.filesChanged} changed files`,
+        outcome: c.riskyCount
+          ? `${c.riskyCount} risky (> ${c.threshold})`
+          : c.filesAnalysed
+            ? "Measured"
+            : "Not available",
+        tone: c.riskyCount ? "bad" : c.filesAnalysed ? "good" : "open",
+        meta:
+          c.excludedFiles
+            ?.slice(0, 4)
+            .map((f) => `${f.path} (${f.reason})`)
+            .join("; ") || "",
+      }),
+    );
+  }
+  if (prSpots.length)
+    box.append(
+      EvidenceSection(
+        {
+          title: "Blind spots",
+          tone: "open",
+          summary: String(prSpots.length),
+        },
+        ...prSpots,
+      ),
+    );
   // Reviews: each reviewer's latest decision, then the comments.
   const reviews = pr.reviews || [],
     comments = pr.comments || [],
@@ -3517,6 +3919,24 @@ function selectionFacts(node) {
         "Changed",
         partWords(node.changes).replace(/^./, (c) => c.toUpperCase()),
       ]);
+    const crap =
+      scope.kind === "file"
+        ? comparison?.crapData?.byKey?.[`${scope.path}::${node.name}`]
+        : null;
+    if (crap) {
+      const fmt = (e) =>
+        e?.state === "measured"
+          ? `${Number(e.crap).toFixed(1)} (C=${e.complexity}, ${Math.round((e.coverage || 0) * 100)}%)`
+          : e?.state === "not_present"
+            ? "new"
+            : "not available";
+      facts.push([
+        "CRAP",
+        crap.after?.state === "measured"
+          ? `${fmt(crap.before)} → ${fmt(crap.after)}${crap.after.risky ? " · risky (>30)" : ""}`
+          : `CRAP not available (${crap.after?.reason || "no coverage run"})`,
+      ]);
+    }
   } else if (node.kind === "file") {
     const total = node.symbolCount ?? node.symbols?.length ?? 0,
       known = node.symbols || node.symbolPreview || [];
@@ -3527,6 +3947,10 @@ function selectionFacts(node) {
         "Changed declarations",
         String(known.filter((symbol) => symbol.status !== "unchanged").length),
       ]);
+    const excl = comparison?.crapData?.excludedFiles?.find(
+      (f) => f.path === node.path,
+    );
+    if (excl) facts.push(["CRAP", excl.reason]);
   } else if (node.kind === "edge") {
     facts.push(
       ["Kind", node.relationshipKind],
@@ -4103,16 +4527,89 @@ function renderConversations(body) {
     ),
   );
 }
-/** Under Details: the instructions left on this selection, as one quiet link to them. */
+/** Under Details: instructions left here, plus universal Verify evidence for committed
+ * branch/SHA comparisons (never for uncommitted changes; PRs render Verify in prCard). */
 function renderInstructionsHere(body) {
   const count = isOwner() ? workflow.instructionsHere() : 0;
-  if (!count) return;
-  const link = button(
-    "link-button instructions-here",
-    `${count} instruction${count === 1 ? "" : "s"} here ›`,
-    () => nav.go({ name: "instructions" }),
-  );
-  body.append(link);
+  if (count) {
+    const link = button(
+      "link-button instructions-here",
+      `${count} instruction${count === 1 ? "" : "s"} here ›`,
+      () => nav.go({ name: "instructions" }),
+    );
+    body.append(link);
+  }
+  if (
+    isOwner() &&
+    !prData &&
+    comparison &&
+    comparison.base &&
+    comparison.head &&
+    comparison.base !== comparison.head &&
+    comparison.head !== "uncommitted" &&
+    comparison.base !== "uncommitted" &&
+    !commit(comparison.head).worktree &&
+    !commit(comparison.base).worktree &&
+    scope?.kind === "repo"
+  ) {
+    const defaultBranch = (metadata?.branch || "main").replace(
+      /^refs\/heads\//,
+      "",
+    );
+    const block = mapVerify.panel(comparison.base, comparison.head, {
+      source: "branch",
+      defaultBranch,
+    });
+    if (block) {
+      const tamper = tamperFiles(comparison.files || []);
+      const spots = [
+        ...tamper.tests.map((f) =>
+          EvidenceItem({
+            label: f.path,
+            outcome: "Test edited",
+            tone: "open",
+            meta: `${f.status} · tap to inspect on map`,
+            onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+          }),
+        ),
+        ...tamper.ci.map((f) =>
+          EvidenceItem({
+            label: f.path,
+            outcome: "CI edited",
+            tone: "open",
+            meta: `${f.status} · tap to inspect on map`,
+            onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+          }),
+        ),
+        ...tamper.config.map((f) =>
+          EvidenceItem({
+            label: f.path,
+            outcome: "Rules/checks edited",
+            tone: "open",
+            meta: `${f.status} · tap to inspect on map`,
+            onClick: () => mapVerify.nav.place({ kind: "file", path: f.path }),
+          }),
+        ),
+      ];
+      body.append(
+        Stack(
+          block,
+          EvidenceSection(
+            { title: "CI", tone: "quiet", summary: "None" },
+            Note("Local comparison · no CI"),
+          ),
+          EvidenceSection(
+            {
+              title: "Blind spots",
+              tone: spots.length ? "open" : "quiet",
+              summary: spots.length ? String(spots.length) : "None",
+            },
+            ...(spots.length ? spots : [Note("None found")]),
+          ),
+        ),
+      );
+    }
+  }
 }
 function drawTab() {
   const view = nav.view(),

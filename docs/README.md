@@ -10,7 +10,7 @@ This directory records the product scope, the architecture, the validation resul
 - `EXTENDING.md`: How to add a language adapter or an agent provider: the contract, the steps and the definition of done.
 - `RELATIONSHIPS.md`: The supported static relationships, the configuration of dependency rules and the analysis limits.
 - `WORKFLOW.md`: Comments, runs, reports, verification and operational boundaries.
-- `VALIDATION.md`: The recorded evidence from tests and benchmarks.
-- `design/`: The design system: principles, tokens, components, rules and mockups. Each interface change must obey its rules.
+- `VERIFICATION.md`: Sandboxed verification checks and Python CRAP scoring.
+- `design/`: The design system: principles, tokens, components, rules and generator tools.
 - `brand/`: The artwork for the Peek mascot and the Peekumi app icon, with colours and how to use them.
 - `context/`: The original specification and the archive of the visual prototype.

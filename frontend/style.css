@@ -2,6 +2,12 @@
    whole app takes the Peekumi look while its parts move to frontend/ui.js. Light and dark come
    from the tokens. */
 :root {
+  /* The height that the app can use: the visible height minus the safe areas that .app pads
+     (a camera cut-out and the gesture bar in full-screen mode). Sheets size from it. */
+  --usable-height: calc(
+    var(--viewer-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
   --bg: transparent;
   --old-surface: var(--surface);
   --old-ink: var(--ink);
@@ -2156,11 +2162,11 @@ button {
   (max-width: 899px) and (min-height: 501px),
   (max-width: 899px) and (orientation: portrait) {
   .panel {
-    height: calc(var(--viewer-height, 100dvh) * 0.4);
+    height: calc(var(--usable-height) * 0.4);
     max-height: none;
   }
   .keyboard-open .panel {
-    height: calc(var(--viewer-height, 100dvh) - 100px);
+    height: calc(var(--usable-height) - 100px);
   }
   .keyboard-open .top {
     display: none;
@@ -2171,7 +2177,7 @@ button {
 }
 @media (max-width: 899px) and (max-height: 600px) {
   .panel {
-    height: calc(var(--viewer-height, 100dvh) - 100px);
+    height: calc(var(--usable-height) - 100px);
   }
 }
 @media (max-width: 639px),
@@ -2416,21 +2422,21 @@ select option {
   (max-width: 899px) and (orientation: portrait) {
   .panel {
     height: 232px;
-    max-height: calc(var(--viewer-height, 100dvh) - 54px);
+    max-height: calc(var(--usable-height) - 54px);
   }
   .panel[data-height="peek"] #reviewScroll {
     display: none;
   }
   .panel[data-height="half"] {
-    height: calc(var(--viewer-height, 100dvh) * 0.57);
+    height: calc(var(--usable-height) * 0.57);
   }
   /* Full height leaves the header in view: its height is measured (app.js), as it has one
      or two rows. */
   .panel[data-height="full"] {
-    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 58px));
+    height: calc(var(--usable-height) - var(--top-height, 58px));
   }
   .keyboard-open .panel {
-    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 68px));
+    height: calc(var(--usable-height) - var(--top-height, 68px));
   }
   .keyboard-open .panel #reviewScroll {
     display: block;
@@ -2441,7 +2447,7 @@ select option {
 }
 @media (max-width: 899px) and (max-height: 600px) {
   .panel {
-    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 68px));
+    height: calc(var(--usable-height) - var(--top-height, 68px));
   }
 }
 @media (min-width: 900px),
@@ -2463,7 +2469,7 @@ select option {
     height: auto;
   }
   .keyboard-open .panel[data-height="peek"] {
-    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 68px));
+    height: calc(var(--usable-height) - var(--top-height, 68px));
   }
 }
 #timeRail .chip[aria-selected="true"] {
@@ -2728,7 +2734,7 @@ select option {
   margin: 10px 0 14px;
   overflow-wrap: anywhere;
 }
-.task-link {
+.task-link:not(.pk-inbox-row) {
   display: block;
   width: 100%;
   text-align: left;
@@ -2944,8 +2950,14 @@ body {
   backdrop-filter: blur(var(--blur-glass));
 }
 #openTasks[data-ready="true"] {
-  color: var(--old-accent);
-  border-color: color-mix(in srgb, var(--old-accent) 55%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 44px;
+  padding: 0;
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 48%, transparent);
 }
 
 /* Branch and comparison open from the header line instead of a History row. */
@@ -3187,7 +3199,7 @@ body {
   ):not([class*="pk-"]),
 .panel select,
 .panel .tabs,
-.panel details {
+.panel details:not([class*="pk-"]) {
   background: var(--el-glass);
   border-color: var(--el-line);
   box-shadow: var(--el-shadow);
@@ -3855,7 +3867,7 @@ details.p-section[open] > summary::before {
   (max-width: 899px) and (orientation: portrait) {
   .keyboard-open .panel[data-height="peek"] {
     height: auto;
-    max-height: calc(var(--viewer-height, 100dvh) - 96px);
+    max-height: calc(var(--usable-height) - 96px);
   }
   .keyboard-open .canvas-controls,
   .keyboard-open .sheet-body > #baSeg,
@@ -5154,10 +5166,10 @@ a.pr-link .glyph {
 /* A small phone on its side keeps the sheet below the map; it leaves the map more room. */
 @media (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
   .panel[data-height="half"] {
-    height: calc(var(--viewer-height, 100dvh) * 0.6);
+    height: calc(var(--usable-height) * 0.6);
   }
   .panel[data-height="full"] {
-    height: calc(var(--viewer-height, 100dvh) - var(--top-height, 48px));
+    height: calc(var(--usable-height) - var(--top-height, 48px));
   }
 }
 /* A larger phone on its side has the desktop layout: the map at the left and the sheet at the
@@ -5369,7 +5381,7 @@ a.pr-link .glyph {
 
 /* A task in a list: a plain row under a hairline, as a conversation is; not a card.
    (!important: the panel's glass rule for buttons carries an ID in its :not() list.) */
-.panel .task-link {
+.panel .task-link:not(.pk-inbox-row) {
   margin: 0;
   padding: 12px 2px;
   border: 0 !important;

@@ -5,23 +5,29 @@ mod agent_session;
 mod agents;
 mod ask;
 mod audit;
+mod conversation;
+mod crap;
 mod engine;
 mod fix_proposals;
 mod graph_brief;
 mod hash;
 mod index;
+mod lifecycle;
 mod lookup;
 mod merge;
 mod process;
 mod pull_requests;
 mod push;
 mod relationships;
+mod review;
 mod rules;
 mod run_store;
 mod run_store_impl;
 mod runner;
+mod salvage;
 mod sessions;
 mod task_agent;
+mod verify;
 mod worker;
 mod workflow;
 mod worktree;
@@ -85,6 +91,11 @@ struct Options {
     token: Option<String>,
     #[arg(long, hide = true)]
     stdio: bool,
+    /// The owner's Tailscale login (for example `you@example.com`). A request that Tailscale
+    /// Serve brings from this login is the owner's, with no token and no pairing. Requests
+    /// through the public Cloudflare tunnel still need the token.
+    #[arg(long, env = "PEEKUMI_TAILSCALE_OWNER")]
+    tailscale_owner: Option<String>,
     /// Installed agent executable; invoked only after an explicit run dispatch.
     #[arg(long, env = "PEEKUMI_CODEX", default_value = "codex")]
     codex: String,
@@ -134,6 +145,7 @@ fn dispatch(repo: &mut Repository, method: &str, args: &Value) -> Result<Value> 
             args[3] == "overview",
         ),
         "directories" => repo.directories(argument(args, 0), argument(args, 1)),
+        "crap" => repo.crap(argument(args, 0), argument(args, 1)),
         "search" => repo.search(argument(args, 0), argument(args, 1), argument(args, 2)),
         "metrics" => Ok(repo.metrics()),
         _ => anyhow::bail!("Unknown repository operation"),
@@ -315,6 +327,24 @@ fn open_repository(
     Ok((id, app))
 }
 
+/// True when Tailscale Serve vouches that the request comes from the owner's Tailscale login.
+/// Serve replaces any `Tailscale-User-Login` header that a tailnet client sends, so on the
+/// tailnet the header is Tailscale's word. A request through the Cloudflare tunnel carries
+/// Cloudflare's headers, which a client cannot remove, and is never trusted this way: a public
+/// client could send its own `Tailscale-User-Login`. A program on this computer can send the
+/// header too, but it can also read the token file, so the header gives it nothing new.
+fn tailscale_owner(owner: Option<&str>, headers: &axum::http::HeaderMap) -> bool {
+    let Some(owner) = owner.map(str::trim).filter(|o| !o.is_empty()) else {
+        return false;
+    };
+    if headers.contains_key("cf-ray") || headers.contains_key("cf-connecting-ip") {
+        return false;
+    }
+    headers
+        .get("tailscale-user-login")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|login| login.trim().eq_ignore_ascii_case(owner))
+}
 /// The loopback origin of this listener, set once after binding. Ask's lookup client connects
 /// here; an unspecified bind address (0.0.0.0 or ::) is reached through loopback.
 static LOCAL_ORIGIN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -414,6 +444,14 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "/pwa.js" => Some(("text/javascript", include_bytes!("../frontend/pwa.js"))),
         "/icon-192.png" => Some(("image/png", include_bytes!("../frontend/icon-192.png"))),
         "/icon-512.png" => Some(("image/png", include_bytes!("../frontend/icon-512.png"))),
+        "/icon-maskable-192.png" => Some((
+            "image/png",
+            include_bytes!("../frontend/icon-maskable-192.png"),
+        )),
+        "/icon-maskable-512.png" => Some((
+            "image/png",
+            include_bytes!("../frontend/icon-maskable-512.png"),
+        )),
         "/favicon.svg" => Some(("image/svg+xml", include_bytes!("../frontend/favicon.svg"))),
         "/grain.png" => Some(("image/png", include_bytes!("../frontend/grain.png"))),
         "/fonts/next-latin.woff2" => Some((
@@ -611,6 +649,8 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
             "/favicon.svg",
             "/icon-192.png",
             "/icon-512.png",
+            "/icon-maskable-192.png",
+            "/icon-maskable-512.png",
             "/grain.png",
         ]
         .iter()
@@ -719,6 +759,8 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         Some("owner".to_string())
     } else if equal(bearer, &app.reader_token) {
         Some("reader".to_string())
+    } else if tailscale_owner(app.options.tailscale_owner.as_deref(), request.headers()) {
+        Some("owner".to_string())
     } else {
         app.sessions.lock().await.role(session).map(str::to_string)
     };
@@ -734,6 +776,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         && (request.method() != Method::GET
             || path == "/api/devices"
             || path == "/api/workflow"
+            || path == "/api/inbox"
             || path.starts_with("/api/agents")
             || path == "/api/ask/history"
             || path.starts_with("/api/runs")
@@ -930,24 +973,69 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
         || path == "/api/references"
         || path == "/api/ask/history"
         || path == "/api/workflow"
+        || path == "/api/inbox"
         || path.starts_with("/api/agents")
         || path == "/api/prs"
         || path.starts_with("/api/prs/")
         || path.starts_with("/api/comments")
         || path.starts_with("/api/runs")
+        || path.starts_with("/api/verify")
         || path.starts_with("/api/push/")
     {
         let method = request.method().to_string();
         // Ask conversations are kept per branch; the query names the branch viewed.
-        let (branch, head) = {
+        let (branch, start_query, head, run_id_query) = {
             let query = |name: &str| {
                 url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.into_owned())
             };
             // The commit on the map, for the saved list of proposed rules.
-            (query("branch"), query("head").unwrap_or_default())
+            (
+                query("branch"),
+                query("start").or_else(|| query("base")).unwrap_or_default(),
+                query("head").unwrap_or_default(),
+                query("runId"),
+            )
         };
+        // A run's conversation, after the last change the app has (see the conversation module).
+        if method == "GET"
+            && let Some(id) = path
+                .strip_prefix("/api/runs/")
+                .and_then(|rest| rest.strip_suffix("/items"))
+        {
+            // Owned values only: nothing that borrows the request lives across the await.
+            let (after, epoch) = {
+                let query: HashMap<String, String> =
+                    url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
+                        .into_owned()
+                        .collect();
+                (
+                    query
+                        .get("after")
+                        .and_then(|a| a.parse().ok())
+                        .unwrap_or(0u64),
+                    query.get("epoch").cloned(),
+                )
+            };
+            let (store, id) = (app.workflow.clone(), id.to_string());
+            return match tokio::task::spawn_blocking(move || {
+                store.run_items(&id, after, epoch.as_deref())
+            })
+            .await
+            {
+                Ok(Ok(v)) => json_response(StatusCode::OK, v, gzip, None).await,
+                Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                Err(_) => {
+                    error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Workflow worker failed",
+                        gzip,
+                    )
+                    .await
+                }
+            };
+        }
         if method != "GET" {
             let origin = header(request.headers(), "origin");
             let valid_origin = origin.is_empty()
@@ -977,6 +1065,133 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON", gzip).await,
             }
         };
+        if method == "GET" && path == "/api/inbox" {
+            let store = app.workflow.clone();
+            return match tokio::task::spawn_blocking(move || store.inbox()).await {
+                Ok(Ok(v)) => json_response(StatusCode::OK, v, gzip, None).await,
+                Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                Err(_) => {
+                    error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Inbox worker failed",
+                        gzip,
+                    )
+                    .await
+                }
+            };
+        }
+        if path == "/api/verify/runs" || path.starts_with("/api/verify/runs/") {
+            let state = app.workflow.state.clone();
+            let repo = app.options.directory.clone();
+            if method == "POST" && path == "/api/verify/runs" {
+                let start = body["start"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&app.options.base)
+                    .to_string();
+                let head_rev = body["head"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&app.options.head)
+                    .to_string();
+                let prepare = body["prepare"] == true;
+                let run_id = body["runId"].as_str().map(str::to_string);
+                let config_ref = body["configRef"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                let acceptance = if let Some(ref rid) = run_id {
+                    app.workflow.run(rid).ok().and_then(|r| {
+                        let ac = &r["acceptanceCheck"];
+                        if ac.is_null() {
+                            return None;
+                        }
+                        crate::rules::parse_acceptance(&json!({
+                            "command": ac["command"],
+                            "expectFailOnStart": ac["expectFailOnStart"],
+                            "timeoutSeconds": ac["timeoutSeconds"],
+                        }))
+                        .ok()
+                    })
+                } else {
+                    None
+                };
+                return match tokio::task::spawn_blocking(move || {
+                    verify::start_background(verify::Request {
+                        repo,
+                        state,
+                        start,
+                        head: head_rev,
+                        prepare,
+                        trigger: "owner".into(),
+                        run_id,
+                        config_ref,
+                        acceptance,
+                    })
+                })
+                .await
+                {
+                    Ok(Ok(v)) => json_response(StatusCode::OK, v, gzip, None).await,
+                    Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                    Err(_) => {
+                        error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Verification worker failed",
+                            gzip,
+                        )
+                        .await
+                    }
+                };
+            }
+            if method == "GET" && path == "/api/verify/runs" {
+                let start_filter = (!start_query.is_empty()).then_some(start_query.clone());
+                let head_filter = (!head.is_empty()).then_some(head.clone());
+                let run_filter = run_id_query.filter(|s| !s.is_empty());
+                return match tokio::task::spawn_blocking(move || {
+                    verify::list_runs_filtered(
+                        &state,
+                        start_filter.as_deref(),
+                        head_filter.as_deref(),
+                        run_filter.as_deref(),
+                    )
+                })
+                .await
+                {
+                    Ok(Ok(runs)) => {
+                        json_response(StatusCode::OK, json!({"runs": runs}), gzip, None).await
+                    }
+                    Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e.to_string(), gzip).await,
+                    Err(_) => {
+                        error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Verification lookup failed",
+                            gzip,
+                        )
+                        .await
+                    }
+                };
+            }
+            if method == "GET"
+                && let Some(id) = path.strip_prefix("/api/verify/runs/")
+            {
+                let id = id.to_string();
+                return match tokio::task::spawn_blocking(move || verify::read_run(&state, &id))
+                    .await
+                {
+                    Ok(Ok(run)) => json_response(StatusCode::OK, run, gzip, None).await,
+                    Ok(Err(e)) => error(StatusCode::NOT_FOUND, &e.to_string(), gzip).await,
+                    Err(_) => {
+                        error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Verification lookup failed",
+                            gzip,
+                        )
+                        .await
+                    }
+                };
+            }
+            return error(StatusCode::METHOD_NOT_ALLOWED, "Unsupported method", gzip).await;
+        }
         if path.starts_with("/api/prs") {
             let directory = app.options.directory.clone();
             let github = app.options.github.clone();
@@ -1221,6 +1436,7 @@ async fn handle(State(fleet): State<Arc<Fleet>>, request: Request) -> Response {
                 .await
         }
         "/api/directories" => app.engine.call("directories", json!([base, head])).await,
+        "/api/crap" => app.engine.call("crap", json!([base, head])).await,
         "/api/fixes" => app.engine.call("fixes", json!([head])).await,
         "/api/rule-check" => {
             app.engine
@@ -1289,6 +1505,11 @@ fn adopt_former_settings() {
 }
 fn main() -> Result<()> {
     adopt_former_settings();
+    if std::env::args().nth(1).as_deref() == Some("verify") {
+        let mut args: Vec<String> = std::env::args().collect();
+        args.remove(1);
+        verify::cli(args);
+    }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -1484,6 +1705,43 @@ mod tests {
         }
     }
     use super::*;
+    #[test]
+    fn tailscale_identity_admits_only_the_owner_and_never_through_cloudflare() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let with = |pairs: &[(&'static str, &str)]| {
+            let mut h = HeaderMap::new();
+            for (k, v) in pairs {
+                h.insert(*k, HeaderValue::from_str(v).unwrap());
+            }
+            h
+        };
+        let owner = Some("you@example.com");
+        assert!(tailscale_owner(
+            owner,
+            &with(&[("tailscale-user-login", "you@example.com")])
+        ));
+        assert!(tailscale_owner(
+            owner,
+            &with(&[("tailscale-user-login", "You@Example.com")])
+        ));
+        assert!(!tailscale_owner(
+            owner,
+            &with(&[("tailscale-user-login", "other@example.com")])
+        ));
+        assert!(!tailscale_owner(owner, &with(&[])));
+        assert!(!tailscale_owner(
+            None,
+            &with(&[("tailscale-user-login", "you@example.com")])
+        ));
+        assert!(!tailscale_owner(
+            Some(" "),
+            &with(&[("tailscale-user-login", " ")])
+        ));
+        for cf in ["cf-ray", "cf-connecting-ip"] {
+            let forged = with(&[("tailscale-user-login", "you@example.com"), (cf, "x")]);
+            assert!(!tailscale_owner(owner, &forged), "{cf}");
+        }
+    }
     #[test]
     fn lookup_origin_uses_loopback_for_unspecified_binds() {
         assert_eq!(

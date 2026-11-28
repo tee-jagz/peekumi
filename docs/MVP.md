@@ -4,7 +4,7 @@ The owner wants to keep in contact with the engineering of agent implementations
 
 ## Visual and interaction contract
 
-Use the original HTML mockup in `docs/context/repo-strata-context.zip` as the visual reference. Keep the pastel background of the mockup. In light mode, the background colours are sky, peach, mint and sand. In dark mode, they are ocean, ember, pine and slate. Do not use purple. Also keep the frosted surfaces, the rounded hierarchy cards and the curved dependency arrows.
+The design system in `docs/design/` and `frontend/ui.js` defines the current glass-strata look, tokens, and components (`docs/context/repo-strata-context.zip` is the historical prototype reference). Keep the frosted glass surfaces, rounded hierarchy cards, and curved dependency arrows.
 
 The approved update replaces the stacked commit sheets with one graph canvas and a review sheet that expands. On a phone, the map occupies the upper part of a fixed viewport, and the review panel scrolls below the map. At desktop widths, the panel is on the right side.
 
@@ -12,7 +12,7 @@ A tap selects a card or a dependency. A second tap, or the main action of the se
 
 Time shows a commit strip above the single graph canvas, and the strip scrolls horizontally. By default, Time and Diff compare each commit with its first parent. If you select a base manually, the base stays pinned when you change the commit or the view. The base stays pinned until “Use previous commit” restores automatic selection. The root commit compares with itself. Diff gives base/head revision selectors and Before/After, but it does not stack canvases or show a folder strip.
 
-Use real packages and symbols. Do not invent layers or health measurements. Large real maps use an SVG pan/zoom viewport. The labels are readable at 1:1, and an optional Fit control is available. Changes only hides the unchanged cards at each hierarchy level.
+Use real packages and symbols. Do not invent layers. Do not show a health score. A CRAP score must come from a coverage run at that commit and show its source. Large real maps use an SVG pan/zoom viewport. The labels are readable at 1:1, and an optional Fit control is available. Changes only hides the unchanged cards at each hierarchy level.
 
 The review sheet on the phone has three heights: peek, half and full. To change the height, drag or click the handle of the sheet, or use the arrow/Home/End keys. Peek shows the selection, its documentation summary and, where available, compact inputs/outputs. Peek does not show inspection controls. The expanded views give direct access to Details, Source, Changes, Relations and Discussion.
 
@@ -20,7 +20,7 @@ The composer (Ask, Instruction and Session) is independent. It stays available i
 
 The review sheet and its controls are frosted glass. The text areas are more opaque and are readable. Controls are icons with accessible names and tooltips. The map key continues to use words.
 
-Comments become frozen task previews, isolated agent runs, reports and owner verification. The preparation, progress and results are under the Tasks action, which is always in the header. Ask discusses the committed context, and its tools are disabled. Structure replaces the Health lens, which Peekumi does not measure.
+Comments become frozen task previews, isolated agent runs, reports and owner verification. The preparation, progress and results are under the Tasks action, which is always in the header. Ask discusses the committed context using read-only repository lookup tools only. Structure replaces the Health lens, which Peekumi does not measure.
 
 ## First usable slice
 
@@ -42,12 +42,9 @@ Visalytics is the first integration target. It is a repository that contains bot
 These items are deferred:
 
 - Automatic Ask brief generation
-- Health scores
-- Coverage
 - Mutation testing
 - Inferred architecture
 - Compiler-backed call resolution and runtime dispatch
-- Uncommitted work
 - Persistent history indexing
 - Rename-aware symbol continuity
 

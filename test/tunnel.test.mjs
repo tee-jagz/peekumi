@@ -54,6 +54,20 @@ test("Tailscale sharing accepts empty and matching Serve configurations", () => 
   }
 });
 
+test("Tailscale status names the owner's login, and none on a tagged node", () => {
+  const user = {
+    Self: { DNSName: "machine.example.", UserID: 7 },
+    User: { 7: { LoginName: "you@example.com" } },
+  };
+  let { provider } = fixture([JSON.stringify(user), "{}"]);
+  assert.equal(provider.status().owner, "you@example.com");
+  ({ provider } = fixture([
+    JSON.stringify({ ...user, Self: { ...user.Self, Tags: ["tag:server"] } }),
+    "{}",
+  ]));
+  assert.equal(provider.status().owner, null);
+});
+
 test("Tailscale sharing leaves another Serve configuration intact", () => {
   const { provider, calls } = fixture([
     JSON.stringify({ Self: { DNSName: "machine.example." } }),

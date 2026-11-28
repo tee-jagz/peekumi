@@ -13,8 +13,7 @@ These scripts start Peekumi, find the Rust toolchain and measure the backend per
 - `tunnel/cloudflare-release.mjs`: The four platform assets and their SHA-256 digests, pinned from the asset data of the official GitHub release. When you update them, verify the actual assets. The macOS hashes in the release notes can be different from the asset digests. Peekumi does not look up releases at runtime.
 - `tunnel/select.mjs`: Strict selection on the command line. Environment variables and the saved configuration cannot enable Cloudflare. `manage.mjs` sets up secure cookies and prints a temporary pairing link. It does not save the Cloudflare hostname.
 - `package.mjs`: Makes a platform archive with bundled Node/TypeScript and a SHA-256 checksum. The archive does not include private state.
-- `lint-ui.mjs`: Checks that the interface uses only the parts of `frontend/ui.js` (rules R37 to R42 in `docs/design/15-rules.md`). It also checks that `ui.css` keeps the value rules R1 to R10. The old UI is in `ui-baseline.json`: a count above it fails, and `--update` writes a lower count. `npm run lint` runs it.
-- `lint-docs.mjs`: Checks the documents that people read. An em dash or a contraction is an error. A sentence of more than 25 words is a warning. `npm run lint` runs it.
+- `lint-ui.mjs`: Checks that the interface uses only the parts of `frontend/ui.js` (rules R34 to R39 in `docs/design/15-rules.md`) and that `ui.css` keeps rules R1 to R10. Legacy UI counts are tracked in `ui-baseline.json`: counts above the baseline fail, and `--update` lowers it. `npm run lint` runs it.
 - `release.mjs`: Prepares a release: the version in the four files that hold it, and the date in the changelog. See [RELEASING.md](../RELEASING.md).
 - `release-notes.mjs`: Prints the notes of a GitHub release: the install steps and the section of `CHANGELOG.md` for the version. The Distribution workflow uses it. A version without a changelog section is an error.
 

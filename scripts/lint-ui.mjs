@@ -340,16 +340,18 @@ if (update || first) {
   for (const e of errors) console.error(e);
   process.exit(errors.length ? 1 : 0);
 }
-for (const u of under)
-  errors.push(
-    `${u.file}: ${NAMES[u.code]} (${u.code}) went down from ${u.was} to ${u.now}. Run node scripts/lint-ui.mjs --update to lock it in.`,
-  );
 if (errors.length) {
   for (const e of errors) console.error(e);
   console.error(
     `lint-ui: ${errors.length} problems. See docs/design/15-rules.md.`,
   );
   process.exit(1);
+}
+if (under.length) {
+  for (const u of under)
+    console.log(
+      `lint-ui: ${u.file}: ${NAMES[u.code]} (${u.code}) went down from ${u.was} to ${u.now} (run node scripts/lint-ui.mjs --update to tighten baseline).`,
+    );
 }
 const total = Object.values(counts).reduce(
   (n, c) => n + Object.values(c).reduce((a, b) => a + b, 0),

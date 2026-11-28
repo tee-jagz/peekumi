@@ -313,3 +313,132 @@ export function expandRelationships(data) {
     ),
   };
 }
+
+/** The outcome of one GitHub status check (an entry of `statusCheckRollup`), from its raw
+ * fields only: `passed`, `failed`, `pending`, `skipped`, `neutral` or `unknown`. A CheckRun
+ * has `status` and, once completed, `conclusion`; a StatusContext has `state`. Only an
+ * explicit success is `passed`. */
+export function checkOutcome(check) {
+  const up = (v) => String(v || "").toUpperCase();
+  const statusContext =
+    check.__typename === "StatusContext" ||
+    (!check.__typename && check.state != null && check.conclusion == null);
+  if (statusContext)
+    return (
+      {
+        SUCCESS: "passed",
+        FAILURE: "failed",
+        ERROR: "failed",
+        PENDING: "pending",
+        EXPECTED: "pending",
+      }[up(check.state)] || "unknown"
+    );
+  const status = up(check.status);
+  if (status && status !== "COMPLETED") return "pending";
+  return (
+    {
+      SUCCESS: "passed",
+      FAILURE: "failed",
+      TIMED_OUT: "failed",
+      CANCELLED: "failed",
+      ACTION_REQUIRED: "failed",
+      STARTUP_FAILURE: "failed",
+      SKIPPED: "skipped",
+      NEUTRAL: "neutral",
+    }[up(check.conclusion)] || "unknown"
+  );
+}
+
+/** The checks that GitHub reports for a PR (`statusCheckRollup`), each with its outcome, and
+ * one line about all of them. `headline` says "All N reported checks passed" only when every
+ * check is an explicit success; otherwise it counts each outcome. `tone` is `good`, `bad`,
+ * `wait`, `open` (some checks did not pass and did not fail) or `quiet` (no checks). */
+export function summarizeChecks(rollup = []) {
+  const entries = rollup.map((c) => ({
+    name: c.name || c.context || "Unnamed check",
+    producer: c.workflowName || (c.context ? "Status" : "") || "",
+    outcome: checkOutcome(c),
+    raw: [c.status, c.conclusion, c.state].filter(Boolean).join(" / "),
+    url: c.detailsUrl || c.targetUrl || "",
+  }));
+  const counts = {};
+  for (const e of entries) counts[e.outcome] = (counts[e.outcome] || 0) + 1;
+  const total = entries.length;
+  const order = [
+    "failed",
+    "pending",
+    "passed",
+    "skipped",
+    "neutral",
+    "unknown",
+  ];
+  const parts = order
+    .filter((o) => counts[o])
+    .map((o) => `${counts[o]} ${o}`)
+    .join(" · ");
+  if (!total)
+    return {
+      entries,
+      counts,
+      total,
+      headline: "No checks reported",
+      tone: "quiet",
+    };
+  if (counts.passed === total)
+    return {
+      entries,
+      counts,
+      total,
+      headline: `All ${total} reported check${total === 1 ? "" : "s"} passed`,
+      tone: "good",
+    };
+  return {
+    entries,
+    counts,
+    total,
+    headline: parts,
+    tone: counts.failed ? "bad" : counts.pending ? "wait" : "open",
+  };
+}
+
+/** Classifies a repository path that can change what a check proves: `tests`, `ci`, `config`,
+ * or `null`. Matches `backend/review.rs::sensitive_kind` so PR and task views agree. */
+export function sensitiveKind(path = "") {
+  if (path === ".peekumi.json" || path === ".strata.json") return "config";
+  const parts = path.split("/");
+  const name = parts.at(-1) || "";
+  const folders = parts.slice(0, -1);
+  if (
+    path.startsWith(".github/workflows/") ||
+    path.startsWith(".circleci/") ||
+    path.startsWith(".buildkite/") ||
+    path === ".gitlab-ci.yml" ||
+    path === "azure-pipelines.yml" ||
+    name === "Jenkinsfile"
+  )
+    return "ci";
+  const dot = name.indexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : "";
+  const rest = dot > 0 ? name.slice(dot + 1) : "";
+  const testFolder = folders.some((f) =>
+    ["test", "tests", "__tests__", "spec"].includes(f),
+  );
+  const testName =
+    Boolean(stem) &&
+    (stem.endsWith("_test") ||
+      name.includes(".test.") ||
+      name.includes(".spec.") ||
+      (stem.startsWith("test_") && rest === "py"));
+  return testFolder || testName ? "tests" : null;
+}
+
+/** Collects changed test, CI and configuration files from a comparison's file list. */
+export function tamperFiles(files = []) {
+  const found = { tests: [], ci: [], config: [] };
+  for (const f of files) {
+    if (!f || f.status === "unchanged") continue;
+    const kind = sensitiveKind(f.path);
+    if (kind) found[kind].push({ path: f.path, status: f.status });
+  }
+  return found;
+}

@@ -148,6 +148,14 @@ export function createAgents({ api, repo }) {
     );
   };
 
+  /** What the conversation of the agent with `id` can do (the server's `capabilities`: live
+   * text, queue while busy, steer, interrupt, approvals, images, resume, cost). Until the list
+   * loads it is empty, and the list starts to load. */
+  const capabilities = (id) => {
+    if (!catalog) load().catch(() => {});
+    return catalog?.agents.find((a) => a.id === id)?.capabilities || {};
+  };
+
   /** Opens the Agents sheet: one row for each job, each opening its list. `job` opens that
    * list directly. `closed` runs when the sheet closes, so the caller can show the new choice. */
   async function open(job = null, closed = () => {}) {
@@ -531,6 +539,7 @@ export function createAgents({ api, repo }) {
     label,
     short,
     asksBeforeCommands,
+    capabilities,
     problem,
     open,
   };

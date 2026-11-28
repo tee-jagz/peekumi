@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 /// Tool calls one answer may make before it must reply with what it has.
-pub const MAX_CALLS: usize = 30;
+pub const MAX_CALLS: usize = 60;
 /// Tool calls one task run may make.
 pub const TASK_CALLS: usize = 300;
 /// The open grants of task runs, by key. Shared by the server and the task runner.

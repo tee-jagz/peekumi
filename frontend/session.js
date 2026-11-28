@@ -48,7 +48,7 @@ export function savePermissions(mode) {
 
 /** What a live session does now, for the sheet's header outside its view: a title, a short
  * label, the command or file to highlight, and the path the agent works on (for the map).
- * `tail` is the session with the end of its log. */
+ * `tail` is the session; its steps come from the items this device has read. */
 /** The word for each of Peek's activity poses (frontend/peek.js). */
 const ACTIVITY_WORDS = {
   reading: "Reading",
@@ -82,7 +82,7 @@ export function activity(tail) {
         ? tail.summary.split("\n")[0]
         : "The agent waits for your reply.",
     };
-  const last = timeline(tail.output || "")
+  const last = itemsOf(tail.id)
     .filter((i) => i.kind === "step" || i.kind === "text")
     .at(-1);
   if (!last) return { state: "running", title: "Working", label: "Starting" };
@@ -103,44 +103,45 @@ export function activity(tail) {
   };
 }
 
-/** A path inside the session's worktree, relative to the repository. */
-const relative = (path = "") =>
-  path.includes("/worktree/") ? path.split("/worktree/").pop() : path;
-const fileName = (path = "") => relative(path).split("/").pop();
+/** A new ID for an owner message. The server keeps a message with the same ID once, so a send
+ * that the device repeats (after a timeout, say) is not doubled. */
+const messageId = () =>
+  "m" +
+  [...crypto.getRandomValues(new Uint8Array(12))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 
-/** File and folder paths named in a command or a search, relative to the repository: what
- * the agent looks at when it runs `sed -n 1,40p backend/lookup.rs` or `grep -rn x backend/`.
- * Options, variables, URLs, globs and paths outside the worktree are left out. */
-export function pathsIn(text = "") {
-  const found = [];
-  for (const raw of String(text).split(/[\s'"`;|&()<>=,]+/)) {
-    let token = relative(raw)
-      .replace(/^\.\//, "")
-      .replace(/:\d+(:\d+)?$/, "")
-      .replace(/[:,.]$/, "");
-    // `backend/` names a folder.
-    const folder = /^[\w.-]+\/$/.test(token);
-    token = token.replace(/\/$/, "");
-    if (
-      !token ||
-      token.length > 200 ||
-      /^[-$~/]/.test(token) ||
-      token.includes("://") ||
-      token.includes("..") ||
-      /[*?{}[\]\\]/.test(token)
-    )
-      continue;
-    if (
-      !folder &&
-      !token.includes("/") &&
-      !/^[\w.-]+\.[A-Za-z0-9]{1,6}$/.test(token)
-    )
-      continue;
-    if (/^\d+(\.\d+)+$/.test(token)) continue;
-    found.push(token);
-  }
-  return [...new Set(found)].slice(0, 4);
+/** Each run's conversation as the server reads it (backend/conversation.rs): its items, the
+ * epoch and number of the last change that this device has, and the files the run changed. */
+const conversations = new Map();
+
+/** Reads the items of run `id` that changed since this device's last read, with `api` (a GET
+ * that returns JSON). The first read, and a read after the server restarted (a new epoch),
+ * give the whole list. Returns the items. */
+export async function syncItems(api, id) {
+  const known = conversations.get(id);
+  const query = known ? `?after=${known.seq}&epoch=${known.epoch}` : "";
+  const read = await api(`/api/runs/${id}/items${query}`);
+  const items = read.items || known.items.slice();
+  for (const patch of read.patches || []) items[patch.index] = patch.item;
+  items.length = read.total;
+  conversations.set(id, {
+    epoch: read.epoch,
+    seq: read.seq,
+    items,
+    changed: read.changed || [],
+  });
+  return items;
 }
+
+/** The items of run `id` that this device has: empty before the first read. */
+export const itemsOf = (id) => conversations.get(id)?.items || [];
+
+/** The number of the last change of run `id` that this device has, for change checks. */
+export const seqOf = (id) => conversations.get(id)?.seq || 0;
+
+/** The files that run `id` changed, from the last read of its conversation. */
+export const changedOf = (id) => conversations.get(id)?.changed || [];
 
 /** Where a session's agent is and has been, from its steps: `current` (the newest place),
  * `trail` (up to four places before it, newest first), and `activity`, the pose of a step
@@ -163,245 +164,6 @@ export function focusOf(items) {
     trail: order.slice(1),
     activity: newest?.done ? null : newest?.activity || null,
   };
-}
-
-/** The text of a Claude Code tool result, which is a string or a list of text parts. */
-function resultText(content) {
-  if (typeof content === "string") return content;
-  return (content || [])
-    .map((part) => (typeof part === "string" ? part : part.text || ""))
-    .join("\n");
-}
-
-/** One Claude Code tool call as a step: a short label, the command or pattern, and the files
- * it read or changed. Peekumi's own bookkeeping calls are left out. */
-function claudeStep(part) {
-  const input = part.input || {};
-  const step = {
-    kind: "step",
-    id: part.id,
-    files: [],
-    changed: [],
-    targets: [],
-  };
-  const file = relative(input.file_path || input.notebook_path || "");
-  const at = (paths) => paths.filter(Boolean).map((path) => ({ path }));
-  switch (part.name) {
-    case "Read":
-      return {
-        ...step,
-        activity: "reading",
-        label: `Read ${fileName(file)}`,
-        files: [file],
-        targets: at([file]),
-      };
-    case "Edit":
-    case "MultiEdit":
-      return {
-        ...step,
-        activity: "editing",
-        label: `Edited ${fileName(file)}`,
-        files: [file],
-        changed: [file],
-        targets: at([file]),
-      };
-    case "Write":
-      return {
-        ...step,
-        activity: "creating",
-        label: `Wrote ${fileName(file)}`,
-        files: [file],
-        changed: [file],
-        targets: at([file]),
-      };
-    case "Bash":
-      return {
-        ...step,
-        activity: "running",
-        label: "Ran",
-        code: input.command,
-        note: input.description,
-        targets: at(pathsIn(input.command)),
-      };
-    case "Glob":
-      return {
-        ...step,
-        activity: "searching",
-        label: "Listed files",
-        code: input.pattern,
-        targets: at(pathsIn(input.path)),
-      };
-    case "Grep":
-      return {
-        ...step,
-        activity: "searching",
-        label: "Searched",
-        code: input.pattern,
-        targets: at(pathsIn(input.path)),
-      };
-    case "TodoWrite":
-    case "mcp__peekumi__get_run":
-      return null;
-  }
-  if (part.name.startsWith("mcp__peekumi_graph__")) {
-    const tool = part.name.slice("mcp__peekumi_graph__".length);
-    const target =
-      input.to?.name ||
-      input.name ||
-      input.query ||
-      input.text ||
-      input.path ||
-      "";
-    const path = input.path || input.to?.path;
-    // A map lookup names the file and, often, the declaration: that is where the agent looks.
-    const targets = [
-      input.from,
-      input.to,
-      input.path ? { path: input.path, name: input.name } : null,
-    ]
-      .filter((t) => t?.path)
-      .map((t) => ({ path: t.path, symbol: t.name || undefined }));
-    return {
-      ...step,
-      activity: "reading",
-      label: `Map · ${tool}`,
-      code: target,
-      files: path ? [path] : [],
-      targets,
-    };
-  }
-  return { ...step, label: part.name };
-}
-
-/** Reads a session log into a timeline: the owner's messages, the agent's text, its steps
- * with their output, the end of each turn, Peekumi's rule check after it, and errors. It reads Claude Code's stream-json,
- * Codex's JSON events and Peekumi's own agent, so every provider looks the same. */
-export function timeline(output = "") {
-  const items = [];
-  const steps = new Map();
-  for (const line of output.split("\n")) {
-    let event;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (event.type === "peekumi.owner") {
-      for (const m of event.messages || [])
-        items.push({
-          kind: "owner",
-          text: m.text,
-          anchors: m.anchors || [],
-          turn: event.turn,
-        });
-      continue;
-    }
-    if (event.type === "peekumi.turn") {
-      items.push({ kind: "end", status: event.status, turn: event.turn });
-      continue;
-    }
-    // Peekumi's own rule check at the end of a turn (backend/runner.rs).
-    if (event.type === "peekumi.rules") {
-      items.push({ kind: "rules", check: event.check || {}, turn: event.turn });
-      continue;
-    }
-    if (
-      event.type === "peekumi.error" ||
-      (event.type === "error" && event.message)
-    ) {
-      items.push({ kind: "error", text: event.message });
-      continue;
-    }
-    // Claude Code.
-    if (event.type === "assistant")
-      for (const part of event.message?.content || []) {
-        if (part.type === "text" && part.text?.trim())
-          items.push({ kind: "text", text: part.text });
-        else if (part.type === "tool_use") {
-          const step = claudeStep(part);
-          if (step) {
-            steps.set(part.id, step);
-            items.push(step);
-          }
-        }
-      }
-    if (event.type === "user")
-      for (const part of event.message?.content || []) {
-        const step = part.type === "tool_result" && steps.get(part.tool_use_id);
-        if (!step) continue;
-        step.output = resultText(part.content);
-        step.failed = part.is_error === true;
-        // A Write over a file that exists edits it (Claude Code says "updated").
-        if (step.activity === "creating" && /\bupdated\b/i.test(step.output))
-          step.activity = "editing";
-        step.done = true;
-      }
-    if (event.type === "result" && event.is_error)
-      items.push({
-        kind: "error",
-        text: event.result || "The agent stopped with an error.",
-      });
-    if (event.type === "result")
-      items.push({ kind: "cost", cost: event.total_cost_usd || 0 });
-    // Codex (item.completed) and Peekumi's own agent (an item alone).
-    const item = event.item;
-    if (item && (event.type === "item.completed" || !event.type)) {
-      if (item.type === "agent_message" && item.text?.trim())
-        items.push({ kind: "text", text: item.text });
-      else if (item.type === "command_execution") {
-        const command = String(item.command || "").replace(
-          /^\/bin\/\w+ -lc '(.*)'$/s,
-          "$1",
-        );
-        items.push({
-          kind: "step",
-          activity: "running",
-          label: "Ran",
-          code: command,
-          output: item.aggregated_output,
-          failed: typeof item.exit_code === "number" && item.exit_code !== 0,
-          done: true,
-          files: [],
-          changed: [],
-          targets: pathsIn(command).map((path) => ({ path })),
-        });
-      } else if (item.type === "file_change") {
-        const paths = item.changes
-          ? item.changes.map((c) => relative(c.path))
-          : [relative(item.path)];
-        const failed = item.status === "failed";
-        items.push({
-          kind: "step",
-          // Only new files: creating. Any other change: editing.
-          activity: item.changes?.every((c) => c.kind === "add")
-            ? "creating"
-            : "editing",
-          label: `${failed ? "Could not change" : "Changed"} ${paths.map(fileName).join(", ")}`,
-          files: paths,
-          changed: failed ? [] : paths,
-          targets: paths.map((path) => ({ path })),
-          done: true,
-          failed,
-        });
-      } else if (
-        item.type === "mcp_tool_call" &&
-        item.server === "peekumi_graph"
-      )
-        items.push({
-          kind: "step",
-          activity: "reading",
-          label: `Map · ${item.tool}`,
-          done: true,
-          files: [],
-          changed: [],
-          targets: item.arguments?.path
-            ? [{ path: item.arguments.path, symbol: item.arguments.name }]
-            : [],
-        });
-    }
-  }
-  // Steps that never got a result belong to a turn that is still running, or that stopped.
-  return items;
 }
 
 /** The session's cost so far, from the agents' own reports. */
@@ -435,6 +197,9 @@ export function createSession({
   using,
   agentName: nameOf = (id) => id,
   asksBeforeCommands = () => false,
+  // What a provider's conversation can do (backend/conversation.rs): the view shows its
+  // controls by these, never by the provider's name.
+  capabilities = () => ({}),
   openTask,
   showOnMap,
   openPlace,
@@ -447,6 +212,8 @@ export function createSession({
   let places = { key: "", map: {} },
     findingPlaces = false;
   let draft = "",
+    // The ID of the draft's message, kept across a failed send (see messageId).
+    draftId = null,
     ending = false,
     denyNote = "",
     // The request last brought into view, so a redraw does not move the reader again.
@@ -552,7 +319,7 @@ export function createSession({
 
   /** The Session view: the conversation, live state, and the session's actions. */
   function render(body, r) {
-    const items = timeline(r.output || "");
+    const items = itemsOf(r.id);
     // One row that stays at the top: back, the title, the state, and Stop while it works.
     const state = r.approval
       ? "Needs you"
@@ -563,8 +330,10 @@ export function createSession({
           : live(r)
             ? "Your turn"
             : "Ended";
+    const can = capabilities(r.agent);
     const stop =
       r.status === "running" &&
+      can.interrupt !== false &&
       IconButton({
         icon: "stop",
         label: "Stop",
@@ -640,7 +409,7 @@ export function createSession({
   }
 
   /** The conversation of a session: the owner's messages, the agent's text and steps. */
-  function conversation(r, items = timeline(r.output || "")) {
+  function conversation(r, items = itemsOf(r.id)) {
     const log = Thread();
     log.setAttribute("role", "log");
     log.setAttribute("aria-label", "Session conversation");
@@ -735,6 +504,7 @@ export function createSession({
   async function askToFix(r) {
     try {
       await write(`/api/runs/${r.id}/message`, {
+        id: messageId(),
         text: "Fix the rule breaks that this session adds. Do not change the rule files to remove a break. If a break is needed, tell me why.",
         anchors: [],
       });
@@ -747,7 +517,7 @@ export function createSession({
   /** Below the conversation: the session's details, then quiet links: its changes on the
    * map, how it treats commands, and End session. */
   function renderActions(body, r) {
-    const cost = costOf(timeline(r.output || ""));
+    const cost = costOf(itemsOf(r.id));
     body.append(
       Note(
         [
@@ -777,7 +547,7 @@ export function createSession({
       links.push(link("Changes on the map", () => showOnMap(r)));
     // How the session treats commands; the next turn starts with the new choice.
     const all = r.permissions === "allow";
-    if (asksBeforeCommands(r.agent)) {
+    if (capabilities(r.agent).approvals ?? asksBeforeCommands(r.agent)) {
       const mode = link(
         all ? "Commands: all allowed" : "Commands: ask first",
         async () => {
@@ -852,14 +622,19 @@ export function createSession({
     const pointer =
       here && here.anchor.kind !== "repo" && pointed() ? here.anchor : null;
     const send = async (text) => {
+      // One ID for each draft: if this send fails and the owner sends again, the server keeps
+      // the message once.
+      if (text !== draft || !draftId) draftId = messageId();
       draft = text;
       try {
         if (current) {
           await write(`/api/runs/${current.id}/message`, {
+            id: draftId,
             text: draft,
             anchors: pointer ? [pointer] : [],
           });
           draft = "";
+          draftId = null;
           sent();
           await refresh();
           return;
@@ -885,7 +660,9 @@ export function createSession({
           ? named
             ? `Reply to “${(current.title || "Session").slice(0, 40)}”`
             : current.status === "running"
-              ? "Steer the agent: it reads this after its current turn"
+              ? capabilities(current.agent).steer
+                ? "Steer the agent: it reads this now"
+                : "Steer the agent: it reads this after its current turn"
               : "Reply to the agent"
           : "What do you want to work on?",
         sendLabel: current ? "Send to the agent" : "Start session",

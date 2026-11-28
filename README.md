@@ -30,9 +30,10 @@ Ask, tasks and sessions send code to the model provider that you choose. [Where 
 
 - [User guide](docs/USER-GUIDE.md): all controls, views and icons, with screenshots.
 - [Ask, instructions and agent runs](docs/WORKFLOW.md).
+- [Sandboxed verification and CRAP scores](docs/VERIFICATION.md).
 - [Relationships and dependency rules](docs/RELATIONSHIPS.md), with `.peekumi.json`.
 - [Development](docs/DEVELOPMENT.md): how to build and test, benchmarks and analysis limits.
-- [Architecture](docs/ARCHITECTURE.md), [scope](docs/MVP.md), [validation](docs/VALIDATION.md) and [brand](docs/brand/README.md).
+- [Architecture](docs/ARCHITECTURE.md), [scope](docs/MVP.md) and [brand](docs/brand/README.md).
 - [Security](SECURITY.md): how to report a problem, and what Peekumi protects. [Changelog](CHANGELOG.md).
 - [Contributing](CONTRIBUTING.md): how to propose and make a change, and how to [add a language or an agent provider](docs/EXTENDING.md).
 

@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  checkOutcome,
   children,
   connections,
   rootScope,
+  sensitiveKind,
+  summarizeChecks,
+  tamperFiles,
   visibleOnSide,
 } from "../frontend/model.js";
 const file = (path, status = "unchanged", deps = [], beforeDeps = []) => ({
@@ -105,4 +109,154 @@ test("typed symbol edges preserve rule-only changes and never draw unresolved ca
   assert.equal(edges[0].to.key, "symbol:helper");
   assert.equal(edges[0].status, "changed");
   assert.equal(edges[0].violationsAfter[0].id, "boundary");
+});
+
+test("checkOutcome classifies every GitHub CheckRun and StatusContext state honestly", () => {
+  // CheckRuns
+  assert.equal(
+    checkOutcome({ status: "COMPLETED", conclusion: "SUCCESS" }),
+    "passed",
+  );
+  for (const conclusion of [
+    "FAILURE",
+    "TIMED_OUT",
+    "CANCELLED",
+    "ACTION_REQUIRED",
+    "STARTUP_FAILURE",
+  ]) {
+    assert.equal(
+      checkOutcome({ status: "COMPLETED", conclusion }),
+      "failed",
+      conclusion,
+    );
+  }
+  assert.equal(
+    checkOutcome({ status: "IN_PROGRESS", conclusion: null }),
+    "pending",
+  );
+  assert.equal(checkOutcome({ status: "QUEUED" }), "pending");
+  assert.equal(
+    checkOutcome({ status: "COMPLETED", conclusion: "SKIPPED" }),
+    "skipped",
+  );
+  assert.equal(
+    checkOutcome({ status: "COMPLETED", conclusion: "NEUTRAL" }),
+    "neutral",
+  );
+  assert.equal(
+    checkOutcome({ status: "COMPLETED", conclusion: "STALE" }),
+    "unknown",
+  );
+  assert.equal(checkOutcome({ status: "COMPLETED" }), "unknown");
+
+  // StatusContexts
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "SUCCESS" }),
+    "passed",
+  );
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "FAILURE" }),
+    "failed",
+  );
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "ERROR" }),
+    "failed",
+  );
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "PENDING" }),
+    "pending",
+  );
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "EXPECTED" }),
+    "pending",
+  );
+  assert.equal(
+    checkOutcome({ __typename: "StatusContext", state: "MYSTERY" }),
+    "unknown",
+  );
+});
+
+test("summarizeChecks says All N reported checks passed only when every check explicitly passed", () => {
+  const empty = summarizeChecks([]);
+  assert.equal(empty.headline, "No checks reported");
+  assert.equal(empty.tone, "quiet");
+
+  const onePassed = summarizeChecks([
+    {
+      name: "Unit tests",
+      workflowName: "CI",
+      status: "COMPLETED",
+      conclusion: "SUCCESS",
+      detailsUrl: "https://github.com/example/repo/actions/runs/1",
+    },
+  ]);
+  assert.equal(onePassed.headline, "All 1 reported check passed");
+  assert.equal(onePassed.tone, "good");
+  assert.equal(
+    onePassed.entries[0].url,
+    "https://github.com/example/repo/actions/runs/1",
+  );
+
+  const twoPassed = summarizeChecks([
+    { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+    { __typename: "StatusContext", context: "lint", state: "SUCCESS" },
+  ]);
+  assert.equal(twoPassed.headline, "All 2 reported checks passed");
+  assert.equal(twoPassed.tone, "good");
+
+  // Skipped, neutral or unknown checks must NEVER roll up as "All passed".
+  const withSkipped = summarizeChecks([
+    { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+    { name: "E2E", status: "COMPLETED", conclusion: "SKIPPED" },
+  ]);
+  assert.equal(withSkipped.headline, "1 passed · 1 skipped");
+  assert.equal(withSkipped.tone, "open");
+
+  const withNeutral = summarizeChecks([
+    { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+    { name: "Note", status: "COMPLETED", conclusion: "NEUTRAL" },
+  ]);
+  assert.equal(withNeutral.headline, "1 passed · 1 neutral");
+  assert.equal(withNeutral.tone, "open");
+
+  const withPending = summarizeChecks([
+    { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+    { name: "Deploy", status: "IN_PROGRESS" },
+  ]);
+  assert.equal(withPending.headline, "1 pending · 1 passed");
+  assert.equal(withPending.tone, "wait");
+
+  const withFailed = summarizeChecks([
+    { name: "Build", status: "COMPLETED", conclusion: "SUCCESS" },
+    { name: "Tests", status: "COMPLETED", conclusion: "FAILURE" },
+    { name: "Lint", status: "IN_PROGRESS" },
+  ]);
+  assert.equal(withFailed.headline, "1 failed · 1 pending · 1 passed");
+  assert.equal(withFailed.tone, "bad");
+});
+
+test("tamperFiles identifies changed tests, CI files and .peekumi.json", () => {
+  assert.equal(sensitiveKind("test/app.test.mjs"), "tests");
+  assert.equal(sensitiveKind(".github/workflows/ci.yml"), "ci");
+  assert.equal(sensitiveKind(".peekumi.json"), "config");
+  assert.equal(sensitiveKind("src/main.rs"), null);
+  const flagged = tamperFiles([
+    { path: "src/main.rs", status: "changed" },
+    { path: "test/api.test.mjs", status: "changed" },
+    { path: ".github/workflows/ci.yml", status: "changed" },
+    { path: ".peekumi.json", status: "changed" },
+    { path: "test/unchanged.test.mjs", status: "unchanged" },
+  ]);
+  assert.deepEqual(
+    flagged.tests.map((f) => f.path),
+    ["test/api.test.mjs"],
+  );
+  assert.deepEqual(
+    flagged.ci.map((f) => f.path),
+    [".github/workflows/ci.yml"],
+  );
+  assert.deepEqual(
+    flagged.config.map((f) => f.path),
+    [".peekumi.json"],
+  );
 });

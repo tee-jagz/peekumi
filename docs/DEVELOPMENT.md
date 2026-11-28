@@ -16,7 +16,7 @@ Peekumi uses a Rust backend (Axum/Tokio and SQLite). This backend reads committe
 ## Layout and lint
 
 - `npm run format` makes the layout of the JavaScript, the CSS, the HTML and the YAML files (Prettier), and of the Rust code (rustfmt). `npm run format:check` only checks it.
-- `npm run lint` runs `clippy` with warnings as errors, and it checks the writing rules of the documents (`scripts/lint-docs.mjs`).
+- `npm run lint` runs `clippy` with warnings as errors and checks the UI component rules (`scripts/lint-ui.mjs`).
 
 CI runs both on each pull request. The settings are in `.prettierrc.json`, `.prettierignore`, `rustfmt.toml` and `.editorconfig`.
 
@@ -90,7 +90,7 @@ PEEKUMI_TEST_REPO=/path/to/visalytics PEEKUMI_TEST_BASE=HEAD~10 npm run test:bro
 
 `PEEKUMI_BROWSER_CHANNEL=chrome` uses an installed Chrome, not the Chromium that Playwright downloads. Browser tests save local screenshots in `test-results/`. These screenshots can contain inspected code, and they never go into a commit.
 
-See [MVP scope](MVP.md), [architecture](ARCHITECTURE.md), and [first integration results](VALIDATION.md).
+See [MVP scope](MVP.md), [architecture](ARCHITECTURE.md), and [verification](VERIFICATION.md).
 
 ## Benchmark indexing
 

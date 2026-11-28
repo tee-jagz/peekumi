@@ -95,23 +95,37 @@ pub struct SessionTurn<'a> {
 pub const NO_COAUTHOR: &str =
     r#"{"includeCoAuthoredBy":false,"attribution":{"commit":"","pr":""}}"#;
 
-/// Commands a session agent may run with no question: Git on its own branch and common test
-/// runners. Any other command waits for the owner (Claude Code), see the runner's `approve`.
-pub const SESSION_COMMANDS: [&str; 14] = [
+/// Commands a session agent may run with no question: Git on its own branch, read-only
+/// inspection, format/lint, and common build/test runners. Any other command waits for the
+/// owner (Claude Code), see the runner's `approve`.
+pub const SESSION_COMMANDS: [&str; 27] = [
     "Bash(git status:*)",
     "Bash(git diff:*)",
     "Bash(git log:*)",
     "Bash(git show:*)",
+    "Bash(git branch:*)",
+    "Bash(git ls-files:*)",
     "Bash(git add:*)",
     "Bash(git commit:*)",
     "Bash(npm test:*)",
     "Bash(npm run test:*)",
+    "Bash(npm run lint:*)",
+    "Bash(npm run format:*)",
     "Bash(cargo test:*)",
     "Bash(cargo check:*)",
+    "Bash(cargo build:*)",
+    "Bash(cargo clippy:*)",
+    "Bash(cargo fmt:*)",
     "Bash(pytest:*)",
     "Bash(python -m pytest:*)",
     "Bash(go test:*)",
     "Bash(node --test:*)",
+    "Bash(rg:*)",
+    "Bash(ls:*)",
+    "Bash(cat:*)",
+    "Bash(head:*)",
+    "Bash(tail:*)",
+    "Bash(wc:*)",
 ];
 /// The graph tools as an agent sees them through the `peekumi_graph` MCP server.
 pub const GRAPH_TOOLS: [&str; 8] = [
@@ -167,6 +181,22 @@ pub trait Agent: Send + Sync {
     /// (the session's approval bridge). The app then shows the "Commands" switch.
     fn asks_before_commands(&self) -> bool {
         false
+    }
+    /// What this provider's conversation can do in a session (see the conversation module).
+    /// The app shows its controls by these. Today every provider takes one turn at a time: a
+    /// message sent during a turn waits for the next one, Stop ends the turn, and the next turn
+    /// continues the conversation.
+    fn capabilities(&self) -> crate::conversation::Capabilities {
+        crate::conversation::Capabilities {
+            stream_text: false,
+            queue_while_busy: true,
+            steer: false,
+            interrupt: true,
+            approvals: self.asks_before_commands(),
+            images: false,
+            resume: true,
+            cost: false,
+        }
     }
 }
 
@@ -260,6 +290,19 @@ impl Agent for ClaudeCode {
     }
     fn asks_before_commands(&self) -> bool {
         true
+    }
+    fn capabilities(&self) -> crate::conversation::Capabilities {
+        // Claude Code reports the cost of each turn in its result.
+        crate::conversation::Capabilities {
+            stream_text: false,
+            queue_while_busy: true,
+            steer: false,
+            interrupt: true,
+            approvals: true,
+            images: false,
+            resume: true,
+            cost: true,
+        }
     }
     /// The model aliases and effort levels that `claude --help` names. Claude Code has no
     /// command that lists models; an alias always means the latest model of that family.

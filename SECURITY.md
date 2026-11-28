@@ -12,7 +12,11 @@ Peekumi runs on your computer and shows the code of the repositories that you re
 
 ### Access
 
-- Each request, except pairing, needs a session or an access token. Peekumi has two tokens: the owner token and the read-only token. Each token is 32 random bytes. Only your user account can read the token files.
+- On your tailnet, Tailscale is the sign-in. `peekumi share` saves the Tailscale login of this computer's owner. A request that Tailscale Serve brings from that login is the owner's, with no token and no pairing. Serve replaces a `Tailscale-User-Login` header that a client sends, so the header is Tailscale's word.
+- Tailscale names the person, not the device. Each device that is signed in with your login can use Peekumi, servers too. Give a server a Tailscale tag: a tagged device has no user identity, so it gets no access.
+- A request through the Cloudflare tunnel never gets in this way, because a public client can send its own header. Peekumi refuses the Tailscale header on each request that has Cloudflare's headers.
+- A program on this computer can send the header too. It can also read the token files, so the header gives it nothing new.
+- Other requests, except pairing, need a session or an access token. Peekumi has two tokens: the owner token and the read-only token. Each token is 32 random bytes. Only your user account can read the token files.
 - Peekumi compares tokens in constant time. There is no limit on pairing attempts, but the tokens are long random values, so it is not practical to guess them.
 - A pairing link changes a token into a session cookie. The cookie is `HttpOnly` and `SameSite=Strict`. It is also `Secure` when you use HTTPS through `peekumi share`. A session is valid for 30 days. Peekumi keeps only hashes of session IDs, and you can revoke a device at any time.
 - A request that changes data must come from the same origin and must use JSON. Pages use a strict Content Security Policy, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
@@ -65,6 +69,14 @@ Each part has a size limit, and the answer says when Peekumi cut a part. While i
 - **Allow all commands** removes that question. The agent can then run any command with the permissions of your user account. It can read files outside the worktree, use the network and change other files on your computer. Use this mode only for work that you trust, and turn it off with **Commands: ask first**.
 - Peekumi gives a session agent no project or user settings of Claude Code, so your own permission rules and hooks do not apply to it.
 - Peekumi never pushes an agent branch. It merges a task or an ended session into your branch only when you tap **Merge** and confirm, and only as a fast-forward. Examine the result before you merge it.
+
+### Sandboxed verification
+
+- Verification runs repository checks from `.peekumi.json` at the `start` commit against a `git archive` copy of `head` with no `.git` folder.
+- On macOS, checks run under Seatbelt (`/usr/bin/sandbox-exec`). On Linux, checks run under bubblewrap (`bwrap`). If the sandbox is unavailable or fails to apply, the run stops as `blocked`. Peekumi never executes checks outside the sandbox.
+- The check phase blocks network access, clears environment tokens, assigns a private empty `HOME`, denies `~/.ssh`, `~/.aws`, `~/.config/gh`, Keychains, the inspected checkout, and Peekumi state, and keeps any prepare cache read-only.
+- The `--prepare` phase enables network access inside the sandbox only when the owner opts in. Automatic runs after an agent report never enable `--prepare`.
+- Each check runs in its own process group with a strict timeout and capped output tail.
 
 ### Network exposure
 

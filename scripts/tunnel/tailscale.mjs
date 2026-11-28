@@ -24,18 +24,22 @@ export function createTailscaleProvider(run) {
     },
 
     /**
-     * Reads the signed-in DNS host and current Serve configuration without changing either.
-     * Throws on command/JSON errors or a missing host, before reading Serve configuration.
-     * @returns {{host: string, configuration: object}} Current tunnel status.
+     * Reads the signed-in DNS host, the owner's login and the current Serve configuration
+     * without changing them. Throws on command/JSON errors or a missing host, before reading
+     * Serve configuration. `owner` is null on a tagged node, which has no user identity.
+     * @returns {{host: string, owner: string|null, configuration: object}} Current tunnel status.
      */
     status() {
       const ts = JSON.parse(run("tailscale", ["status", "--json"]));
       const host = ts.Self?.DNSName?.replace(/\.$/, "");
       if (!host) throw new Error("Sign into Tailscale first");
+      const owner = ts.Self?.Tags?.length
+        ? null
+        : ts.User?.[String(ts.Self?.UserID)]?.LoginName || null;
       const configuration = JSON.parse(
         run("tailscale", ["serve", "status", "--json"]),
       );
-      return { host, configuration };
+      return { host, owner, configuration };
     },
 
     /**

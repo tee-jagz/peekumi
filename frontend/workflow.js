@@ -15,10 +15,24 @@ import {
   Note,
   PickRow,
   DataNote,
+  EvidenceItem,
+  EvidenceQuestion,
+  EvidenceSection,
+  InboxCue,
+  InboxRow,
+  ProvenanceChips,
   RuleCheck,
   SegmentedControl,
   Spinner,
+  Stack,
+  Text,
+  Actions,
+  Row,
+  Modal,
+  openModal,
+  Prose,
   TextArea,
+  TextField,
 } from "./ui.js";
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -206,13 +220,20 @@ export function createWorkflow({
   sessions,
   // Notifications on this device (notify.js), for "Tell me when it is done".
   notifications = { isOn: () => false, canTurnOn: () => false, ensureOn() {} },
+  // Review Inbox navigation helpers for committed branches and already-loaded read-only PRs.
+  openBranch = () => {},
+  openPr = () => {},
+  loadedPrs = () => [],
 }) {
   const {
     createSession,
     live,
     activity,
-    timeline,
     focusOf,
+    syncItems,
+    itemsOf,
+    seqOf,
+    changedOf,
     savedPermissions,
     savePermissions,
   } = sessions;
@@ -225,7 +246,6 @@ export function createWorkflow({
     editing = null,
     preview = null;
   // The end of an open session's log while another view is open (see cueLive).
-  let sessionTail = null;
   let brief = "",
     picks = new Set(),
     // The send sheet: "background" starts a task, "live" a session (With me). A preview is
@@ -281,6 +301,7 @@ export function createWorkflow({
     using: (job) => agents.using(job),
     agentName: (id) => agents.short(id),
     asksBeforeCommands: (id) => agents.asksBeforeCommands(id),
+    capabilities: (id) => agents.capabilities(id),
     openTask: (id) => openTask(id),
     showOnMap: (r, path) => showOnMap(r, path),
     openPlace: (target) => openPlace(target),
@@ -328,35 +349,45 @@ export function createWorkflow({
       .catch(() => {})
       .then(async () => {
         data = await api("/api/workflow");
+        inboxData = await api("/api/inbox").catch(() => inboxData);
         loaded = true;
         const shown = runId();
         if (shown) runDetail = await api("/api/runs/" + shown);
-        // A running run or an open session outside its view: only the end of its log, for
-        // the sheet's line and the map's agent focus.
+        if (
+          !autoOpenedOnce &&
+          verifyActions.autoOpenEnabled() &&
+          nav.view().name === "inspect" &&
+          data.runs.some((r) => r.kind !== "session" && stageOf(r) === "needs")
+        ) {
+          autoOpenedOnce = true;
+          nav.go({ name: "tasks" });
+        }
+        // The conversation of the run on screen, and of a running run or an open session
+        // outside its view (for the sheet's line and the map's agent focus): only the items
+        // that changed since the last read (see backend/conversation.rs).
         const open = data.runs
           .slice()
           .reverse()
           .find((r) => active(r) || live(r));
-        sessionTail =
-          open && open.id !== shown
-            ? await api(`/api/runs/${open.id}/tail`).catch(() => null)
-            : null;
+        for (const id of new Set([shown, open?.id].filter(Boolean)))
+          await syncItems(api, id).catch(() => {});
         // A task to approve, approved or merged shows what a merge would do now: before the
         // approval, the server's `next` decides between Approve and Approve and merge.
         const r = shown && runDetail?.id === shown && runDetail;
+        // A finished run also needs it for the files its agent left uncommitted (`loose`).
         mergeInfo =
           r &&
-          r.status === "completed" &&
-          !r.revisedBy &&
-          (reviewed(r) ||
-            r.merge ||
-            data.comments.some(
-              (c) => c.runId === r.id && c.status === "addressed",
-            ))
+          ["completed", "failed", "cancelled"].includes(r.status) &&
+          !r.revisedBy
             ? await api(`/api/runs/${r.id}/merge`).catch(() => null)
             : null;
         bar();
-        const signature = JSON.stringify([data, runDetail, mergeInfo]),
+        const signature = JSON.stringify([
+            data,
+            runDetail,
+            mergeInfo,
+            shown && seqOf(shown),
+          ]),
           changed = signature !== lastSignature;
         lastSignature = signature;
         // A poll redraws only a page that shows this data (never the map's own views).
@@ -426,43 +457,49 @@ export function createWorkflow({
     // Tasks only: an open session shows in the sheet's live line (see cueLive).
     const running = data.runs.find((r) => active(r) && r.kind !== "session"),
       stuck = !running && data.runs.find(stalled);
+    const waitingCount = ready.length + loadedPrs().length;
     const next = running
       ? "working"
       : stuck
         ? "attention"
-        : ready.length
+        : waitingCount > 0
           ? "ready"
           : "";
+    const cueKey = next === "ready" ? `ready:${waitingCount}` : next;
     const agent = (r) => agents.label(r.agent);
     const label = running
       ? `${agent(running)} is working on a task`
       : stuck
         ? "A task stopped and needs your attention"
-        : ready.length
-          ? `Tasks, ${ready.length} ready to review`
+        : waitingCount > 0
+          ? `Tasks, ${waitingCount} waiting on you`
           : "Tasks";
     button.setAttribute("aria-label", label);
     button.title =
       running || stuck
         ? label
-        : ready.length
-          ? `${ready.length} task${ready.length === 1 ? "" : "s"} ready to review on its agent branch`
+        : waitingCount > 0
+          ? `${waitingCount} change${waitingCount === 1 ? "" : "s"} waiting for your review`
           : "Open tasks";
-    if (next === cue) return;
+    if (cueKey === cue) return;
     const finished = cue === "working" && next !== "working";
-    cue = next;
+    cue = cueKey;
     clearTimeout(settle);
     button.dataset.cue = next;
     button.dataset.ready = String(next === "ready");
     if (next === "working") button.replaceChildren(peek("working"));
     else if (next === "attention") button.replaceChildren(peek("stopped"));
     else if (finished && next === "ready") {
-      // One short hop as the agent finishes, then the usual accent icon.
+      // One short hop as the agent finishes, then the amber waiting pill.
       button.replaceChildren(peek("ready"));
       settle = setTimeout(
-        () => cue === "ready" && button.replaceChildren(tasksIcon),
+        () =>
+          cue === cueKey &&
+          button.replaceChildren(tasksIcon, InboxCue(waitingCount)),
         2600,
       );
+    } else if (next === "ready") {
+      button.replaceChildren(tasksIcon, InboxCue(waitingCount));
     } else button.replaceChildren(tasksIcon);
   }
   /** The sheet's live line: a small Peek and one state word at the right of the sheet's title
@@ -487,31 +524,36 @@ export function createWorkflow({
           );
     if (row && line.parentElement !== row) row.append(line);
     const view = nav.view(),
-      runs = data.runs.slice().reverse();
+      runs = data.runs.slice().reverse(),
+      waitingTasks = runs.filter(
+        (x) => x.kind !== "session" && stageOf(x) === "needs",
+      );
     const r =
       runs.find((x) => live(x) && x.approval) ||
       runs.find((x) => live(x) && x.status === "running") ||
       runs.find((x) => active(x) && x.kind !== "session") ||
-      runs.find(live);
+      runs.find(live) ||
+      (view.name === "tasks" ? null : waitingTasks[0]);
     line.hidden = !r || (view.name === "run" && view.id === r.id);
     if (line.hidden) return;
     const session = r.kind === "session";
-    // What the agent does now, from the end of its log.
-    const full =
-      runDetail?.id === r.id
-        ? runDetail
-        : sessionTail?.id === r.id
-          ? sessionTail
-          : r;
+    // What the agent does now, from the items of its conversation.
+    const full = runDetail?.id === r.id ? runDetail : r;
     const now = session
       ? activity(full)
-      : { state: "running", title: "Working", label: taskTitle(r), code: "" };
+      : active(r)
+        ? { state: "running", title: "Working", label: taskTitle(r), code: "" }
+        : {
+            state: "needs",
+            title: `${waitingTasks.length} waiting`,
+            label: taskTitle(r),
+            code: "",
+          };
     const name = session ? r.title || "Session" : taskTitle(r);
-    // Just out of a running session's view: fetch the end of its log now, not at the next poll.
-    if (session && r.status === "running" && full === r && !tailLoading) {
+    // Just out of a running session's view: read its conversation now, not at the next poll.
+    if (session && r.status === "running" && !seqOf(r.id) && !tailLoading) {
       tailLoading = true;
-      api(`/api/runs/${r.id}/tail`)
-        .then((tail) => (sessionTail = tail))
+      syncItems(api, r.id)
         .catch(() => {})
         .finally(() => {
           tailLoading = false;
@@ -569,22 +611,15 @@ export function createWorkflow({
   function runFocus() {
     const r = markedRun();
     if (!r) return focus.set("run", null);
-    const full =
-      r.output !== undefined
-        ? r
-        : runDetail?.id === r.id
-          ? runDetail
-          : sessionTail?.id === r.id
-            ? sessionTail
-            : r;
-    const where = focusOf(timeline(full.output || ""));
+    const full = runDetail?.id === r.id ? runDetail : r;
+    const where = focusOf(itemsOf(r.id));
     focus.set("run", {
       running: r.status === "running",
       live: live(r),
       activity: where.activity,
       current: where.current,
       trail: where.trail,
-      changed: full.changed || [],
+      changed: full.changed || changedOf(r.id),
     });
   }
   function bar() {
@@ -646,7 +681,10 @@ export function createWorkflow({
         asking,
         onInput: (text) => {
           draft = text;
-          if (text) composer.pinned = true;
+          if (text) {
+            if (!composer) composer = context();
+            if (composer) composer.pinned = true;
+          }
         },
         onAdd: async (text) => {
           draft = text;
@@ -799,7 +837,29 @@ export function createWorkflow({
         onClick: () => agents.open(null, () => redraw()),
       });
       choose.id = "openAgents";
-      head("Tasks", { actions: [...taskActions().filter(Boolean), choose] });
+      const shown = data.runs
+        .filter((r) => r.status !== "preview" && !r.revisedBy)
+        .slice()
+        .reverse();
+      // Open sessions are conversations (see Conversations); a session sent to review is work.
+      const drafts = data.comments.filter(sendable);
+      const needs = shown.filter((r) => stageOf(r) === "needs");
+      const working = shown.filter((r) => stageOf(r) === "working");
+      const branches = (inboxData?.needsYou || []).filter(
+        (item) => item.kind === "branch",
+      );
+      const prs = loadedPrs();
+      const totalWaiting = needs.length + prs.length;
+      const meta = [
+        totalWaiting ? `${totalWaiting} waiting on you` : "All caught up",
+        working.length && `${working.length} working`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      head("Tasks", {
+        meta,
+        actions: [...taskActions().filter(Boolean), choose],
+      });
       const uses = agents.describe("task");
       if (uses)
         body.append(el("p", "read-note tasks-uses", `New tasks use ${uses}`));
@@ -808,14 +868,7 @@ export function createWorkflow({
           .load()
           .then((c) => c && redraw())
           .catch(() => {});
-      const shown = data.runs
-        .filter((r) => r.status !== "preview" && !r.revisedBy)
-        .slice()
-        .reverse();
-      // Open sessions are conversations (see Conversations); a session sent to review is work.
-      const drafts = data.comments.filter(sendable);
-      const needs = shown.filter((r) => stageOf(r) === "needs");
-      if (drafts.length || needs.length)
+      if (drafts.length || needs.length || prs.length)
         body.append(el("h3", "workflow-group", "Needs you"));
       if (drafts.length)
         body.append(
@@ -830,17 +883,72 @@ export function createWorkflow({
       // A task's earlier rounds open from its latest one. Tasks are grouped by what they
       // need from you; applied and closed tasks leave this list for History.
       body.append(...needs.map(taskCard));
-      const working = shown.filter((r) => stageOf(r) === "working");
+      for (const pr of prs) {
+        const chips = [];
+        if (pr.isDraft) chips.push({ text: "Draft", tone: "quiet" });
+        if (pr.reviewDecision === "CHANGES_REQUESTED")
+          chips.push({ text: "Changes requested", tone: "open" });
+        body.append(
+          InboxRow({
+            title: `PR #${pr.number} · ${pr.title}`,
+            source: "GitHub PR",
+            chips,
+            onClick: () => openPr(pr.number),
+          }),
+        );
+      }
       if (working.length)
         body.append(
           el("h3", "workflow-group", "Working"),
-          ...working.map(taskCard),
+          ...working.map((r) => taskCard(r, false)),
         );
       const done = shown.filter((r) => stageOf(r) === "done");
       if (done.length)
         body.append(
           el("h3", "workflow-group quiet-group", "Done · waiting to merge"),
           ...done.map((r) => taskCard(r, true)),
+        );
+      if (branches.length)
+        body.append(
+          Disclosure(
+            {
+              summary: `Other branches (${branches.length})`,
+              key: "other-branches",
+            },
+            Stack(
+              ...branches.map((br) => {
+                const v = br.verification;
+                const ran = (v?.checks || []).filter(
+                  (c) => c.observed !== "skipped",
+                );
+                const passed = ran.filter((c) => c.matched).length;
+                const chip =
+                  v?.state === "failed"
+                    ? {
+                        text: ran.length
+                          ? `Checks failed · ${passed}/${ran.length} passed`
+                          : "Checks failed",
+                        tone: "bad",
+                      }
+                    : v?.state === "passed"
+                      ? {
+                          text: ran.length
+                            ? `${passed}/${ran.length} checks passed`
+                            : "Checks passed",
+                          tone: "good",
+                        }
+                      : v?.state === "skipped"
+                        ? { text: "No checks matched", tone: "open" }
+                        : { text: "Not checked yet", tone: "quiet" };
+                return InboxRow({
+                  title: br.name || br.title,
+                  chips: [chip],
+                  urgent: v?.state === "failed",
+                  onClick: () => openBranch(br.start, br.head, br.name),
+                });
+              }),
+            ),
+          ),
         );
     }
     const items = task
@@ -912,6 +1020,19 @@ export function createWorkflow({
         link.classList.add("link-button", "history-link");
         body.append(link);
       }
+      body.append(
+        Disclosure(
+          { summary: "Inbox settings", key: "inbox-settings" },
+          Checkbox({
+            label: "Auto-open inbox when items wait",
+            checked: verifyActions.autoOpenEnabled(),
+            onChange: (e) => {
+              verifyActions.setAutoOpen(e.target.checked);
+              redraw();
+            },
+          }),
+        ),
+      );
     }
   }
   /** The instruction cards in `list`, grouped by state, added to `target`. */
@@ -952,17 +1073,38 @@ export function createWorkflow({
         card.append(richText(c.text, "workflow-text"), foot);
         const report = c.report;
         if (report) {
-          // What the agent says about it, quietly under the instruction; no heading.
-          card.append(
-            richText(report.note || report.reason, "workflow-text report-text"),
-          );
-          if (report.checks) {
-            const d = el("details", "workflow-evidence");
-            d.append(
-              el("summary", "", "Agent-reported checks"),
-              richText(report.checks, "workflow-text"),
+          // Keep long agent essays collapsed behind a toggle so signal stays first on mobile.
+          const summaryText = String(report.note || report.reason || "").trim();
+          if (summaryText.length > 180) {
+            const lead =
+              summaryText.split(/(?<=[.!?])\s+/)[0]?.slice(0, 160) ||
+              summaryText.slice(0, 160);
+            card.append(
+              richText(
+                lead + (lead.length < summaryText.length ? "…" : ""),
+                "workflow-text report-text",
+              ),
+              Disclosure(
+                { summary: "Full agent note" },
+                richText(summaryText, "workflow-text report-text"),
+              ),
             );
-            card.append(d);
+          } else if (summaryText) {
+            card.append(richText(summaryText, "workflow-text report-text"));
+          }
+          if (
+            report.checks &&
+            (!task ||
+              task.applied ||
+              task.revisedBy ||
+              task.status !== "completed")
+          ) {
+            card.append(
+              Disclosure(
+                { summary: "Agent-reported checks" },
+                Prose(report.checks),
+              ),
+            );
           }
         }
         if (c.verification)
@@ -1225,8 +1367,9 @@ export function createWorkflow({
     build(box, close);
     return dialog;
   }
-  /** Brings the target's new commits into the task. A clean update keeps the approval; a
-   * conflict opens the new round in which the agent resolves it. */
+  /** Brings the target's new commits into the task. A clean update adds a merge commit, so
+   * the approval is cleared and the owner approves the new head; a conflict opens the new
+   * round in which the agent resolves it. */
   async function updateTask(r) {
     const out = await write(`/api/runs/${r.id}/update`, {});
     if (out.round) {
@@ -1236,7 +1379,9 @@ export function createWorkflow({
       setTimeout(() => notice(""), 5000);
       await openTask(out.round.id);
     } else {
-      notice(`Updated with ${mergeInfo?.target || "main"}. No conflicts.`);
+      notice(
+        `Updated with ${mergeInfo?.target || "main"}. No conflicts. Approve the new head.`,
+      );
       setTimeout(() => notice(""), 3000);
       await refresh();
     }
@@ -1310,15 +1455,19 @@ export function createWorkflow({
       );
     return shown;
   }
-  /** Records the owner's approval of the finished instructions `ready`, against their
-   * commit, with the note when one is written. */
-  async function approve(ready) {
-    for (const c of ready)
-      await write(
-        "/api/comments/" + c.id,
-        { action: "verify", version: c.version, note: verificationNote },
-        "PATCH",
+  /** Records the owner's approval of task `r` in one request, bound to the exact start and
+   * head of the merge state `m` that the owner saw, with the note when one is written. The
+   * server refuses when either commit changed (see backend/review.rs). */
+  async function approve(r, m = mergeInfo) {
+    if (!m?.start || !m?.head)
+      throw new Error(
+        "Peekumi could not read the task's commits. Check again, then approve.",
       );
+    await write(`/api/runs/${r.id}/approve`, {
+      start: m.start,
+      head: m.head,
+      note: verificationNote,
+    });
     verificationNote = "";
     reply = null;
   }
@@ -1343,11 +1492,16 @@ export function createWorkflow({
           ? [
               action("Approve only", async () => {
                 try {
-                  await approve(approveFirst);
+                  await approve(r, m);
                 } finally {
                   close();
                   await refresh();
                 }
+                requestAnimationFrame(() =>
+                  document
+                    .querySelector(".apply-step")
+                    ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+                );
               }),
             ]
           : []),
@@ -1356,7 +1510,7 @@ export function createWorkflow({
             approveFirst ? "Approve and merge" : "Merge",
             async () => {
               try {
-                if (approveFirst) await approve(approveFirst);
+                if (approveFirst) await approve(r, m);
                 await write(`/api/runs/${r.id}/merge`, {
                   target: m.targetSha,
                   head: m.head,
@@ -1476,6 +1630,866 @@ export function createWorkflow({
   }
   /** The step after approval: merge into the target branch on the owner's tap, or what is in
    * the way and the way past it. Null while there is nothing to merge. Peekumi never pushes. */
+  /** Files the agent left uncommitted in its worktree: they are not in the task's results,
+   * and a later round would not see them. The owner can keep them as one commit. */
+  function looseStep(r) {
+    // `loose` is a count, or why Peekumi cannot count (shown under Blind spots).
+    const n = mergeInfo?.loose?.state === "counted" ? mergeInfo.loose.count : 0;
+    if (!n || r.merge) return null;
+    return Stack(
+      Text(`The agent left ${plural(n, "file")} uncommitted.`),
+      Note(
+        "They are not part of this task's results, and a new round starts without them. You can keep them as one commit on the task branch, then review it.",
+      ),
+      Actions(
+        {},
+        Button({ label: "Keep these files", onClick: () => keepLoose(r) }),
+      ),
+    );
+  }
+  /** Shows the agent's loose files and commits exactly those on the owner's action. A
+   * restricted file is listed but never read or kept. */
+  function keepLoose(r) {
+    const states = {
+      new: "New",
+      changed: "Changed",
+      staged: "Staged",
+      deleted: "Deleted",
+    };
+    const box = Stack(Note("Reading the agent's files…"));
+    let close = () => {};
+    close = openModal(
+      Modal({ label: "Keep the agent's files", onClose: () => close() }, box),
+    );
+    (async () => {
+      let loose;
+      try {
+        loose = await api(`/api/runs/${r.id}/loose`);
+      } catch (e) {
+        box.replaceChildren(
+          Text(e.message),
+          Actions({}, Button({ label: "Close", onClick: close })),
+        );
+        return;
+      }
+      let message = "Keep the work that the agent left uncommitted";
+      const kept = loose.files.filter((f) => !f.restricted);
+      box.replaceChildren(
+        Stack(
+          Text(`Commit ${plural(kept.length, "file")} on ${loose.branch}?`),
+          List(
+            ...loose.files.map((f) =>
+              Row({
+                title: f.path,
+                meta: f.restricted
+                  ? "Restricted: not kept, never read"
+                  : states[f.state] +
+                    (f.added == null
+                      ? ""
+                      : ` · +${f.added}${f.removed ? ` −${f.removed}` : ""}`),
+                chevron: false,
+                small: true,
+              }),
+            ),
+          ),
+          TextArea({
+            label: "Commit message",
+            value: message,
+            onInput: (e) => (message = e.target.value),
+          }),
+          Note(
+            "Peekumi commits in the agent's worktree, not in your folder. The work is not approved: review it as usual.",
+          ),
+          Actions(
+            {},
+            Button({ label: "Cancel", onClick: close }),
+            Button({
+              label: "Keep and commit",
+              variant: "primary",
+              disabled: !kept.length,
+              onClick: async () => {
+                try {
+                  await write(`/api/runs/${r.id}/salvage`, {
+                    message,
+                    head: loose.head,
+                    hash: loose.hash,
+                  });
+                } catch (e) {
+                  box.replaceChildren(
+                    Text(e.message),
+                    Actions({}, Button({ label: "Close", onClick: close })),
+                  );
+                  return;
+                }
+                // The view behind the sheet is current before it shows again: a merge
+                // started at once must see the new branch head.
+                await refresh();
+                close();
+              },
+            }),
+          ),
+        ),
+      );
+    })();
+  }
+  let inboxData = null,
+    autoOpenedOnce = false;
+  /** Cached CRAP comparisons by `start:head`, loaded alongside review evidence. */
+  const crapChecks = new Map();
+  /** Async API actions and caches for verification, inbox, acceptance, and CRAP (never build DOM elements). */
+  const verifyActions = {
+    autoOpenEnabled() {
+      try {
+        return localStorage.getItem("peekumi.autoOpenInbox") === "1";
+      } catch {
+        return false;
+      }
+    },
+    setAutoOpen(on) {
+      try {
+        localStorage.setItem("peekumi.autoOpenInbox", on ? "1" : "0");
+      } catch {}
+    },
+    splitArgv(raw) {
+      const out = [];
+      let cur = "",
+        quote = "";
+      for (const ch of String(raw || "").trim()) {
+        if (quote) {
+          if (ch === quote) quote = "";
+          else cur += ch;
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+        } else if (/\s/.test(ch)) {
+          if (cur) {
+            out.push(cur);
+            cur = "";
+          }
+        } else cur += ch;
+      }
+      if (cur) out.push(cur);
+      return out;
+    },
+    inbox() {
+      api("/api/inbox")
+        .then((res) => {
+          inboxData = res;
+          redraw();
+        })
+        .catch(() => {});
+    },
+    crap(start, head) {
+      if (!start || !head) return null;
+      const key = `${start}:${head}`;
+      if (!crapChecks.has(key)) {
+        crapChecks.set(key, { loading: true });
+        api(`/api/crap?${new URLSearchParams({ base: start, head })}`)
+          .then((crap) => crapChecks.set(key, { crap }))
+          .catch((e) =>
+            crapChecks.set(key, {
+              failed: true,
+              reason: e.message,
+            }),
+          )
+          .finally(redraw);
+      }
+      return { key, ...crapChecks.get(key) };
+    },
+    async start(r, prepare = false, configRef = null) {
+      const start = mergeInfo?.start || r.start || r.base;
+      const head = mergeInfo?.head || resultCommit(r);
+      if (!start || !head) return;
+      try {
+        await write("/api/verify/runs", {
+          start,
+          head,
+          prepare,
+          runId: r.id,
+          ...(configRef ? { configRef } : {}),
+        });
+        crapChecks.delete(`${start}:${head}`);
+        notice(
+          prepare
+            ? "Preparing and running checks in sandbox…"
+            : "Running checks in sandbox…",
+        );
+        setTimeout(() => notice(""), 3000);
+        await refresh();
+      } catch (e) {
+        notice(e.message, true);
+      }
+    },
+    async saveAcceptance(r, rawCmd, expectFailOnStart) {
+      const command = this.splitArgv(rawCmd);
+      if (!command.length) {
+        notice(
+          "Enter a shell-free command, for example: node --test test/model.test.mjs",
+          true,
+        );
+        return;
+      }
+      try {
+        await write(`/api/runs/${r.id}/acceptance`, {
+          command,
+          expectFailOnStart: Boolean(expectFailOnStart),
+        });
+        notice("Saved owner acceptance check. Run checks to verify.");
+        setTimeout(() => notice(""), 3500);
+        await refresh();
+      } catch (e) {
+        notice(e.message, true);
+      }
+    },
+    async clearAcceptance(r) {
+      try {
+        await write(`/api/runs/${r.id}/acceptance`, { command: null });
+        notice("Removed owner acceptance check.");
+        setTimeout(() => notice(""), 3000);
+        await refresh();
+      } catch (e) {
+        notice(e.message, true);
+      }
+    },
+    async sendFailureBack(r, verifyRun) {
+      const failed = (verifyRun.checks || []).filter(
+        (c) => !c.matched && c.observed !== "skipped",
+      );
+      const details = failed
+        .map((c) => {
+          const tail = (c.output || "").trim().slice(-1500);
+          return `Check "${c.name}" (${c.id}) ${c.observed} (expected ${c.expected}):\nCommand: ${(c.command || []).join(" ")}${tail ? `\nOutput:\n${tail}` : ""}`;
+        })
+        .join("\n\n");
+      const feedback = `Fix the failed Peekumi verification check${failed.length === 1 ? "" : "s"}:\n\n${details}`;
+      try {
+        await write("/api/comments", {
+          anchor: { kind: "repo", path: "" },
+          sha: mergeInfo?.head || resultCommit(r) || r.base,
+          text: feedback,
+          forRun: r.id,
+        });
+        const next = await write(`/api/runs/${r.id}/revise`, { feedback });
+        notice(`Sent failed checks back to the agent (round ${next.round}).`);
+        setTimeout(() => notice(""), 4000);
+        await openTask(next.id);
+      } catch (e) {
+        notice(e.message, true);
+      }
+    },
+  };
+  /** The results of Peekumi's own verification runs for a task, when the server has them
+   * (`verification` on the run or on its merge state), as evidence items. Each result keeps
+   * its own state; nothing adds them up to one verdict. */
+  function verificationItems(r) {
+    const found = r.verification ?? mergeInfo?.verification;
+    const start = mergeInfo?.start || r.start || r.base;
+    const head = mergeInfo?.head || resultCommit(r);
+    const items = [];
+    if (found && !Array.isArray(found) && found.id) {
+      if (found.state === "running") {
+        items.push(Spinner("Running checks in sandbox"));
+      } else if (found.state === "blocked") {
+        items.push(
+          EvidenceItem({
+            label: "Sandboxed verification blocked",
+            outcome: "Blocked",
+            tone: "open",
+            meta: found.reason || found.summary,
+          }),
+        );
+      } else {
+        for (const c of found.checks || []) {
+          const observed = String(c.observed || "unknown").toLowerCase();
+          const outcomeLabel =
+            {
+              fail_to_pass: "Fail → Pass",
+              weak_test: "Weak test",
+              inconclusive: "Inconclusive",
+              skipped: "Skipped",
+              timed_out: "Timed out",
+            }[observed] || observed;
+          const tone = c.matched
+            ? "good"
+            : ["blocked", "skipped", "inconclusive"].includes(observed)
+              ? "open"
+              : "bad";
+          items.push(
+            EvidenceItem({
+              label: c.name || c.id || "Check",
+              outcome: outcomeLabel,
+              tone,
+              meta: [
+                c.skipReason || c.detail,
+                !c.skipReason &&
+                  !c.detail &&
+                  `expected ${c.expected || "pass"}`,
+                c.durationMs != null &&
+                  observed !== "skipped" &&
+                  `${c.durationMs}ms`,
+                found.sandbox?.engine &&
+                  observed !== "skipped" &&
+                  found.sandbox.engine,
+                head &&
+                  observed !== "skipped" &&
+                  `at ${String(head).slice(0, 7)}`,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              onClick:
+                c.file && start && head
+                  ? () => inspect(start, head, { kind: "file", path: c.file })
+                  : undefined,
+            }),
+          );
+          if (!c.matched && observed !== "skipped" && c.output)
+            items.push(
+              Disclosure(
+                {
+                  summary: `${c.name || c.id} output`,
+                  key: `check-output-${c.id || c.name}`,
+                },
+                Command(c.output),
+              ),
+            );
+        }
+        if (found.limits?.notes?.length)
+          for (const note of found.limits.notes) items.push(Note(note));
+      }
+      const actionButtons = [];
+      if (found.state === "failed" && !r.revisedBy && !r.applied && !r.merge)
+        actionButtons.push(
+          Button({
+            label: "Send failure to agent",
+            variant: "danger",
+            onClick: () => verifyActions.sendFailureBack(r, found),
+          }),
+        );
+      if (found.state !== "running" && start && head) {
+        const missingAtStart =
+          found.state === "blocked" &&
+          !found.configRef &&
+          /has no checks section|No \.peekumi\.json configuration/i.test(
+            found.reason || "",
+          );
+        const fallbackRef = r.targetBranch || "main";
+        const activeRef = found.configRef || null;
+        if (missingAtStart) {
+          actionButtons.push(
+            Button({
+              label: `Run checks from ${fallbackRef}`,
+              variant: "secondary",
+              onClick: () => verifyActions.start(r, false, fallbackRef),
+            }),
+          );
+        } else {
+          actionButtons.push(
+            Button({
+              label: activeRef
+                ? `Run checks again (${activeRef})`
+                : "Run checks again",
+              variant: "secondary",
+              onClick: () => verifyActions.start(r, false, activeRef),
+            }),
+          );
+          if (
+            found.manifestsChanged ||
+            found.limits?.notes?.some((n) => /--prepare/.test(n))
+          )
+            actionButtons.push(
+              Button({
+                label: "Prepare and run",
+                variant: "secondary",
+                onClick: () => verifyActions.start(r, true, activeRef),
+              }),
+            );
+        }
+      }
+      if (actionButtons.length) items.push(Actions({}, ...actionButtons));
+      items.push(...acceptanceControl(r));
+      return { run: found, items };
+    }
+    const list = Array.isArray(found)
+      ? found
+      : found?.results || found?.checks || [];
+    for (const v of list) {
+      const state = String(
+        v.state || v.status || v.outcome || "unknown",
+      ).toLowerCase();
+      items.push(
+        EvidenceItem({
+          label: v.name || v.id || v.command || "Check",
+          outcome: state,
+          tone:
+            {
+              passed: "good",
+              success: "good",
+              failed: "bad",
+              failure: "bad",
+              error: "bad",
+              running: "wait",
+              pending: "wait",
+            }[state] || "open",
+          meta: [
+            v.head && `at ${String(v.head).slice(0, 7)}`,
+            v.reason || v.summary,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }),
+      );
+    }
+    if (!items.length) {
+      items.push(
+        EvidenceItem({
+          label: "Sandboxed tests",
+          outcome: "Not run",
+          tone: "open",
+        }),
+      );
+      if (start && head && !r.revisedBy && !r.applied)
+        items.push(
+          Actions(
+            {},
+            Button({
+              label: "Run checks",
+              variant: "secondary",
+              onClick: () => verifyActions.start(r, false),
+            }),
+          ),
+        );
+    }
+    items.push(...acceptanceControl(r));
+    return { run: null, items };
+  }
+  /** Phase 3: Owner-only shell-free acceptance check editor bound into approvalRecord by hash. */
+  function acceptanceControl(r) {
+    if (r.revisedBy || r.applied || r.merge) return [];
+    const ac = mergeInfo?.acceptanceCheck ?? r.acceptanceCheck;
+    const out = [];
+    if (ac?.command?.length) {
+      out.push(
+        EvidenceItem({
+          label: `Acceptance: ${ac.command.join(" ")}`,
+          outcome: ac.expectFailOnStart ? "Fail → Pass" : "Must pass",
+          tone: "quiet",
+          meta: `owner-only · #${String(ac.commandHash || "").slice(0, 8)}`,
+        }),
+      );
+    }
+    let cmdValue = ac?.command?.join(" ") || "";
+    let expectFail = Boolean(ac?.expectFailOnStart);
+    out.push(
+      Disclosure(
+        {
+          summary: ac?.command?.length
+            ? "Edit owner acceptance check"
+            : "Add owner acceptance check",
+          key: "owner-acceptance",
+        },
+        Stack(
+          TextField({
+            label: "Shell-free command (argv words)",
+            value: cmdValue,
+            placeholder: "node --test test/model.test.mjs",
+            help: "Runs inside Seatbelt; changing it clears prior approval.",
+            onInput: (e) => {
+              cmdValue = e.target.value;
+            },
+          }),
+          Checkbox({
+            label: "Must fail on start commit (fail → pass)",
+            checked: expectFail,
+            onChange: (e) => {
+              expectFail = e.target.checked;
+            },
+          }),
+          Actions(
+            {},
+            Button({
+              label: "Save acceptance check",
+              variant: "secondary",
+              onClick: () =>
+                verifyActions.saveAcceptance(r, cmdValue, expectFail),
+            }),
+            ...(ac?.command?.length
+              ? [
+                  Button({
+                    label: "Remove",
+                    variant: "plain",
+                    onClick: () => verifyActions.clearAcceptance(r),
+                  }),
+                ]
+              : []),
+          ),
+        ),
+      ),
+    );
+    return out;
+  }
+  /** Formats CRAP items concisely: changed Python functions before/after, or a one-line
+   * "Not available" reason for other languages. Clicking a function jumps to it on the map. */
+  function crapItems(crapState, start, head) {
+    if (!crapState) return [];
+    if (crapState.loading) return [Note("Checking CRAP…")];
+    if (crapState.failed)
+      return [
+        EvidenceItem({
+          label: "CRAP",
+          outcome: "Unavailable",
+          tone: "open",
+          meta: crapState.reason,
+        }),
+      ];
+    const c = crapState.crap;
+    if (!c) return [];
+    const items = [];
+    const src = c.afterSource;
+    const num = (entry) =>
+      entry?.state === "measured"
+        ? Number(entry.crap).toFixed(1)
+        : entry?.state === "not_present"
+          ? "new"
+          : "n/a";
+    if (c.functions?.length) {
+      for (const fn of c.functions.slice(0, 12)) {
+        const after = fn.after;
+        const measured = after?.state === "measured";
+        items.push(
+          EvidenceItem({
+            label: `${fn.path} · ${fn.name}`,
+            outcome: measured
+              ? `CRAP ${Number(after.crap).toFixed(1)}${after.risky ? " risky" : ""}`
+              : "Not available",
+            tone: measured ? (after.risky ? "bad" : "good") : "open",
+            meta: measured
+              ? `${num(fn.before)} → ${num(after)} · ${Math.round((after.coverage || 0) * 100)}% cov · tap to focus`
+              : after?.reason || "No coverage run",
+            onClick:
+              start && head
+                ? () =>
+                    inspect(start, head, {
+                      kind: "symbol",
+                      path: fn.path,
+                      symbol: fn.name,
+                    })
+                : undefined,
+          }),
+        );
+      }
+      if (src?.state === "available")
+        items.push(
+          Note(
+            `Coverage: ${src.verifyRunId} (${src.checkId}) at ${String(src.commit || "").slice(0, 7)}`,
+          ),
+        );
+    } else if (c.filesChanged > 0) {
+      const langs = [
+        ...new Set((c.excludedFiles || []).map((f) => f.language)),
+      ].filter(Boolean);
+      items.push(
+        EvidenceItem({
+          label: "CRAP",
+          outcome: "Not available",
+          tone: "open",
+          meta: langs.length
+            ? `${langs.join(", ")} · Python only`
+            : src?.reason || "No coverage run",
+        }),
+      );
+    }
+    return items;
+  }
+  /** Short, scannable blind spots: what nobody checked, skipped checks, inline tests,
+   * changed tests/CI/rules, CRAP gaps, blocked checks, and loose files. */
+  function blindSpots(check, verifyRun, crapData, start, head) {
+    const items = [];
+    const m = mergeInfo || {};
+    if (verifyRun?.state === "blocked")
+      items.push(
+        EvidenceItem({
+          label: "Sandboxed tests blocked",
+          outcome: "Blocked",
+          tone: "open",
+          meta: verifyRun.reason,
+        }),
+      );
+    else if (verifyRun?.state === "skipped")
+      items.push(
+        EvidenceItem({
+          label: "All configured checks were skipped",
+          outcome: "0 passed",
+          tone: "open",
+          meta: "Skipped checks never count as passing evidence",
+        }),
+      );
+    else if (!verifyRun)
+      items.push(
+        EvidenceItem({
+          label: "No sandboxed tests ran",
+          outcome: "Not run",
+          tone: "open",
+        }),
+      );
+    for (const c of verifyRun?.checks || []) {
+      if (c.observed === "skipped")
+        items.push(
+          EvidenceItem({
+            label: `${c.name || c.id} skipped`,
+            outcome: "Skipped",
+            tone: "open",
+            meta: `${(c.paths || []).join(", ")} unmatched · never counts as passed`,
+          }),
+        );
+    }
+    for (const inlinePath of verifyRun?.inlineTestFiles || []) {
+      items.push(
+        EvidenceItem({
+          label: `Inline #[cfg(test)] edited · ${inlinePath}`,
+          outcome: "Inline test",
+          tone: "open",
+          meta: "fail-to-pass not run · tap to inspect on map",
+          onClick:
+            start && head
+              ? () => inspect(start, head, { kind: "file", path: inlinePath })
+              : undefined,
+        }),
+      );
+    }
+    const t = m.tamper;
+    const kinds = {
+      tests: "Test edited",
+      ci: "CI edited",
+      config: "Rules/checks edited",
+    };
+    const words = {
+      A: "added",
+      M: "modified",
+      D: "deleted",
+      T: "type changed",
+    };
+    if (t?.state === "unavailable")
+      items.push(
+        EvidenceItem({
+          label: "Test/CI/rule changes",
+          outcome: "Unavailable",
+          tone: "open",
+          meta: t.reason,
+        }),
+      );
+    else if (t)
+      for (const [kind, outcome] of Object.entries(kinds))
+        for (const f of t[kind] || [])
+          items.push(
+            EvidenceItem({
+              label: f.path,
+              outcome,
+              tone: "open",
+              meta: `${words[f.status] || f.status} · tap to inspect on map`,
+              onClick:
+                start && head
+                  ? () => inspect(start, head, { kind: "file", path: f.path })
+                  : undefined,
+            }),
+          );
+    const loose = m.loose;
+    if (loose?.state === "unavailable")
+      items.push(
+        EvidenceItem({
+          label: "Loose files",
+          outcome: "Unavailable",
+          tone: "open",
+          meta: loose.reason,
+        }),
+      );
+    else if (loose?.count)
+      items.push(
+        EvidenceItem({
+          label: `${plural(loose.count, "loose file")} uncommitted`,
+          outcome: "Not in head",
+          tone: "open",
+        }),
+      );
+    if (crapData && crapData.filesChanged > 0 && crapData.excludedFiles?.length)
+      items.push(
+        EvidenceItem({
+          label: `CRAP skipped ${crapData.excludedFiles.length} of ${crapData.filesChanged} files`,
+          outcome: "Not covered",
+          tone: "open",
+          meta: crapData.excludedFiles
+            .slice(0, 3)
+            .map((f) => `${f.path} (${f.language})`)
+            .join(", "),
+        }),
+      );
+    if (check?.state === "not checked")
+      items.push(
+        EvidenceItem({
+          label: "Rules not checked",
+          outcome: "Not checked",
+          tone: "open",
+          meta: check.reason,
+        }),
+      );
+    const unresolved = check?.limits?.unresolved || 0,
+      unanalysed = check?.limits?.unanalysed?.length || 0;
+    if (unresolved || unanalysed)
+      items.push(
+        EvidenceItem({
+          label: [
+            unresolved && `${unresolved} unresolved links`,
+            unanalysed && `${plural(unanalysed, "file")} unanalysed`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          outcome: "Rule limits",
+          tone: "open",
+        }),
+      );
+    return items;
+  }
+  /** The review of a finished task in four separate, scannable parts: Peekumi checks, CI,
+   * Agent claims (collapsed), and Blind spots. Starts with a blunt one-line status telling
+   * the owner if it is waiting on them and why. */
+  function reviewEvidence(r, ready) {
+    const known = ruleCheckOf(r),
+      check = known && !known.loading ? known.check : null,
+      m = mergeInfo || {},
+      start = m.start || r.start || r.base,
+      head = m.head || resultCommit(r),
+      short = (sha) => (sha || "").slice(0, 7),
+      verify = verificationItems(r),
+      crapState = verifyActions.crap(start, head),
+      crapData = crapState && !crapState.loading ? crapState.crap : null,
+      spots = blindSpots(check, verify.run, crapData, start, head),
+      claims = data.comments.filter(
+        (c) => c.runId === r.id && c.report?.checks,
+      ),
+      flagged = (m.tamper?.tests?.length || 0) + (m.tamper?.ci?.length || 0),
+      approval = m.approval || r.approvalRecord,
+      weakCount = verify.run?.counts?.weak || 0;
+    const question =
+      approval && m.approvalCurrent === false
+        ? `Waiting on you: task or acceptance changed (${short(m.head)}). Approve again?`
+        : approval && !ready.length
+          ? `Approved (${short(approval.head)}). Ready to merge.`
+          : weakCount
+            ? `Waiting on you: ${plural(weakCount, "weak test")} passed on start commit.`
+            : verify.run?.state === "failed"
+              ? "Waiting on you: checks failed in sandbox. Send back?"
+              : verify.run?.state === "skipped"
+                ? "Waiting on you: all checks skipped (0 passing evidence)."
+                : crapData?.riskyCount
+                  ? `Waiting on you: ${plural(crapData.riskyCount, "function")} over CRAP ${crapData.threshold}.`
+                  : flagged
+                    ? `Waiting on you: ${plural(flagged, "test or CI file")} edited.`
+                    : check?.addedCount
+                      ? `Waiting on you: ${plural(check.addedCount, "rule break")} added.`
+                      : !verify.run
+                        ? "Waiting on you: no tests ran. Approve anyway?"
+                        : spots.length
+                          ? `Waiting on you: ${plural(spots.length, "blind spot")}.`
+                          : `Waiting on you: approve ${short(head)}?`;
+    const provChips = [
+      start && head && { text: `${short(start)} → ${short(head)}` },
+      verify.run?.configCommit &&
+        verify.run.configCommit !== start && {
+          text: `checks from ${verify.run.configRef || "config"}@${short(verify.run.configCommit)}`,
+          tone: "open",
+        },
+    ].filter(Boolean);
+    const hasSkippedOrInconc =
+      (verify.run?.counts?.skipped || 0) > 0 ||
+      (verify.run?.counts?.inconclusive || 0) > 0;
+    const ruleTone =
+      verify.run?.state === "failed" ||
+      check?.addedCount ||
+      crapData?.riskyCount
+        ? "bad"
+        : !check || verify.run?.state === "running"
+          ? "wait"
+          : check.state === "checked" &&
+              (!verify.run ||
+                (verify.run.state === "passed" && !hasSkippedOrInconc))
+            ? "good"
+            : "open";
+    const peekumiSummary =
+      verify.run?.state === "running"
+        ? "Running"
+        : verify.run?.state === "failed"
+          ? verify.run.summary || "Failed"
+          : verify.run?.state === "blocked"
+            ? "Blocked"
+            : verify.run?.state === "skipped" ||
+                verify.run?.state === "inconclusive"
+              ? verify.run.summary
+              : !check
+                ? "Checking"
+                : check.addedCount
+                  ? plural(check.addedCount, "rule break")
+                  : verify.run?.state === "passed"
+                    ? verify.run.summary
+                    : check.state === "not checked"
+                      ? "Not checked"
+                      : "0 breaks · no tests";
+    const ruleWarnings = check?.limits?.warnings?.length || 0;
+    const ruleLine = !check
+      ? Note("Checking rules…")
+      : check.addedCount > 0
+        ? ruleCheckView(r)
+        : EvidenceItem({
+            label: "Dependency rules",
+            outcome: check.state === "not checked" ? "Not checked" : "0 breaks",
+            tone: check.state === "checked" ? "good" : "open",
+            meta:
+              check.state === "not checked"
+                ? check.reason
+                : [
+                    check.head && String(check.head).slice(0, 7),
+                    ruleWarnings && plural(ruleWarnings, "warning"),
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+          });
+    return Stack(
+      EvidenceQuestion(question),
+      ProvenanceChips(provChips),
+      EvidenceSection(
+        {
+          title: "Peekumi checks",
+          tone: ruleTone,
+          summary: peekumiSummary,
+        },
+        ruleLine,
+        ...verify.items,
+        ...crapItems(crapState, start, head),
+      ),
+      EvidenceSection(
+        { title: "CI", tone: "quiet", summary: "None" },
+        Note("Local branch · no CI"),
+      ),
+      EvidenceSection(
+        {
+          title: "Agent claims",
+          tone: "quiet",
+          summary: claims.length ? "Not proof" : "None",
+        },
+        claims.length
+          ? Disclosure(
+              { summary: "Show agent check claims (not proof)" },
+              ...claims.map((c) => Command(c.report.checks)),
+            )
+          : Note("None reported"),
+      ),
+      EvidenceSection(
+        {
+          title: "Blind spots",
+          tone: spots.length ? "open" : "quiet",
+          summary: spots.length ? String(spots.length) : "None",
+        },
+        ...(spots.length ? spots : [Note("None found")]),
+      ),
+    );
+  }
   function mergeStep(r) {
     const m = mergeInfo;
     if (!m || ["waiting", "applied"].includes(m.state)) return null;
@@ -1598,7 +2612,7 @@ export function createWorkflow({
         el(
           "p",
           "read-note",
-          `Peekumi merges ${m.target} into the task branch. If they conflict, the agent resolves it as a new round, and you review the result again before you merge.`,
+          `Peekumi merges ${m.target} into the task branch. The head changes, so you approve the result again before you merge. If they conflict, the agent resolves it as a new round first.`,
         ),
       );
     } else if (m.state === "elsewhere") {
@@ -1639,9 +2653,10 @@ export function createWorkflow({
     const round = r.round > 1 ? ` · round ${r.round}` : "";
     return `${words}${more}${round}`;
   }
-  /** True once a finished task has no instruction left to review and at least one approved. */
+  /** True once a finished task has the owner's approval record (see backend/review.rs) and no
+   * instruction left to review. */
   function reviewed(r) {
-    if (r.status !== "completed") return false;
+    if (r.status !== "completed" || !r.approvalRecord) return false;
     const comments = data.comments.filter((c) =>
       instructionsOf(r).some((x) => x.id === c.id),
     );
@@ -1683,19 +2698,53 @@ export function createWorkflow({
     if (reviewed(r)) return "done";
     return open(r).length ? "needs" : "history";
   }
-  /** One task in a list: its instructions, state and date. Done and past tasks are quiet. */
+  /** One task in the Review Inbox: plain-English status and next step with zero git jargon. */
   function taskCard(r, quiet = false) {
-    const card = action(taskTitle(r), () => openTask(r.id));
-    card.classList.add("task-link");
-    if (quiet) card.classList.add("quiet");
-    card.append(
-      el(
-        "span",
-        "rd",
-        `${runStatus(r)} · ${new Date(r.createdAt).toLocaleDateString()}`,
-      ),
+    const info = (inboxData?.needsYou || []).find(
+      (i) => i.kind === "task" && i.id === r.id,
     );
-    return card;
+    const v = info?.verification;
+    const ran = (v?.checks || []).filter((c) => c.observed !== "skipped");
+    const passed = ran.filter((c) => c.matched).length;
+    const chips = [];
+    let urgent = false;
+    if (active(r)) {
+      chips.push({ text: runStatus(r), tone: "wait" });
+    } else if (quiet) {
+      chips.push({ text: runStatus(r), tone: "good" });
+    } else if (v?.state === "failed") {
+      urgent = true;
+      chips.push({
+        text: ran.length
+          ? `Checks failed · ${passed}/${ran.length} passed`
+          : "Checks failed",
+        tone: "bad",
+      });
+    } else if (v?.state === "passed") {
+      chips.push({
+        text: ran.length
+          ? `Ready to approve · ${passed}/${ran.length} checks passed`
+          : "Ready to approve · Checks passed",
+        tone: "good",
+      });
+    } else if (v?.state === "skipped") {
+      chips.push({ text: "No checks matched", tone: "open" });
+    } else if (v?.state === "blocked") {
+      chips.push({ text: "Checks blocked · Tap to fix", tone: "open" });
+    } else if (v?.state === "running") {
+      chips.push({ text: "Running checks…", tone: "wait" });
+    } else {
+      chips.push({ text: "Not checked yet · Tap to review", tone: "open" });
+    }
+    if (!quiet && info?.tamperCount)
+      chips.push({ text: "Edited tests/CI", tone: "open" });
+    return InboxRow({
+      title: taskTitle(r),
+      chips,
+      urgent,
+      className: quiet ? "task-link quiet" : "task-link",
+      onClick: () => openTask(r.id),
+    });
   }
   /** Applied and closed tasks, newest first: the record, out of the way of current work. */
   function history(body) {
@@ -1850,9 +2899,26 @@ export function createWorkflow({
       );
       body.append(asked);
     }
-    comments(body, r);
+    const stale =
+      !!r.approvalRecord && !!mergeInfo && mergeInfo.approvalCurrent === false;
+    const ready = data.comments.filter(
+      (c) =>
+        c.runId === r.id &&
+        (c.status === "addressed" ||
+          (c.status === "verified" && (!r.approvalRecord || stale))),
+    );
+    // An applied task is a settled record: later changes start a new task.
+    const decide = !active(r) && !r.revisedBy && !r.applied && !endedSession(r),
+      batch = decide ? collected(r.id) : [],
+      signalFirst =
+        decide && r.status === "completed" && Boolean(resultCommit(r)),
+      notes = Stack();
+    comments(notes, r);
+    if (!signalFirst) body.append(notes);
     const step = mergeStep(r);
     if (step) body.append(step);
+    const loose = looseStep(r);
+    if (loose) body.append(loose);
     const actions = el("div", "sel-acts task-actions");
     if (active(r) && r.status !== "interrupted")
       actions.append(
@@ -1874,12 +2940,6 @@ export function createWorkflow({
       actions.append(
         action(`Open round ${(r.round || 1) + 1}`, () => openTask(r.revisedBy)),
       );
-    const ready = data.comments.filter(
-      (c) => c.runId === r.id && c.status === "addressed",
-    );
-    // An applied task is a settled record: later changes start a new task.
-    const decide = !active(r) && !r.revisedBy && !r.applied && !endedSession(r),
-      batch = decide ? collected(r.id) : [];
     const agentName = agents.label(r.agent);
     if (batch.length) {
       // The list and the button that sends it to the agent, as the next round, sit together.
@@ -1926,9 +2986,9 @@ export function createWorkflow({
         body.append(card);
       }
     }
-    // The rule check shows before Approve: what the task adds, its limits, and a rule change.
-    const rules = decide && ready.length && ruleCheckView(r);
-    if (rules) actions.append(rules);
+    // Signal first: open question + 4 compact sections + Approve/Request actions sit above the
+    // agent's prose write-up so the owner sees what is waiting on them immediately.
+    if (signalFirst) body.append(reviewEvidence(r, ready));
     // Approve covers the finished instructions only; say which ones stay open.
     const left = undecided(r).length;
     if (decide && ready.length && left)
@@ -1958,7 +3018,7 @@ export function createWorkflow({
           "Approve",
           async () => {
             try {
-              await approve(ready);
+              await approve(r);
             } finally {
               await refresh();
             }
@@ -1996,14 +3056,7 @@ export function createWorkflow({
     if (decide && reviewed(r))
       actions.append(
         action("Reopen review", async () => {
-          for (const c of data.comments.filter(
-            (x) => x.runId === r.id && x.status === "verified",
-          ))
-            await write(
-              "/api/comments/" + c.id,
-              { action: "unverify", version: c.version },
-              "PATCH",
-            );
+          await write(`/api/runs/${r.id}/unapprove`, {});
           await refresh();
         }),
       );
@@ -2037,6 +3090,7 @@ export function createWorkflow({
       note.classList.add("review-note", "reply-box");
       body.append(note);
     }
+    if (signalFirst) body.append(notes);
     // One quiet log for everything about how the agent got there.
     const progress = agentActivity(r.output);
     const log = el("details", "workflow-evidence diagnostics");
@@ -2068,7 +3122,12 @@ export function createWorkflow({
     if (document.hidden || !loaded) return;
     // While an agent works or a session is open, every 3 s, so its state on the sheet (and a
     // command request) shows at once; otherwise every 12 s.
-    if (!data.runs.some((r) => active(r) || live(r)) && ++idle % 4) return;
+    if (
+      !data.runs.some((r) => active(r) || live(r)) &&
+      mergeInfo?.verification?.state !== "running" &&
+      ++idle % 4
+    )
+      return;
     refresh("poll").catch((e) => notice(e.message, true));
   }, 3000);
   // A session on screen that is working updates faster, so its steps appear as they happen.

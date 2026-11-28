@@ -11,11 +11,383 @@
 //! relationships it checked, how many broke it and how many in its scope stayed unresolved, and
 //! warns about groups that match no file and rules that checked nothing, so a typo cannot pass
 //! silently.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Component, Path};
 /// Rule configuration files, preferred first: `.peekumi.json`, then `.strata.json` from before the rename.
 pub const CONFIG_FILES: [&str; 2] = [".peekumi.json", ".strata.json"];
+/// Maximum timeout allowed for a single check or prepare command (30 minutes).
+pub const MAX_TIMEOUT_SECS: u64 = 1800;
+/// Default timeout for a check command.
+pub const DEFAULT_CHECK_TIMEOUT_SECS: u64 = 120;
+/// Default timeout for a prepare command.
+pub const DEFAULT_PREPARE_TIMEOUT_SECS: u64 = 300;
+/// Parsed `checks` configuration from `.peekumi.json`.
+#[derive(Clone, Debug)]
+pub struct ChecksConfig {
+    pub prepare: Option<PrepareSpec>,
+    pub new_tests: Option<NewTestSpec>,
+    pub items: Vec<CheckSpec>,
+}
+/// Optional dependency installation phase.
+#[derive(Clone, Debug)]
+pub struct PrepareSpec {
+    pub command: Vec<String>,
+    pub timeout_seconds: u64,
+    pub cache_key: Vec<String>,
+    pub cache_dirs: Vec<String>,
+}
+/// Optional standalone fail-to-pass runner for new or edited test files.
+#[derive(Clone, Debug)]
+pub struct NewTestSpec {
+    pub command: Vec<String>,
+    pub timeout_seconds: u64,
+    pub test_support_globs: Vec<String>,
+}
+/// Owner-authored shell-free acceptance check bound into `approvalRecord`.
+#[derive(Clone, Debug)]
+pub struct AcceptanceSpec {
+    pub command: Vec<String>,
+    pub expect_fail_on_start: bool,
+    pub timeout_seconds: u64,
+    pub command_hash: String,
+}
+/// One verification check command.
+#[derive(Clone, Debug)]
+pub struct CheckSpec {
+    pub id: String,
+    pub name: String,
+    pub command: Vec<String>,
+    pub timeout_seconds: u64,
+    pub expect: String,
+    pub cwd: Option<String>,
+    pub paths: Vec<String>,
+    pub artifacts: Vec<String>,
+    pub coverage: Option<String>,
+    pub env: BTreeMap<String, String>,
+}
+/// Validates a relative path inside the archived repository copy (no leading `/`, no `..`, no NUL).
+fn relative_path(raw: &str, field: &str) -> Result<String> {
+    let trimmed = raw.trim();
+    ensure!(
+        !trimmed.is_empty() && trimmed.len() <= 256 && !trimmed.contains('\0'),
+        "Invalid {field} path"
+    );
+    ensure!(
+        !trimmed.starts_with('/') && !trimmed.contains('\\'),
+        "{field} must be a relative path"
+    );
+    for comp in Path::new(trimmed).components() {
+        match comp {
+            Component::Normal(_) | Component::CurDir => {}
+            _ => bail!("{field} cannot escape the repository copy"),
+        }
+    }
+    Ok(trimmed.to_string())
+}
+fn command_argv(value: &Value, field: &str) -> Result<Vec<String>> {
+    let arr = value
+        .as_array()
+        .with_context(|| format!("{field} must be a nonempty string array"))?;
+    ensure!(
+        !arr.is_empty() && arr.len() <= 64,
+        "{field} must have between 1 and 64 arguments"
+    );
+    let mut out = Vec::with_capacity(arr.len());
+    for item in arr {
+        let s = item
+            .as_str()
+            .filter(|s| !s.is_empty() && s.len() <= 4096 && !s.contains('\0'))
+            .with_context(|| format!("{field} entries must be nonempty strings"))?;
+        out.push(s.to_string());
+    }
+    Ok(out)
+}
+fn timeout_value(value: &Value, default_secs: u64) -> Result<u64> {
+    if value.is_null() {
+        return Ok(default_secs);
+    }
+    let secs = value
+        .as_u64()
+        .context("timeoutSeconds must be a positive integer")?;
+    ensure!(
+        (1..=MAX_TIMEOUT_SECS).contains(&secs),
+        "timeoutSeconds must be between 1 and {MAX_TIMEOUT_SECS}"
+    );
+    Ok(secs)
+}
+fn string_paths(value: &Value, field: &str, max: usize) -> Result<Vec<String>> {
+    if value.is_null() {
+        return Ok(vec![]);
+    }
+    let arr = value
+        .as_array()
+        .with_context(|| format!("{field} must be a string array"))?;
+    ensure!(arr.len() <= max, "At most {max} entries in {field}");
+    arr.iter()
+        .map(|v| {
+            let s = v
+                .as_str()
+                .with_context(|| format!("{field} entries must be strings"))?;
+            relative_path(s, field)
+        })
+        .collect()
+}
+fn glob_patterns(value: &Value, field: &str, max: usize) -> Result<Vec<String>> {
+    if value.is_null() {
+        return Ok(vec![]);
+    }
+    let arr = value
+        .as_array()
+        .with_context(|| format!("{field} must be a string array"))?;
+    ensure!(arr.len() <= max, "At most {max} entries in {field}");
+    let mut out = Vec::with_capacity(arr.len());
+    for v in arr {
+        let p = v
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .with_context(|| format!("{field} entries must be nonempty strings"))?;
+        ensure!(
+            p.len() <= 256
+                && !p.starts_with('/')
+                && !p.contains("..")
+                && !p.contains(['[', ']', '{', '}', '\\', '\0']),
+            "{field}: use relative path globs with only * and ? wildcards"
+        );
+        out.push(p.to_string());
+    }
+    Ok(out)
+}
+/// Validates an owner-authored acceptance check command and computes its SHA-256 hash.
+/// Commands execute inside the OS sandbox (Seatbelt / bwrap) with no network and a clean environment.
+pub fn parse_acceptance(value: &Value) -> Result<AcceptanceSpec> {
+    let obj = value
+        .as_object()
+        .context("Acceptance check must be an object")?;
+    ensure!(
+        obj.keys()
+            .all(|k| ["command", "expectFailOnStart", "timeoutSeconds"].contains(&k.as_str())),
+        "Unknown acceptance check field"
+    );
+    let command = command_argv(&value["command"], "acceptance.command")?;
+    let expect_fail_on_start = match value.get("expectFailOnStart") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        _ => bail!("acceptance.expectFailOnStart must be a boolean"),
+    };
+    let timeout_seconds = timeout_value(&value["timeoutSeconds"], DEFAULT_CHECK_TIMEOUT_SECS)?;
+    let canonical = serde_json::to_string(&json!({
+        "command": command,
+        "expectFailOnStart": expect_fail_on_start,
+    }))?;
+    let command_hash = crate::hash::hash(canonical.as_bytes());
+    Ok(AcceptanceSpec {
+        command,
+        expect_fail_on_start,
+        timeout_seconds,
+        command_hash,
+    })
+}
+fn safe_env_key(key: &str) -> bool {
+    if key.is_empty() || key.len() > 64 {
+        return false;
+    }
+    if !key
+        .bytes()
+        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+    {
+        return false;
+    }
+    const EXACT_FORBIDDEN: &[&str] = &[
+        "HOME",
+        "PATH",
+        "TMPDIR",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "IFS",
+        "BASH_ENV",
+        "ENV",
+    ];
+    if EXACT_FORBIDDEN.contains(&key) || key.starts_with("DYLD_") {
+        return false;
+    }
+    const SECRET_SEGMENTS: &[&str] = &[
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "PASSWD",
+        "COOKIE",
+        "CREDENTIAL",
+        "CREDENTIALS",
+        "API_KEY",
+        "ACCESS_KEY",
+        "PRIVATE_KEY",
+        "AUTH_KEY",
+        "AUTH_HEADER",
+    ];
+    !SECRET_SEGMENTS.iter().any(|bad| {
+        key == *bad
+            || key.ends_with(&format!("_{bad}"))
+            || key.starts_with(&format!("{bad}_"))
+            || key.contains(&format!("_{bad}_"))
+    })
+}
+/// Validates and parses the `checks` object of `.peekumi.json`.
+/// Rejects unknown fields, unsafe paths, secret-like env keys and invalid timeouts.
+pub fn parse_checks(value: &Value) -> Result<ChecksConfig> {
+    let obj = value
+        .as_object()
+        .context("checks configuration must be an object")?;
+    ensure!(
+        obj.keys()
+            .all(|k| ["prepare", "newTests", "items"].contains(&k.as_str())),
+        "Unknown checks field"
+    );
+    let prepare = if let Some(prep) = obj.get("prepare").filter(|v| !v.is_null()) {
+        let pobj = prep
+            .as_object()
+            .context("checks.prepare must be an object")?;
+        ensure!(
+            pobj.keys().all(|k| {
+                ["command", "timeoutSeconds", "cacheKey", "cacheDirs"].contains(&k.as_str())
+            }),
+            "Unknown checks.prepare field"
+        );
+        Some(PrepareSpec {
+            command: command_argv(&prep["command"], "checks.prepare.command")?,
+            timeout_seconds: timeout_value(&prep["timeoutSeconds"], DEFAULT_PREPARE_TIMEOUT_SECS)?,
+            cache_key: string_paths(&prep["cacheKey"], "checks.prepare.cacheKey", 32)?,
+            cache_dirs: string_paths(&prep["cacheDirs"], "checks.prepare.cacheDirs", 16)?,
+        })
+    } else {
+        None
+    };
+    let new_tests = if let Some(nt) = obj.get("newTests").filter(|v| !v.is_null()) {
+        let nobj = nt
+            .as_object()
+            .context("checks.newTests must be an object")?;
+        ensure!(
+            nobj.keys()
+                .all(|k| ["command", "timeoutSeconds", "testSupportGlobs"].contains(&k.as_str())),
+            "Unknown checks.newTests field"
+        );
+        let command = command_argv(&nt["command"], "checks.newTests.command")?;
+        ensure!(
+            command.iter().any(|a| a == "{files}"),
+            "checks.newTests.command must contain a literal \"{{files}}\" argument"
+        );
+        Some(NewTestSpec {
+            command,
+            timeout_seconds: timeout_value(&nt["timeoutSeconds"], DEFAULT_CHECK_TIMEOUT_SECS)?,
+            test_support_globs: glob_patterns(
+                &nt["testSupportGlobs"],
+                "checks.newTests.testSupportGlobs",
+                32,
+            )?,
+        })
+    } else {
+        None
+    };
+    let raw_items = value["items"]
+        .as_array()
+        .context("checks.items must be a nonempty array")?;
+    ensure!(
+        !raw_items.is_empty() && raw_items.len() <= 32,
+        "checks.items must contain between 1 and 32 checks"
+    );
+    let mut ids = BTreeSet::new();
+    let mut items = Vec::with_capacity(raw_items.len());
+    for item in raw_items {
+        let iobj = item.as_object().context("Each check must be an object")?;
+        ensure!(
+            iobj.keys().all(|k| [
+                "id",
+                "name",
+                "command",
+                "timeoutSeconds",
+                "expect",
+                "cwd",
+                "paths",
+                "artifacts",
+                "coverage",
+                "env"
+            ]
+            .contains(&k.as_str())),
+            "Unknown check field"
+        );
+        let id = item["id"]
+            .as_str()
+            .filter(|s| {
+                !s.is_empty()
+                    && s.len() <= 64
+                    && s.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+            })
+            .context("Check needs a valid id")?
+            .to_string();
+        ensure!(ids.insert(id.clone()), "Duplicate check id {id}");
+        let name = match item["name"].as_str() {
+            Some(s) if !s.trim().is_empty() && s.len() <= 120 => s.trim().to_string(),
+            None if item["name"].is_null() => id.clone(),
+            _ => bail!("Check {id} has an invalid name"),
+        };
+        let command = command_argv(&item["command"], &format!("check {id} command"))?;
+        let timeout_seconds = timeout_value(&item["timeoutSeconds"], DEFAULT_CHECK_TIMEOUT_SECS)?;
+        let expect = match item["expect"].as_str() {
+            None if item["expect"].is_null() => "pass".to_string(),
+            Some("pass") => "pass".to_string(),
+            Some("fail") => "fail".to_string(),
+            _ => bail!("Check {id} expect must be pass or fail"),
+        };
+        let cwd = match item["cwd"].as_str() {
+            None if item["cwd"].is_null() => None,
+            Some(s) => Some(relative_path(s, "check cwd")?),
+            _ => bail!("Check {id} cwd must be a relative path"),
+        };
+        let paths = glob_patterns(&item["paths"], &format!("check {id} paths"), 32)?;
+        let artifacts = string_paths(&item["artifacts"], "check artifacts", 16)?;
+        let coverage = match item["coverage"].as_str() {
+            None if item["coverage"].is_null() => None,
+            Some(s) => Some(relative_path(s, "check coverage")?),
+            _ => bail!("Check {id} coverage must be a relative path"),
+        };
+        let mut env = BTreeMap::new();
+        if let Some(map) = item.get("env").filter(|v| !v.is_null()) {
+            let eobj = map
+                .as_object()
+                .with_context(|| format!("Check {id} env must be an object"))?;
+            ensure!(eobj.len() <= 32, "At most 32 env entries per check");
+            for (k, v) in eobj {
+                ensure!(safe_env_key(k), "Check {id} env key {k} is not allowed");
+                let val = v
+                    .as_str()
+                    .filter(|s| s.len() <= 1024 && !s.contains('\0'))
+                    .with_context(|| format!("Check {id} env {k} must be a string"))?;
+                env.insert(k.clone(), val.to_string());
+            }
+        }
+        items.push(CheckSpec {
+            id,
+            name,
+            command,
+            timeout_seconds,
+            expect,
+            cwd,
+            paths,
+            artifacts,
+            coverage,
+            env,
+        });
+    }
+    Ok(ChecksConfig {
+        prepare,
+        new_tests,
+        items,
+    })
+}
 /// The kinds of a rule and the pairs of files (source, target) that would break it (see
 /// [`Rules::breaking_pairs`]).
 pub type Breaks<'a> = (Vec<String>, Vec<(&'a str, &'a str)>);
@@ -49,10 +421,13 @@ pub fn parse(source: &str) -> Result<Rules> {
     ensure!(
         object
             .keys()
-            .all(|k| ["version", "groups", "rules"].contains(&k.as_str())),
+            .all(|k| ["version", "groups", "rules", "checks"].contains(&k.as_str())),
         "Unknown configuration field"
     );
     ensure!(value["version"] == 1, "Expected version 1");
+    if let Some(checks) = object.get("checks").filter(|v| !v.is_null()) {
+        parse_checks(checks)?;
+    }
     let groups = value["groups"]
         .as_object()
         .ok_or_else(|| anyhow::anyhow!("Expected groups object"))?

@@ -24,5 +24,4 @@
 - [ ] Relationships stay static, and unresolved or ambiguous targets stay explicit.
 - [ ] No credentials, tokens or source from another repository are in the change.
 - [ ] New interface parts have no cards, bands, tinted boxes, badges or shadows around status.
-- [ ] Documents for people are in Simplified Technical English, with no em dashes.
 - [ ] CHANGELOG.md has one line under `## [Unreleased]`.

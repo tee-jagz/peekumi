@@ -32,7 +32,7 @@ jobs:
       - run: npm ci
       - name: Layout (Prettier and rustfmt)
         run: npm run format:check
-      - name: Lint (clippy) and the writing rules of the documents
+      - name: Lint (clippy and UI components)
         run: npm run lint
       - name: Secrets in the history
         uses: gitleaks/gitleaks-action@v3

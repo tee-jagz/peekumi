@@ -191,7 +191,9 @@ try {
             deletions: 3,
             changedFiles: 2,
             headRefName: "setup",
+            headRefOid: repo.initialHead,
             baseRefName: "main",
+            readAt: Date.now(),
             url: "https://github.com/example/repo/pull/7",
             body: "## Summary\n\nKeep the existing canvas and show the PR in the sheet.\n\n- One\n- Two",
             comments: [],
@@ -258,10 +260,11 @@ try {
     assert.match(await page.locator("#revisionSummary").innerText(), /PR #7/);
     assert.match(
       await page.locator(".pr-card").innerText(),
-      /Keep the existing canvas[\s\S]*All 1 passed[\s\S]*1 approved[\s\S]*Open on GitHub/,
+      /Keep the existing canvas[\s\S]*All 1 reported check passed[\s\S]*1 approved[\s\S]*Open on GitHub/,
     );
     assert.equal(new URL(page.url()).searchParams.get("pr"), "7");
-    // A reload keeps the PR: its details come back without a new fetch.
+    const viewedHead = new URL(page.url()).searchParams.get("branch");
+    // A reload with matching head and no checks shows "No checks reported".
     await page.route("**/api/prs/7", (r) =>
       r.fulfill({
         json: {
@@ -269,6 +272,8 @@ try {
           title: "Review setup",
           state: "OPEN",
           body: "",
+          headRefOid: viewedHead,
+          statusCheckRollup: [],
           url: "https://github.com/example/repo/pull/7",
         },
       }),
@@ -277,8 +282,52 @@ try {
     await page.locator("#reviewScope .pr-head").waitFor();
     assert.match(
       await page.locator(".pr-card").innerText(),
-      /No description\.[\s\S]*None reported/,
+      /No description\.[\s\S]*No checks reported/,
     );
+    // Reload drift: if GitHub now has a newer head, never show its checks as evidence for the old code.
+    await page.unroute("**/api/prs/7");
+    await page.route("**/api/prs/7", (r) =>
+      r.fulfill({
+        json: {
+          number: 7,
+          title: "Review setup",
+          state: "OPEN",
+          body: "",
+          headRefOid: "deadbeef".repeat(5),
+          statusCheckRollup: [
+            {
+              name: "New head test",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+            },
+          ],
+          url: "https://github.com/example/repo/pull/7",
+        },
+      }),
+    );
+    await page.reload();
+    await page.locator("#reviewScope .pr-head").waitFor();
+    const drifted = await page.locator(".pr-card").innerText();
+    assert.match(drifted, /This PR changed after you opened it/);
+    assert.match(drifted, /Open latest version/);
+    assert.match(drifted, /Not for this head/);
+    assert.doesNotMatch(drifted, /New head test/);
+    // Lookup failure stays distinct from "No checks reported".
+    await page.unroute("**/api/prs/7");
+    await page.route("**/api/prs/7", (r) =>
+      r.fulfill({ status: 400, json: { error: "GitHub unreachable" } }),
+    );
+    await page.reload();
+    await page.locator("#reviewScope .pr-head").waitFor();
+    const checksSummary = page.locator(".pr-card summary", {
+      hasText: "Checks",
+    });
+    if (await checksSummary.isVisible()) await checksSummary.click();
+    assert.match(
+      await page.locator(".pr-card").textContent(),
+      /Lookup failed[\s\S]*Peekumi could not read this PR from GitHub[\s\S]*Try again/,
+    );
+    await page.unroute("**/api/prs/7");
     // The ✕ beside the PR name goes back to the checkout's branch.
     await page.locator("#revisionSummary .rev-leave").click();
     await page.waitForFunction(

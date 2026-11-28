@@ -17,7 +17,7 @@ When you examine a repository, you can collect feedback. You preview this feedba
    Peekumi does not merge in these conditions:
 
    - **Your files are in the way.** You have uncommitted changes in files that the merge changes. Git refuses to overwrite them, and Peekumi names them first. **Commit my changes, then merge** opens a sheet with only those files. An agent writes the commit message, and you can edit it. When you tap **Commit**, Peekumi commits exactly those files on the watched branch. Your other uncommitted changes stay uncommitted. If the files change before you tap **Commit**, Peekumi refuses and asks you to check again.
-   - **The watched branch has new commits.** **Update with main** merges the watched branch into the task branch. If there is no conflict, Peekumi makes the merge commit on the task branch and keeps your approval. If there is a conflict, a new round starts. In that round, the agent merges the watched branch, resolves the conflict and commits. Your approved instructions go back to review, because the code changed. **Explore changes** then shows the task on top of the new watched branch.
+   - **The watched branch has new commits.** **Update with main** merges the watched branch into the task branch. If there is no conflict, Peekumi makes the merge commit on the task branch and clears any previous approval because `start` and `head` changed. If there is a conflict, a new round starts. In that round, the agent merges the watched branch, resolves the conflict and commits. Your approved instructions go back to review, because the code changed. **Explore changes** then shows the task on top of the new watched branch.
    - **The watched branch is checked out in a different folder.** Merge there, or check out a different branch in that folder.
 
    Write each change in the box at the bottom of the task, then tap ✓ to add it to the list of the task. The button below the list (for example **Send 2 changes to Codex**) starts the next round with the same agent. **Request changes** puts the cursor in the box. The next round has a new `peekumi/run-<id>` branch from the last commit of the previous round. Flagged and unreported instructions and the collected changes are the work of the next round. Instructions that the agent addressed in an earlier round go with the round as complete work: they keep their report and their commit, the task tells the agent not to report on them, and you approve them with the rest. The earlier report is in the history of each instruction and in the task. Peekumi marks the previous round as revised, and you can open it from the latest round. If you merge the latest round, you apply all the rounds.
@@ -27,6 +27,10 @@ When you examine a repository, you can collect feedback. You preview this feedba
 ## State and reporting
 
 An instruction moves through these states: Draft → With agent → Addressed / Flagged / Unreported. Only the owner can change Addressed to Verified. A process that stops never verifies an instruction. An instruction that has no answer becomes Unreported, also when the agent exits with success. Verification and the reopen action wait until the run ends.
+
+One module, `backend/lifecycle.rs`, lists every status of a run and an instruction, and every allowed change between them, with the event that causes it. Each change of the workflow state goes through one transaction. Before Peekumi saves the transaction, it checks each status. An unknown status, or a change that is not in the list, stops the transaction. The error names the change.
+
+When a run ends, its agent can leave files that it did not commit. These files are not part of the results, and a later round starts from the branch tip without them. The run view then says how many files the agent left. With **Keep these files**, you see each file and its state: new, changed, staged or deleted. Peekumi then commits exactly those files on the task branch, in the agent's worktree, with your message. It does not change your folder, and it does not approve the work: you review the new commit as usual. Peekumi lists a restricted file (for example `.env`) but never reads it and never commits it. Salvage is not possible while the agent runs, after a later round starts, or after a merge.
 
 Draft edits use version checks. These checks prevent a silent overwrite of the edits from a different open phone or browser. Each transition adds an audit event and keeps the previous text and report. The UI explicitly shows **current review status**, also when you look at an older commit. Anchors stay on their original revision. Revision-relative instruction state and rename continuity are not available yet.
 
@@ -48,7 +52,7 @@ Workflow data is in `<state-dir>/workflow.sqlite`, separate from the disposable 
 
 The name of each run branch is `peekumi/run-<id>`. When Peekumi creates these branches, it starts Git with hooks disabled. Peekumi changes the checkout that you examine only when you tap **Merge**, **Undo merge** or **Commit**, as step 7 tells. It also runs Git with hooks disabled for these actions. It never switches your checkout to a different branch, pushes, deletes branches or automatically removes run worktrees. Peekumi tells agents to stay in the worktree that it gives them. The worktree is Git isolation, not an operating-system security boundary. Installed agents run as the user of the service, and they keep their own sandbox/permission policy.
 
-Peekumi starts Codex as `codex exec --sandbox workspace-write --approve-for-me`. It starts Claude Code with `claude -p --permission-mode acceptEdits`. Codex sends approval requests through its automatic reviewer. Peekumi explicitly gives Claude these tools: file, search, shell and the three Peekumi reporting tools. Peekumi excludes other MCP configurations. No adapter uses a blanket permission-bypass flag.
+Peekumi starts Codex as `codex exec --approve-for-me` (which selects workspace-write with automatic approval review). It starts Claude Code with `claude -p --permission-mode acceptEdits`. Peekumi explicitly gives Claude file, search, shell and Peekumi reporting tools, and excludes other MCP configurations. No adapter uses a blanket permission-bypass flag.
 
 Use `--codex` / `PEEKUMI_CODEX` and `--claude` / `PEEKUMI_CLAUDE` to configure the installed executable paths. The service account must have the agent sign-in and all necessary tool permissions. If a failure occurs, the run shows it and does not claim success. Codex uses its documented [non-interactive interface](https://developers.openai.com/codex/noninteractive) and [stdio MCP configuration](https://developers.openai.com/codex/mcp).
 
@@ -66,26 +70,29 @@ Authenticated owner writes must use same-origin JSON. Untrusted repository text,
 - `POST /mcp/ask`: the read-only lookup tools of Ask over Streamable HTTP MCP. It accepts only the random key of an answer that is in progress (refer to the text below).
 - `GET /api/workflow`: comments, history, run summaries and watched ref.
 - `POST /api/comments`: `{anchor, sha, text, forRun?}`. `forRun` marks the instruction for the next round of that finished task. Peekumi rejects it if the task was revised.
-- `PATCH /api/comments/<id>`: `{action, version, text? , note?}`. The actions are `edit`, `delete`, `reopen`, `verify` and `unverify` (which takes an approved instruction back to review while its task is not applied). When a task is applied to main, `unverify`, `revise` and new instructions with `forRun` for that task are refused.
+- `PATCH /api/comments/<id>`: `{action, version, text?, note?}`. Supported actions are `edit`, `delete`, `reopen`, and `unverify` (which withdraws the task approval while the task is not applied). Approval itself covers a whole task at exact commits via `POST /api/runs/<id>/approve` (`PATCH` with `verify` is rejected). When a task is applied to main, `unverify`, `revise` and new instructions with `forRun` for that task are refused.
 - `PUT /api/agents/openrouter-key`: `{key}`. It tests the key with OpenRouter, then saves it. `DELETE` on the same path removes it. Both return the same body as `GET /api/agents`.
-- `GET /api/agents`: the providers, their jobs and status, the models of each job (each with `efforts` and `defaultEffort`), `source`, and the default choice for each job.
+- `GET /api/agents`: the providers, their jobs and status, the models of each job (each with `efforts` and `defaultEffort`), `source`, and the default choice for each job. Each provider also has `capabilities`: what its conversation can do (`streamText`, `queueWhileBusy`, `steer`, `interrupt`, `approvals`, `images`, `resume` and `cost`). The app shows a session's controls by these, never by the provider's name.
 - `POST /api/runs/preview`: `{commentIds, brief, using?}`. `using` is `{agent, model, effort}`. An older client can send `agent` alone.
 - `POST /api/runs`: `{previewId}`.
-- `GET /api/runs/<id>`: progress, task, output and results.
+- `GET /api/runs/<id>`: progress, task and results. A task also has `output`, its whole log. A session has no `output`: its conversation comes from `items`.
+- `GET /api/runs/<id>/items?after=&epoch=`: the run's conversation as neutral items, the same for every provider (see [Conversations](#conversations)). The first read gives `items`, the whole list. A later read with the `epoch` and `seq` of the last read gives only `patches`, `{index, item}` for each item that was added or changed. A read with another epoch (after a restart) gives the whole list again. It also returns `total`, `status` and `changed`.
 - `POST /api/runs/<id>/cancel`: requests termination of the process group.
 - `GET` / `PUT /api/ask/history?branch=<ref>`: the saved Ask conversation of one branch of the repository, `{messages}` (owner only; a maximum of 100 user or assistant messages). Without `branch`, the route uses the watched branch.
-- `GET /api/runs/<id>/merge`: what a merge of the task does now. `state` is `ready`, `blocked` (uncommitted files in the way: `blocking`), `behind` (the watched branch has `behind` new commits), `elsewhere` (checked out in a different folder: `folder`), `merged` (with `undoable`), `applied` or `waiting`. It also returns `files`, `commits`, `targetSha` and `head`.
+- `GET /api/runs/<id>/merge`: what a merge of the task does now. `state` is `ready`, `blocked` (uncommitted files in the way: `blocking`), `behind` (the watched branch has `behind` new commits), `elsewhere` (checked out in a different folder: `folder`), `merged` (with `undoable`), `applied` or `waiting`. It also returns `files`, `commits`, `targetSha`, `head` and `loose`, the number of files that the agent left uncommitted.
 - `POST /api/runs/<id>/merge`: `{target, head}`, the two commits that the owner confirmed. It does a fast-forward of the watched branch. If either commit changed, Peekumi refuses.
 - `POST /api/runs/<id>/unmerge`: moves the watched branch back to its commit before the merge.
 - `POST /api/runs/<id>/update`: merges the watched branch into the task branch. It returns `{merged}` with the new merge state, or `{round}` when a conflict starts a new round.
 - `POST /api/runs/<id>/commit-draft`: the blocking files, the checked-out commit, a hash of the changes and a commit message from the agent.
 - `POST /api/runs/<id>/commit-mine`: `{message, head, hash}`. It commits exactly the blocking files.
+- `GET /api/runs/<id>/loose`: the files that the agent left uncommitted in its worktree, each with `state` (`new`, `changed`, `staged` or `deleted`), line counts and `restricted`. It also returns the worktree commit `head`, a `hash` of the changes and the task `branch`.
+- `POST /api/runs/<id>/salvage`: `{message, head, hash}`. It commits exactly the loose files that are not restricted, on the task branch. If the files changed after the owner looked, Peekumi refuses.
 - `POST /api/runs/session`: `{text, sha, anchor, using?}`. It starts a session with the owner's first message, and returns the session (a run with `kind: "session"`). Peekumi rejects it while an agent runs.
-- `POST /api/runs/<id>/message`: `{text, anchors?}`. It adds the owner's message to a session. A waiting session starts its next turn. A running session keeps the message for the next turn (`queued: true`).
+- `POST /api/runs/<id>/message`: `{id?, text, anchors?}`. It adds the owner's message to a session. A waiting session starts its next turn. A running session keeps the message for the next turn (`queued: true`). `id` is the app's ID for the message: a send with an ID that the session has already gives `duplicate: true` and changes nothing. A message with no ID gets one. When a turn takes a message, the message records that `turn`.
 - `POST /api/runs/<id>/approval`: `{approval, decision, message?}`. It answers the agent's request to run a command. `decision` is `allow`, `session` (allow, and allow the same command for the rest of the session), `all` (allow every command from now on) or `deny`.
 - `POST /api/runs/session` also takes `permissions`: `ask` (the default) or `allow`.
 - `POST /api/runs/<id>/permissions`: `{mode}`, `ask` or `allow`. It changes how an open session treats commands.
-- `GET /api/runs/<id>/tail`: a session with only the last 16 KB of its log.
+- `GET /api/runs/<id>/tail`: a session with only the last 16 KB of its log. The app now reads `items`; this route stays for older clients.
 - `GET /api/runs/<id>` and `GET /api/runs/<id>/tail` of a session also return `changed`: the files that the session changed since its start commit, committed or not, and its new files.
 - `POST /api/references`: `{base, head, text, about?}`. It returns `references`, the place of each code span in `text` that names exactly one file or declaration in the comparison, in the same form as Ask's `references`. A dotted name such as `Workflow.route` names a method by its type.
 - `POST /api/runs/<id>/end`: `{review}`. It ends a waiting session. With `review: true`, the session's instruction gets a report with the last commit of the branch, and it goes to the normal review.
@@ -147,6 +154,15 @@ A place that Follow showed is not a pointer. Follow moves the map, but it never 
 **End a session.** **End session** shows the commits on the branch. **Send to review** reports the session's instruction with the last commit, and the work then goes through the normal review: **Approve**, then **Merge** with **Undo**. The conversation stays with the work, under **Session conversation**. **End without review** keeps the branch, and the instruction stays unreported. The session then says that you ended it, and that nothing was merged.
 
 Peekumi never pushes a session branch and never changes your checkout. A turn has a time limit of one hour.
+
+
+### Conversations
+
+Each provider writes its own log: Claude Code writes stream-json, Codex writes JSON events, and Peekumi's own agent writes one item on each line. Peekumi adds its own events: the owner's messages, the end of each turn, the rule check and errors. The server reads the log into one list of neutral items (`backend/conversation.rs`), the same for every provider. The items are the owner's messages, the agent's text and its steps, with their output and the places they touch. They also include the end of each turn, the rule check, errors and cost.
+
+Each provider has a conversation adapter, next to its setup in `backend/agents.rs`. To add a provider, give it an adapter that turns its events into items, and its capabilities. The app needs no change.
+
+The server reads each log once, in parts, and numbers each change. The app keeps the items that it has and asks only for the changes after its last number. So a phone that was asleep reads only what it missed, and it never downloads the whole log again.
 
 ## Notifications
 

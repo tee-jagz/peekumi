@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { command } from "./reference/engine.mjs";
 import { startRust } from "./rust-support.mjs";
-import { fixture, waitFor } from "./workflow-support.mjs";
+import { approve, fixture, waitFor } from "./workflow-support.mjs";
 test("anchored drafts, immutable previews, scoped MCP reports, verification and persistence", async (t) => {
   const f = await fixture();
   t.after(() => f.close());
@@ -141,28 +141,27 @@ test("anchored drafts, immutable previews, scoped MCP reports, verification and 
   assert.equal((await f.git("rev-parse", "HEAD")).toString().trim(), original);
   assert.equal((await f.git("status", "--porcelain")).toString().trim(), "");
   assert.equal(
+    (await approve(req, preview.id, { note: "x".repeat(12001) })).status,
+    400,
+    "An oversized review note is rejected",
+  );
+  // Per-comment verify is rejected; approval covers the whole task at exact commits.
+  assert.equal(
     (
       await req(
         "/api/comments/" + a.id,
-        {
-          action: "verify",
-          version: addressed.version,
-          note: "x".repeat(12001),
-        },
+        { action: "verify", version: addressed.version },
         "PATCH",
       )
     ).status,
     400,
-    "An oversized review note is rejected",
   );
-  const verified = await req(
-    "/api/comments/" + a.id,
-    {
-      action: "verify",
-      version: addressed.version,
-      note: "Reviewed the new file and reported checks.",
-    },
-    "PATCH",
+  const approvedRes = await approve(req, preview.id, {
+    note: "Reviewed the new file and reported checks.",
+  });
+  assert.equal(approvedRes.status.approvalCurrent, true);
+  const verified = (await req("/api/workflow")).comments.find(
+    (x) => x.id === a.id,
   );
   assert.equal(verified.status, "verified");
   assert.equal(verified.verification.commit, addressed.report.commit);
@@ -354,24 +353,18 @@ test("requesting changes starts a next round that builds on the agent's own comm
   assert.equal(again.status, 400);
   assert.match(again.error, /already requested/);
   // The finished instruction keeps its report from round 1: it never shows "Needs retry",
-  // and approving it verifies the commit that addressed it, which the latest branch contains.
-  const verified = await f.req(
-    "/api/comments/" + c.id,
-    { action: "verify", version: moved.version },
-    "PATCH",
-  );
-  assert.equal(verified.status, "verified");
-  assert.equal(verified.verification.commit, result1);
+  // and approving the task verifies every addressed commit, which the latest branch contains.
   const addressed = (await f.req("/api/workflow")).comments.find(
     (x) => x.id === collected.id,
   );
   assert.equal(addressed.status, "addressed");
   assert.equal(addressed.report.commit, result);
-  await f.req(
-    "/api/comments/" + collected.id,
-    { action: "verify", version: addressed.version },
-    "PATCH",
+  await approve(f.req, next.id);
+  const verified = (await f.req("/api/workflow")).comments.find(
+    (x) => x.id === c.id,
   );
+  assert.equal(verified.status, "verified");
+  assert.equal(verified.verification.commit, result1);
   const done = await f.req(`/api/runs/${next.id}/revise`, { feedback: "More" });
   assert.match(done.error, /Nothing in this task is left to change/);
   assert.equal(
@@ -393,11 +386,8 @@ test("requesting changes starts a next round that builds on the agent's own comm
     reopened.history.some((h) => h.status === "verified"),
     "The approval stays in the history",
   );
-  approved = await f.req(
-    "/api/comments/" + c.id,
-    { action: "verify", version: reopened.version },
-    "PATCH",
-  );
+  await approve(f.req, next.id);
+  approved = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
   assert.equal(approved.status, "verified");
   // Once the owner merges the latest round, the task is a settled record.
   await f.git("merge", "--ff-only", next.branch);
@@ -443,12 +433,7 @@ test("a merge closes the task; instructions that the agent flagged become drafts
   );
   let state = await f.req("/api/workflow");
   assert.equal(state.comments.find((x) => x.id === b.id).status, "flagged");
-  const done = state.comments.find((x) => x.id === a.id);
-  await f.req(
-    "/api/comments/" + a.id,
-    { action: "verify", version: done.version },
-    "PATCH",
-  );
+  await approve(f.req, p.id);
   const status = await f.req(`/api/runs/${p.id}/merge`);
   assert.equal(status.state, "ready");
   const merged = await f.req(`/api/runs/${p.id}/merge`, {
@@ -498,14 +483,7 @@ test("an update round keeps a flagged instruction open and in view", async (t) =
   await waitFor(
     async () => (await f.req("/api/runs/" + p.id)).status === "completed",
   );
-  const done = (await f.req("/api/workflow")).comments.find(
-    (x) => x.id === a.id,
-  );
-  await f.req(
-    "/api/comments/" + a.id,
-    { action: "verify", version: done.version },
-    "PATCH",
-  );
+  await approve(f.req, p.id);
   // main moves on with the same file, so the update is a round that resolves a conflict.
   await writeFile(path.join(f.dir, "agent-result.txt"), "main's own notes\n");
   await f.git("add", "agent-result.txt");
@@ -545,19 +523,105 @@ test("an edit to a tracked file that a merge would overwrite blocks it, by its e
   await waitFor(
     async () => (await f.req("/api/runs/" + p.id)).status === "completed",
   );
-  const comment = (await f.req("/api/workflow")).comments.find(
-    (x) => x.id === c.id,
-  );
-  await f.req(
-    "/api/comments/" + c.id,
-    { action: "verify", version: comment.version },
-    "PATCH",
-  );
+  await approve(f.req, p.id);
   // The owner edits the tracked file, and does not commit it.
   await writeFile(path.join(f.dir, "agent-result.txt"), "The owner's edit.\n");
   const status = await f.req(`/api/runs/${p.id}/merge`);
   assert.equal(status.state, "blocked");
   assert.deepEqual(status.blocking, ["agent-result.txt"]);
+});
+
+test("the owner can keep work that an agent left uncommitted, but never a restricted file", async (t) => {
+  const f = await fixture();
+  t.after(() => f.close());
+  const c = await f.req("/api/comments", {
+    text: "Write the result file LEAVE_LOOSE",
+    sha: f.sha,
+    anchor: { kind: "repo", path: "" },
+  });
+  const p = await f.req("/api/runs/preview", {
+    agent: "codex",
+    commentIds: [c.id],
+  });
+  await f.req("/api/runs", { previewId: p.id });
+  const run = await waitFor(async () => {
+    const r = await f.req("/api/runs/" + p.id);
+    return r.status === "completed" && r;
+  });
+  assert.equal(run.results.length, 1);
+  assert.deepEqual((await f.req(`/api/runs/${p.id}/merge`)).loose, {
+    state: "counted",
+    count: 3,
+  });
+  const loose = await f.req(`/api/runs/${p.id}/loose`);
+  assert.deepEqual(
+    loose.files.map((x) => [x.path, x.state, x.restricted === true]).sort(),
+    [
+      ["module.py", "changed", false],
+      [".env", "new", true],
+      ["notes/loose.txt", "new", false],
+    ].sort(),
+  );
+  // Peekumi never reads a restricted file, not even for the line counts.
+  assert.equal(loose.files.find((x) => x.path === ".env").added, undefined);
+  const stale = await f.req(`/api/runs/${p.id}/salvage`, {
+    ...loose,
+    message: "Keep the notes",
+    hash: "0".repeat(64),
+  });
+  assert.match(stale.error, /files changed; check them again/);
+  // Approving before keeping loose files: keeping them moves the head and clears the approval.
+  const firstApproved = await approve(f.req, p.id);
+  assert.equal(firstApproved.status.approvalCurrent, true);
+  assert.equal(firstApproved.status.state, "ready");
+  const kept = await f.req(`/api/runs/${p.id}/salvage`, {
+    head: loose.head,
+    hash: loose.hash,
+    message: "Keep the notes",
+  });
+  assert.ok(kept.commit);
+  assert.equal(kept.status.approvalCurrent, false);
+  assert.equal(kept.status.state, "waiting");
+  const refusedAfterSalvage = await f.req(`/api/runs/${p.id}/merge`, {
+    target: kept.status.targetSha,
+    head: kept.status.head,
+  });
+  assert.match(refusedAfterSalvage.error, /Approve this task before you merge/);
+  const after = await f.req("/api/runs/" + p.id);
+  assert.equal(after.results.length, 2);
+  assert.equal(after.results[1], kept.commit);
+  assert.equal(after.approvalRecord, null);
+  assert.equal(after.approvalHistory[0].clearedBy, "salvage");
+  assert.deepEqual(after.salvaged[0].files.sort(), [
+    "module.py",
+    "notes/loose.txt",
+  ]);
+  const git = async (...a) =>
+    (await f.git("-C", run.worktree, ...a)).toString().trim();
+  assert.equal(
+    await git("log", "-1", "--format=%B"),
+    `Keep the notes\n\nPeekumi-Run: ${p.id}`,
+  );
+  assert.equal(
+    await git("status", "--porcelain"),
+    "?? .env",
+    "The restricted file stays loose",
+  );
+  // The owner's checkout does not change, and the comment is not approved.
+  assert.equal((await f.git("status", "--porcelain")).toString().trim(), "");
+  const comment = (await f.req("/api/workflow")).comments.find(
+    (x) => x.id === c.id,
+  );
+  assert.notEqual(comment.status, "verified");
+  assert.deepEqual((await f.req(`/api/runs/${p.id}/merge`)).loose, {
+    state: "counted",
+    count: 1,
+  });
+  // When the worktree is gone, loose reports unavailable with a reason, never 0.
+  await rm(run.worktree, { recursive: true, force: true });
+  const missing = await f.req(`/api/runs/${p.id}/merge`);
+  assert.equal(missing.loose.state, "unavailable");
+  assert.match(missing.loose.reason, /no longer exists/);
 });
 
 test("an approved task merges on the owner's action, never over uncommitted work, and can be undone", async (t) => {
@@ -583,16 +647,28 @@ test("an approved task merges on the owner's action, never over uncommitted work
     "waiting",
     "An unapproved task cannot merge",
   );
-  let comment = (await f.req("/api/workflow")).comments.find(
-    (x) => x.id === c.id,
-  );
-  await f.req(
-    "/api/comments/" + c.id,
-    { action: "verify", version: comment.version },
-    "PATCH",
-  );
+  // Merge is refused without an approval record for the exact current commits.
+  const beforeApprove = await merge();
+  const unapprovedMerge = await f.req(`/api/runs/${p.id}/merge`, {
+    target: beforeApprove.targetSha,
+    head: beforeApprove.head,
+  });
+  assert.match(unapprovedMerge.error, /Approve this task before you merge/);
+  // Stale commit SHAs are rejected by approve.
+  const staleApprove = await f.req(`/api/runs/${p.id}/approve`, {
+    start: beforeApprove.start,
+    head: "0".repeat(40),
+  });
+  assert.match(staleApprove.error, /The task changed after you checked it/);
+  const approvedFirst = await approve(f.req, p.id, { note: "Checked diff" });
+  assert.equal(approvedFirst.approval.start, beforeApprove.start);
+  assert.equal(approvedFirst.approval.head, beforeApprove.head);
+  assert.equal(approvedFirst.approval.note, "Checked diff");
+  assert.equal(approvedFirst.approval.evidence.ci.state, "none");
+  assert.equal(approvedFirst.approval.evidence.tamper.state, "listed");
   let status = await merge();
   assert.equal(status.state, "ready");
+  assert.equal(status.approvalCurrent, true);
   assert.equal(status.target, "main");
   assert.equal(status.checkedOut, true);
   assert.equal(status.commits, 1);
@@ -655,7 +731,9 @@ test("an approved task merges on the owner's action, never over uncommitted work
     const r = await f.req("/api/runs/" + update.round.id);
     return r.status === "completed" && r;
   });
-  comment = (await f.req("/api/workflow")).comments.find((x) => x.id === c.id);
+  const comment = (await f.req("/api/workflow")).comments.find(
+    (x) => x.id === c.id,
+  );
   assert.equal(
     comment.status,
     "addressed",
@@ -667,11 +745,7 @@ test("an approved task merges on the owner's action, never over uncommitted work
     /deterministic agent[^]*owner's own notes/,
   );
   assert.equal((await merge(round.id)).state, "waiting");
-  await f.req(
-    "/api/comments/" + c.id,
-    { action: "verify", version: comment.version },
-    "PATCH",
-  );
+  await approve(f.req, round.id);
   assert.equal(
     (await merge(p.id)).state,
     "waiting",
@@ -708,12 +782,18 @@ test("an approved task merges on the owner's action, never over uncommitted work
   assert.equal(undone.state, "ready");
   assert.equal(await out("rev-parse", "main"), before);
   assert.equal(await out("status", "--porcelain"), "M module.py");
-  // A clean update keeps the approval: main moves on in a file the task does not touch.
+  // A clean update changes the head and start, so it removes the approval until approved again.
   await f.git("commit", "-qam", "Main moves on");
   status = await merge(round.id);
   assert.equal(status.state, "behind");
   const clean = await f.req(`/api/runs/${round.id}/update`, {});
-  assert.equal(clean.merged.state, "ready");
+  assert.equal(clean.merged.state, "waiting");
+  assert.equal(clean.merged.approvalCurrent, false);
+  const blockedClean = await f.req(`/api/runs/${round.id}/merge`, {
+    target: clean.merged.targetSha,
+    head: clean.merged.head,
+  });
+  assert.match(blockedClean.error, /Approve this task before you merge/);
   assert.match(
     await out(
       "log",
@@ -723,6 +803,7 @@ test("an approved task merges on the owner's action, never over uncommitted work
     ),
     /Merge main into peekumi\/run-/,
   );
+  await approve(f.req, round.id);
   // With main not checked out, the merge moves only the branch, never the working files.
   await f.git("checkout", "-q", "--detach");
   const detached = await merge(round.id);
@@ -1056,7 +1137,7 @@ test("OpenRouter answers Ask with Peekumi's lookups, and its key stays on the se
     ],
     ["vendor/tool-model", { effort: "high" }, true],
   );
-  assert.match(chats[0].json.messages[0].content, /ASD-STE100/);
+  assert.match(chats[0].json.messages[0].content, /Check before you answer/);
   const tool = chats[1].json.messages.find((m) => m.role === "tool");
   assert.match(
     tool.content,
@@ -1278,7 +1359,19 @@ test("a session continues one conversation over turns, asks before commands, and
   // Peekumi checked the rules itself when the turn ended; this repository has none.
   assert.equal(run.ruleCheck.state, "not checked");
   assert.equal(run.ruleCheck.configState, "not configured");
-  assert.match(run.output, /"type":"peekumi.rules","turn":1/);
+  // A session's run has no whole log: its conversation comes as items.
+  assert.equal(run.output, undefined);
+  const log = () =>
+    readFile(path.join(f.state, "runs", session.id, "output.log"), "utf8");
+  assert.match(await log(), /"type":"peekumi.rules","turn":1/);
+  const { items } = await f.req(`/api/runs/${session.id}/items`);
+  const kinds = items.map((i) => i.kind);
+  assert.equal(kinds[0], "owner");
+  assert.deepEqual(kinds.slice(-2), ["end", "rules"]);
+  assert.ok(kinds.includes("text") && kinds.includes("step"), kinds.join(","));
+  // The first message got an ID, and the turn that took it.
+  assert.match(run.messages[0].id, /^m[0-9a-f]{16}$/);
+  assert.equal(run.messages[0].turn, 1);
   assert.deepEqual(
     JSON.parse(
       await readFile(path.join(f.state, "session-approval-1.json"), "utf8"),
@@ -1288,7 +1381,7 @@ test("a session continues one conversation over turns, asks before commands, and
   assert.deepEqual(run.allow, ["Bash(npm install:*)"]);
   assert.equal(run.results.length, 1);
   assert.equal(run.summary, "Turn 1 is done.");
-  assert.match(run.output, /"type":"peekumi.owner","turn":1/);
+  assert.match(await log(), /"type":"peekumi.owner","turn":1/);
   const first = JSON.parse(
     await readFile(path.join(f.state, "session-turn-1.json"), "utf8"),
   );
@@ -1301,12 +1394,22 @@ test("a session continues one conversation over turns, asks before commands, and
     /## Rule check\nBefore you end a turn in which you committed changes, call check_rules/,
   );
   // The next turn resumes the conversation; the session rule answers without asking.
-  const sent = await f.req(`/api/runs/${session.id}/message`, {
+  const again = {
+    id: "again-1",
     text: "Again.\nRUN: npm install other",
     anchors: [{ kind: "symbol", path: "module.py", symbol: "run" }],
-  });
+  };
+  const sent = await f.req(`/api/runs/${session.id}/message`, again);
   assert.equal(sent.queued, false);
+  assert.equal(sent.id, "again-1");
+  // The phone repeats the send (a timeout, say): the message is kept once.
+  const repeated = await f.req(`/api/runs/${session.id}/message`, again);
+  assert.equal(repeated.duplicate, true);
   run = await waiting(2);
+  assert.deepEqual(
+    run.messages.filter((m) => m.id === "again-1").map((m) => m.turn),
+    [2],
+  );
   const second = JSON.parse(
     await readFile(path.join(f.state, "session-turn-2.json"), "utf8"),
   );
@@ -1412,12 +1515,12 @@ test("a session continues one conversation over turns, asks before commands, and
   assert.equal(comment.report.commit, done.results[4]);
   assert.equal(comment.report.note, "Turn 5 is done.");
   // From here it is a normal task: the owner approves it.
-  const approved = await f.req(
-    "/api/comments/" + comment.id,
-    { action: "verify", version: comment.version },
-    "PATCH",
+  const approvedRes = await approve(f.req, session.id);
+  assert.equal(approvedRes.status.approvalCurrent, true, approvedRes.error);
+  const approved = (await f.req("/api/workflow")).comments.find(
+    (c) => c.id === comment.id,
   );
-  assert.equal(approved.status, "verified", approved.error);
+  assert.equal(approved.status, "verified");
   assert.equal(
     (await f.req(`/api/runs/${session.id}/message`, { text: "More" })).error,
     "This session has ended",
@@ -1474,7 +1577,10 @@ test("a Codex session resumes its thread, can stop a turn, and can end without r
     return r.status === "waiting" && r.turns === 2 && !r.pid && r;
   });
   assert.match(
-    run.output,
+    await readFile(
+      path.join(f.state, "runs", session.id, "output.log"),
+      "utf8",
+    ),
     /"type":"peekumi.turn","turn":2,"status":"cancelled"/,
   );
   await new Promise((r) => setTimeout(r, 800));
@@ -1800,7 +1906,7 @@ test("Ask sees the committed dependency rules at the compared head", async (t) =
   assert.equal(JSON.parse(result.answer.text), rules);
 });
 
-test("Ask checks what a draft left unchecked before it replies", async (t) => {
+test("Ask returns its answer in a single pass without hidden recheck passes", async (t) => {
   const f = await fixture();
   t.after(() => f.close());
   const ask = (question, stream = false) =>
@@ -1823,23 +1929,17 @@ test("Ask checks what a draft left unchecked before it replies", async (t) => {
   const whole = await (await ask("Leave something unchecked.")).json();
   assert.equal(
     whole.answer.text,
-    "Checked after: The function moved. I did not check the tests.",
-    "A draft that leaves a check open goes back for a second pass with the draft",
+    "The function moved. I did not check the tests.",
+    "Ask does not trigger a hidden second LLM pass based on phrasing",
   );
   const lines = (await (await ask("Leave something unchecked.", true)).text())
     .trim()
     .split("\n")
     .map((l) => JSON.parse(l));
   assert.equal(lines.at(-1).type, "done");
-  assert.match(
+  assert.equal(
     lines.at(-1).answer.text,
-    /^Checked after: /,
-    "Streamed answers get the same check",
-  );
-  const turns = lines.filter((e) => e.type === "turn").length;
-  assert.ok(
-    turns >= 3,
-    "The checked pass starts a new turn, which replaces the draft on screen",
+    "The function moved. I did not check the tests.",
   );
   assert.equal(
     (await (await ask("Answer fully.")).json()).answer.text,
@@ -2011,8 +2111,8 @@ test("Ask sees callers and may use bounded read-only lookups that end with the a
     "Code search finds the call site and the declaration it sits in: " +
       used.searched,
   );
-  assert.equal(used.calls, 30, "Lookups stop at the per-answer limit");
-  assert.equal(result.lookups.length, 30);
+  assert.equal(used.calls, 60, "Lookups stop at the per-answer limit");
+  assert.equal(result.lookups.length, 60);
   assert.ok(result.lookups.includes("Read target in late.py"));
 
   const after = await fetch(used.url, {

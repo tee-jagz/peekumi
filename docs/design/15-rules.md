@@ -57,19 +57,18 @@ Every screen obeys these rules. A rule marked **lint** is checked by a tool in C
 
 These rules keep the interface on the parts of `frontend/ui.js`. `scripts/lint-ui.mjs` checks them in `npm run lint`.
 
-- **R37 (lint).** Only the component modules (`ui.js`, `peek.js` and `icons.js`) make elements. Another module calls a part of `ui.js`. It never calls `document.createElement` or a helper that makes elements.
-- **R38 (lint).** No markup from strings outside the component modules: no `innerHTML`, `outerHTML`, `insertAdjacentHTML` or `document.write`.
-- **R39 (lint).** No class names and no inline styles outside the component modules. A part takes its state as an argument.
-- **R40 (lint).** No native dialogs: no `alert`, `confirm` or `prompt`. Use `Dialog`.
-- **R41 (lint).** `index.html` holds only `pk-` classes and mount points. No new stylesheet rules outside `ui.css`.
-- **R42 (lint).** Every `pk-` class that `ui.js` uses exists in `ui.css`, and every rendered part has an accessible name (`test/ui.test.mjs`).
-- **R43 (review).** Every pop-up (menu, select list, popover, dialog, sheet) has the `surface-popup` ground and `shadow-popup`, so it stands clear of the page in both themes.
-- **R44 (review).** When a pop-up scrolls, its header with its controls (Close, Back, Refresh) stays at the top. The content scrolls under it.
+- **R34 (lint).** Only the component modules (`ui.js`, `peek.js` and `icons.js`) make elements. Another module calls a part of `ui.js` rather than calling `document.createElement` or a local element helper.
+- **R35 (lint).** No markup from strings outside the component modules (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`).
+- **R36 (lint).** No class names or inline styles outside the component modules. Pass state to the component part instead.
+- **R37 (lint).** No native dialogs (`alert`, `confirm`, `prompt`). Use `Dialog`.
+- **R38 (lint).** `index.html` holds only `pk-` classes and mount points. No new stylesheet rules outside `ui.css`.
+- **R39 (lint).** Every `pk-` class used by `ui.js` exists in `ui.css`, and every rendered part has an accessible name (`test/ui.test.mjs`).
+- **R40 (review).** Every pop-up (menu, select list, popover, dialog, sheet) has `surface-popup` and `shadow-popup`, and keeps its header fixed when scrolling.
 
-The app still has UI from before the components. `scripts/ui-baseline.json` records it for each file. A count above the baseline fails, so new code must use the parts. When a screen moves to the parts, its count goes down. Then `node scripts/lint-ui.mjs --update` writes the lower number, and the debt cannot come back.
+`scripts/ui-baseline.json` tracks remaining legacy UI outside the component modules. Counts above the baseline fail `npm run lint`. When legacy UI is migrated, run `node scripts/lint-ui.mjs --update` to lower the baseline.
 
 ## Process
 
-- **R34.** A new component needs a row in **Components** first, then its function in `frontend/ui.js` and its preview in `tools/gallery.mjs`.
-- **R35.** A new token needs an entry in `tokens.json` with a usage note and a contrast check.
-- **R36.** Run `npm run test:browser` and look at the phone and desktop screenshots for each change to the interface.
+- **R41.** Add new components to `frontend/ui.js`, `docs/design/14-components.md`, and `docs/design/tools/gallery.mjs`.
+- **R42.** Add new tokens to `docs/design/tokens.json` with a contrast check.
+- **R43.** Run `npm run test:browser` and inspect phone and desktop screenshots for interface changes.

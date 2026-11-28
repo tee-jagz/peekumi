@@ -380,10 +380,10 @@ export function Checkbox({
 }
 
 /** A row that opens more detail below it. */
-export function Disclosure({ summary, open = false }, ...children) {
+export function Disclosure({ summary, open = false, key }, ...children) {
   return h(
     "details",
-    { class: "pk-disclosure", open },
+    { class: "pk-disclosure", open, data: key ? { key } : undefined },
     h("summary", {}, summary, Icon("chevron", true)),
     children,
   );
@@ -1198,6 +1198,7 @@ export function MapCard({
   files,
   breaks,
   breaksTitle,
+  crap,
   meta,
   parts = [],
   bars,
@@ -1231,6 +1232,15 @@ export function MapCard({
       icon || Icon(`obj-${kind}`, true),
       h("span", { class: "pk-card-name" }, shown),
       meta != null && h("span", { class: "pk-card-meta" }, meta),
+      crap &&
+        h(
+          "span",
+          {
+            class: cls("pk-card-crap", crap.risky && "is-risky"),
+            title: crap.title || null,
+          },
+          crap.text,
+        ),
       parts.length > 0 && h("span", { class: "pk-card-parts" }, parts),
       uncommitted &&
         h("span", {
@@ -1930,6 +1940,147 @@ export function RuleCheck({ check, loading = false, actions = [] }) {
           ),
         ),
     ),
+  );
+}
+
+/** The mark of each evidence tone: `good` (an explicit pass), `bad` (a failure), `wait`
+ * (not finished), `open` (it needs the owner: a blind spot, a limit, a check that did not
+ * run) and `quiet` (nothing to show, or a claim that is not proof). */
+const EVIDENCE_MARKS = {
+  good: "check",
+  bad: "close",
+  wait: "pending",
+  open: "eye",
+  quiet: "shield",
+};
+
+/** One part of the evidence for a review: Peekumi checks, CI, agent claims or blind spots.
+ * `title` names it and `summary` gives its state in a few words, with the mark of `tone`
+ * (see EVIDENCE_MARKS). The parts stay separate: no part and no total is a verdict. */
+export function EvidenceSection(
+  { title, tone = "quiet", summary },
+  ...children
+) {
+  return h(
+    "section",
+    { class: "pk-evidence", data: { tone }, "aria-label": title },
+    h(
+      "div",
+      { class: "pk-evidence-head" },
+      h("h3", {}, title),
+      summary &&
+        h(
+          "span",
+          { class: "pk-evidence-summary" },
+          Icon(EVIDENCE_MARKS[tone] || "shield", true),
+          summary,
+        ),
+    ),
+    children,
+  );
+}
+
+/** One fact in an EvidenceSection: a check, a claim or a file. `label` names it, `outcome`
+ * is its state in words with the mark of `tone`, `meta` is a caption (where it came from,
+ * when Peekumi read it), `href` links to its source, and `onClick` jumps to it on the map. */
+export function EvidenceItem({
+  label,
+  outcome,
+  tone = "quiet",
+  meta,
+  href,
+  onClick,
+}) {
+  const tag = onClick ? "button" : "div";
+  return h(
+    tag,
+    {
+      class: onClick ? "pk-evidence-item is-clickable" : "pk-evidence-item",
+      ...(onClick ? { type: "button", on: { click: onClick } } : {}),
+      data: { tone },
+    },
+    h(
+      "span",
+      { class: "pk-evidence-mark" },
+      Icon(EVIDENCE_MARKS[tone] || "shield", true),
+    ),
+    h(
+      "span",
+      { class: "pk-evidence-body" },
+      h("span", { class: "pk-evidence-label" }, label),
+      meta && h("span", { class: "pk-meta" }, meta),
+      href && ExternalLink({ label: "Details", href }),
+    ),
+    outcome && h("span", { class: "pk-evidence-outcome" }, outcome),
+  );
+}
+
+/** The question that needs the owner first, above the evidence of a review. */
+export function EvidenceQuestion(text) {
+  return h("p", { class: "pk-evidence-question" }, text);
+}
+
+/** Compact monospace provenance chips pinned beneath the verdict strip (commit pair,
+ * fallback configRef source, etc.). Each chip is `{ text, tone? }`. */
+export function ProvenanceChips(chips = []) {
+  const valid = chips.filter((c) => c && c.text);
+  if (!valid.length) return null;
+  return h(
+    "div",
+    { class: "pk-prov-row" },
+    ...valid.map((c) =>
+      h(
+        "span",
+        { class: "pk-prov-chip", data: { tone: c.tone || "quiet" } },
+        c.text,
+      ),
+    ),
+  );
+}
+
+/** Compact amber waiting count shown inside `#openTasks` without stretching the icon button into a pill. */
+export function InboxCue(count) {
+  return h("span", { class: "pk-inbox-cue" }, String(count));
+}
+
+/** One compact 2-line row in the Review Inbox: title on line 1, source badge + signal chips
+ * on line 2, with a trailing chevron. */
+export function InboxRow({
+  title,
+  source,
+  chips = [],
+  urgent = false,
+  className = "",
+  onClick,
+}) {
+  return h(
+    "button",
+    {
+      type: "button",
+      class: cls("pk-inbox-row", className),
+      data: { urgent: urgent ? "yes" : null },
+      on: onClick && { click: onClick },
+    },
+    h(
+      "span",
+      { class: "pk-inbox-main" },
+      h("span", { class: "pk-inbox-title" }, title),
+      h(
+        "span",
+        { class: "pk-inbox-chips" },
+        source && h("span", { class: "pk-inbox-src" }, source),
+        ...chips
+          .filter((c) => c && c.text)
+          .map((c) =>
+            h(
+              "span",
+              { class: "pk-inbox-chip", data: { tone: c.tone || "quiet" } },
+              c.text,
+            ),
+          ),
+      ),
+    ),
+    Icon("chevron", true),
   );
 }
 

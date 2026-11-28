@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { createInterface } from "node:readline";
 const root = path.resolve(import.meta.dirname, "..");
+export const RUST_BINARY = path.join(root, "target/release/peekumi");
 export async function startRust(
   directory,
   {

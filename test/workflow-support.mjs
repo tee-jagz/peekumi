@@ -99,3 +99,13 @@ export async function waitFor(fn) {
   }
   throw Error("Workflow timeout");
 }
+/** Approves run `id` through `req` (a fixture's owner call) at the start and head that its
+ * merge state names now, as the app does. `extra` adds fields, such as a `note`. */
+export async function approve(req, id, extra = {}) {
+  const m = await req(`/api/runs/${id}/merge`);
+  return req(`/api/runs/${id}/approve`, {
+    start: m.start,
+    head: m.head,
+    ...extra,
+  });
+}

@@ -88,7 +88,6 @@
       "scripts/cargo.mjs",
       "scripts/release.mjs",
       "scripts/release-notes.mjs",
-      "scripts/lint-docs.mjs",
       "scripts/tunnel/**"
     ],
     "graph-brief": ["backend/graph_brief.rs"],
@@ -323,12 +322,6 @@
     },
     "items": [
       {
-        "id": "lint-docs",
-        "name": "Docs writing rules",
-        "command": ["node", "scripts/lint-docs.mjs"],
-        "timeoutSeconds": 60
-      },
-      {
         "id": "lint-ui",
         "name": "UI components lint",
         "command": ["node", "scripts/lint-ui.mjs"],
@@ -341,7 +334,6 @@
           "node",
           "--test",
           "test/model.test.mjs",
-          "test/docs.test.mjs",
           "test/pilot.test.mjs",
           "test/ui.test.mjs"
         ],

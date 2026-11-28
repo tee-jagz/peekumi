@@ -112,7 +112,9 @@ peekumi share
 peekumi pair
 ```
 
-`share` configures private Tailscale Serve HTTPS, enables secure cookies and restarts Peekumi. It never enables public Funnel. Tailscale can ask you to enable HTTPS for your tailnet. Before you give the default HTTPS endpoint of Serve to Peekumi, examine the current Serve configuration. After this, `peekumi pair` prints the HTTPS pairing link.
+`share` configures private Tailscale Serve HTTPS, enables secure cookies and restarts Peekumi. It never enables public Funnel. Tailscale can ask you to enable HTTPS for your tailnet. Before you give the default HTTPS endpoint of Serve to Peekumi, examine the current Serve configuration.
+
+`share` also saves your Tailscale login. Then each of your devices that is signed into Tailscale as you opens Peekumi with no token and no pairing. A phone that uses the Cloudflare tunnel, or a computer on a tagged Tailscale node, still needs the pairing link: `peekumi pair` prints it.
 
 If the Tailscale status or the exposure fails, `peekumi share` prints the cause, the Tailscale setup and retry steps, and the explicit alternative `peekumi share --tunnel cloudflare` with its warning about public access. Then it exits with a non-zero code. It does not save the sharing settings or restart Peekumi. It never uses Cloudflare automatically.
 

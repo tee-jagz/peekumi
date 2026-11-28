@@ -35,14 +35,14 @@ Peekumi makes promises to the people who use it. A change that breaks one of the
 Before you push, run these two commands:
 
 - `npm run format`: Prettier and rustfmt make the layout of the code. Do not change the layout by hand.
-- `npm run lint`: `clippy` with warnings as errors, and a check of the writing rules in the documents.
+- `npm run lint`: `clippy` with warnings as errors, and `scripts/lint-ui.mjs`.
 
 CI runs the format check, the lint, a secret scan, a vulnerability audit and all three test suites on each pull request. A pull request can merge only when the `checks` and `test` jobs pass.
 
 ## Write the change
 
 - **Code documentation.** Give each module and each public function a short comment that tells its job, its inputs and outputs, and its errors and side effects: `//!` and `///` in Rust, `@module` and JSDoc in JavaScript, docstrings in Python. Keep the README of each folder true to the code.
-- **Documents for people.** Write the README files, `docs/` and the skills in [ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/). Use short sentences, one instruction in each sentence, active voice, simple tenses and approved words. `npm run lint` checks some of these rules. Keep commands, paths, API routes and interface labels exactly as they are. Do not use em dashes.
+- **Documents for people.** Keep the README files, `docs/` and skills clear, concise, and accurate. Keep commands, paths, API routes and interface labels exact.
 - **Tests.** Add a test that fails before your change and passes after it. For a defect, the test shows the defect.
 - **The changelog.** Add one line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). Write what changes for the user, not how you made it.
 

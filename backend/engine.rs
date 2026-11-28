@@ -936,6 +936,163 @@ impl Repository {
             json!({"path":path,"before":before.and_then(|f|f.source.as_ref()),"after":after.and_then(|f|f.source.as_ref()),"patch":patch,"analysis":current.analysis,"symbols":compare_symbols(before,after),"imports":current.imports,"details":{"before":before.map(File::details),"after":after.map(File::details)}}),
         )
     }
+    /// Computes before-and-after CRAP scores for changed Python functions between `base` and
+    /// `head`, using only coverage reports recorded by Peekumi's sandboxed verification runs.
+    /// Non-Python changed files stay explicit in `excludedFiles` with `"CRAP not available"`.
+    pub fn crap(&mut self, base: &str, head: &str) -> Result<Value> {
+        let a = self.snapshot(base)?;
+        let b = self.snapshot(head)?;
+        let paths: BTreeSet<&String> = a.files.keys().chain(b.files.keys()).collect();
+        let mut changed_files = Vec::new();
+        let mut before_py = Vec::new();
+        let mut after_py = Vec::new();
+        let mut excluded = Vec::new();
+        let mut python_changed_paths = Vec::new();
+
+        for path in paths {
+            let fa = a.files.get(path);
+            let fb = b.files.get(path);
+            let file_status = status(fa.map(|f| (&f.oid, &f.mode)), fb.map(|f| (&f.oid, &f.mode)));
+            if file_status == "unchanged" {
+                continue;
+            }
+            changed_files.push((path.clone(), file_status));
+            let lang = crate::crap::language_label(path);
+            if lang != "python" {
+                excluded.push(json!({
+                    "path": path,
+                    "language": lang,
+                    "status": file_status,
+                    "reason": format!("CRAP not available for {lang} (supported for Python only)"),
+                }));
+                continue;
+            }
+            python_changed_paths.push((path.clone(), file_status));
+            if let Some(src) = fa.and_then(|f| f.source.as_ref()) {
+                before_py.push((path.clone(), src.clone()));
+            }
+            if let Some(src) = fb.and_then(|f| f.source.as_ref()) {
+                after_py.push((path.clone(), src.clone()));
+            }
+        }
+
+        let (before_scores, before_source, mut limits) = crate::crap::score_python_commit(
+            &self.state,
+            &self.parser_config.python,
+            &a.sha,
+            &before_py,
+        )?;
+        let (after_scores, after_source, after_limits) = crate::crap::score_python_commit(
+            &self.state,
+            &self.parser_config.python,
+            &b.sha,
+            &after_py,
+        )?;
+        limits.extend(after_limits);
+
+        let mut functions = Vec::new();
+        let mut by_key = serde_json::Map::new();
+        let mut analysed_files = BTreeSet::new();
+        let mut risky_count = 0usize;
+
+        for (path, file_status) in &python_changed_paths {
+            let fa = a.files.get(path);
+            let fb = b.files.get(path);
+            let compared = compare_symbols(fa, fb);
+            let mut file_has_measured = false;
+            for sym in compared {
+                let kind = sym["kind"].as_str().unwrap_or("");
+                if !["function", "method"].contains(&kind) {
+                    continue;
+                }
+                let sym_status = sym["status"].as_str().unwrap_or("unchanged");
+                if sym_status == "unchanged" {
+                    continue;
+                }
+                let name = sym["name"].as_str().unwrap_or("");
+                let key = format!("{path}::{name}");
+                let before_entry = if sym_status == "added" {
+                    json!({"state": "not_present", "reason": "Function added in head"})
+                } else {
+                    before_scores.get(&key).cloned().unwrap_or_else(|| {
+                        json!({
+                            "state": "unavailable",
+                            "reason": before_source["reason"]
+                                .as_str()
+                                .unwrap_or("No coverage evidence for start commit"),
+                            "commit": a.sha,
+                        })
+                    })
+                };
+                let after_entry = if sym_status == "removed" {
+                    json!({"state": "not_present", "reason": "Function removed in head"})
+                } else {
+                    after_scores.get(&key).cloned().unwrap_or_else(|| {
+                        json!({
+                            "state": "unavailable",
+                            "reason": after_source["reason"]
+                                .as_str()
+                                .unwrap_or("No coverage evidence for head commit"),
+                            "commit": b.sha,
+                        })
+                    })
+                };
+                if after_entry["state"] == "measured" || before_entry["state"] == "measured" {
+                    file_has_measured = true;
+                }
+                let risky = after_entry["risky"] == true;
+                if risky {
+                    risky_count += 1;
+                }
+                let entry = json!({
+                    "key": key,
+                    "path": path,
+                    "name": name,
+                    "kind": kind,
+                    "status": sym_status,
+                    "before": before_entry,
+                    "after": after_entry,
+                    "risky": risky,
+                });
+                by_key.insert(key, entry.clone());
+                functions.push(entry);
+            }
+            if file_has_measured {
+                analysed_files.insert(path.clone());
+            } else if *file_status == "removed" {
+                excluded.push(json!({
+                    "path": path,
+                    "language": "python",
+                    "status": file_status,
+                    "reason": "Python file removed in head",
+                }));
+            } else {
+                excluded.push(json!({
+                    "path": path,
+                    "language": "python",
+                    "status": file_status,
+                    "reason": after_source["reason"]
+                        .as_str()
+                        .unwrap_or("No changed Python functions with coverage data"),
+                }));
+            }
+        }
+
+        Ok(json!({
+            "base": a.sha,
+            "head": b.sha,
+            "threshold": crate::crap::RISKY_THRESHOLD,
+            "filesChanged": changed_files.len(),
+            "filesAnalysed": analysed_files.len(),
+            "excludedFiles": excluded,
+            "beforeSource": before_source,
+            "afterSource": after_source,
+            "functions": functions,
+            "byKey": by_key,
+            "riskyCount": risky_count,
+            "limits": limits,
+        }))
+    }
     /// Returns analysis counters for parsed blobs, reused results and built snapshots.
     /// These are operational counters, not code-quality or health measurements.
     pub fn metrics(&self) -> Value {

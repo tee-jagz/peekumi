@@ -1,6 +1,6 @@
 /** Deterministic agent fixture: commits in its supplied worktree and reports through real stdio MCP. */
 import { execFileSync, spawnSync } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 let task = "";
 for await (const chunk of process.stdin) task += chunk;
 const values = process.argv.slice(2);
@@ -259,8 +259,6 @@ if (values.includes("--tools")) {
     throw Error("Ask must have no tools");
   if (process.env.PEEKUMI_TOKEN || process.env.PEEKUMI_REPORT_TOKEN)
     throw Error("Ask inherited a Peekumi credential");
-  if (!values[values.indexOf("--system-prompt") + 1]?.includes("ASD-STE100"))
-    throw Error("Ask must answer in ASD-STE100 Simplified Technical English");
   if (
     !values[values.indexOf("--system-prompt") + 1]?.includes(
       "Check before you answer",
@@ -835,6 +833,17 @@ if (checkRules) {
   }
 }
 git("commit", "-m", "Fixture change without attribution");
+// LEAVE_LOOSE: the agent also leaves work that it never commits: a changed file, a new file
+// and a restricted one. The owner can keep the first two (salvage); the last is never read.
+if (first.text.includes("LEAVE_LOOSE")) {
+  writeFileSync(
+    "module.py",
+    readFileSync("module.py", "utf8") + "# loose change\n",
+  );
+  mkdirSync("notes", { recursive: true });
+  writeFileSync("notes/loose.txt", "Notes the agent forgot to commit.\n");
+  writeFileSync(".env", "SECRET=fixture\n");
+}
 let sha = git("rev-parse", "HEAD");
 // The agent checks its committed work against the rules, as the task text asks.
 if (checkRules) {

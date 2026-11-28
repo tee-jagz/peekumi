@@ -9,6 +9,18 @@ const VIEW_FIELDS: &str = "number,title,url,state,isDraft,body,author,createdAt,
 additions,deletions,changedFiles,baseRefName,baseRefOid,headRefName,headRefOid,comments,reviews,\
 statusCheckRollup";
 
+/// Reads one PR's details with `gh pr view`, and adds `readAt`: the time (milliseconds since
+/// the Unix epoch) when Peekumi read them. Check results change, so the app shows that time
+/// with them.
+fn view(directory: &Path, executable: &str, number: &str) -> Result<Value> {
+    let mut pr = gh(
+        directory,
+        executable,
+        &["pr", "view", number, "--json", VIEW_FIELDS],
+    )?;
+    pr["readAt"] = json!(crate::workflow::now());
+    Ok(pr)
+}
 fn gh(directory: &Path, executable: &str, args: &[&str]) -> Result<Value> {
     let bytes = crate::process::run(executable, args, Some(directory), vec![])
         // The command's own path and output stay off the screen.
@@ -50,6 +62,8 @@ pub fn route(
         );
     }
     // `GET /api/prs/<number>` reads one PR's details again (after a reload) without a fetch.
+    // The PR can have a new head since it was opened: the app compares `headRefOid` with the
+    // head that it shows, and never shows the new head's checks as evidence for the old one.
     if method == "GET" {
         let number = path
             .strip_prefix("/api/prs/")
@@ -57,11 +71,7 @@ pub fn route(
             .filter(|n| *n > 0)
             .context("Unsupported PR operation")?
             .to_string();
-        return gh(
-            directory,
-            executable,
-            &["pr", "view", &number, "--json", VIEW_FIELDS],
-        );
+        return view(directory, executable, &number);
     }
     ensure!(
         method == "POST" && path == "/api/prs/open",
@@ -72,11 +82,7 @@ pub fn route(
         .filter(|n| *n > 0)
         .context("A positive PR number is required")?
         .to_string();
-    let pr = gh(
-        directory,
-        executable,
-        &["pr", "view", &number, "--json", VIEW_FIELDS],
-    )?;
+    let pr = view(directory, executable, &number)?;
     let repo = gh(directory, executable, &["repo", "view", "--json", "url"])?;
     let remote = repo["url"]
         .as_str()

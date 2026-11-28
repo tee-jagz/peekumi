@@ -57,9 +57,8 @@ Peekumi's name comes from geology: strata are the layers of a rock face. Peek, t
 1. Take every value from `tokens.json`. Never write a hex value, a px size or a radius that is not a token.
 2. Build every screen from the parts in `frontend/ui.js`. A new part needs a row in **Components** first. `npm run lint` fails when a module makes UI of its own (see **Rules**).
 3. Check each screen against **Rules** before it ships.
-4. **Current state** lists what the app does now, and the work to move it to this system.
-5. **Flows** measures the main journeys and gives the flow rules F1 to F9. A change to a flow obeys them.
-6. **Decisions** lists the choices that are open.
+4. **Flows** measures the main journeys and gives the flow rules F1 to F9. A change to a flow obeys them.
+5. **Decisions** lists the choices that are open.
 
 ## Files
 
@@ -68,7 +67,6 @@ Peekumi's name comes from geology: strata are the layers of a rock face. Peek, t
 | `01-principles.md` to `13-accessibility.md` | The foundations and the guidance for each topic. |
 | `14-components.md` | The parts that every screen must use. |
 | `15-rules.md` | The rules that every screen must obey. |
-| `16-current-state.md` | What the app does now, and the work to move it to this system. |
 | `17-decisions.md` | The open decisions. |
 | `19-flows.md` | The main journeys, measured, with simpler flows and the flow rules. |
 | `20-looks.md` | The Strata look: the reasons, the contrast and what changes. |
@@ -78,7 +76,4 @@ Peekumi's name comes from geology: strata are the layers of a rock face. Peek, t
 | `../../frontend/ui.js` | The components: one function for each part in `14-components.md`. |
 | `../../frontend/ui.css` | The `pk-` classes of all components. Each value comes from a token. |
 | `assets/Mascot/` | Peek and the app icon. |
-| `mockups/` | One page for each component and each screen, rendered from `frontend/ui.js`. `tools/make.mjs` makes them. |
-| `tools/` | The generator of the mockups. |
-
-Open `mockups/index.html` in a browser to see each component. Open `mockups/screens.html` to see all screens. Add `?theme=dark`, `?theme=light-cb` or `?theme=dark-cb` to the address to see another theme.
+| `tools/` | Generator scripts (`node docs/design/tools/make.mjs` generates static HTML mockups into `mockups/` on demand). |

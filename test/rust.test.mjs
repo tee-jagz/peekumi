@@ -277,6 +277,31 @@ test("Rust authentication, write content-type boundary, gzip negotiation and sta
   assert.equal((await fetch(url + "/canvas.js")).status, 200);
   assert.equal((await fetch(url + "/select.js")).status, 200);
 });
+test("the owner's Tailscale identity opens Peekumi with no token, but never through Cloudflare", async (t) => {
+  const f = await fixture(t);
+  const server = await startRust(f.directory, {
+    base: f.base,
+    extraEnv: { PEEKUMI_TAILSCALE_OWNER: "you@example.com" },
+  });
+  t.after(() => server.close());
+  const status = async (headers) =>
+    (await fetch(server.url + "/api/repo", { headers })).status;
+  assert.equal(
+    await status({ "Tailscale-User-Login": "you@example.com" }),
+    200,
+  );
+  assert.equal(
+    await status({ "Tailscale-User-Login": "other@example.com" }),
+    401,
+  );
+  assert.equal(await status({}), 401);
+  assert.equal(
+    await status({ "Tailscale-User-Login": "you@example.com", "Cf-Ray": "x" }),
+    401,
+    "A public client can send its own header through the Cloudflare tunnel",
+  );
+});
+
 test("Rust syntax index survives process restart and unavailable parsers remain explicit", async (t) => {
   const f = await fixture(t);
   const state = await mkdtemp(path.join(os.tmpdir(), "peekumi-rust-index-"));

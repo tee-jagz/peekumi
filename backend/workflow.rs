@@ -32,6 +32,11 @@ pub struct Workflow {
     /// `rule_check`), from any thread that is not an async worker. The server sets it; without
     /// it, a session turn records that its rules were not checked.
     pub rule_checker: std::sync::Arc<std::sync::OnceLock<RuleChecker>>,
+    /// The conversation of each run whose items the app read (see the conversation module), by
+    /// run ID. Each keeps its place in the log, so a read only parses what the log gained.
+    pub conversations: std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, crate::conversation::Translator>>,
+    >,
 }
 /// See [`Workflow::briefing`].
 pub type Briefing = Box<dyn Fn(&[Value], &str) -> String + Send + Sync>;
@@ -101,6 +106,7 @@ impl Workflow {
             grants: Default::default(),
             briefing: Default::default(),
             rule_checker: Default::default(),
+            conversations: Default::default(),
         };
         #[cfg(unix)]
         {
@@ -146,7 +152,10 @@ impl Workflow {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let raw: String = tx.query_row("SELECT body FROM workflow WHERE id=1", [], |r| r.get(0))?;
         let mut v: Value = serde_json::from_str(&raw)?;
+        let before = crate::lifecycle::statuses(&v);
         let out = f(&mut v)?;
+        // Every status change must be one that the life cycle allows (see `lifecycle`).
+        crate::lifecycle::check(&before, &v)?;
         tx.execute("UPDATE workflow SET body=?1 WHERE id=1", [v.to_string()])?;
         tx.commit()?;
         Ok(out)
@@ -304,11 +313,10 @@ impl Workflow {
                     ensure!(run["revisedBy"].is_null(), "A later round continues this task");
                     ensure!(!self.applied(run), "This task is applied to main; start a new task for further changes");
                 }
-                if action == "verify" {
-                    ensure!(c["status"] == "addressed", "Only addressed comments can be verified");
-                    let run=find(v,"runs",c["runId"].as_str().context("Missing run")?)?;
-                    self.git(&["merge-base","--is-ancestor",c["report"]["commit"].as_str().context("Missing result commit")?,run["branch"].as_str().unwrap()])?;
-                }
+                // An approval covers a whole task at exact commits, in one request (see the
+                // review module), never one instruction at a time.
+                ensure!(action != "verify", "Approve the task as a whole: POST /api/runs/<id>/approve with its start and head");
+                let run_id = c["runId"].as_str().map(str::to_string);
                 let c = find_mut(v,"comments",id)?;
                 match action {
                     "edit" => { ensure!(c["status"] == "draft", "Only drafts can be edited");
@@ -322,19 +330,13 @@ impl Workflow {
                         c["report"] = Value::Null;
                         c["runId"] = Value::Null;
                     }
-                    "verify" => { ensure!(c["status"] == "addressed", "Only addressed comments can be verified");
-                        // The note is optional; a blank note is stored as null.
-                        let note = match body["note"].as_str().map(str::trim) {
-                            None | Some("") => Value::Null,
-                            Some(_) => json!(text(&body,"note",12000)?),
-                        };
-                        c["verification"] = json!({"note":note,"commit":c["report"]["commit"],"at":now(),"actor":"owner"});
-                        c["status"] = json!("verified");
-                    }
                     "unverify" => {
-                        // The approval stays in the instruction's history.
-                        c["status"] = json!("addressed");
-                        c["verification"] = Value::Null;
+                        // Taking one instruction back takes back the task's approval: the
+                        // record and every approved instruction go back to review. The
+                        // approval stays in the history.
+                        let run = run_id.as_deref().context("Missing run")?;
+                        crate::review::clear_approval(v, run, "unapprove")?;
+                        return Ok(find(v,"comments",id)?.clone());
                     }
                     _ => bail!("Unknown comment action"),
                 }
@@ -416,10 +418,14 @@ impl Workflow {
             let mut r = find(&v, "runs", id)?.clone();
             r.as_object_mut().unwrap().remove("reportHash");
             self.annotate_application(&mut r);
-            let log = self.state.join("runs").join(id).join("output.log");
-            r["output"] = json!(String::from_utf8_lossy(
-                &std::fs::read(log).unwrap_or_default()
-            ));
+            // A task's raw log, for its Agent log. A session's conversation comes from
+            // `/api/runs/<id>/items` (see the conversation module), never as the whole log.
+            if r["kind"] != "session" {
+                let log = self.state.join("runs").join(id).join("output.log");
+                r["output"] = json!(String::from_utf8_lossy(
+                    &std::fs::read(log).unwrap_or_default()
+                ));
+            }
             // The run's changed files, for the marks on the map (see the agent_session module).
             r["changed"] = json!(self.session_changes(&r));
             return Ok(r);
@@ -473,6 +479,23 @@ impl Workflow {
         Ok(
             json!({"id":format!("c{}", &crate::random_token()[..16]),"anchor":anchor,"sha":sha,"uncommitted":uncommitted,"text":content,"status":"draft","version":0,"createdAt":now(),"history":[]}),
         )
+    }
+    /// The items of run `id`'s conversation that changed after `after` (see
+    /// `conversation::Translator::since`): the app reads these in place of the whole log.
+    pub fn run_items(&self, id: &str, after: u64, epoch: Option<&str>) -> Result<Value> {
+        let run = self.run(id)?;
+        let agent = run["agent"].as_str().unwrap_or("").to_string();
+        let mut all = self.conversations.lock().unwrap_or_else(|e| e.into_inner());
+        let conversation = all
+            .entry(id.to_string())
+            .or_insert_with(|| crate::conversation::Translator::new(&agent));
+        conversation.read_from(&self.state.join("runs").join(id).join("output.log"))?;
+        let mut out = conversation.since(after, epoch);
+        drop(all);
+        out["status"] = run["status"].clone();
+        // The files the run changed, for the marks on the map.
+        out["changed"] = json!(self.session_changes(&run));
+        Ok(out)
     }
     /// The commit that the owner started a run's work from (its `start`): the base of the first
     /// round, or the target of the last update from the watched branch. Its rules are the rules
@@ -799,6 +822,37 @@ impl Workflow {
             }
             Ok(json!({"ok":true}))
         })?;
+        // When an agent finishes with new commits and the start commit defines checks,
+        // start an offline sandboxed verification run automatically (never auto-prepare).
+        if status == "completed"
+            && let Ok(run) = self.run(id)
+            && let Some(head) = run["results"]
+                .as_array()
+                .and_then(|list| list.last())
+                .and_then(Value::as_str)
+            && let Ok(start) = self.start_of(&run)
+            && crate::verify::has_checks_at(&self.repo, &start)
+        {
+            let acceptance = run["acceptanceCheck"].as_object().and_then(|_| {
+                crate::rules::parse_acceptance(&json!({
+                    "command": run["acceptanceCheck"]["command"],
+                    "expectFailOnStart": run["acceptanceCheck"]["expectFailOnStart"],
+                    "timeoutSeconds": run["acceptanceCheck"]["timeoutSeconds"],
+                }))
+                .ok()
+            });
+            let _ = crate::verify::start_background(crate::verify::Request {
+                repo: self.repo.clone(),
+                state: self.state.clone(),
+                start,
+                head: head.to_string(),
+                prepare: false,
+                trigger: "auto".into(),
+                run_id: Some(id.to_string()),
+                config_ref: None,
+                acceptance,
+            });
+        }
         // The owner who stopped a run knows that it stopped.
         if !stopped_by_owner && let Ok(run) = self.run(id) {
             let (title, body) = match status {
@@ -904,7 +958,7 @@ impl Workflow {
 }
 /// Active and interrupted runs hold the repository slot until the supervisor closes them.
 pub fn active(r: &Value) -> bool {
-    ["starting", "running", "interrupted"].contains(&r["status"].as_str().unwrap_or(""))
+    crate::lifecycle::active(r["status"].as_str().unwrap_or(""))
 }
 /// The agents' part of the API (see the agents module), with the server's settings.
 impl Workflow {
@@ -997,6 +1051,7 @@ impl Workflow {
                     "notes": {"ask": a.note(Job::Ask), "task": a.note(Job::Task)},
                     "key": a.key(),
                     "asksBeforeCommands": a.asks_before_commands(),
+                    "capabilities": a.capabilities(),
                     "models": models,
                     "source": if discovered { "agent" } else { "built-in" },
                     "status": {"ready": status.ready, "reason": status.reason},

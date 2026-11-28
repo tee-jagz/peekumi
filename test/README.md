@@ -14,6 +14,12 @@ The `reference/` directory keeps the previous Node implementation for equivalenc
 
 Workflow integration tests use temporary Git repositories and a deterministic local agent. This agent uses the production stdio MCP protocol. `workflow-browser.mjs` completes draft → preview → dispatch → report → inspect → verify on phone and desktop. These tests do not run a real paid agent session.
 
+`salvage-browser.mjs` keeps the files that an agent left uncommitted, on phone and desktop. It checks that a restricted file stays loose.
+
+`verify.test.mjs` checks sandboxed verification isolation, start-commit check binding, process-group timeouts, prepare caches, CLI exit codes and automatic runs. `crap.test.mjs` checks before and after Python CRAP scores from sandboxed LCOV runs and explicit non-Python exclusions. `pilot.test.mjs` checks the 20-case crossover pilot runner and dry run. `verify-browser.mjs` checks risky CRAP cards on the map and the four-part review sheet on phone and desktop.
+
+`real-agent-e2e.mjs` is an opt-in test with a real Codex agent. It is not part of `npm test`, because it uses your Codex login and takes minutes. It makes a temporary repository, then writes an instruction on the map, sends a task, reads the report, keeps the loose file, approves and merges. Git checks each step. Run `npm run build:rust`, then `node test/real-agent-e2e.mjs`.
+
 To run only the management and tunnel checks, run `node --test test/manage.test.mjs test/tunnel.test.mjs test/cloudflare.test.mjs`. These checks cover:
 
 - The strict opt-in for a public tunnel.

@@ -434,11 +434,15 @@ async function shareTailscale(c) {
   }
   c.publicUrl = tunnel.url(tunnelStatus);
   c.secureCookie = true;
+  // Your devices on the tailnet open Peekumi as you, with no token (see --tailscale-owner).
+  c.tailscaleOwner = tunnelStatus.owner || undefined;
   await save(c);
   await stop();
   await start();
   console.log(
-    `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run peekumi pair`,
+    c.tailscaleOwner
+      ? `Phone URL: ${c.publicUrl}/ · open it on any device that is signed into Tailscale as ${c.tailscaleOwner}. No token is needed.`
+      : `Phone URL: ${c.publicUrl}/ · connect Tailscale on your phone, then run peekumi pair`,
   );
 }
 
@@ -548,6 +552,21 @@ async function main() {
   )
     throw new Error("--tunnel is supported only by peekumi share");
   if (command === "doctor") return doctor();
+  if (command === "verify") {
+    const child = spawn(executable, ["verify", ...process.argv.slice(3)], {
+      stdio: "inherit",
+    });
+    for (const signal of ["SIGTERM", "SIGINT"])
+      process.on(signal, () => child.kill(signal));
+    child.on("error", (e) => {
+      console.error(e.message + "; run peekumi doctor");
+      process.exitCode = 2;
+    });
+    child.on("exit", (code) => {
+      process.exitCode = code ?? 2;
+    });
+    return;
+  }
   if (command === "repo") {
     const c = await config();
     if (sub === "list") {
@@ -604,6 +623,7 @@ async function main() {
     ];
     for (const repo of c.repositories.slice(1)) params.push("--repo", repo);
     if (c.secureCookie) params.push("--secure-cookie");
+    if (c.tailscaleOwner) params.push("--tailscale-owner", c.tailscaleOwner);
     const env = { ...process.env };
     delete env.PEEKUMI_TOKEN;
     delete env.STRATA_TOKEN;
